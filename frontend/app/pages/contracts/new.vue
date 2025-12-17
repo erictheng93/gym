@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, LABELS } from '~/constants'
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -65,18 +67,18 @@ const validateStep = (step: number) => {
   errors.value = {}
 
   if (step === 1) {
-    if (!form.member_id) errors.value.member_id = '請選擇會員'
-    if (!form.plan_id) errors.value.plan_id = '請選擇方案'
-    if (!form.branch_id) errors.value.branch_id = '請選擇分店'
-    if (!form.start_date) errors.value.start_date = '請選擇開始日期'
+    if (!form.member_id) errors.value.member_id = PAGES.CONTRACTS.ERROR_SELECT_MEMBER
+    if (!form.plan_id) errors.value.plan_id = PAGES.CONTRACTS.ERROR_SELECT_PLAN
+    if (!form.branch_id) errors.value.branch_id = PAGES.CONTRACTS.ERROR_SELECT_BRANCH
+    if (!form.start_date) errors.value.start_date = PAGES.CONTRACTS.ERROR_SELECT_START_DATE
   }
 
   if (step === 2) {
-    if (form.total_amount <= 0) errors.value.total_amount = '金額必須大於 0'
+    if (form.total_amount <= 0) errors.value.total_amount = PAGES.CONTRACTS.ERROR_AMOUNT_POSITIVE
   }
 
   if (step === 3) {
-    if (!form.digital_signature) errors.value.digital_signature = '請簽名確認'
+    if (!form.digital_signature) errors.value.digital_signature = PAGES.CONTRACTS.ERROR_SIGNATURE_REQUIRED
   }
 
   return Object.keys(errors.value).length === 0
@@ -128,7 +130,7 @@ const handleSubmit = async () => {
     router.push('/contracts')
   } catch (error) {
     console.error('Failed to create contract:', error)
-    errors.value.submit = '建立合約失敗，請稍後再試'
+    errors.value.submit = PAGES.CONTRACTS.ERROR_CREATE_FAILED
   } finally {
     isSubmitting.value = false
   }
@@ -140,7 +142,7 @@ const handleSubmit = async () => {
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="loading-spinner-large" />
-      <p class="text-secondary mt-md">載入中...</p>
+      <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
     </div>
 
     <template v-else>
@@ -150,7 +152,7 @@ const handleSubmit = async () => {
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m15 18-6-6 6-6"/>
           </svg>
-          返回
+          {{ MESSAGES.ACTIONS.BACK }}
         </button>
       </header>
 
@@ -164,8 +166,8 @@ const handleSubmit = async () => {
             <path d="M9 15h6"/>
           </svg>
         </div>
-        <h1 class="text-headline">新增合約</h1>
-        <p class="text-body text-secondary">建立會員合約</p>
+        <h1 class="text-headline">{{ PAGES.CONTRACTS.CREATE_TITLE }}</h1>
+        <p class="text-body text-secondary">{{ PAGES.CONTRACTS.CREATE_CONTRACT }}</p>
       </div>
 
       <!-- Progress Steps -->
@@ -178,7 +180,7 @@ const handleSubmit = async () => {
         >
           <div class="step-number">{{ step }}</div>
           <span class="step-label">
-            {{ step === 1 ? '選擇方案' : step === 2 ? '確認資訊' : '簽名確認' }}
+            {{ step === 1 ? PAGES.CONTRACTS.STEP_SELECT_PLAN : step === 2 ? PAGES.CONTRACTS.STEP_CONFIRM : PAGES.CONTRACTS.STEP_SIGN }}
           </span>
         </div>
         <div class="progress-line">
@@ -194,14 +196,14 @@ const handleSubmit = async () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>
             </svg>
-            選擇會員與方案
+            {{ PAGES.CONTRACTS.SELECT_MEMBER_PLAN }}
           </h2>
 
           <div class="form-grid">
             <div class="input-group required full-width">
-              <label class="input-label">選擇會員</label>
+              <label class="input-label">{{ PAGES.CONTRACTS.SELECT_MEMBER }}</label>
               <select v-model="form.member_id" class="input" :class="{ 'input-error': errors.member_id }">
-                <option value="">請選擇會員</option>
+                <option value="">{{ PAGES.CONTRACTS.SELECT_MEMBER_PLACEHOLDER }}</option>
                 <option v-for="member in members" :key="member.id" :value="member.id">
                   {{ member.full_name }} ({{ member.member_code }})
                 </option>
@@ -210,9 +212,9 @@ const handleSubmit = async () => {
             </div>
 
             <div class="input-group required">
-              <label class="input-label">會籍方案</label>
+              <label class="input-label">{{ PAGES.CONTRACTS.SELECT_PLAN }}</label>
               <select v-model="form.plan_id" class="input" :class="{ 'input-error': errors.plan_id }">
-                <option value="">請選擇方案</option>
+                <option value="">{{ PAGES.CONTRACTS.SELECT_PLAN_PLACEHOLDER }}</option>
                 <option v-for="plan in plans" :key="plan.id" :value="plan.id">
                   {{ plan.name }} - NT$ {{ plan.price.toLocaleString() }}
                 </option>
@@ -221,9 +223,9 @@ const handleSubmit = async () => {
             </div>
 
             <div class="input-group required">
-              <label class="input-label">所屬分店</label>
+              <label class="input-label">{{ PAGES.CONTRACTS.SELECT_BRANCH }}</label>
               <select v-model="form.branch_id" class="input" :class="{ 'input-error': errors.branch_id }">
-                <option value="">請選擇分店</option>
+                <option value="">{{ PAGES.CONTRACTS.SELECT_BRANCH_PLACEHOLDER }}</option>
                 <option v-for="branch in branches" :key="branch.id" :value="branch.id">
                   {{ branch.name }}
                 </option>
@@ -232,7 +234,7 @@ const handleSubmit = async () => {
             </div>
 
             <div class="input-group required">
-              <label class="input-label">開始日期</label>
+              <label class="input-label">{{ PAGES.CONTRACTS.SELECT_START_DATE }}</label>
               <input
                 v-model="form.start_date"
                 type="date"
@@ -248,28 +250,28 @@ const handleSubmit = async () => {
             <div class="preview-header">
               <h4>{{ selectedPlan.name }}</h4>
               <span class="plan-type-badge">
-                {{ selectedPlan.plan_type === 'TIME_BASED' ? '期限制' : '計次制' }}
+                {{ selectedPlan.plan_type === 'TIME_BASED' ? LABELS.CONTRACT_TYPE.TIME_BASED : LABELS.CONTRACT_TYPE.COUNT_BASED }}
               </span>
             </div>
             <div class="preview-details">
               <div v-if="selectedPlan.duration_months" class="preview-item">
-                <span class="preview-label">期限</span>
-                <span class="preview-value">{{ selectedPlan.duration_months }} 個月</span>
+                <span class="preview-label">{{ PAGES.CONTRACTS.DURATION_LABEL }}</span>
+                <span class="preview-value">{{ selectedPlan.duration_months }} {{ PAGES.CONTRACTS.MONTHS }}</span>
               </div>
               <div v-if="selectedPlan.class_counts" class="preview-item">
-                <span class="preview-label">課程次數</span>
-                <span class="preview-value">{{ selectedPlan.class_counts }} 次</span>
+                <span class="preview-label">{{ PAGES.CONTRACTS.CLASS_COUNTS }}</span>
+                <span class="preview-value">{{ selectedPlan.class_counts }} {{ PAGES.CONTRACTS.TIMES }}</span>
               </div>
               <div class="preview-item">
-                <span class="preview-label">允許暫停</span>
+                <span class="preview-label">{{ PAGES.CONTRACTS.ALLOW_PAUSE }}</span>
                 <span class="preview-value" :class="selectedPlan.allow_pause ? 'text-success' : 'text-error'">
-                  {{ selectedPlan.allow_pause ? '是' : '否' }}
+                  {{ selectedPlan.allow_pause ? LABELS.YES : LABELS.NO }}
                 </span>
               </div>
               <div class="preview-item">
-                <span class="preview-label">允許轉讓</span>
+                <span class="preview-label">{{ PAGES.CONTRACTS.ALLOW_TRANSFER }}</span>
                 <span class="preview-value" :class="selectedPlan.allow_transfer ? 'text-success' : 'text-error'">
-                  {{ selectedPlan.allow_transfer ? '是' : '否' }}
+                  {{ selectedPlan.allow_transfer ? LABELS.YES : LABELS.NO }}
                 </span>
               </div>
             </div>
@@ -283,31 +285,31 @@ const handleSubmit = async () => {
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
               <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
-            確認合約資訊
+            {{ PAGES.CONTRACTS.CONFIRM_CONTRACT_INFO }}
           </h2>
 
           <!-- Contract Summary -->
           <div class="contract-summary">
             <div class="summary-section">
-              <h4>會員資訊</h4>
+              <h4>{{ PAGES.CONTRACTS.MEMBER_INFO }}</h4>
               <div class="summary-row">
-                <span class="summary-label">會員姓名</span>
+                <span class="summary-label">{{ PAGES.CONTRACTS.MEMBER_NAME }}</span>
                 <span class="summary-value">{{ selectedMember?.full_name }}</span>
               </div>
               <div class="summary-row">
-                <span class="summary-label">會員編號</span>
+                <span class="summary-label">{{ PAGES.CONTRACTS.MEMBER_CODE }}</span>
                 <span class="summary-value">{{ selectedMember?.member_code }}</span>
               </div>
             </div>
 
             <div class="summary-section">
-              <h4>方案資訊</h4>
+              <h4>{{ PAGES.CONTRACTS.PLAN_INFO }}</h4>
               <div class="summary-row">
-                <span class="summary-label">方案名稱</span>
+                <span class="summary-label">{{ PAGES.CONTRACTS.PLAN_NAME }}</span>
                 <span class="summary-value">{{ selectedPlan?.name }}</span>
               </div>
               <div class="summary-row">
-                <span class="summary-label">合約期間</span>
+                <span class="summary-label">{{ PAGES.CONTRACTS.CONTRACT_PERIOD }}</span>
                 <span class="summary-value">
                   {{ formatDate(form.start_date) }} ~ {{ formatDate(calculatedEndDate) }}
                 </span>
@@ -315,9 +317,9 @@ const handleSubmit = async () => {
             </div>
 
             <div class="summary-section">
-              <h4>付款資訊</h4>
+              <h4>{{ PAGES.CONTRACTS.PAYMENT_INFO }}</h4>
               <div class="input-group">
-                <label class="input-label">合約金額</label>
+                <label class="input-label">{{ PAGES.CONTRACTS.CONTRACT_AMOUNT }}</label>
                 <div class="amount-input">
                   <span class="currency">NT$</span>
                   <input
@@ -333,19 +335,19 @@ const handleSubmit = async () => {
             </div>
 
             <div class="summary-section">
-              <h4>備註</h4>
+              <h4>{{ MESSAGES.FORM.NOTES }}</h4>
               <textarea
                 v-model="form.notes"
                 class="input"
                 rows="3"
-                placeholder="輸入備註 (選填)..."
+                :placeholder="PAGES.CONTRACTS.NOTES_PLACEHOLDER"
               ></textarea>
             </div>
           </div>
 
           <!-- Total Amount Display -->
           <div class="total-amount-card">
-            <span class="total-label">合約總金額</span>
+            <span class="total-label">{{ PAGES.CONTRACTS.TOTAL_AMOUNT }}</span>
             <span class="total-value">NT$ {{ form.total_amount.toLocaleString() }}</span>
           </div>
         </section>
@@ -356,12 +358,12 @@ const handleSubmit = async () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
             </svg>
-            電子簽名
+            {{ PAGES.CONTRACTS.E_SIGNATURE }}
           </h2>
 
           <div class="signature-section">
             <p class="signature-notice text-secondary">
-              請會員於下方簽名區簽名，簽名後將作為合約確認依據。
+              {{ PAGES.CONTRACTS.SIGN_INSTRUCTION }}
             </p>
 
             <SignaturePad v-model="form.digital_signature" />
@@ -369,13 +371,13 @@ const handleSubmit = async () => {
 
             <!-- Contract Terms -->
             <div class="contract-terms">
-              <h4>合約條款摘要</h4>
+              <h4>{{ PAGES.CONTRACTS.CONTRACT_TERMS }}</h4>
               <ul>
                 <li>本合約自 {{ formatDate(form.start_date) }} 起生效，至 {{ formatDate(calculatedEndDate) }} 止。</li>
                 <li>合約金額為 NT$ {{ form.total_amount.toLocaleString() }}。</li>
-                <li v-if="selectedPlan?.allow_pause">本方案允許暫停，暫停期間將自動延長結束日期。</li>
+                <li v-if="selectedPlan?.allow_pause">{{ PAGES.CONTRACTS.PAUSE_HINT }}</li>
                 <li v-if="selectedPlan?.allow_transfer">本方案允許轉讓給其他會員。</li>
-                <li>電子簽名具有與紙本簽名同等法律效力。</li>
+                <li>{{ PAGES.CONTRACTS.SIGN_LEGAL_NOTE }}</li>
               </ul>
             </div>
           </div>
@@ -395,12 +397,12 @@ const handleSubmit = async () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m15 18-6-6 6-6"/>
             </svg>
-            上一步
+            {{ MESSAGES.ACTIONS.PREVIOUS }}
           </button>
-          <button v-else type="button" class="btn btn-ghost" @click="router.back()">取消</button>
+          <button v-else type="button" class="btn btn-ghost" @click="router.back()">{{ MESSAGES.FORM.CANCEL }}</button>
 
           <button v-if="currentStep < totalSteps" type="button" class="btn btn-primary btn-large" @click="nextStep">
-            下一步
+            {{ MESSAGES.ACTIONS.NEXT }}
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m9 18 6-6-6-6"/>
             </svg>
@@ -409,7 +411,7 @@ const handleSubmit = async () => {
             <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
-            {{ isSubmitting ? '建立中...' : '完成簽約' }}
+            {{ isSubmitting ? MESSAGES.ACTIONS.CREATING : PAGES.CONTRACTS.COMPLETE_SIGN }}
           </button>
         </div>
       </form>

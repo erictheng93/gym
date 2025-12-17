@@ -1,46 +1,53 @@
 <script setup lang="ts">
+import { APP_NAME, MESSAGES } from '~/constants'
+
 const { user, logout } = useAuth()
 const { isDark, toggleTheme } = useTheme()
 const route = useRoute()
 
 const menuItems = [
   {
-    label: '儀表板',
+    label: MESSAGES.NAV.DASHBOARD,
     to: '/',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>`
   },
   {
-    label: '會員管理',
+    label: MESSAGES.NAV.MEMBERS,
     to: '/members',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
   },
   {
-    label: '合約管理',
+    label: MESSAGES.NAV.CONTRACTS,
     to: '/contracts',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>`
   },
   {
-    label: '收款管理',
+    label: MESSAGES.NAV.PAYMENTS,
     to: '/payments',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`
   },
   {
-    label: '會籍方案',
+    label: MESSAGES.NAV.PLANS,
     to: '/plans',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>`
   },
   {
-    label: '分店管理',
+    label: MESSAGES.NAV.EMPLOYEES,
+    to: '/employees',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+  },
+  {
+    label: MESSAGES.NAV.BRANCHES,
     to: '/branches',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`
   },
   {
-    label: '會員入場',
+    label: MESSAGES.NAV.CHECKIN,
     to: '/checkin',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
   },
   {
-    label: '營運報表',
+    label: MESSAGES.NAV.REPORTS,
     to: '/reports',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>`
   },
@@ -61,7 +68,7 @@ const userName = computed(() => {
   if (user.value?.first_name || user.value?.last_name) {
     return `${user.value.first_name || ''} ${user.value.last_name || ''}`.trim()
   }
-  return user.value?.email?.split('@')[0] || 'User'
+  return user.value?.email?.split('@')[0] || MESSAGES.USER.DEFAULT_NAME
 })
 </script>
 
@@ -83,7 +90,7 @@ const userName = computed(() => {
                 </linearGradient>
               </defs>
             </svg>
-            <span class="logo-text">Gym Nexus</span>
+            <span class="logo-text">{{ APP_NAME }}</span>
           </div>
         </div>
 
@@ -125,7 +132,7 @@ const userName = computed(() => {
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
             </svg>
-            <span>登出</span>
+            <span>{{ MESSAGES.AUTH.LOGOUT }}</span>
           </button>
         </div>
       </div>

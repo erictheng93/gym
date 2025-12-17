@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, STATUS } from '~/constants'
+
 const { members, fetchMembers } = useMembers()
 const searchQuery = ref('')
 const selectedMember = ref<any>(null)
@@ -63,11 +65,11 @@ const getMemberStatusClass = (status: string) => {
 
 const getMemberStatusLabel = (status: string) => {
   const map: Record<string, string> = {
-    'ACTIVE': '有效',
-    'active': '有效',
-    'EXPIRED': '過期',
-    'SUSPENDED': '停權',
-    'PAUSED': '暫停'
+    'ACTIVE': STATUS.MEMBER.ACTIVE,
+    'active': STATUS.MEMBER.ACTIVE,
+    'EXPIRED': STATUS.MEMBER.EXPIRED,
+    'SUSPENDED': STATUS.MEMBER.SUSPENDED,
+    'PAUSED': STATUS.MEMBER.PAUSED
   }
   return map[status] || status
 }
@@ -78,8 +80,8 @@ const getMemberStatusLabel = (status: string) => {
     <!-- Header -->
     <div class="page-header">
       <div class="header-content">
-        <h1>會員入場</h1>
-        <p>掃描會員條碼或搜尋會員進行入場登記</p>
+        <h1>{{ MESSAGES.NAV.CHECKIN }}</h1>
+        <p>{{ PAGES.CHECKIN.DESCRIPTION }}</p>
       </div>
     </div>
 
@@ -95,7 +97,7 @@ const getMemberStatusLabel = (status: string) => {
                 <polyline points="22 4 12 14.01 9 11.01"/>
               </svg>
             </div>
-            <h2>入場成功!</h2>
+            <h2>{{ MESSAGES.SUCCESS.CHECKIN }}</h2>
             <p>{{ selectedMember?.full_name }}</p>
           </div>
         </div>
@@ -111,7 +113,7 @@ const getMemberStatusLabel = (status: string) => {
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="搜尋會員姓名、編號或電話..."
+              :placeholder="PAGES.CHECKIN.SEARCH_PLACEHOLDER"
               class="search-input"
               autofocus
             />
@@ -151,17 +153,17 @@ const getMemberStatusLabel = (status: string) => {
 
             <div class="selected-details">
               <div class="detail-item">
-                <span class="label">電話</span>
+                <span class="label">{{ MESSAGES.FORM.PHONE }}</span>
                 <span class="value">{{ selectedMember.phone || '—' }}</span>
               </div>
               <div class="detail-item">
-                <span class="label">Email</span>
+                <span class="label">{{ MESSAGES.FORM.EMAIL }}</span>
                 <span class="value">{{ selectedMember.email || '—' }}</span>
               </div>
             </div>
 
             <div class="checkin-actions">
-              <button class="btn-cancel" @click="selectedMember = null">取消</button>
+              <button class="btn-cancel" @click="selectedMember = null">{{ MESSAGES.FORM.CANCEL }}</button>
               <button
                 class="btn-checkin"
                 @click="performCheckin"
@@ -171,7 +173,7 @@ const getMemberStatusLabel = (status: string) => {
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                確認入場
+                {{ PAGES.CHECKIN.CONFIRM_CHECKIN }}
               </button>
             </div>
           </div>
@@ -184,17 +186,17 @@ const getMemberStatusLabel = (status: string) => {
                 <rect width="10" height="10" x="7" y="7" rx="1"/>
               </svg>
             </div>
-            <h3>掃描或搜尋會員</h3>
-            <p>請掃描會員條碼或輸入會員資訊進行入場登記</p>
+            <h3>{{ PAGES.CHECKIN.SCAN_OR_SEARCH }}</h3>
+            <p>{{ PAGES.CHECKIN.SCAN_HINT }}</p>
           </div>
         </div>
       </div>
 
       <!-- Recent Checkins Sidebar -->
       <div class="recent-checkins">
-        <h3>今日入場紀錄</h3>
+        <h3>{{ PAGES.CHECKIN.TODAY_RECORDS }}</h3>
         <div v-if="recentCheckins.length === 0" class="no-checkins">
-          <p>尚無入場紀錄</p>
+          <p>{{ PAGES.CHECKIN.NO_RECORDS }}</p>
         </div>
         <div v-else class="checkins-list">
           <div v-for="checkin in recentCheckins" :key="checkin.id" class="checkin-item">

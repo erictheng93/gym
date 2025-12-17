@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+
 const { branches, isLoading, fetchBranches } = useBranches()
 
 onMounted(() => {
@@ -6,7 +8,7 @@ onMounted(() => {
 })
 
 const branchTypeLabel = (type: string) => {
-  return type === 'HEADQUARTER' ? '總店' : '分店'
+  return type === 'HEADQUARTER' ? LABELS.BRANCH_TYPE.HEADQUARTER : LABELS.BRANCH_TYPE.BRANCH
 }
 </script>
 
@@ -15,14 +17,14 @@ const branchTypeLabel = (type: string) => {
     <!-- Header -->
     <div class="page-header">
       <div class="header-content">
-        <h1>分店管理</h1>
-        <p>管理所有分店與場館資訊</p>
+        <h1>{{ PAGES.BRANCHES.TITLE }}</h1>
+        <p>{{ PAGES.BRANCHES.DESCRIPTION }}</p>
       </div>
       <NuxtLink to="/branches/new" class="btn-primary">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 12h14"/><path d="M12 5v14"/>
         </svg>
-        新增分店
+        {{ PAGES.BRANCHES.ADD_BRANCH }}
       </NuxtLink>
     </div>
 
@@ -36,7 +38,7 @@ const branchTypeLabel = (type: string) => {
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ branches.length }}</span>
-          <span class="stat-label">總分店數</span>
+          <span class="stat-label">{{ PAGES.BRANCHES.TOTAL_BRANCHES }}</span>
         </div>
       </div>
       <div class="stat-card">
@@ -47,7 +49,7 @@ const branchTypeLabel = (type: string) => {
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ branches.filter(b => b.type === 'HEADQUARTER').length }}</span>
-          <span class="stat-label">總部</span>
+          <span class="stat-label">{{ PAGES.BRANCHES.HEADQUARTERS }}</span>
         </div>
       </div>
       <div class="stat-card">
@@ -58,7 +60,7 @@ const branchTypeLabel = (type: string) => {
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ branches.filter(b => b.status === 'active').length }}</span>
-          <span class="stat-label">營運中</span>
+          <span class="stat-label">{{ STATUS.OPERATING }}</span>
         </div>
       </div>
     </div>
@@ -66,7 +68,7 @@ const branchTypeLabel = (type: string) => {
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
-      <p>載入中...</p>
+      <p>{{ MESSAGES.ACTIONS.LOADING }}</p>
     </div>
 
     <!-- Empty State -->
@@ -74,9 +76,9 @@ const branchTypeLabel = (type: string) => {
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
         <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
-      <h3>尚無分店</h3>
-      <p>建立第一個分店開始管理</p>
-      <NuxtLink to="/branches/new" class="btn-primary">新增分店</NuxtLink>
+      <h3>{{ PAGES.BRANCHES.NO_BRANCHES }}</h3>
+      <p>{{ PAGES.BRANCHES.NO_BRANCHES_HINT }}</p>
+      <NuxtLink to="/branches/new" class="btn-primary">{{ PAGES.BRANCHES.ADD_BRANCH }}</NuxtLink>
     </div>
 
     <!-- Branches Grid -->
@@ -95,8 +97,8 @@ const branchTypeLabel = (type: string) => {
             <span class="type-badge" :class="branch.type === 'HEADQUARTER' ? 'hq' : 'branch'">
               {{ branchTypeLabel(branch.type) }}
             </span>
-            <span v-if="branch.status === 'archived'" class="status-badge archived">已停用</span>
-            <span v-else class="status-badge active">營運中</span>
+            <span v-if="branch.status === 'archived'" class="status-badge archived">{{ STATUS.DISABLED }}</span>
+            <span v-else class="status-badge active">{{ STATUS.OPERATING }}</span>
           </div>
         </div>
 
@@ -121,13 +123,13 @@ const branchTypeLabel = (type: string) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
             </svg>
-            <span>統編：{{ branch.tax_id }}</span>
+            <span>{{ PAGES.BRANCHES.TAX_ID_PREFIX }}{{ branch.tax_id }}</span>
           </div>
         </div>
 
         <div class="branch-actions">
-          <NuxtLink :to="`/branches/${branch.id}/edit`" class="btn-secondary">編輯</NuxtLink>
-          <NuxtLink :to="`/branches/${branch.id}`" class="btn-secondary">查看詳情</NuxtLink>
+          <NuxtLink :to="`/branches/${branch.id}/edit`" class="btn-secondary">{{ MESSAGES.FORM.EDIT }}</NuxtLink>
+          <NuxtLink :to="`/branches/${branch.id}`" class="btn-secondary">{{ MESSAGES.ACTIONS.VIEW_DETAILS }}</NuxtLink>
         </div>
       </div>
     </div>

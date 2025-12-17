@@ -133,7 +133,10 @@ CREATE TABLE contract_logs (
     end_date DATE,
     days_affected INTEGER,
     reason TEXT,
-    created_by_employee UUID REFERENCES employees(id)
+    created_by_employee UUID REFERENCES employees(id),
+    branch_id UUID REFERENCES branches(id),
+    original_member_id UUID REFERENCES members(id),
+    target_member_id UUID REFERENCES members(id)
 );
 
 -- ============================================

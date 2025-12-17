@@ -7,6 +7,9 @@
  * 4. 付款狀態自動計算：當 payments 變更時，自動計算 contracts.payment_status
  * 5. 合約到期自動更新：檢查合約是否過期並自動更新狀態
  * 6. 合約到期通知：合約即將到期時，自動創建通知紀錄
+ * 7. HR 休假審核流程：驗證上級審核下級，記錄審核歷史，更新休假餘額
+ * 8. HR 考勤自動計算：打卡時自動計算工時、遲到、加班等
+ * 9. 會員入場驗證：驗證會員合約有效性，記錄入場紀錄
  */
 
 export default ({ filter, action, init, schedule }, { services, database, getSchema }) => {
@@ -88,6 +91,73 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
       console.log(`[GymHook] Contract ${payload.contract_id} resumed to ACTIVE`);
     } catch (error) {
       console.error('[GymHook] Error resuming contract:', error);
+    }
+  });
+
+  // 當合約轉讓（TRANSFER）時，將合約轉移給新會員
+  action('contract_logs.items.create', async ({ payload, key }, { schema }) => {
+    if (payload.log_type !== 'TRANSFER') return;
+    if (!payload.contract_id || !payload.target_member_id) return;
+
+    try {
+      const contractsService = new ItemsService('contracts', {
+        schema: schema,
+        knex: database,
+      });
+
+      const membersService = new ItemsService('members', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 取得原合約資料
+      const contract = await contractsService.readOne(payload.contract_id, {
+        fields: ['id', 'member_id', 'contract_status'],
+      });
+
+      if (!contract) return;
+
+      const originalMemberId = contract.member_id;
+
+      // 更新合約的 member_id 為新會員
+      await contractsService.updateOne(payload.contract_id, {
+        member_id: payload.target_member_id,
+      });
+
+      console.log(`[GymHook] Contract ${payload.contract_id} transferred from member ${originalMemberId} to ${payload.target_member_id}`);
+
+      // 更新原會員狀態
+      if (originalMemberId) {
+        const originalMemberContracts = await contractsService.readByQuery({
+          filter: {
+            member_id: { _eq: originalMemberId },
+            status: { _eq: 'active' },
+          },
+          fields: ['id', 'contract_status'],
+        });
+        const originalMemberStatus = calculateMemberStatus(originalMemberContracts);
+        await membersService.updateOne(originalMemberId, {
+          member_status: originalMemberStatus,
+        });
+        console.log(`[GymHook] Original member ${originalMemberId} status updated to ${originalMemberStatus}`);
+      }
+
+      // 更新新會員狀態
+      const targetMemberContracts = await contractsService.readByQuery({
+        filter: {
+          member_id: { _eq: payload.target_member_id },
+          status: { _eq: 'active' },
+        },
+        fields: ['id', 'contract_status'],
+      });
+      const targetMemberStatus = calculateMemberStatus(targetMemberContracts);
+      await membersService.updateOne(payload.target_member_id, {
+        member_status: targetMemberStatus,
+      });
+      console.log(`[GymHook] Target member ${payload.target_member_id} status updated to ${targetMemberStatus}`);
+
+    } catch (error) {
+      console.error('[GymHook] Error transferring contract:', error);
     }
   });
 
@@ -567,4 +637,588 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
     if (hasPaused) return 'PAUSED';
     return 'INACTIVE';
   }
+
+  // ============================================
+  // 7. HR 休假審核流程 Hooks
+  // ============================================
+
+  /**
+   * 檢查審核者是否為申請者的上級
+   * 遞迴向上查找 supervisor_id 鏈
+   * @param {string} approverId - 審核者 ID
+   * @param {string} employeeId - 申請者 ID
+   * @param {object} employeesService - Directus ItemsService
+   * @returns {Promise<boolean>} 是否為上級
+   */
+  async function isSupervisorOf(approverId, employeeId, employeesService) {
+    if (!approverId || !employeeId) return false;
+    if (approverId === employeeId) return false;
+
+    try {
+      // 取得申請者的上級鏈
+      let currentId = employeeId;
+      const visited = new Set();
+      const maxDepth = 10; // 防止無限迴圈
+      let depth = 0;
+
+      while (currentId && depth < maxDepth) {
+        if (visited.has(currentId)) break; // 避免循環參照
+        visited.add(currentId);
+
+        const employee = await employeesService.readOne(currentId, {
+          fields: ['id', 'supervisor_id', 'job_title_id'],
+        });
+
+        if (!employee) break;
+
+        // 找到審核者是直屬上級
+        if (employee.supervisor_id === approverId) {
+          return true;
+        }
+
+        currentId = employee.supervisor_id;
+        depth++;
+      }
+
+      // 如果沒有找到直接上級關係，檢查職級 (可選: 透過 job_titles.permissions_config.level)
+      // 此處可擴充為依據 job_title 的 level 判斷
+      return false;
+    } catch (error) {
+      console.error('[GymHook] Error checking supervisor relationship:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 計算請假天數 (支援半天假)
+   */
+  function calculateLeaveDays(startDate, endDate, isHalfDay) {
+    if (isHalfDay) return 0.5;
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  }
+
+  // 休假申請提交時 - 驗證並計算天數
+  action('leave_requests.items.create', async ({ payload, key }, { schema, accountability }) => {
+    try {
+      const leaveRequestsService = new ItemsService('leave_requests', {
+        schema: schema,
+        knex: database,
+      });
+
+      const employeesService = new ItemsService('employees', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 計算請假天數
+      const daysRequested = calculateLeaveDays(
+        payload.start_date,
+        payload.end_date,
+        payload.is_half_day
+      );
+
+      // 更新請假天數
+      await leaveRequestsService.updateOne(key, {
+        days_requested: daysRequested,
+        submitted_at: new Date().toISOString(),
+      });
+
+      // 建立審核歷史記錄 (SUBMIT)
+      try {
+        const logsService = new ItemsService('leave_approval_logs', {
+          schema: schema,
+          knex: database,
+        });
+
+        await logsService.createOne({
+          leave_request_id: key,
+          action_by: payload.employee_id,
+          action: 'SUBMIT',
+          previous_status: null,
+          new_status: 'PENDING',
+          notes: '提交休假申請',
+        });
+      } catch (e) {
+        // leave_approval_logs 表可能不存在
+        console.log('[GymHook] leave_approval_logs table not available');
+      }
+
+      // 更新休假餘額中的 pending_days
+      try {
+        const balancesService = new ItemsService('leave_balances', {
+          schema: schema,
+          knex: database,
+        });
+
+        const year = new Date(payload.start_date).getFullYear();
+        const balances = await balancesService.readByQuery({
+          filter: {
+            employee_id: { _eq: payload.employee_id },
+            leave_type: { _eq: payload.leave_type },
+            year: { _eq: year },
+          },
+          limit: 1,
+        });
+
+        if (balances.length > 0) {
+          const currentPending = parseFloat(balances[0].pending_days) || 0;
+          await balancesService.updateOne(balances[0].id, {
+            pending_days: currentPending + daysRequested,
+          });
+        }
+      } catch (e) {
+        console.log('[GymHook] leave_balances table not available');
+      }
+
+      console.log(`[GymHook] Leave request ${key} submitted: ${daysRequested} days`);
+    } catch (error) {
+      console.error('[GymHook] Error processing leave request submission:', error);
+    }
+  });
+
+  // 休假審核時 - 驗證審核權限 (上級才能審核下級)
+  filter('leave_requests.items.update', async (payload, meta, { schema: filterSchema, accountability }) => {
+    // 只在更新 leave_status 且為 APPROVED 或 REJECTED 時檢查
+    if (!payload.leave_status || !['APPROVED', 'REJECTED'].includes(payload.leave_status)) {
+      return payload;
+    }
+
+    const keys = meta.keys || [];
+
+    // 需要有審核者
+    if (!payload.approver_id && !accountability?.user) {
+      throw new Error('缺少審核者資訊');
+    }
+
+    const approverId = payload.approver_id || accountability?.user;
+
+    try {
+      // 在 filter hook 中需要獲取 schema
+      const schema = filterSchema || await getSchema();
+
+      const leaveRequestsService = new ItemsService('leave_requests', {
+        schema: schema,
+        knex: database,
+      });
+
+      const employeesService = new ItemsService('employees', {
+        schema: schema,
+        knex: database,
+      });
+
+      for (const requestId of keys) {
+        const request = await leaveRequestsService.readOne(requestId, {
+          fields: ['id', 'employee_id', 'leave_status'],
+        });
+
+        if (!request) continue;
+
+        // 檢查是否為待審核狀態
+        if (request.leave_status !== 'PENDING') {
+          throw new Error(`休假申請 ${requestId} 不是待審核狀態，無法審核`);
+        }
+
+        // 取得審核者的員工資訊
+        const approverEmployees = await employeesService.readByQuery({
+          filter: { user_id: { _eq: approverId } },
+          limit: 1,
+        });
+
+        let approverEmployeeId = approverId;
+        if (approverEmployees.length > 0) {
+          approverEmployeeId = approverEmployees[0].id;
+        }
+
+        // 檢查是否為總部管理員 (admin level)
+        let isAdmin = false;
+        if (approverEmployees.length > 0) {
+          const approver = approverEmployees[0];
+          if (approver.job_title_id) {
+            const jobTitlesService = new ItemsService('job_titles', {
+              schema: schema,
+              knex: database,
+            });
+            const jobTitle = await jobTitlesService.readOne(approver.job_title_id, {
+              fields: ['permissions_config'],
+            });
+            if (jobTitle?.permissions_config?.level === 'admin') {
+              isAdmin = true;
+            }
+          }
+        }
+
+        // 管理員可以審核所有人，否則需要是上級
+        if (!isAdmin) {
+          const isSupervisor = await isSupervisorOf(approverEmployeeId, request.employee_id, employeesService);
+          if (!isSupervisor) {
+            throw new Error('您不是該員工的上級，無法審核此休假申請');
+          }
+        }
+      }
+
+      // 設定審核時間
+      payload.approved_at = new Date().toISOString();
+      if (!payload.approver_id) {
+        payload.approver_id = approverId;
+      }
+
+      return payload;
+    } catch (error) {
+      console.error('[GymHook] Leave approval validation error:', error);
+      throw error;
+    }
+  });
+
+  // 休假審核完成後 - 記錄審核歷史，更新餘額
+  action('leave_requests.items.update', async ({ payload, keys }, { schema }) => {
+    // 只處理狀態變更
+    if (!payload.leave_status) return;
+
+    try {
+      const leaveRequestsService = new ItemsService('leave_requests', {
+        schema: schema,
+        knex: database,
+      });
+
+      for (const requestId of keys) {
+        const request = await leaveRequestsService.readOne(requestId, {
+          fields: ['id', 'employee_id', 'leave_type', 'days_requested', 'start_date', 'approver_id'],
+        });
+
+        if (!request) continue;
+
+        // 記錄審核歷史
+        try {
+          const logsService = new ItemsService('leave_approval_logs', {
+            schema: schema,
+            knex: database,
+          });
+
+          const actionMap = {
+            'APPROVED': 'APPROVE',
+            'REJECTED': 'REJECT',
+            'CANCELLED': 'CANCEL',
+          };
+
+          await logsService.createOne({
+            leave_request_id: requestId,
+            action_by: payload.approver_id || request.approver_id,
+            action: actionMap[payload.leave_status] || payload.leave_status,
+            previous_status: 'PENDING',
+            new_status: payload.leave_status,
+            notes: payload.approval_notes || null,
+          });
+        } catch (e) {
+          console.log('[GymHook] Could not create approval log');
+        }
+
+        // 更新休假餘額
+        try {
+          const balancesService = new ItemsService('leave_balances', {
+            schema: schema,
+            knex: database,
+          });
+
+          const year = new Date(request.start_date).getFullYear();
+          const balances = await balancesService.readByQuery({
+            filter: {
+              employee_id: { _eq: request.employee_id },
+              leave_type: { _eq: request.leave_type },
+              year: { _eq: year },
+            },
+            limit: 1,
+          });
+
+          if (balances.length > 0) {
+            const balance = balances[0];
+            const daysRequested = parseFloat(request.days_requested) || 0;
+            const currentPending = parseFloat(balance.pending_days) || 0;
+            const currentUsed = parseFloat(balance.used_days) || 0;
+
+            if (payload.leave_status === 'APPROVED') {
+              // 核准：pending 減少，used 增加
+              await balancesService.updateOne(balance.id, {
+                pending_days: Math.max(0, currentPending - daysRequested),
+                used_days: currentUsed + daysRequested,
+              });
+            } else if (['REJECTED', 'CANCELLED'].includes(payload.leave_status)) {
+              // 駁回/取消：pending 減少
+              await balancesService.updateOne(balance.id, {
+                pending_days: Math.max(0, currentPending - daysRequested),
+              });
+            }
+          }
+        } catch (e) {
+          console.log('[GymHook] Could not update leave balance');
+        }
+
+        console.log(`[GymHook] Leave request ${requestId} ${payload.leave_status}`);
+      }
+    } catch (error) {
+      console.error('[GymHook] Error processing leave approval:', error);
+    }
+  });
+
+  // ============================================
+  // 8. HR 考勤自動計算 Hooks
+  // ============================================
+
+  /**
+   * 計算工時 (小時)
+   */
+  function calculateWorkHours(checkIn, checkOut, breakMinutes = 60) {
+    if (!checkIn || !checkOut) return 0;
+
+    const inTime = new Date(checkIn);
+    const outTime = new Date(checkOut);
+    const diffMs = outTime - inTime;
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    // 扣除休息時間
+    const workHours = diffHours - (breakMinutes / 60);
+    return Math.max(0, Math.round(workHours * 100) / 100);
+  }
+
+  /**
+   * 計算遲到分鐘數
+   */
+  function calculateLateMinutes(checkIn, scheduledStart, graceMinutes = 10) {
+    if (!checkIn || !scheduledStart) return 0;
+
+    const inTime = new Date(checkIn);
+    const scheduled = new Date(scheduledStart);
+    const diffMs = inTime - scheduled;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    // 寬限時間內不算遲到
+    if (diffMinutes <= graceMinutes) return 0;
+    return diffMinutes - graceMinutes;
+  }
+
+  // 打卡簽退時自動計算工時
+  action('attendances.items.update', async ({ payload, keys }, { schema }) => {
+    // 只在更新 check_out 時計算
+    if (!payload.check_out) return;
+
+    try {
+      const attendancesService = new ItemsService('attendances', {
+        schema: schema,
+        knex: database,
+      });
+
+      for (const attendanceId of keys) {
+        const attendance = await attendancesService.readOne(attendanceId, {
+          fields: ['id', 'check_in', 'check_out', 'employee_id', 'branch_id'],
+        });
+
+        if (!attendance || !attendance.check_in) continue;
+
+        const checkOut = payload.check_out || attendance.check_out;
+        const workHours = calculateWorkHours(attendance.check_in, checkOut);
+
+        // 計算加班 (超過 8 小時)
+        const standardHours = 8;
+        const overtimeHours = Math.max(0, workHours - standardHours);
+
+        // 決定出勤狀態
+        let attendanceStatus = 'PRESENT';
+        if (attendance.late_minutes > 0) {
+          attendanceStatus = 'LATE';
+        }
+
+        await attendancesService.updateOne(attendanceId, {
+          work_hours: workHours,
+          overtime_hours: overtimeHours,
+          attendance_status: attendanceStatus,
+        });
+
+        console.log(`[GymHook] Attendance ${attendanceId} calculated: ${workHours}h work, ${overtimeHours}h overtime`);
+      }
+    } catch (error) {
+      console.error('[GymHook] Error calculating attendance:', error);
+    }
+  });
+
+  // 打卡簽到時記錄日期和檢查遲到
+  action('attendances.items.create', async ({ payload, key }, { schema }) => {
+    if (!payload.check_in) return;
+
+    try {
+      const attendancesService = new ItemsService('attendances', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 設定考勤日期
+      const checkInDate = new Date(payload.check_in);
+      const attendanceDate = checkInDate.toISOString().split('T')[0];
+
+      // 取得班表設定 (如果有)
+      let lateMinutes = 0;
+      let scheduledStart = null;
+
+      try {
+        const shiftsService = new ItemsService('shift_schedules', {
+          schema: schema,
+          knex: database,
+        });
+
+        const shifts = await shiftsService.readByQuery({
+          filter: {
+            branch_id: { _eq: payload.branch_id },
+            is_default: { _eq: true },
+          },
+          limit: 1,
+        });
+
+        if (shifts.length > 0) {
+          const shift = shifts[0];
+          // 組合日期和班表時間
+          const [hours, minutes] = shift.start_time.split(':');
+          scheduledStart = new Date(checkInDate);
+          scheduledStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+          lateMinutes = calculateLateMinutes(
+            payload.check_in,
+            scheduledStart,
+            shift.grace_period_minutes || 10
+          );
+        }
+      } catch (e) {
+        // shift_schedules 可能不存在
+      }
+
+      const attendanceStatus = lateMinutes > 0 ? 'LATE' : 'PRESENT';
+
+      await attendancesService.updateOne(key, {
+        attendance_date: attendanceDate,
+        late_minutes: lateMinutes,
+        attendance_status: attendanceStatus,
+      });
+
+      console.log(`[GymHook] Attendance ${key} created: date=${attendanceDate}, late=${lateMinutes}min`);
+    } catch (error) {
+      console.error('[GymHook] Error processing attendance check-in:', error);
+    }
+  });
+
+  // ============================================
+  // 9. 會員入場驗證 Hooks
+  // ============================================
+
+  // 會員入場時驗證合約有效性
+  filter('member_checkins.items.create', async (payload, meta, { schema }) => {
+    if (!payload.member_id) {
+      throw new Error('缺少會員資訊');
+    }
+
+    try {
+      const contractsService = new ItemsService('contracts', {
+        schema: schema,
+        knex: database,
+      });
+
+      const membersService = new ItemsService('members', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 取得會員資訊
+      const member = await membersService.readOne(payload.member_id, {
+        fields: ['id', 'member_status', 'branch_id', 'full_name'],
+      });
+
+      if (!member) {
+        throw new Error('會員不存在');
+      }
+
+      if (member.member_status !== 'ACTIVE') {
+        throw new Error(`會員 ${member.full_name} 狀態為 ${member.member_status}，無法入場`);
+      }
+
+      // 檢查是否有有效合約
+      const today = new Date().toISOString().split('T')[0];
+      const validContracts = await contractsService.readByQuery({
+        filter: {
+          _and: [
+            { member_id: { _eq: payload.member_id } },
+            { contract_status: { _eq: 'ACTIVE' } },
+            { status: { _eq: 'active' } },
+            {
+              _or: [
+                { end_date: { _gte: today } },
+                { end_date: { _null: true } }, // 次數制沒有 end_date
+              ],
+            },
+          ],
+        },
+        fields: ['id', 'plan_id', 'remaining_counts', 'end_date'],
+        limit: 1,
+      });
+
+      if (validContracts.length === 0) {
+        throw new Error(`會員 ${member.full_name} 沒有有效合約，無法入場`);
+      }
+
+      // 設定使用的合約
+      payload.contract_id = validContracts[0].id;
+
+      // 判斷是否跨店入場
+      if (payload.branch_id && member.branch_id && payload.branch_id !== member.branch_id) {
+        payload.is_cross_branch = true;
+      }
+
+      // 設定入場時間 (如果沒有提供)
+      if (!payload.check_time) {
+        payload.check_time = new Date().toISOString();
+      }
+
+      return payload;
+    } catch (error) {
+      console.error('[GymHook] Member checkin validation error:', error);
+      throw error;
+    }
+  });
+
+  // 會員入場後 - 如果是次數制合約，扣除次數
+  action('member_checkins.items.create', async ({ payload, key }, { schema }) => {
+    if (!payload.contract_id) return;
+
+    try {
+      const contractsService = new ItemsService('contracts', {
+        schema: schema,
+        knex: database,
+      });
+
+      const contract = await contractsService.readOne(payload.contract_id, {
+        fields: ['id', 'remaining_counts', 'plan_id'],
+      });
+
+      // 如果是次數制合約 (有 remaining_counts)
+      if (contract && contract.remaining_counts !== null) {
+        const newCount = Math.max(0, contract.remaining_counts - 1);
+
+        await contractsService.updateOne(payload.contract_id, {
+          remaining_counts: newCount,
+        });
+
+        // 如果次數用完，更新合約狀態
+        if (newCount === 0) {
+          await contractsService.updateOne(payload.contract_id, {
+            contract_status: 'EXPIRED',
+          });
+          console.log(`[GymHook] Contract ${payload.contract_id} expired (no remaining counts)`);
+        }
+
+        console.log(`[GymHook] Member checkin: contract ${payload.contract_id} remaining ${newCount}`);
+      }
+    } catch (error) {
+      console.error('[GymHook] Error processing member checkin:', error);
+    }
+  });
 };

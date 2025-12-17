@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
+
 definePageMeta({
-  middleware: 'auth'
+  middleware: 'auth',
+  validate: (route) => {
+    const id = route.params.memberId as string
+    // UUID v4 格式驗證
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+  }
 })
 
 const route = useRoute()
@@ -13,7 +20,7 @@ const isLoading = ref(true)
 const isDeleting = ref(false)
 const showDeleteModal = ref(false)
 
-const memberId = computed(() => route.params.id as string)
+const memberId = computed(() => route.params.memberId as string)
 
 const loadMember = async () => {
   isLoading.value = true
@@ -40,27 +47,27 @@ const formatDate = (dateStr: string | null) => {
 
 const getStatusBadge = (status: string) => {
   const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: '有效', class: 'badge-success' },
-    EXPIRED: { label: '過期', class: 'badge-error' },
-    SUSPENDED: { label: '暫停', class: 'badge-warning' },
-    BANNED: { label: '停權', class: 'badge-error' }
+    ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
+    EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
+    SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
+    BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
   }
   return map[status] || { label: status, class: '' }
 }
 
 const getContractStatusBadge = (status: string) => {
   const map: Record<string, { label: string; class: string }> = {
-    DRAFT: { label: '草稿', class: '' },
-    ACTIVE: { label: '有效', class: 'badge-success' },
-    PAUSED: { label: '暫停', class: 'badge-warning' },
-    EXPIRED: { label: '過期', class: 'badge-error' },
-    TERMINATED: { label: '終止', class: 'badge-error' }
+    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+    TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
   }
   return map[status] || { label: status, class: '' }
 }
 
 const getGenderLabel = (gender: string | null) => {
-  const map: Record<string, string> = { M: '男', F: '女', O: '其他' }
+  const map: Record<string, string> = { M: LABELS.GENDER.MALE, F: LABELS.GENDER.FEMALE, O: LABELS.GENDER.OTHER }
   return gender ? map[gender] || gender : '—'
 }
 
@@ -84,7 +91,7 @@ const handleDelete = async () => {
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="loading-spinner-large" />
-      <p class="text-secondary mt-md">載入中...</p>
+      <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
     </div>
 
     <template v-else-if="member">
@@ -156,7 +163,7 @@ const handleDelete = async () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
-            聯絡資訊
+            {{ MESSAGES.COMMON.CONTACT_INFO }}
           </h3>
           <div class="info-grid">
             <div class="info-item">
@@ -184,7 +191,7 @@ const handleDelete = async () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
             </svg>
-            個人資料
+            {{ MESSAGES.COMMON.PERSONAL_INFO }}
           </h3>
           <div class="info-grid">
             <div class="info-item">
@@ -212,7 +219,7 @@ const handleDelete = async () => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>
             </svg>
-            標籤
+            {{ MESSAGES.FORM.TAGS }}
           </h3>
           <div class="tags-list">
             <span v-for="tag in member.tags" :key="tag" class="tag">{{ tag }}</span>
@@ -223,12 +230,12 @@ const handleDelete = async () => {
       <!-- Contracts Section -->
       <section class="contracts-section">
         <div class="section-header">
-          <h2 class="text-title-1">合約紀錄</h2>
+          <h2 class="text-title-1">{{ PAGES.MEMBERS.CONTRACT_HISTORY }}</h2>
           <NuxtLink :to="`/contracts/new?member=${member.id}`" class="btn btn-primary btn-small">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14"/><path d="M12 5v14"/>
             </svg>
-            新增合約
+            {{ PAGES.CONTRACTS.ADD_CONTRACT }}
           </NuxtLink>
         </div>
 
@@ -238,7 +245,7 @@ const handleDelete = async () => {
               <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
             </svg>
           </div>
-          <p class="text-secondary">尚無合約紀錄</p>
+          <p class="text-secondary">{{ PAGES.MEMBERS.NO_CONTRACTS }}</p>
         </div>
 
         <div v-else class="contracts-grid">
@@ -279,14 +286,14 @@ const handleDelete = async () => {
               <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
             </svg>
           </div>
-          <h3 class="modal-title">確定要刪除嗎？</h3>
+          <h3 class="modal-title">{{ MESSAGES.CONFIRM.DELETE_TITLE }}</h3>
           <p class="modal-desc text-secondary">
-            刪除後將無法恢復會員「{{ member?.full_name }}」的資料。
+            {{ PAGES.MEMBERS.DELETE_WARNING }}「{{ member?.full_name }}」
           </p>
           <div class="modal-actions">
-            <button class="btn btn-secondary" @click="showDeleteModal = false">取消</button>
+            <button class="btn btn-secondary" @click="showDeleteModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
             <button class="btn btn-danger" :disabled="isDeleting" @click="handleDelete">
-              {{ isDeleting ? '刪除中...' : '確定刪除' }}
+              {{ isDeleting ? MESSAGES.ACTIONS.DELETING : MESSAGES.CONFIRM.CONFIRM_DELETE }}
             </button>
           </div>
         </div>

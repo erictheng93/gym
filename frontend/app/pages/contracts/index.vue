@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -11,12 +13,12 @@ const selectedStatus = ref('')
 const stats = ref({ active: 0, expired: 0, draft: 0 })
 
 const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'DRAFT', label: '草稿' },
-  { value: 'ACTIVE', label: '有效' },
-  { value: 'PAUSED', label: '暫停中' },
-  { value: 'EXPIRED', label: '已過期' },
-  { value: 'TERMINATED', label: '已終止' }
+  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
+  { value: 'DRAFT', label: STATUS.CONTRACT.DRAFT },
+  { value: 'ACTIVE', label: STATUS.CONTRACT.ACTIVE },
+  { value: 'PAUSED', label: STATUS.CONTRACT.PAUSED },
+  { value: 'EXPIRED', label: STATUS.CONTRACT.EXPIRED },
+  { value: 'TERMINATED', label: STATUS.CONTRACT.TERMINATED }
 ]
 
 const loadContracts = async () => {
@@ -50,20 +52,20 @@ const formatDate = (dateStr: string | null) => {
 
 const getStatusBadge = (status: string) => {
   const map: Record<string, { label: string; class: string }> = {
-    DRAFT: { label: '草稿', class: '' },
-    ACTIVE: { label: '有效', class: 'badge-success' },
-    PAUSED: { label: '暫停中', class: 'badge-warning' },
-    EXPIRED: { label: '已過期', class: 'badge-error' },
-    TERMINATED: { label: '已終止', class: 'badge-error' }
+    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+    TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
   }
   return map[status] || { label: status, class: '' }
 }
 
 const getPaymentStatusBadge = (status: string) => {
   const map: Record<string, { label: string; class: string }> = {
-    UNPAID: { label: '未付款', class: 'badge-error' },
-    PARTIAL: { label: '部分付款', class: 'badge-warning' },
-    PAID: { label: '已付清', class: 'badge-success' }
+    UNPAID: { label: STATUS.PAYMENT.UNPAID, class: 'badge-error' },
+    PARTIAL: { label: STATUS.PAYMENT.PARTIAL, class: 'badge-warning' },
+    PAID: { label: STATUS.PAYMENT.PAID, class: 'badge-success' }
   }
   return map[status] || { label: status, class: '' }
 }
@@ -74,8 +76,8 @@ const getPaymentStatusBadge = (status: string) => {
     <!-- Header -->
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-headline">合約管理</h1>
-        <p class="text-body text-secondary">管理會員合約與簽約流程</p>
+        <h1 class="text-headline">{{ PAGES.CONTRACTS.TITLE }}</h1>
+        <p class="text-body text-secondary">{{ PAGES.CONTRACTS.DESCRIPTION }}</p>
       </div>
       <NuxtLink to="/contracts/new" class="btn btn-primary">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -84,7 +86,7 @@ const getPaymentStatusBadge = (status: string) => {
           <path d="M12 18v-6"/>
           <path d="M9 15h6"/>
         </svg>
-        新增合約
+        {{ PAGES.CONTRACTS.ADD_CONTRACT }}
       </NuxtLink>
     </header>
 
@@ -99,7 +101,7 @@ const getPaymentStatusBadge = (status: string) => {
         </div>
         <div class="stat-content">
           <span class="stat-number">{{ stats.active }}</span>
-          <span class="stat-label">有效合約</span>
+          <span class="stat-label">{{ PAGES.CONTRACTS.ACTIVE_CONTRACTS }}</span>
         </div>
       </div>
 
@@ -113,7 +115,7 @@ const getPaymentStatusBadge = (status: string) => {
         </div>
         <div class="stat-content">
           <span class="stat-number">{{ stats.expired }}</span>
-          <span class="stat-label">已過期</span>
+          <span class="stat-label">{{ PAGES.CONTRACTS.EXPIRED_CONTRACTS }}</span>
         </div>
       </div>
 
@@ -126,7 +128,7 @@ const getPaymentStatusBadge = (status: string) => {
         </div>
         <div class="stat-content">
           <span class="stat-number">{{ stats.draft }}</span>
-          <span class="stat-label">草稿</span>
+          <span class="stat-label">{{ PAGES.CONTRACTS.DRAFT_CONTRACTS }}</span>
         </div>
       </div>
     </div>
@@ -135,7 +137,7 @@ const getPaymentStatusBadge = (status: string) => {
     <div class="filters-bar glass-card-flat">
       <div class="filter-group">
         <select v-model="selectedBranch" class="input filter-select">
-          <option value="">全部分店</option>
+          <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
           <option v-for="branch in branches" :key="branch.id" :value="branch.id">
             {{ branch.name }}
           </option>
@@ -153,7 +155,7 @@ const getPaymentStatusBadge = (status: string) => {
     <div class="table-card card">
       <div v-if="isLoading" class="loading-state">
         <div class="loading-spinner-large" />
-        <p class="text-secondary mt-md">載入中...</p>
+        <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
       </div>
 
       <div v-else-if="contracts.length === 0" class="empty-state">
@@ -163,21 +165,21 @@ const getPaymentStatusBadge = (status: string) => {
             <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
           </svg>
         </div>
-        <h3 class="text-title-3">尚無合約資料</h3>
-        <p class="text-secondary">新增第一份合約開始使用系統</p>
-        <NuxtLink to="/contracts/new" class="btn btn-primary mt-lg">新增合約</NuxtLink>
+        <h3 class="text-title-3">{{ PAGES.CONTRACTS.NO_CONTRACTS }}</h3>
+        <p class="text-secondary">{{ PAGES.CONTRACTS.NO_CONTRACTS_HINT }}</p>
+        <NuxtLink to="/contracts/new" class="btn btn-primary mt-lg">{{ PAGES.CONTRACTS.ADD_CONTRACT }}</NuxtLink>
       </div>
 
       <table v-else class="data-table">
         <thead>
           <tr>
-            <th>合約編號</th>
-            <th>會員</th>
-            <th>方案</th>
-            <th>期間</th>
-            <th>金額</th>
-            <th>付款狀態</th>
-            <th>合約狀態</th>
+            <th>{{ PAGES.CONTRACTS.CONTRACT_NUMBER }}</th>
+            <th>{{ PAGES.CONTRACTS.MEMBER }}</th>
+            <th>{{ PAGES.CONTRACTS.PLAN }}</th>
+            <th>{{ PAGES.CONTRACTS.PERIOD }}</th>
+            <th>{{ PAGES.CONTRACTS.AMOUNT }}</th>
+            <th>{{ PAGES.CONTRACTS.PAYMENT_STATUS }}</th>
+            <th>{{ PAGES.CONTRACTS.CONTRACT_STATUS }}</th>
             <th></th>
           </tr>
         </thead>
@@ -188,15 +190,15 @@ const getPaymentStatusBadge = (status: string) => {
             </td>
             <td>
               <div class="member-cell">
-                <div class="member-avatar">{{ contract.member?.full_name?.[0] || '?' }}</div>
+                <div class="member-avatar">{{ contract.member_id?.full_name?.[0] || '?' }}</div>
                 <div class="member-info">
-                  <span class="member-name">{{ contract.member?.full_name || '—' }}</span>
-                  <span class="member-code-small text-caption text-tertiary">{{ contract.member?.member_code }}</span>
+                  <span class="member-name">{{ contract.member_id?.full_name || '—' }}</span>
+                  <span class="member-code-small text-caption text-tertiary">{{ contract.member_id?.member_code }}</span>
                 </div>
               </div>
             </td>
             <td>
-              <span class="plan-name">{{ contract.plan?.name || '—' }}</span>
+              <span class="plan-name">{{ contract.plan_id?.name || '—' }}</span>
             </td>
             <td>
               <div class="date-range">
@@ -220,7 +222,7 @@ const getPaymentStatusBadge = (status: string) => {
             </td>
             <td>
               <div class="actions-cell">
-                <NuxtLink :to="`/contracts/${contract.id}`" class="action-btn" title="查看詳情">
+                <NuxtLink :to="`/contracts/${contract.id}`" class="action-btn" :title="MESSAGES.ACTIONS.VIEW_DETAILS">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
                     <circle cx="12" cy="12" r="3"/>

@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  APP_NAME,
+  APP_COPYRIGHT_YEAR,
+  STORAGE_KEYS,
+  ANIMATION,
+  MESSAGES
+} from '~/constants'
+
 definePageMeta({
   layout: false
 })
@@ -17,7 +25,7 @@ const mounted = ref(false)
 onMounted(() => {
   mounted.value = true
   // Check and apply theme
-  const savedTheme = localStorage.getItem('gym-nexus-theme')
+  const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME)
   if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
     isDark.value = true
     document.documentElement.setAttribute('data-theme', 'dark')
@@ -30,7 +38,7 @@ const toggleTheme = () => {
   isDark.value = !isDark.value
   const theme = isDark.value ? 'dark' : 'light'
   document.documentElement.setAttribute('data-theme', theme)
-  localStorage.setItem('gym-nexus-theme', theme)
+  localStorage.setItem(STORAGE_KEYS.THEME, theme)
 }
 
 watchEffect(() => {
@@ -43,7 +51,7 @@ const handleSubmit = async () => {
   error.value = ''
 
   if (!form.email || !form.password) {
-    error.value = '請填寫帳號和密碼'
+    error.value = MESSAGES.AUTH.REQUIRED_FIELDS
     triggerShake()
     return
   }
@@ -53,14 +61,14 @@ const handleSubmit = async () => {
   if (result.success) {
     await navigateTo('/')
   } else {
-    error.value = result.error || '登入失敗，請確認帳號密碼'
+    error.value = result.error || MESSAGES.AUTH.LOGIN_ERROR
     triggerShake()
   }
 }
 
 const triggerShake = () => {
   isShaking.value = true
-  setTimeout(() => { isShaking.value = false }, 500)
+  setTimeout(() => { isShaking.value = false }, ANIMATION.SHAKE_DURATION)
 }
 </script>
 
@@ -75,7 +83,7 @@ const triggerShake = () => {
 
     <!-- Theme Toggle -->
     <ClientOnly>
-      <button class="theme-toggle" @click="toggleTheme" aria-label="切換主題">
+      <button class="theme-toggle" @click="toggleTheme" :aria-label="MESSAGES.A11Y.TOGGLE_THEME">
         <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
         </svg>
@@ -102,8 +110,8 @@ const triggerShake = () => {
               </defs>
             </svg>
           </div>
-          <h1 class="login-title">Gym Nexus</h1>
-          <p class="login-subtitle">登入您的帳號以繼續</p>
+          <h1 class="login-title">{{ APP_NAME }}</h1>
+          <p class="login-subtitle">{{ MESSAGES.AUTH.LOGIN_SUBTITLE }}</p>
         </div>
 
         <!-- Error Message -->
@@ -119,46 +127,39 @@ const triggerShake = () => {
         <!-- Form -->
         <form @submit.prevent="handleSubmit" class="login-form">
           <div class="input-group">
-            <label for="email" class="input-label">電子郵件</label>
+            <label for="email" class="input-label">{{ MESSAGES.FORM.EMAIL }}</label>
             <input
               id="email"
               v-model="form.email"
               type="email"
               autocomplete="email"
               class="input"
-              placeholder="name@example.com"
+              :placeholder="MESSAGES.FORM.EMAIL_PLACEHOLDER"
             />
           </div>
 
           <div class="input-group">
-            <label for="password" class="input-label">密碼</label>
+            <label for="password" class="input-label">{{ MESSAGES.FORM.PASSWORD }}</label>
             <input
               id="password"
               v-model="form.password"
               type="password"
               autocomplete="current-password"
               class="input"
-              placeholder="輸入您的密碼"
+              :placeholder="MESSAGES.FORM.PASSWORD_PLACEHOLDER"
             />
           </div>
 
           <button type="submit" class="btn btn-primary btn-large w-full" :disabled="isLoading">
             <span v-show="isLoading" class="loading-spinner"></span>
-            <span>{{ isLoading ? '登入中...' : '登入' }}</span>
+            <span>{{ isLoading ? MESSAGES.AUTH.LOGGING_IN : MESSAGES.AUTH.LOGIN }}</span>
           </button>
         </form>
-
-        <!-- Footer -->
-        <div class="login-footer">
-          <p class="text-footnote text-secondary">
-            測試帳號：eric@dacit.net / eric
-          </p>
-        </div>
       </div>
 
       <!-- Copyright -->
       <p class="copyright text-caption text-tertiary">
-        © 2025 Gym Nexus. All rights reserved.
+        © {{ APP_COPYRIGHT_YEAR }} {{ APP_NAME }}. All rights reserved.
       </p>
     </div>
   </div>

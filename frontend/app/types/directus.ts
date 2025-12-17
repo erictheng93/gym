@@ -109,15 +109,21 @@ export interface Contract extends BaseFields {
 // 合約異動
 export interface ContractLog extends BaseFields {
   contract_id: string
-  log_type: 'PAUSE' | 'EXTENSION' | 'TRANSFER'
+  log_type: 'PAUSE' | 'RESUME' | 'EXTEND' | 'TRANSFER' | 'CANCEL' | 'CLASS_USED' | 'RENEWAL'
   start_date: string | null
   end_date: string | null
   days_affected: number | null
   reason: string | null
   created_by_employee: string | null
+  original_member_id: string | null
+  target_member_id: string | null
+  branch_id: string | null
   // Relations
   contract?: Contract
   created_by?: Employee
+  original_member?: Member
+  target_member?: Member
+  branch?: Branch
 }
 
 // 打卡紀錄

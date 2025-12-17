@@ -1,5 +1,7 @@
+import { STORAGE_KEYS } from '~/constants'
+
 export const useTheme = () => {
-  const userTheme = useState<'light' | 'dark' | 'system'>('gym-nexus-theme', () => 'system')
+  const userTheme = useState<'light' | 'dark' | 'system'>(STORAGE_KEYS.THEME, () => 'system')
 
   const isDark = computed(() => {
     if (import.meta.server) {

@@ -1,36 +1,36 @@
 <script setup lang="ts">
-import { MESSAGES, PAGES, STATUS, PAGINATION, TIMING } from '~/constants'
-
 definePageMeta({
   middleware: 'auth'
 })
 
-const { members, totalCount, isLoading, fetchMembers } = useMembers()
+const { employees, totalCount, isLoading, fetchEmployees } = useEmployees()
 const { branches, fetchBranches } = useBranches()
+const { jobTitles, fetchJobTitles } = useJobTitles()
 
 const search = ref('')
 const selectedBranch = ref('')
 const selectedStatus = ref('')
+const selectedJobTitle = ref('')
 const currentPage = ref(1)
-const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
+const pageSize = 20
 
 const statusOptions = [
-  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
-  { value: 'ACTIVE', label: STATUS.MEMBER.ACTIVE },
-  { value: 'EXPIRED', label: STATUS.MEMBER.EXPIRED },
-  { value: 'SUSPENDED', label: STATUS.MEMBER.PAUSED },
-  { value: 'BANNED', label: STATUS.MEMBER.SUSPENDED }
+  { value: '', label: '全部狀態' },
+  { value: 'ACTIVE', label: '在職' },
+  { value: 'RESIGNED', label: '離職' },
+  { value: 'LEAVE', label: '留停' }
 ]
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 
-const loadMembers = async () => {
-  await fetchMembers({
+const loadEmployees = async () => {
+  await fetchEmployees({
     page: currentPage.value,
     limit: pageSize,
     search: search.value || undefined,
     branchId: selectedBranch.value || undefined,
-    status: selectedStatus.value || undefined
+    status: selectedStatus.value || undefined,
+    jobTitleId: selectedJobTitle.value || undefined
   })
 }
 
@@ -40,21 +40,21 @@ const handleSearch = () => {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => {
     currentPage.value = 1
-    loadMembers()
-  }, TIMING.DEBOUNCE)
+    loadEmployees()
+  }, 300)
 }
 
-watch([selectedBranch, selectedStatus], () => {
+watch([selectedBranch, selectedStatus, selectedJobTitle], () => {
   currentPage.value = 1
-  loadMembers()
+  loadEmployees()
 })
 
 watch(currentPage, () => {
-  loadMembers()
+  loadEmployees()
 })
 
 onMounted(async () => {
-  await Promise.all([loadMembers(), fetchBranches()])
+  await Promise.all([loadEmployees(), fetchBranches(), fetchJobTitles()])
 })
 
 const formatDate = (dateStr: string) => {
@@ -67,31 +67,39 @@ const formatDate = (dateStr: string) => {
 
 const getStatusBadge = (status: string) => {
   const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
-    EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
-    SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
-    BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
+    ACTIVE: { label: '在職', class: 'badge-success' },
+    RESIGNED: { label: '離職', class: 'badge-error' },
+    LEAVE: { label: '留停', class: 'badge-warning' }
   }
   return map[status] || { label: status, class: '' }
+}
+
+const getEmploymentTypeBadge = (type: string) => {
+  const map: Record<string, { label: string; class: string }> = {
+    FULL_TIME: { label: '正職', class: 'badge-info' },
+    PART_TIME: { label: '兼職', class: 'badge-secondary' },
+    FREELANCE: { label: '外包', class: 'badge-secondary' }
+  }
+  return map[type] || { label: type, class: '' }
 }
 </script>
 
 <template>
-  <div class="members-page">
+  <div class="employees-page">
     <!-- Header -->
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-headline">{{ PAGES.MEMBERS.TITLE }}</h1>
-        <p class="text-body text-secondary">{{ PAGES.MEMBERS.DESCRIPTION }}</p>
+        <h1 class="text-headline">員工管理</h1>
+        <p class="text-body text-secondary">管理所有員工資料與權限</p>
       </div>
-      <NuxtLink to="/members/new" class="btn btn-primary">
+      <NuxtLink to="/employees/new" class="btn btn-primary">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
           <circle cx="9" cy="7" r="4"/>
           <line x1="19" x2="19" y1="8" y2="14"/>
           <line x1="22" x2="16" y1="11" y2="11"/>
         </svg>
-        {{ PAGES.MEMBERS.ADD_MEMBER }}
+        新增員工
       </NuxtLink>
     </header>
 
@@ -102,16 +110,23 @@ const getStatusBadge = (status: string) => {
           v-model="search"
           type="text"
           class="input input-search"
-          :placeholder="PAGES.MEMBERS.SEARCH_PLACEHOLDER"
+          placeholder="搜尋員工姓名或編號..."
           @input="handleSearch"
         />
       </div>
 
       <div class="filter-group">
         <select v-model="selectedBranch" class="input filter-select">
-          <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
+          <option value="">全部分店</option>
           <option v-for="branch in branches" :key="branch.id" :value="branch.id">
             {{ branch.name }}
+          </option>
+        </select>
+
+        <select v-model="selectedJobTitle" class="input filter-select">
+          <option value="">全部職位</option>
+          <option v-for="jobTitle in jobTitles" :key="jobTitle.id" :value="jobTitle.id">
+            {{ jobTitle.name }}
           </option>
         </select>
 
@@ -127,18 +142,18 @@ const getStatusBadge = (status: string) => {
     <div class="stats-bar">
       <div class="stat-item">
         <span class="stat-number">{{ totalCount }}</span>
-        <span class="stat-label text-caption text-secondary">{{ MESSAGES.COMMON.MATCHES }}</span>
+        <span class="stat-label text-caption text-secondary">符合條件</span>
       </div>
     </div>
 
-    <!-- Members Table -->
+    <!-- Employees Table -->
     <div class="table-card card">
       <div v-if="isLoading" class="loading-state">
         <div class="loading-spinner-large" />
-        <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
+        <p class="text-secondary mt-md">載入中...</p>
       </div>
 
-      <div v-else-if="members.length === 0" class="empty-state">
+      <div v-else-if="employees.length === 0" class="empty-state">
         <div class="empty-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
@@ -147,61 +162,63 @@ const getStatusBadge = (status: string) => {
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
         </div>
-        <h3 class="text-title-3">{{ PAGES.MEMBERS.NO_MEMBERS }}</h3>
-        <p class="text-secondary">{{ PAGES.MEMBERS.NO_MEMBERS_HINT }}</p>
-        <NuxtLink to="/members/new" class="btn btn-primary mt-lg">{{ PAGES.MEMBERS.ADD_MEMBER }}</NuxtLink>
+        <h3 class="text-title-3">尚無員工資料</h3>
+        <p class="text-secondary">新增第一位員工開始使用系統</p>
+        <NuxtLink to="/employees/new" class="btn btn-primary mt-lg">新增員工</NuxtLink>
       </div>
 
       <table v-else class="data-table">
         <thead>
           <tr>
-            <th>會員</th>
+            <th>員工</th>
             <th>編號</th>
-            <th>聯絡方式</th>
+            <th>職位</th>
             <th>分店</th>
+            <th>聘用類型</th>
             <th>狀態</th>
             <th>加入日期</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(member, index) in members" :key="member.id" class="stagger-item" :style="{ animationDelay: `${index * 0.03}s` }">
+          <tr v-for="(employee, index) in employees" :key="employee.id" class="stagger-item" :style="{ animationDelay: `${index * 0.03}s` }">
             <td>
-              <div class="member-cell">
-                <div class="member-avatar">{{ member.full_name[0] }}</div>
-                <span class="member-name">{{ member.full_name }}</span>
+              <div class="employee-cell">
+                <div class="employee-avatar">{{ employee.full_name[0] }}</div>
+                <span class="employee-name">{{ employee.full_name }}</span>
               </div>
             </td>
             <td>
-              <code class="member-code">{{ member.member_code }}</code>
+              <code class="employee-code">{{ employee.employee_code || '—' }}</code>
             </td>
             <td>
-              <div class="contact-cell">
-                <span v-if="member.phone" class="phone">{{ member.phone }}</span>
-                <span v-if="member.email" class="email text-caption text-tertiary">{{ member.email }}</span>
-                <span v-if="!member.phone && !member.email" class="text-tertiary">—</span>
-              </div>
+              <span class="job-title">{{ employee.job_title?.name || '—' }}</span>
             </td>
             <td>
-              <span class="branch-name">{{ member.branch?.name || '—' }}</span>
+              <span class="branch-name">{{ employee.branch?.name || '—' }}</span>
             </td>
             <td>
-              <span :class="['badge', getStatusBadge(member.member_status).class]">
-                {{ getStatusBadge(member.member_status).label }}
+              <span :class="['badge', getEmploymentTypeBadge(employee.employment_type).class]">
+                {{ getEmploymentTypeBadge(employee.employment_type).label }}
               </span>
             </td>
             <td>
-              <span class="text-secondary">{{ member.join_date ? formatDate(member.join_date) : '—' }}</span>
+              <span :class="['badge', getStatusBadge(employee.employment_status).class]">
+                {{ getStatusBadge(employee.employment_status).label }}
+              </span>
+            </td>
+            <td>
+              <span class="text-secondary">{{ employee.date_created ? formatDate(employee.date_created) : '—' }}</span>
             </td>
             <td>
               <div class="actions-cell">
-                <NuxtLink :to="`/members/${member.id}`" class="action-btn" title="查看詳情">
+                <NuxtLink :to="`/employees/${employee.id}`" class="action-btn" title="查看詳情">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
                     <circle cx="12" cy="12" r="3"/>
                   </svg>
                 </NuxtLink>
-                <NuxtLink :to="`/members/${member.id}/edit`" class="action-btn" title="編輯">
+                <NuxtLink :to="`/employees/${employee.id}/edit`" class="action-btn" title="編輯">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
                     <path d="m15 5 4 4"/>
@@ -220,7 +237,7 @@ const getStatusBadge = (status: string) => {
           :disabled="currentPage === 1"
           @click="currentPage--"
         >
-          {{ MESSAGES.ACTIONS.PREV_PAGE }}
+          上一頁
         </button>
         <span class="page-info text-secondary">
           第 {{ currentPage }} / {{ totalPages }} 頁
@@ -230,7 +247,7 @@ const getStatusBadge = (status: string) => {
           :disabled="currentPage === totalPages"
           @click="currentPage++"
         >
-          {{ MESSAGES.ACTIONS.NEXT_PAGE }}
+          下一頁
         </button>
       </div>
     </div>
@@ -238,7 +255,7 @@ const getStatusBadge = (status: string) => {
 </template>
 
 <style scoped>
-.members-page {
+.employees-page {
   max-width: 1400px;
   margin: 0 auto;
 }
@@ -399,18 +416,18 @@ const getStatusBadge = (status: string) => {
   background: var(--color-bg-secondary);
 }
 
-/* Member Cell */
-.member-cell {
+/* Employee Cell */
+.employee-cell {
   display: flex;
   align-items: center;
   gap: var(--space-md);
 }
 
-.member-avatar {
+.employee-avatar {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #34c759, #30d158);
   color: white;
   display: flex;
   align-items: center;
@@ -420,12 +437,12 @@ const getStatusBadge = (status: string) => {
   flex-shrink: 0;
 }
 
-.member-name {
+.employee-name {
   font-weight: 500;
   color: var(--color-text-primary);
 }
 
-.member-code {
+.employee-code {
   font-family: var(--font-mono);
   font-size: 13px;
   padding: 2px 8px;
@@ -434,15 +451,9 @@ const getStatusBadge = (status: string) => {
   color: var(--color-text-secondary);
 }
 
-/* Contact Cell */
-.contact-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.phone {
+.job-title {
   font-size: 14px;
+  color: var(--color-text-primary);
 }
 
 /* Actions Cell */
@@ -473,6 +484,17 @@ const getStatusBadge = (status: string) => {
   color: var(--color-accent);
 }
 
+/* Badge variants */
+.badge-info {
+  background: rgba(0, 122, 255, 0.1);
+  color: #007aff;
+}
+
+.badge-secondary {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
 /* Pagination */
 .pagination {
   display: flex;
@@ -495,6 +517,10 @@ const getStatusBadge = (status: string) => {
 
   .search-wrapper {
     max-width: none;
+  }
+
+  .filter-group {
+    flex-wrap: wrap;
   }
 
   .data-table {

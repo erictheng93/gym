@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { aggregate, readItems } from '@directus/sdk'
+import { MESSAGES, PAGES, STATUS } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
@@ -22,9 +23,9 @@ const isLoading = ref(true)
 // Greeting based on time
 const greeting = computed(() => {
   const hour = new Date().getHours()
-  if (hour < 12) return '早安'
-  if (hour < 18) return '午安'
-  return '晚安'
+  if (hour < 12) return MESSAGES.GREETING.MORNING
+  if (hour < 18) return MESSAGES.GREETING.AFTERNOON
+  return MESSAGES.GREETING.EVENING
 })
 
 const userName = computed(() => {
@@ -98,11 +99,11 @@ const formatCurrency = (amount: number) => {
 
 const getStatusBadge = (status: string) => {
   const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: '有效', class: 'badge-success' },
-    EXPIRED: { label: '過期', class: 'badge-error' },
-    SUSPENDED: { label: '暫停', class: 'badge-warning' },
-    DRAFT: { label: '草稿', class: '' },
-    PAUSED: { label: '暫停', class: 'badge-warning' }
+    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+    SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
   }
   return map[status] || { label: status, class: '' }
 }
@@ -114,7 +115,7 @@ const getStatusBadge = (status: string) => {
     <header class="dashboard-header">
       <div class="header-content">
         <h1 class="text-display">{{ greeting }}，{{ userName }}</h1>
-        <p class="text-title-3 text-secondary">歡迎回到 Gym Nexus 管理系統</p>
+        <p class="text-title-3 text-secondary">{{ PAGES.DASHBOARD.WELCOME }}</p>
       </div>
       <div class="header-date">
         <p class="text-callout text-tertiary">{{ new Date().toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</p>
@@ -135,7 +136,7 @@ const getStatusBadge = (status: string) => {
                 <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
             </div>
-            <span class="stat-label text-subhead text-secondary">會員總數</span>
+            <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.TOTAL_MEMBERS }}</span>
           </div>
           <div class="stat-value text-display">{{ stats.members.total }}</div>
           <div class="stat-footer">
@@ -146,7 +147,7 @@ const getStatusBadge = (status: string) => {
               </svg>
               +{{ stats.members.new }}
             </span>
-            <span class="text-caption text-tertiary">本週新增</span>
+            <span class="text-caption text-tertiary">{{ PAGES.DASHBOARD.NEW_THIS_WEEK }}</span>
           </div>
         </div>
 
@@ -159,14 +160,14 @@ const getStatusBadge = (status: string) => {
                 <path d="m9 11 3 3L22 4"/>
               </svg>
             </div>
-            <span class="stat-label text-subhead text-secondary">有效會員</span>
+            <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.ACTIVE_MEMBERS }}</span>
           </div>
           <div class="stat-value text-display">{{ stats.members.active }}</div>
           <div class="stat-footer">
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: stats.members.total ? `${(stats.members.active / stats.members.total * 100)}%` : '0%' }" />
             </div>
-            <span class="text-caption text-tertiary">{{ stats.members.total ? Math.round(stats.members.active / stats.members.total * 100) : 0 }}% 活躍率</span>
+            <span class="text-caption text-tertiary">{{ stats.members.total ? Math.round(stats.members.active / stats.members.total * 100) : 0 }}{{ PAGES.DASHBOARD.ACTIVE_RATE }}</span>
           </div>
         </div>
 
@@ -179,11 +180,11 @@ const getStatusBadge = (status: string) => {
                 <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
               </svg>
             </div>
-            <span class="stat-label text-subhead text-secondary">有效合約</span>
+            <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.ACTIVE_CONTRACTS }}</span>
           </div>
           <div class="stat-value text-display">{{ stats.contracts.active }}</div>
           <div class="stat-footer">
-            <span class="badge">{{ stats.contracts.draft }} 待簽署</span>
+            <span class="badge">{{ stats.contracts.draft }} {{ PAGES.DASHBOARD.PENDING_SIGN }}</span>
           </div>
         </div>
 
@@ -195,11 +196,11 @@ const getStatusBadge = (status: string) => {
                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
               </svg>
             </div>
-            <span class="stat-label text-subhead text-secondary">本月營收</span>
+            <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.MONTHLY_REVENUE }}</span>
           </div>
           <div class="stat-value text-display">{{ formatCurrency(stats.revenue.month) }}</div>
           <div class="stat-footer">
-            <span class="text-caption text-tertiary">今日：{{ formatCurrency(stats.revenue.today) }}</span>
+            <span class="text-caption text-tertiary">{{ MESSAGES.TIME.TODAY }}：{{ formatCurrency(stats.revenue.today) }}</span>
           </div>
         </div>
       </div>
@@ -211,15 +212,15 @@ const getStatusBadge = (status: string) => {
         <!-- Recent Members -->
         <div class="content-card card">
           <div class="card-header">
-            <h2 class="text-title-3">最新會員</h2>
-            <NuxtLink to="/members" class="btn btn-ghost btn-small">查看全部</NuxtLink>
+            <h2 class="text-title-3">{{ PAGES.DASHBOARD.RECENT_MEMBERS }}</h2>
+            <NuxtLink to="/members" class="btn btn-ghost btn-small">{{ MESSAGES.ACTIONS.VIEW_ALL }}</NuxtLink>
           </div>
           <div class="card-body">
             <div v-if="isLoading" class="loading-state">
               <div class="loading-spinner-large" />
             </div>
             <div v-else-if="recentMembers.length === 0" class="empty-state">
-              <p class="text-secondary">尚無會員資料</p>
+              <p class="text-secondary">{{ PAGES.MEMBERS.NO_MEMBERS }}</p>
             </div>
             <ul v-else class="member-list">
               <li v-for="(member, index) in recentMembers" :key="member.id" class="member-item stagger-item" :style="{ animationDelay: `${index * 0.1}s` }">
@@ -242,15 +243,15 @@ const getStatusBadge = (status: string) => {
         <!-- Recent Contracts -->
         <div class="content-card card">
           <div class="card-header">
-            <h2 class="text-title-3">最新合約</h2>
-            <NuxtLink to="/contracts" class="btn btn-ghost btn-small">查看全部</NuxtLink>
+            <h2 class="text-title-3">{{ PAGES.DASHBOARD.RECENT_CONTRACTS }}</h2>
+            <NuxtLink to="/contracts" class="btn btn-ghost btn-small">{{ MESSAGES.ACTIONS.VIEW_ALL }}</NuxtLink>
           </div>
           <div class="card-body">
             <div v-if="isLoading" class="loading-state">
               <div class="loading-spinner-large" />
             </div>
             <div v-else-if="recentContracts.length === 0" class="empty-state">
-              <p class="text-secondary">尚無合約資料</p>
+              <p class="text-secondary">{{ PAGES.CONTRACTS.NO_CONTRACTS }}</p>
             </div>
             <ul v-else class="contract-list">
               <li v-for="(contract, index) in recentContracts" :key="contract.id" class="contract-item stagger-item" :style="{ animationDelay: `${index * 0.1}s` }">
@@ -279,7 +280,7 @@ const getStatusBadge = (status: string) => {
 
     <!-- Quick Actions -->
     <section class="actions-section">
-      <h2 class="text-title-3 mb-lg">快速操作</h2>
+      <h2 class="text-title-3 mb-lg">{{ PAGES.DASHBOARD.QUICK_ACTIONS }}</h2>
       <div class="actions-grid">
         <NuxtLink to="/members/new" class="action-card card card-interactive">
           <div class="action-icon add-member">
@@ -290,7 +291,7 @@ const getStatusBadge = (status: string) => {
               <line x1="22" x2="16" y1="11" y2="11"/>
             </svg>
           </div>
-          <span class="action-label">新增會員</span>
+          <span class="action-label">{{ PAGES.DASHBOARD.ADD_MEMBER }}</span>
         </NuxtLink>
 
         <NuxtLink to="/contracts/new" class="action-card card card-interactive">
@@ -302,7 +303,7 @@ const getStatusBadge = (status: string) => {
               <line x1="9" y1="15" x2="15" y2="15"/>
             </svg>
           </div>
-          <span class="action-label">新增合約</span>
+          <span class="action-label">{{ PAGES.DASHBOARD.ADD_CONTRACT }}</span>
         </NuxtLink>
 
         <NuxtLink to="/checkin" class="action-card card card-interactive">
@@ -312,7 +313,7 @@ const getStatusBadge = (status: string) => {
               <path d="m9 11 3 3L22 4"/>
             </svg>
           </div>
-          <span class="action-label">會員入場</span>
+          <span class="action-label">{{ MESSAGES.NAV.CHECKIN }}</span>
         </NuxtLink>
 
         <NuxtLink to="/reports" class="action-card card card-interactive">
@@ -322,7 +323,7 @@ const getStatusBadge = (status: string) => {
               <path d="m19 9-5 5-4-4-3 3"/>
             </svg>
           </div>
-          <span class="action-label">營運報表</span>
+          <span class="action-label">{{ MESSAGES.NAV.REPORTS }}</span>
         </NuxtLink>
       </div>
     </section>

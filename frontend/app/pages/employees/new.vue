@@ -1,72 +1,51 @@
 <script setup lang="ts">
-import { MESSAGES, PAGES, LABELS } from '~/constants'
-
 definePageMeta({
   middleware: 'auth'
 })
 
 const router = useRouter()
-const { createMember } = useMembers()
+const { createEmployee } = useEmployees()
 const { branches, fetchBranches } = useBranches()
+const { jobTitles, fetchJobTitles } = useJobTitles()
 
 const isSubmitting = ref(false)
 const errors = ref<Record<string, string>>({})
 
 const form = reactive({
   full_name: '',
-  phone: '',
-  email: '',
-  gender: '' as 'M' | 'F' | 'O' | '',
-  birthday: '',
-  height: null as number | null,
+  employee_code: '',
   branch_id: '',
-  emergency_contact: '',
-  emergency_phone: '',
-  tags: [] as string[],
-  member_status: 'ACTIVE' as const
+  job_title_id: '',
+  employment_status: 'ACTIVE' as 'ACTIVE' | 'RESIGNED' | 'LEAVE',
+  employment_type: 'FULL_TIME' as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE',
+  basic_salary: null as number | null
 })
 
-const newTag = ref('')
+const employmentStatusOptions = [
+  { value: 'ACTIVE', label: '在職' },
+  { value: 'RESIGNED', label: '離職' },
+  { value: 'LEAVE', label: '留停' }
+]
 
-const genderOptions = [
-  { value: 'M', label: LABELS.GENDER.MALE },
-  { value: 'F', label: LABELS.GENDER.FEMALE },
-  { value: 'O', label: LABELS.GENDER.OTHER }
+const employmentTypeOptions = [
+  { value: 'FULL_TIME', label: '正職' },
+  { value: 'PART_TIME', label: '兼職' },
+  { value: 'FREELANCE', label: '外包' }
 ]
 
 onMounted(async () => {
-  await fetchBranches()
+  await Promise.all([fetchBranches(), fetchJobTitles()])
   // 預設選擇第一個分店
   if (branches.value.length > 0 && !form.branch_id) {
     form.branch_id = branches.value[0].id
   }
 })
 
-const addTag = () => {
-  const tag = newTag.value.trim()
-  if (tag && !form.tags.includes(tag)) {
-    form.tags.push(tag)
-    newTag.value = ''
-  }
-}
-
-const removeTag = (tag: string) => {
-  form.tags = form.tags.filter(t => t !== tag)
-}
-
 const validate = () => {
   errors.value = {}
 
   if (!form.full_name.trim()) {
-    errors.value.full_name = PAGES.MEMBERS.NAME_PLACEHOLDER
-  }
-
-  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-    errors.value.email = 'Email 格式不正確'
-  }
-
-  if (form.phone && !/^[0-9-+() ]+$/.test(form.phone)) {
-    errors.value.phone = '電話格式不正確'
+    errors.value.full_name = '請輸入員工姓名'
   }
 
   return Object.keys(errors.value).length === 0
@@ -77,20 +56,19 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const memberData = {
+    const employeeData = {
       ...form,
-      gender: form.gender || null,
-      birthday: form.birthday || null,
-      height: form.height || null,
+      employee_code: form.employee_code || null,
       branch_id: form.branch_id || null,
-      join_date: new Date().toISOString().split('T')[0]
+      job_title_id: form.job_title_id || null,
+      basic_salary: form.basic_salary || null
     }
 
-    await createMember(memberData)
-    router.push('/members')
+    await createEmployee(employeeData)
+    router.push('/employees')
   } catch (error) {
-    console.error('Failed to create member:', error)
-    errors.value.submit = '建立會員失敗，請稍後再試'
+    console.error('Failed to create employee:', error)
+    errors.value.submit = '建立員工失敗，請稍後再試'
   } finally {
     isSubmitting.value = false
   }
@@ -98,14 +76,14 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="member-form-page">
+  <div class="employee-form-page">
     <!-- Header -->
     <header class="page-header">
       <button class="back-btn" @click="router.back()">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m15 18-6-6 6-6"/>
         </svg>
-        {{ MESSAGES.ACTIONS.BACK }}
+        返回
       </button>
     </header>
 
@@ -119,72 +97,41 @@ const handleSubmit = async () => {
           <line x1="22" x2="16" y1="11" y2="11"/>
         </svg>
       </div>
-      <h1 class="text-headline">{{ PAGES.MEMBERS.ADD_MEMBER }}</h1>
-      <p class="text-body text-secondary">{{ PAGES.MEMBERS.FILL_BASIC_INFO }}</p>
+      <h1 class="text-headline">新增員工</h1>
+      <p class="text-body text-secondary">填寫員工基本資料與職務資訊</p>
     </div>
 
     <!-- Form -->
-    <form class="member-form" @submit.prevent="handleSubmit">
+    <form class="employee-form" @submit.prevent="handleSubmit">
       <!-- Basic Info Section -->
       <section class="form-section glass-card">
         <h2 class="section-title">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          {{ MESSAGES.COMMON.BASIC_INFO }}
+          基本資料
         </h2>
 
         <div class="form-grid">
           <div class="input-group required">
-            <label class="input-label">{{ MESSAGES.FORM.NAME }}</label>
+            <label class="input-label">姓名</label>
             <input
               v-model="form.full_name"
               type="text"
               class="input"
               :class="{ 'input-error': errors.full_name }"
-              :placeholder="PAGES.MEMBERS.NAME_PLACEHOLDER"
+              placeholder="請輸入員工姓名"
             />
             <span v-if="errors.full_name" class="error-text">{{ errors.full_name }}</span>
           </div>
 
           <div class="input-group">
-            <label class="input-label">{{ MESSAGES.FORM.GENDER }}</label>
-            <div class="radio-group">
-              <label
-                v-for="opt in genderOptions"
-                :key="opt.value"
-                class="radio-option"
-                :class="{ active: form.gender === opt.value }"
-              >
-                <input
-                  v-model="form.gender"
-                  type="radio"
-                  :value="opt.value"
-                  class="radio-input"
-                />
-                {{ opt.label }}
-              </label>
-            </div>
-          </div>
-
-          <div class="input-group">
-            <label class="input-label">{{ MESSAGES.FORM.BIRTHDAY }}</label>
+            <label class="input-label">員工編號</label>
             <input
-              v-model="form.birthday"
-              type="date"
+              v-model="form.employee_code"
+              type="text"
               class="input"
-            />
-          </div>
-
-          <div class="input-group">
-            <label class="input-label">身高 (cm)</label>
-            <input
-              v-model.number="form.height"
-              type="number"
-              class="input"
-              placeholder="例：175"
-              min="0"
-              max="300"
+              placeholder="自動產生或手動輸入"
             />
           </div>
 
@@ -197,94 +144,78 @@ const handleSubmit = async () => {
               </option>
             </select>
           </div>
+
+          <div class="input-group">
+            <label class="input-label">職位</label>
+            <select v-model="form.job_title_id" class="input">
+              <option value="">請選擇職位</option>
+              <option v-for="jobTitle in jobTitles" :key="jobTitle.id" :value="jobTitle.id">
+                {{ jobTitle.name }}
+              </option>
+            </select>
+          </div>
         </div>
       </section>
 
-      <!-- Contact Section -->
+      <!-- Employment Info Section -->
       <section class="form-section glass-card">
         <h2 class="section-title">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
           </svg>
-          {{ MESSAGES.COMMON.CONTACT_INFO }}
+          任職資訊
         </h2>
 
         <div class="form-grid">
           <div class="input-group">
-            <label class="input-label">{{ MESSAGES.FORM.PHONE }}</label>
-            <input
-              v-model="form.phone"
-              type="tel"
-              class="input"
-              :class="{ 'input-error': errors.phone }"
-              placeholder="0912-345-678"
-            />
-            <span v-if="errors.phone" class="error-text">{{ errors.phone }}</span>
+            <label class="input-label">任職狀態</label>
+            <div class="radio-group">
+              <label
+                v-for="opt in employmentStatusOptions"
+                :key="opt.value"
+                class="radio-option"
+                :class="{ active: form.employment_status === opt.value }"
+              >
+                <input
+                  v-model="form.employment_status"
+                  type="radio"
+                  :value="opt.value"
+                  class="radio-input"
+                />
+                {{ opt.label }}
+              </label>
+            </div>
           </div>
 
           <div class="input-group">
-            <label class="input-label">Email</label>
-            <input
-              v-model="form.email"
-              type="email"
-              class="input"
-              :class="{ 'input-error': errors.email }"
-              placeholder="email@example.com"
-            />
-            <span v-if="errors.email" class="error-text">{{ errors.email }}</span>
+            <label class="input-label">聘用類型</label>
+            <div class="radio-group">
+              <label
+                v-for="opt in employmentTypeOptions"
+                :key="opt.value"
+                class="radio-option"
+                :class="{ active: form.employment_type === opt.value }"
+              >
+                <input
+                  v-model="form.employment_type"
+                  type="radio"
+                  :value="opt.value"
+                  class="radio-input"
+                />
+                {{ opt.label }}
+              </label>
+            </div>
           </div>
 
           <div class="input-group">
-            <label class="input-label">緊急聯絡人</label>
+            <label class="input-label">基本薪資</label>
             <input
-              v-model="form.emergency_contact"
-              type="text"
+              v-model.number="form.basic_salary"
+              type="number"
               class="input"
-              placeholder="請輸入緊急聯絡人姓名"
+              placeholder="請輸入金額"
+              min="0"
             />
-          </div>
-
-          <div class="input-group">
-            <label class="input-label">緊急聯絡電話</label>
-            <input
-              v-model="form.emergency_phone"
-              type="tel"
-              class="input"
-              placeholder="0912-345-678"
-            />
-          </div>
-        </div>
-      </section>
-
-      <!-- Tags Section -->
-      <section class="form-section glass-card">
-        <h2 class="section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>
-          </svg>
-          {{ MESSAGES.FORM.TAGS }}
-        </h2>
-
-        <div class="tags-input-wrapper">
-          <div class="tags-list" v-if="form.tags.length > 0">
-            <span v-for="tag in form.tags" :key="tag" class="tag">
-              {{ tag }}
-              <button type="button" class="tag-remove" @click="removeTag(tag)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-                </svg>
-              </button>
-            </span>
-          </div>
-          <div class="tag-input-row">
-            <input
-              v-model="newTag"
-              type="text"
-              class="input"
-              placeholder="輸入標籤..."
-              @keydown.enter.prevent="addTag"
-            />
-            <button type="button" class="btn btn-secondary btn-small" @click="addTag">{{ MESSAGES.FORM.ADD }}</button>
           </div>
         </div>
       </section>
@@ -299,12 +230,12 @@ const handleSubmit = async () => {
 
       <!-- Actions -->
       <div class="form-actions">
-        <button type="button" class="btn btn-ghost" @click="router.back()">{{ MESSAGES.FORM.CANCEL }}</button>
+        <button type="button" class="btn btn-ghost" @click="router.back()">取消</button>
         <button type="submit" class="btn btn-primary btn-large" :disabled="isSubmitting">
           <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
           </svg>
-          {{ isSubmitting ? MESSAGES.ACTIONS.CREATING : PAGES.MEMBERS.ADD_MEMBER }}
+          {{ isSubmitting ? '建立中...' : '建立員工' }}
         </button>
       </div>
     </form>
@@ -312,7 +243,7 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-.member-form-page {
+.employee-form-page {
   max-width: 800px;
   margin: 0 auto;
 }
@@ -361,7 +292,7 @@ const handleSubmit = async () => {
   width: 80px;
   height: 80px;
   border-radius: var(--radius-2xl);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #34c759, #30d158);
   color: white;
   display: flex;
   align-items: center;
@@ -370,7 +301,7 @@ const handleSubmit = async () => {
 }
 
 /* Form Sections */
-.member-form {
+.employee-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
@@ -383,7 +314,6 @@ const handleSubmit = async () => {
 
 .form-section:nth-child(1) { animation-delay: 0.15s; }
 .form-section:nth-child(2) { animation-delay: 0.2s; }
-.form-section:nth-child(3) { animation-delay: 0.25s; }
 
 .section-title {
   display: flex;
@@ -433,6 +363,7 @@ const handleSubmit = async () => {
 .radio-group {
   display: flex;
   gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .radio-option {
@@ -458,58 +389,6 @@ const handleSubmit = async () => {
 
 .radio-input {
   display: none;
-}
-
-/* Tags */
-.tags-input-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.tags-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
-.tag {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 6px 12px;
-  background: var(--color-accent-light);
-  color: var(--color-accent);
-  border-radius: var(--radius-full);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.tag-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: none;
-  background: transparent;
-  color: currentColor;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.tag-remove:hover {
-  opacity: 1;
-}
-
-.tag-input-row {
-  display: flex;
-  gap: var(--space-md);
-}
-
-.tag-input-row .input {
-  flex: 1;
 }
 
 /* Submit Error */

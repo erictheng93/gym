@@ -1,4 +1,6 @@
-import { readMe } from '@directus/sdk'
+import { readMe, readItems } from '@directus/sdk'
+import type { Employee } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 interface User {
   id: string
@@ -8,9 +10,21 @@ interface User {
   role: string | null
 }
 
+// 當前員工資訊（包含分店）
+interface CurrentEmployee {
+  id: string
+  full_name: string
+  employee_code: string | null
+  branch_id: string | null
+  branch_name: string | null
+  job_title_id: string | null
+  job_title_name: string | null
+}
+
 export const useAuth = () => {
   const directus = useDirectus()
   const user = useState<User | null>('auth_user', () => null)
+  const currentEmployee = useState<CurrentEmployee | null>('auth_employee', () => null)
   const isAuthenticated = computed(() => !!user.value)
   const isLoading = useState('auth_loading', () => false)
 
@@ -20,9 +34,10 @@ export const useAuth = () => {
       // Use client.login() with an object containing email and password
       await directus.login({ email, password })
       await fetchUser()
+      await fetchCurrentEmployee()
       return { success: true }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '登入失敗'
+      const message = error instanceof Error ? error.message : MESSAGES.AUTH.LOGIN_ERROR
       return { success: false, error: message }
     } finally {
       isLoading.value = false
@@ -36,6 +51,7 @@ export const useAuth = () => {
       // Ignore logout errors
     } finally {
       user.value = null
+      currentEmployee.value = null
       await navigateTo('/login')
     }
   }
@@ -51,20 +67,61 @@ export const useAuth = () => {
     }
   }
 
+  // 根據當前登入用戶取得對應的員工資訊
+  const fetchCurrentEmployee = async () => {
+    if (!user.value?.id) {
+      currentEmployee.value = null
+      return
+    }
+
+    try {
+      const employees = await directus.request(
+        readItems('employees', {
+          filter: { user_id: { _eq: user.value.id } },
+          fields: ['id', 'full_name', 'employee_code', 'branch_id', 'job_title_id', 'branch.name', 'job_title.name'],
+          limit: 1
+        })
+      )
+
+      if (employees.length > 0) {
+        const emp = employees[0] as Employee & { branch?: { name: string }, job_title?: { name: string } }
+        currentEmployee.value = {
+          id: emp.id,
+          full_name: emp.full_name,
+          employee_code: emp.employee_code || null,
+          branch_id: emp.branch_id || null,
+          branch_name: emp.branch?.name || null,
+          job_title_id: emp.job_title_id || null,
+          job_title_name: emp.job_title?.name || null
+        }
+      } else {
+        currentEmployee.value = null
+      }
+    } catch (error) {
+      console.error('Failed to fetch current employee:', error)
+      currentEmployee.value = null
+    }
+  }
+
   const checkAuth = async () => {
     if (!user.value) {
       await fetchUser()
+    }
+    if (user.value && !currentEmployee.value) {
+      await fetchCurrentEmployee()
     }
     return isAuthenticated.value
   }
 
   return {
     user,
+    currentEmployee,
     isAuthenticated,
     isLoading,
     login,
     logout,
     fetchUser,
+    fetchCurrentEmployee,
     checkAuth
   }
 }

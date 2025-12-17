@@ -2,6 +2,8 @@ services:
   database:
     image: postgres:18
     restart: unless-stopped
+    ports:
+      - 5432:5432
     volumes:
       - ./data/database:/var/lib/postgresql
     environment:

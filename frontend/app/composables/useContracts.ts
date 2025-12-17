@@ -24,7 +24,7 @@ export const useContracts = () => {
       const data = await directus.request(
         readItems('contracts', {
           filter,
-          fields: ['*', 'member.full_name', 'member.member_code', 'plan.name', 'branch.name'],
+          fields: ['*', 'member_id.full_name', 'member_id.member_code', 'plan_id.name', 'branch_id.name'],
           sort: ['-date_created'],
           limit
         })
@@ -40,7 +40,23 @@ export const useContracts = () => {
   const getContract = async (id: string) => {
     const data = await directus.request(
       readItem('contracts', id, {
-        fields: ['*', 'member.*', 'plan.*', 'branch.*', 'sales_person.*', 'logs.*', 'payments.*']
+        fields: [
+          '*',
+          'member_id.*',
+          'plan_id.*',
+          'branch_id.*',
+          'sales_person_id.*',
+          'logs.*',
+          'logs.created_by_employee.id',
+          'logs.created_by_employee.full_name',
+          'logs.branch_id.id',
+          'logs.branch_id.name',
+          'logs.original_member_id.id',
+          'logs.original_member_id.full_name',
+          'logs.target_member_id.id',
+          'logs.target_member_id.full_name',
+          'payments.*'
+        ]
       })
     )
     return data as Contract
