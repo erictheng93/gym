@@ -1,10 +1,24 @@
 <script setup lang="ts">
-import { MESSAGES, PAGES, LABELS } from '~/constants'
+import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
 
-const { plans, isLoading, fetchPlans } = usePlans()
+const { plans, isLoading, fetchPlans, deletePlan } = usePlans()
 
+// 篩選狀態
+const statusFilter = ref<'all' | 'active' | 'archived'>('all')
+const typeFilter = ref<'all' | 'TIME_BASED' | 'COUNT_BASED'>('all')
+
+// 載入所有方案（不篩選狀態）
 onMounted(() => {
-  fetchPlans()
+  fetchPlans({ status: '' }) // 空字串表示不篩選
+})
+
+// 篩選後的方案
+const filteredPlans = computed(() => {
+  return plans.value.filter(plan => {
+    const matchStatus = statusFilter.value === 'all' || plan.status === statusFilter.value
+    const matchType = typeFilter.value === 'all' || plan.plan_type === typeFilter.value
+    return matchStatus && matchType
+  })
 })
 
 const planTypeLabel = (type: string) => {
@@ -13,6 +27,34 @@ const planTypeLabel = (type: string) => {
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(price)
+}
+
+// 刪除確認
+const showDeleteConfirm = ref(false)
+const planToDelete = ref<string | null>(null)
+
+const confirmDelete = (planId: string) => {
+  planToDelete.value = planId
+  showDeleteConfirm.value = true
+}
+
+const handleDelete = async () => {
+  if (!planToDelete.value) return
+
+  try {
+    await deletePlan(planToDelete.value)
+    await fetchPlans({ status: '' })
+  } catch (error) {
+    console.error('Failed to delete plan:', error)
+  } finally {
+    showDeleteConfirm.value = false
+    planToDelete.value = null
+  }
+}
+
+const cancelDelete = () => {
+  showDeleteConfirm.value = false
+  planToDelete.value = null
 }
 </script>
 
@@ -69,13 +111,69 @@ const formatPrice = (price: number) => {
       </div>
     </div>
 
+    <!-- Filters -->
+    <div class="filters-bar">
+      <div class="filter-group">
+        <label class="filter-label">狀態</label>
+        <div class="filter-chips">
+          <button
+            class="filter-chip"
+            :class="{ active: statusFilter === 'all' }"
+            @click="statusFilter = 'all'"
+          >
+            全部
+          </button>
+          <button
+            class="filter-chip"
+            :class="{ active: statusFilter === 'active' }"
+            @click="statusFilter = 'active'"
+          >
+            {{ STATUS.ENABLED }}
+          </button>
+          <button
+            class="filter-chip"
+            :class="{ active: statusFilter === 'archived' }"
+            @click="statusFilter = 'archived'"
+          >
+            {{ STATUS.DISABLED }}
+          </button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">類型</label>
+        <div class="filter-chips">
+          <button
+            class="filter-chip"
+            :class="{ active: typeFilter === 'all' }"
+            @click="typeFilter = 'all'"
+          >
+            全部
+          </button>
+          <button
+            class="filter-chip"
+            :class="{ active: typeFilter === 'TIME_BASED' }"
+            @click="typeFilter = 'TIME_BASED'"
+          >
+            {{ LABELS.CONTRACT_TYPE.TIME_BASED }}
+          </button>
+          <button
+            class="filter-chip"
+            :class="{ active: typeFilter === 'COUNT_BASED' }"
+            @click="typeFilter = 'COUNT_BASED'"
+          >
+            {{ LABELS.CONTRACT_TYPE.COUNT_BASED }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Plans Grid -->
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
       <p>{{ MESSAGES.ACTIONS.LOADING }}</p>
     </div>
 
-    <div v-else-if="plans.length === 0" class="empty-state">
+    <div v-else-if="filteredPlans.length === 0" class="empty-state">
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
         <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>
       </svg>
@@ -85,7 +183,7 @@ const formatPrice = (price: number) => {
     </div>
 
     <div v-else class="plans-grid">
-      <div v-for="plan in plans" :key="plan.id" class="plan-card" :class="{ archived: plan.status === 'archived' }">
+      <div v-for="plan in filteredPlans" :key="plan.id" class="plan-card" :class="{ archived: plan.status === 'archived' }">
         <div class="plan-header">
           <div class="plan-type-badge" :class="plan.plan_type === 'TIME_BASED' ? 'time' : 'count'">
             {{ planTypeLabel(plan.plan_type) }}
@@ -129,9 +227,33 @@ const formatPrice = (price: number) => {
 
         <div class="plan-actions">
           <NuxtLink :to="`/plans/${plan.id}/edit`" class="btn-secondary">{{ PAGES.PLANS.EDIT }}</NuxtLink>
+          <button class="btn-danger-outline" @click="confirmDelete(plan.id)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirm Modal -->
+    <Teleport to="body">
+      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="cancelDelete">
+        <div class="modal-content">
+          <div class="modal-icon danger">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+            </svg>
+          </div>
+          <h3>{{ MESSAGES.CONFIRM.DELETE_TITLE }}</h3>
+          <p>{{ MESSAGES.CONFIRM.DELETE_WARNING }}</p>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" @click="cancelDelete">{{ MESSAGES.FORM.CANCEL }}</button>
+            <button class="btn btn-danger" @click="handleDelete">{{ MESSAGES.CONFIRM.CONFIRM_DELETE }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -400,6 +522,159 @@ const formatPrice = (price: number) => {
   to { transform: rotate(360deg); }
 }
 
+/* Filters Bar */
+.filters-bar {
+  display: flex;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-xl);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.filter-chips {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.filter-chip {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.filter-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.filter-chip.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: white;
+}
+
+/* Delete Button */
+.btn-danger-outline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btn-danger-outline:hover {
+  background: rgba(255, 59, 48, 0.1);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s var(--ease-out);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+}
+
+.modal-content {
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-2xl);
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  animation: slideUp 0.3s var(--ease-out);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+}
+
+.modal-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-lg);
+}
+
+.modal-icon.danger {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--color-error);
+}
+
+.modal-content h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.modal-content p {
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-xl) 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: center;
+}
+
+.btn-danger {
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-error);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btn-danger:hover {
+  background: #e53935;
+}
+
 @media (max-width: 768px) {
   .stats-grid {
     grid-template-columns: 1fr;
@@ -408,6 +683,16 @@ const formatPrice = (price: number) => {
   .page-header {
     flex-direction: column;
     gap: var(--space-md);
+  }
+
+  .filters-bar {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .filter-group {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

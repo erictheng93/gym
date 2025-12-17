@@ -11,12 +11,13 @@ export const usePlans = () => {
     planType?: string
   }) => {
     isLoading.value = true
-    const { status = 'active', planType } = options || {}
+    const { status, planType } = options || {}
 
     try {
       const filter: Record<string, unknown> = {}
-      if (status) filter.status = { _eq: status }
-      if (planType) filter.plan_type = { _eq: planType }
+      // 只在 status 有值且不為空字串時添加篩選
+      if (status && status !== '') filter.status = { _eq: status }
+      if (planType && planType !== '') filter.plan_type = { _eq: planType }
 
       const data = await directus.request(
         readItems('membership_plans', {
