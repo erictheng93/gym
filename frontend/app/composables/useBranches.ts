@@ -1,17 +1,18 @@
-import { readItems, createItem, updateItem, deleteItem } from '@directus/sdk'
-import type { Branch } from '~/types/directus'
+import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk'
+import type { Branch, Employee } from '~/types/directus'
 
 export const useBranches = () => {
   const directus = useDirectus()
   const branches = useState<Branch[]>('branches', () => [])
   const isLoading = useState('branches_loading', () => false)
 
-  const fetchBranches = async () => {
+  const fetchBranches = async (includeArchived = false) => {
     isLoading.value = true
     try {
+      const filter = includeArchived ? {} : { status: { _eq: 'active' } }
       const data = await directus.request(
         readItems('branches', {
-          filter: { status: { _eq: 'active' } },
+          filter,
           sort: ['name']
         })
       )
@@ -21,6 +22,24 @@ export const useBranches = () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  const fetchBranch = async (id: string) => {
+    const data = await directus.request(
+      readItem('branches', id)
+    )
+    return data as Branch
+  }
+
+  const fetchBranchEmployees = async (branchId: string) => {
+    const data = await directus.request(
+      readItems('employees', {
+        filter: { branch_id: { _eq: branchId }, status: { _eq: 'active' } },
+        fields: ['*', 'job_title.*'],
+        sort: ['full_name']
+      })
+    )
+    return data as Employee[]
   }
 
   const createBranch = async (branch: Partial<Branch>) => {
@@ -44,6 +63,8 @@ export const useBranches = () => {
     branches,
     isLoading,
     fetchBranches,
+    fetchBranch,
+    fetchBranchEmployees,
     createBranch,
     updateBranch,
     deleteBranch

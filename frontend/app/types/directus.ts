@@ -137,6 +137,13 @@ export interface Attendance {
   location_ip: string | null
   location_gps: string | null
   branch_id: string | null
+  attendance_date: string | null
+  check_type: 'REGULAR' | 'OVERTIME' | 'MAKEUP' | 'EARLY'
+  late_minutes: number
+  early_leave_minutes: number
+  overtime_hours: number
+  attendance_status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EARLY_LEAVE' | 'LEAVE' | 'HOLIDAY'
+  notes: string | null
   // Relations
   employee?: Employee
   branch?: Branch
@@ -145,15 +152,77 @@ export interface Attendance {
 // 休假申請
 export interface LeaveRequest extends BaseFields {
   employee_id: string
-  leave_type: 'SICK' | 'ANNUAL' | 'PERSONAL' | 'COMPENSATORY'
+  leave_type: 'SICK' | 'ANNUAL' | 'PERSONAL' | 'MATERNITY' | 'BEREAVEMENT' | 'OTHER'
   start_date: string
   end_date: string
-  leave_status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  leave_status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
   approver_id: string | null
   reason: string | null
+  hours_requested: number | null
+  days_requested: number | null
+  submitted_at: string | null
+  approved_at: string | null
+  approval_notes: string | null
+  document_url: string | null
+  is_half_day: boolean
+  half_day_type: 'AM' | 'PM' | null
   // Relations
   employee?: Employee
   approver?: Employee
+}
+
+// 休假餘額
+export interface LeaveBalance {
+  id: string
+  status: string
+  date_created: string
+  date_updated: string | null
+  employee_id: string
+  leave_type: 'ANNUAL' | 'SICK' | 'PERSONAL' | 'MATERNITY' | 'BEREAVEMENT' | 'OTHER'
+  year: number
+  total_days: number
+  used_days: number
+  pending_days: number
+  carried_over_days: number
+  expires_at: string | null
+  // Relations
+  employee?: Employee
+}
+
+// 休假審核歷程
+export interface LeaveApprovalLog {
+  id: string
+  date_created: string
+  leave_request_id: string
+  action_by: string
+  action: 'SUBMIT' | 'APPROVE' | 'REJECT' | 'CANCEL' | 'REVOKE'
+  previous_status: string | null
+  new_status: string | null
+  notes: string | null
+  // Relations
+  leave_request?: LeaveRequest
+  actor?: Employee
+}
+
+// 班表設定
+export interface ShiftSchedule {
+  id: string
+  status: string
+  date_created: string
+  date_updated: string | null
+  branch_id: string
+  name: string
+  start_time: string
+  end_time: string
+  break_start: string | null
+  break_end: string | null
+  grace_period_minutes: number
+  early_leave_minutes: number
+  overtime_start_after: string | null
+  is_default: boolean
+  applicable_days: string[]
+  // Relations
+  branch?: Branch
 }
 
 // 收付款
@@ -185,5 +254,8 @@ export interface DirectusSchema {
   contract_logs: ContractLog[]
   attendances: Attendance[]
   leave_requests: LeaveRequest[]
+  leave_balances: LeaveBalance[]
+  leave_approval_logs: LeaveApprovalLog[]
+  shift_schedules: ShiftSchedule[]
   payments: Payment[]
 }

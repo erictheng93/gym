@@ -1,0 +1,10 @@
+# Cloudflare Tunnel 憑證 (敏感資料)
+cloudflared-credentials.json
+cloudflared-config.yml
+
+# Directus 資料
+data/
+uploads/
+
+# 環境變數
+.env

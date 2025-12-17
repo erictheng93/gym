@@ -35,7 +35,7 @@ export const useEmployees = () => {
         directus.request(
           readItems('employees', {
             filter,
-            fields: ['*', 'branch.name', 'job_title.name'],
+            fields: ['*', 'branch_id.name', 'job_title_id.name'],
             sort: ['-date_created'],
             limit,
             offset: (page - 1) * limit
@@ -61,7 +61,7 @@ export const useEmployees = () => {
   const getEmployee = async (id: string) => {
     const data = await directus.request(
       readItem('employees', id, {
-        fields: ['*', 'branch.*', 'job_title.*']
+        fields: ['*', 'branch_id.*', 'job_title_id.*']
       })
     )
     return data as Employee

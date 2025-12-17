@@ -192,10 +192,10 @@ const getEmploymentTypeBadge = (type: string) => {
               <code class="employee-code">{{ employee.employee_code || '—' }}</code>
             </td>
             <td>
-              <span class="job-title">{{ employee.job_title?.name || '—' }}</span>
+              <span class="job-title">{{ employee.job_title_id?.name || '—' }}</span>
             </td>
             <td>
-              <span class="branch-name">{{ employee.branch?.name || '—' }}</span>
+              <span class="branch-name">{{ employee.branch_id?.name || '—' }}</span>
             </td>
             <td>
               <span :class="['badge', getEmploymentTypeBadge(employee.employment_type).class]">

@@ -3,7 +3,7 @@ import {
   APP_NAME,
   APP_COPYRIGHT_YEAR,
   STORAGE_KEYS,
-  ANIMATION,
+  TIMING,
   MESSAGES
 } from '~/constants'
 
@@ -68,7 +68,7 @@ const handleSubmit = async () => {
 
 const triggerShake = () => {
   isShaking.value = true
-  setTimeout(() => { isShaking.value = false }, ANIMATION.SHAKE_DURATION)
+  setTimeout(() => { isShaking.value = false }, TIMING.SHAKE_DURATION)
 }
 </script>
 

@@ -1,0 +1,22 @@
+# Cloudflare Tunnel 配置文件
+# 使用說明：
+# 1. 複製此文件為 cloudflared-config.yml
+# 2. 替換 <YOUR_TUNNEL_ID> 為你的 Tunnel ID
+# 3. 替換域名為你的實際域名
+
+tunnel: <YOUR_TUNNEL_ID>
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # Directus API Backend
+  - hostname: api.yourdomain.com
+    service: http://directus:8055
+    originRequest:
+      noTLSVerify: true
+
+  # 如果需要暴露前端應用 (開發環境)
+  # - hostname: app.yourdomain.com
+  #   service: http://host.docker.internal:3000
+
+  # 捕獲所有其他流量 (此規則必須放在最後)
+  - service: http_status:404
