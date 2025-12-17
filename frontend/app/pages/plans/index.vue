@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, LABELS } from '~/constants'
+
 const { plans, isLoading, fetchPlans } = usePlans()
 
 onMounted(() => {
@@ -6,7 +8,7 @@ onMounted(() => {
 })
 
 const planTypeLabel = (type: string) => {
-  return type === 'TIME_BASED' ? '期限制' : '堂數制'
+  return type === 'TIME_BASED' ? LABELS.CONTRACT_TYPE.TIME_BASED : LABELS.CONTRACT_TYPE.COUNT_BASED
 }
 
 const formatPrice = (price: number) => {
@@ -19,14 +21,14 @@ const formatPrice = (price: number) => {
     <!-- Header -->
     <div class="page-header">
       <div class="header-content">
-        <h1>會籍方案</h1>
-        <p>管理所有會籍與產品方案</p>
+        <h1>{{ PAGES.PLANS.TITLE }}</h1>
+        <p>{{ PAGES.PLANS.DESCRIPTION }}</p>
       </div>
       <NuxtLink to="/plans/new" class="btn-primary">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 12h14"/><path d="M12 5v14"/>
         </svg>
-        新增方案
+        {{ PAGES.PLANS.ADD_PLAN }}
       </NuxtLink>
     </div>
 
@@ -40,7 +42,7 @@ const formatPrice = (price: number) => {
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ plans.filter(p => p.status === 'active').length }}</span>
-          <span class="stat-label">啟用方案</span>
+          <span class="stat-label">{{ PAGES.PLANS.ENABLED_PLANS }}</span>
         </div>
       </div>
       <div class="stat-card">
@@ -51,7 +53,7 @@ const formatPrice = (price: number) => {
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ plans.filter(p => p.plan_type === 'TIME_BASED').length }}</span>
-          <span class="stat-label">期限制方案</span>
+          <span class="stat-label">{{ PAGES.PLANS.TIME_BASED_PLANS }}</span>
         </div>
       </div>
       <div class="stat-card">
@@ -62,7 +64,7 @@ const formatPrice = (price: number) => {
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ plans.filter(p => p.plan_type === 'COUNT_BASED').length }}</span>
-          <span class="stat-label">堂數制方案</span>
+          <span class="stat-label">{{ PAGES.PLANS.COUNT_BASED_PLANS }}</span>
         </div>
       </div>
     </div>
@@ -70,16 +72,16 @@ const formatPrice = (price: number) => {
     <!-- Plans Grid -->
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
-      <p>載入中...</p>
+      <p>{{ MESSAGES.ACTIONS.LOADING }}</p>
     </div>
 
     <div v-else-if="plans.length === 0" class="empty-state">
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
         <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>
       </svg>
-      <h3>尚無方案</h3>
-      <p>建立第一個會籍方案開始銷售</p>
-      <NuxtLink to="/plans/new" class="btn-primary">新增方案</NuxtLink>
+      <h3>{{ PAGES.PLANS.NO_PLANS }}</h3>
+      <p>{{ PAGES.PLANS.NO_PLANS_HINT }}</p>
+      <NuxtLink to="/plans/new" class="btn-primary">{{ PAGES.PLANS.ADD_PLAN }}</NuxtLink>
     </div>
 
     <div v-else class="plans-grid">
@@ -88,7 +90,7 @@ const formatPrice = (price: number) => {
           <div class="plan-type-badge" :class="plan.plan_type === 'TIME_BASED' ? 'time' : 'count'">
             {{ planTypeLabel(plan.plan_type) }}
           </div>
-          <div v-if="plan.status === 'archived'" class="archived-badge">已停用</div>
+          <div v-if="plan.status === 'archived'" class="archived-badge">{{ PAGES.PLANS.ARCHIVED }}</div>
         </div>
 
         <h3 class="plan-name">{{ plan.name }}</h3>
@@ -99,34 +101,34 @@ const formatPrice = (price: number) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
             </svg>
-            <span>{{ plan.duration_months }} 個月</span>
+            <span>{{ plan.duration_months }} {{ PAGES.PLANS.MONTHS }}</span>
           </div>
           <div v-else class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
             </svg>
-            <span>{{ plan.class_counts }} 堂</span>
+            <span>{{ plan.class_counts }} {{ PAGES.PLANS.CLASSES }}</span>
           </div>
 
           <div class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
             </svg>
-            <span>{{ plan.allow_transfer ? '可轉讓' : '不可轉讓' }}</span>
+            <span>{{ plan.allow_transfer ? LABELS.TRANSFERABLE : LABELS.NON_TRANSFERABLE }}</span>
           </div>
 
           <div class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
             </svg>
-            <span>{{ plan.allow_pause ? '可暫停' : '不可暫停' }}</span>
+            <span>{{ plan.allow_pause ? LABELS.PAUSABLE : LABELS.NON_PAUSABLE }}</span>
           </div>
         </div>
 
         <p v-if="plan.description" class="plan-description">{{ plan.description }}</p>
 
         <div class="plan-actions">
-          <NuxtLink :to="`/plans/${plan.id}/edit`" class="btn-secondary">編輯</NuxtLink>
+          <NuxtLink :to="`/plans/${plan.id}/edit`" class="btn-secondary">{{ PAGES.PLANS.EDIT }}</NuxtLink>
         </div>
       </div>
     </div>

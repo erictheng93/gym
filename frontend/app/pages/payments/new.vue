@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, LABELS } from '~/constants'
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -28,10 +30,10 @@ const form = reactive({
 const memberContracts = ref<typeof contracts.value>([])
 
 const paymentMethods = [
-  { value: 'CASH', label: '現金', icon: '💵' },
-  { value: 'CREDIT_CARD', label: '信用卡', icon: '💳' },
-  { value: 'LINE_PAY', label: 'LINE Pay', icon: '📱' },
-  { value: 'TRANSFER', label: '匯款', icon: '🏦' }
+  { value: 'CASH', label: LABELS.PAYMENT_METHOD.CASH, icon: '💵' },
+  { value: 'CREDIT_CARD', label: LABELS.PAYMENT_METHOD.CREDIT_CARD, icon: '💳' },
+  { value: 'LINE_PAY', label: LABELS.PAYMENT_METHOD.LINE_PAY, icon: '📱' },
+  { value: 'TRANSFER', label: LABELS.PAYMENT_METHOD.BANK_TRANSFER, icon: '🏦' }
 ]
 
 const selectedMember = computed(() => members.value.find(m => m.id === form.member_id))
@@ -84,10 +86,10 @@ onMounted(async () => {
 const validate = () => {
   errors.value = {}
 
-  if (!form.member_id) errors.value.member_id = '請選擇會員'
-  if (form.amount <= 0) errors.value.amount = '金額必須大於 0'
-  if (!form.payment_date) errors.value.payment_date = '請選擇付款日期'
-  if (!form.branch_id) errors.value.branch_id = '請選擇分店'
+  if (!form.member_id) errors.value.member_id = PAGES.PAYMENTS.ERROR_SELECT_MEMBER
+  if (form.amount <= 0) errors.value.amount = PAGES.PAYMENTS.ERROR_AMOUNT_POSITIVE
+  if (!form.payment_date) errors.value.payment_date = PAGES.PAYMENTS.ERROR_SELECT_DATE
+  if (!form.branch_id) errors.value.branch_id = PAGES.PAYMENTS.ERROR_SELECT_BRANCH
 
   return Object.keys(errors.value).length === 0
 }
@@ -112,7 +114,7 @@ const handleSubmit = async () => {
     router.push('/payments')
   } catch (error) {
     console.error('Failed to create payment:', error)
-    errors.value.submit = '建立收款紀錄失敗，請稍後再試'
+    errors.value.submit = PAGES.PAYMENTS.ERROR_CREATE_FAILED
   } finally {
     isSubmitting.value = false
   }
@@ -128,7 +130,7 @@ const formatCurrency = (amount: number) => {
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="loading-spinner-large" />
-      <p class="text-secondary mt-md">載入中...</p>
+      <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
     </div>
 
     <template v-else>
@@ -138,7 +140,7 @@ const formatCurrency = (amount: number) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m15 18-6-6 6-6"/>
           </svg>
-          返回
+          {{ MESSAGES.ACTIONS.BACK }}
         </button>
       </header>
 
@@ -149,8 +151,8 @@ const formatCurrency = (amount: number) => {
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
         </div>
-        <h1 class="text-headline">{{ form.payment_type === 'INCOME' ? '新增收款' : '新增退款' }}</h1>
-        <p class="text-body text-secondary">記錄收款或退款資訊</p>
+        <h1 class="text-headline">{{ form.payment_type === 'INCOME' ? PAGES.PAYMENTS.ADD_PAYMENT : PAGES.PAYMENTS.ADD_REFUND }}</h1>
+        <p class="text-body text-secondary">{{ PAGES.PAYMENTS.RECORD_INFO }}</p>
       </div>
 
       <!-- Payment Type Toggle -->
@@ -163,7 +165,7 @@ const formatCurrency = (amount: number) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
-          收款
+          {{ LABELS.PAYMENT_TYPE.INCOME }}
         </button>
         <button
           class="type-option refund"
@@ -174,7 +176,7 @@ const formatCurrency = (amount: number) => {
             <polyline points="3 7 9 13 3 19"/>
             <line x1="21" x2="9" y1="13" y2="13"/>
           </svg>
-          退款
+          {{ LABELS.PAYMENT_TYPE.REFUND }}
         </button>
       </div>
 
@@ -186,14 +188,14 @@ const formatCurrency = (amount: number) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
             </svg>
-            會員與合約
+            {{ PAGES.PAYMENTS.MEMBER_CONTRACT }}
           </h2>
 
           <div class="form-grid">
             <div class="input-group required full-width">
-              <label class="input-label">選擇會員</label>
+              <label class="input-label">{{ PAGES.PAYMENTS.SELECT_MEMBER }}</label>
               <select v-model="form.member_id" class="input" :class="{ 'input-error': errors.member_id }">
-                <option value="">請選擇會員</option>
+                <option value="">{{ PAGES.PAYMENTS.SELECT_MEMBER_PLACEHOLDER }}</option>
                 <option v-for="member in members" :key="member.id" :value="member.id">
                   {{ member.full_name }} ({{ member.member_code }})
                 </option>
@@ -202,25 +204,25 @@ const formatCurrency = (amount: number) => {
             </div>
 
             <div class="input-group full-width">
-              <label class="input-label">關聯合約 (選填)</label>
+              <label class="input-label">{{ PAGES.PAYMENTS.RELATED_CONTRACT }}</label>
               <select v-model="form.contract_id" class="input" :disabled="!form.member_id || memberContracts.length === 0">
-                <option value="">不關聯合約</option>
+                <option value="">{{ PAGES.PAYMENTS.NO_CONTRACT_LINK }}</option>
                 <option v-for="contract in memberContracts" :key="contract.id" :value="contract.id">
                   {{ contract.contract_no }} - {{ contract.plan?.name }} ({{ formatCurrency(contract.total_amount || 0) }})
                 </option>
               </select>
-              <span v-if="!form.member_id" class="hint-text">請先選擇會員</span>
+              <span v-if="!form.member_id" class="hint-text">{{ PAGES.PAYMENTS.SELECT_MEMBER_FIRST }}</span>
             </div>
           </div>
 
           <!-- Selected Info Preview -->
           <div v-if="selectedMember" class="selected-preview">
             <div class="preview-item">
-              <span class="preview-label">會員</span>
+              <span class="preview-label">{{ PAGES.PAYMENTS.MEMBER }}</span>
               <span class="preview-value">{{ selectedMember.full_name }}</span>
             </div>
             <div v-if="selectedContract" class="preview-item">
-              <span class="preview-label">合約金額</span>
+              <span class="preview-label">{{ PAGES.PAYMENTS.CONTRACT_AMOUNT }}</span>
               <span class="preview-value">{{ formatCurrency(selectedContract.total_amount || 0) }}</span>
             </div>
           </div>
@@ -233,7 +235,7 @@ const formatCurrency = (amount: number) => {
               <line x1="12" x2="12" y1="2" y2="22"/>
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
             </svg>
-            金額與付款方式
+            {{ PAGES.PAYMENTS.AMOUNT_METHOD }}
           </h2>
 
           <div class="amount-input-large">
@@ -274,12 +276,12 @@ const formatCurrency = (amount: number) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>
             </svg>
-            其他資訊
+            {{ PAGES.PAYMENTS.OTHER_INFO }}
           </h2>
 
           <div class="form-grid">
             <div class="input-group required">
-              <label class="input-label">付款日期</label>
+              <label class="input-label">{{ PAGES.PAYMENTS.PAYMENT_DATE }}</label>
               <input
                 v-model="form.payment_date"
                 type="date"
@@ -290,9 +292,9 @@ const formatCurrency = (amount: number) => {
             </div>
 
             <div class="input-group required">
-              <label class="input-label">收款分店</label>
+              <label class="input-label">{{ PAGES.PAYMENTS.PAYMENT_BRANCH }}</label>
               <select v-model="form.branch_id" class="input" :class="{ 'input-error': errors.branch_id }">
-                <option value="">請選擇分店</option>
+                <option value="">{{ PAGES.PAYMENTS.SELECT_BRANCH_PLACEHOLDER }}</option>
                 <option v-for="branch in branches" :key="branch.id" :value="branch.id">
                   {{ branch.name }}
                 </option>
@@ -301,12 +303,12 @@ const formatCurrency = (amount: number) => {
             </div>
 
             <div class="input-group full-width">
-              <label class="input-label">備註</label>
+              <label class="input-label">{{ MESSAGES.FORM.NOTES }}</label>
               <textarea
                 v-model="form.notes"
                 class="input"
                 rows="3"
-                placeholder="輸入備註 (選填)..."
+                :placeholder="PAGES.CONTRACTS.NOTES_PLACEHOLDER"
               ></textarea>
             </div>
           </div>
@@ -322,12 +324,12 @@ const formatCurrency = (amount: number) => {
 
         <!-- Actions -->
         <div class="form-actions">
-          <button type="button" class="btn btn-ghost" @click="router.back()">取消</button>
+          <button type="button" class="btn btn-ghost" @click="router.back()">{{ MESSAGES.FORM.CANCEL }}</button>
           <button type="submit" class="btn btn-large" :class="form.payment_type === 'INCOME' ? 'btn-primary' : 'btn-warning'" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
-            {{ isSubmitting ? '處理中...' : (form.payment_type === 'INCOME' ? '確認收款' : '確認退款') }}
+            {{ isSubmitting ? MESSAGES.ACTIONS.PROCESSING : (form.payment_type === 'INCOME' ? PAGES.PAYMENTS.CONFIRM_INCOME : PAGES.PAYMENTS.CONFIRM_REFUND) }}
           </button>
         </div>
       </form>

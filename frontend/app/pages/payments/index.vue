@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES, LABELS, PAGINATION } from '~/constants'
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -11,14 +13,14 @@ const selectedType = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const currentPage = ref(1)
-const pageSize = 20
+const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const stats = ref({ income: { count: 0, amount: 0 }, refund: { count: 0, amount: 0 }, netAmount: 0 })
 
 const typeOptions = [
-  { value: '', label: '全部類型' },
-  { value: 'INCOME', label: '收款' },
-  { value: 'REFUND', label: '退款' }
+  { value: '', label: PAGES.PAYMENTS.ALL_TYPES },
+  { value: 'INCOME', label: LABELS.PAYMENT_TYPE.INCOME },
+  { value: 'REFUND', label: LABELS.PAYMENT_TYPE.REFUND }
 ]
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
@@ -72,10 +74,10 @@ const formatCurrency = (amount: number) => {
 const getPaymentMethodLabel = (method: string | null) => {
   if (!method) return '—'
   const map: Record<string, string> = {
-    CASH: '現金',
-    CREDIT_CARD: '信用卡',
-    LINE_PAY: 'LINE Pay',
-    TRANSFER: '匯款'
+    CASH: LABELS.PAYMENT_METHOD.CASH,
+    CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
+    LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
+    TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
   }
   return map[method] || method
 }
@@ -113,14 +115,14 @@ const setDateRange = (range: string) => {
     <!-- Header -->
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-headline">收款管理</h1>
-        <p class="text-body text-secondary">收款紀錄、退款與對帳</p>
+        <h1 class="text-headline">{{ PAGES.PAYMENTS.TITLE }}</h1>
+        <p class="text-body text-secondary">{{ PAGES.PAYMENTS.DESCRIPTION }}</p>
       </div>
       <NuxtLink to="/payments/new" class="btn btn-primary">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
         </svg>
-        新增收款
+        {{ PAGES.PAYMENTS.ADD_PAYMENT }}
       </NuxtLink>
     </header>
 
@@ -134,7 +136,7 @@ const setDateRange = (range: string) => {
         </div>
         <div class="stat-content">
           <span class="stat-number">{{ formatCurrency(stats.income.amount) }}</span>
-          <span class="stat-label">收款金額 ({{ stats.income.count }} 筆)</span>
+          <span class="stat-label">{{ PAGES.PAYMENTS.TOTAL_PAYMENT }} ({{ stats.income.count }} {{ PAGES.PAYMENTS.ENTRIES }})</span>
         </div>
       </div>
 
@@ -147,7 +149,7 @@ const setDateRange = (range: string) => {
         </div>
         <div class="stat-content">
           <span class="stat-number">{{ formatCurrency(stats.refund.amount) }}</span>
-          <span class="stat-label">退款金額 ({{ stats.refund.count }} 筆)</span>
+          <span class="stat-label">{{ PAGES.PAYMENTS.TOTAL_REFUND }} ({{ stats.refund.count }} {{ PAGES.PAYMENTS.ENTRIES }})</span>
         </div>
       </div>
 
@@ -162,7 +164,7 @@ const setDateRange = (range: string) => {
           <span class="stat-number" :class="{ negative: stats.netAmount < 0 }">
             {{ formatCurrency(stats.netAmount) }}
           </span>
-          <span class="stat-label">淨收款</span>
+          <span class="stat-label">{{ PAGES.PAYMENTS.NET_PAYMENT }}</span>
         </div>
       </div>
     </div>
@@ -171,10 +173,10 @@ const setDateRange = (range: string) => {
     <div class="filters-bar glass-card-flat">
       <div class="date-filters">
         <div class="date-shortcuts">
-          <button class="shortcut-btn" :class="{ active: !startDate && !endDate }" @click="setDateRange('all')">全部</button>
-          <button class="shortcut-btn" @click="setDateRange('today')">今日</button>
-          <button class="shortcut-btn" @click="setDateRange('week')">本週</button>
-          <button class="shortcut-btn" @click="setDateRange('month')">本月</button>
+          <button class="shortcut-btn" :class="{ active: !startDate && !endDate }" @click="setDateRange('all')">{{ PAGES.PAYMENTS.DATE_RANGE_ALL }}</button>
+          <button class="shortcut-btn" @click="setDateRange('today')">{{ PAGES.PAYMENTS.DATE_RANGE_TODAY }}</button>
+          <button class="shortcut-btn" @click="setDateRange('week')">{{ PAGES.PAYMENTS.DATE_RANGE_WEEK }}</button>
+          <button class="shortcut-btn" @click="setDateRange('month')">{{ PAGES.PAYMENTS.DATE_RANGE_MONTH }}</button>
         </div>
         <div class="date-inputs">
           <input v-model="startDate" type="date" class="input input-date" placeholder="開始日期" />
@@ -185,7 +187,7 @@ const setDateRange = (range: string) => {
 
       <div class="filter-group">
         <select v-model="selectedBranch" class="input filter-select">
-          <option value="">全部分店</option>
+          <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
           <option v-for="branch in branches" :key="branch.id" :value="branch.id">
             {{ branch.name }}
           </option>
@@ -203,7 +205,7 @@ const setDateRange = (range: string) => {
     <div class="stats-bar">
       <div class="stat-item">
         <span class="stat-number-small">{{ totalCount }}</span>
-        <span class="stat-label-small text-caption text-secondary">符合條件</span>
+        <span class="stat-label-small text-caption text-secondary">{{ MESSAGES.COMMON.MATCHES }}</span>
       </div>
     </div>
 
@@ -211,7 +213,7 @@ const setDateRange = (range: string) => {
     <div class="table-card card">
       <div v-if="isLoading" class="loading-state">
         <div class="loading-spinner-large" />
-        <p class="text-secondary mt-md">載入中...</p>
+        <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
       </div>
 
       <div v-else-if="payments.length === 0" class="empty-state">
@@ -220,21 +222,21 @@ const setDateRange = (range: string) => {
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
         </div>
-        <h3 class="text-title-3">尚無收款紀錄</h3>
-        <p class="text-secondary">新增第一筆收款開始記錄</p>
-        <NuxtLink to="/payments/new" class="btn btn-primary mt-lg">新增收款</NuxtLink>
+        <h3 class="text-title-3">{{ PAGES.PAYMENTS.NO_PAYMENTS }}</h3>
+        <p class="text-secondary">{{ PAGES.PAYMENTS.NO_PAYMENTS_HINT }}</p>
+        <NuxtLink to="/payments/new" class="btn btn-primary mt-lg">{{ PAGES.PAYMENTS.ADD_PAYMENT }}</NuxtLink>
       </div>
 
       <table v-else class="data-table">
         <thead>
           <tr>
-            <th>日期</th>
-            <th>類型</th>
-            <th>會員</th>
-            <th>合約編號</th>
-            <th>付款方式</th>
-            <th>分店</th>
-            <th>金額</th>
+            <th>{{ PAGES.PAYMENTS.DATE }}</th>
+            <th>{{ PAGES.PAYMENTS.TYPE }}</th>
+            <th>{{ PAGES.PAYMENTS.MEMBER }}</th>
+            <th>{{ PAGES.PAYMENTS.CONTRACT_NO }}</th>
+            <th>{{ PAGES.PAYMENTS.PAYMENT_METHOD }}</th>
+            <th>{{ PAGES.PAYMENTS.BRANCH }}</th>
+            <th>{{ PAGES.PAYMENTS.AMOUNT }}</th>
             <th></th>
           </tr>
         </thead>
@@ -245,7 +247,7 @@ const setDateRange = (range: string) => {
             </td>
             <td>
               <span class="type-badge" :class="payment.payment_type === 'INCOME' ? 'type-income' : 'type-refund'">
-                {{ payment.payment_type === 'INCOME' ? '收款' : '退款' }}
+                {{ payment.payment_type === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND }}
               </span>
             </td>
             <td>
@@ -293,7 +295,7 @@ const setDateRange = (range: string) => {
           :disabled="currentPage === 1"
           @click="currentPage--"
         >
-          上一頁
+          {{ MESSAGES.ACTIONS.PREV_PAGE }}
         </button>
         <span class="page-info text-secondary">
           第 {{ currentPage }} / {{ totalPages }} 頁
@@ -303,7 +305,7 @@ const setDateRange = (range: string) => {
           :disabled="currentPage === totalPages"
           @click="currentPage++"
         >
-          下一頁
+          {{ MESSAGES.ACTIONS.NEXT_PAGE }}
         </button>
       </div>
     </div>

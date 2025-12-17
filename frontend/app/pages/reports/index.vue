@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { MESSAGES, PAGES } from '~/constants'
+
 const { branches, fetchBranches } = useBranches()
 const selectedBranch = ref('')
 const selectedPeriod = ref('month')
@@ -53,19 +55,19 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
     <!-- Header -->
     <div class="page-header">
       <div class="header-content">
-        <h1>營運報表</h1>
-        <p>查看營運數據與統計分析</p>
+        <h1>{{ PAGES.REPORTS.TITLE }}</h1>
+        <p>{{ PAGES.REPORTS.DESCRIPTION }}</p>
       </div>
       <div class="header-actions">
         <select v-model="selectedBranch" class="filter-select">
-          <option value="">全部分店</option>
+          <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
           <option v-for="branch in branches" :key="branch.id" :value="branch.id">
             {{ branch.name }}
           </option>
         </select>
         <div class="period-tabs">
           <button
-            v-for="period in [{ value: 'week', label: '本週' }, { value: 'month', label: '本月' }, { value: 'year', label: '今年' }]"
+            v-for="period in [{ value: 'week', label: MESSAGES.TIME.THIS_WEEK }, { value: 'month', label: MESSAGES.TIME.THIS_MONTH }, { value: 'year', label: MESSAGES.TIME.THIS_YEAR }]"
             :key="period.value"
             :class="{ active: selectedPeriod === period.value }"
             @click="selectedPeriod = period.value"
@@ -90,7 +92,7 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
           </span>
         </div>
         <div class="metric-value">{{ formatCurrency(stats.revenue) }}</div>
-        <div class="metric-label">營業收入</div>
+        <div class="metric-label">{{ PAGES.REPORTS.REVENUE }}</div>
       </div>
 
       <div class="metric-card">
@@ -105,7 +107,7 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
           </span>
         </div>
         <div class="metric-value">{{ stats.newMembers }}</div>
-        <div class="metric-label">新會員</div>
+        <div class="metric-label">{{ PAGES.REPORTS.NEW_MEMBERS }}</div>
       </div>
 
       <div class="metric-card">
@@ -120,7 +122,7 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
           </span>
         </div>
         <div class="metric-value">{{ stats.activeContracts }}</div>
-        <div class="metric-label">有效合約</div>
+        <div class="metric-label">{{ PAGES.REPORTS.ACTIVE_CONTRACTS }}</div>
       </div>
 
       <div class="metric-card">
@@ -135,7 +137,7 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
           </span>
         </div>
         <div class="metric-value">{{ stats.checkins.toLocaleString() }}</div>
-        <div class="metric-label">入場人次</div>
+        <div class="metric-label">{{ PAGES.REPORTS.CHECKINS }}</div>
       </div>
     </div>
 
@@ -144,8 +146,8 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
       <!-- Revenue Chart -->
       <div class="chart-card revenue-chart">
         <div class="chart-header">
-          <h3>營收趨勢</h3>
-          <span class="chart-subtitle">近 6 個月</span>
+          <h3>{{ PAGES.REPORTS.REVENUE_TREND }}</h3>
+          <span class="chart-subtitle">{{ MESSAGES.TIME.RECENT_6_MONTHS }}</span>
         </div>
         <div class="bar-chart">
           <div
@@ -169,15 +171,15 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
       <!-- Top Plans -->
       <div class="chart-card top-plans">
         <div class="chart-header">
-          <h3>熱門方案</h3>
-          <span class="chart-subtitle">依銷售數量排序</span>
+          <h3>{{ PAGES.REPORTS.POPULAR_PLANS }}</h3>
+          <span class="chart-subtitle">{{ PAGES.REPORTS.SORT_BY_SALES }}</span>
         </div>
         <div class="plans-list">
           <div v-for="(plan, index) in topPlans" :key="index" class="plan-item">
             <div class="plan-rank">{{ index + 1 }}</div>
             <div class="plan-info">
               <span class="plan-name">{{ plan.name }}</span>
-              <span class="plan-stats">{{ plan.count }} 份 · {{ formatCurrency(plan.revenue) }}</span>
+              <span class="plan-stats">{{ plan.count }} {{ PAGES.REPORTS.ENTRIES }} · {{ formatCurrency(plan.revenue) }}</span>
             </div>
             <div class="plan-bar">
               <div
@@ -192,31 +194,31 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
 
     <!-- Quick Actions -->
     <div class="quick-actions">
-      <h3>匯出報表</h3>
+      <h3>{{ PAGES.REPORTS.EXPORT_REPORTS }}</h3>
       <div class="actions-grid">
         <button class="action-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
           </svg>
-          <span>營收報表 (Excel)</span>
+          <span>{{ PAGES.REPORTS.EXPORT_REVENUE }}</span>
         </button>
         <button class="action-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
           </svg>
-          <span>會員報表 (Excel)</span>
+          <span>{{ PAGES.REPORTS.EXPORT_MEMBERS }}</span>
         </button>
         <button class="action-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
           </svg>
-          <span>合約報表 (Excel)</span>
+          <span>{{ PAGES.REPORTS.EXPORT_CONTRACTS }}</span>
         </button>
         <button class="action-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
           </svg>
-          <span>入場統計 (PDF)</span>
+          <span>{{ PAGES.REPORTS.EXPORT_CHECKINS }}</span>
         </button>
       </div>
     </div>
