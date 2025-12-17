@@ -30,3 +30,9 @@ backend/uploads/
 
 # Misc
 *.local
+.dev.vars
+
+# Test reports
+playwright-report/
+.playwright-mcp/
+test-results/
