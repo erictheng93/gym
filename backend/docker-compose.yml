@@ -20,7 +20,7 @@ services:
     image: directus/directus:11
     restart: unless-stopped
     ports:
-      - 8055:8055
+      - "0.0.0.0:8500:8055"
     volumes:
       - ./uploads:/directus/uploads
       - ./extensions:/directus/extensions

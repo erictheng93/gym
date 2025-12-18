@@ -14,7 +14,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8055'
+      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500'
     }
   },
 

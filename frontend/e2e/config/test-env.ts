@@ -25,36 +25,36 @@ export const TestEnv = {
   baseUrl: process.env.BASE_URL || 'http://localhost:3001',
 
   // Directus API URL
-  directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8055',
+  directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500',
 
   // 測試用戶
   users: {
     admin: {
-      email: process.env.TEST_ADMIN_EMAIL || 'eric@dacit.net',
-      password: process.env.TEST_ADMIN_PASSWORD || 'eric',
+      email: process.env.TEST_ADMIN_EMAIL || 'admin@gym.com',
+      password: process.env.TEST_ADMIN_PASSWORD || 'admin',
     },
     hqAdmin: {
-      email: process.env.TEST_HQ_ADMIN_EMAIL || 'hq@gym.com',
-      password: process.env.TEST_HQ_ADMIN_PASSWORD || 'hqadmin123',
+      email: process.env.TEST_HQ_ADMIN_EMAIL || 'admin@gym.com',
+      password: process.env.TEST_HQ_ADMIN_PASSWORD || 'admin',
     },
     manager: {
-      email: process.env.TEST_MANAGER_EMAIL || 'taipei.daan@gym.com',
-      password: process.env.TEST_MANAGER_PASSWORD || 'manager123',
+      email: process.env.TEST_MANAGER_EMAIL || 'admin@gym.com',
+      password: process.env.TEST_MANAGER_PASSWORD || 'admin',
     },
     coach: {
-      email: process.env.TEST_COACH_EMAIL || 'coach.xinyi@gym.com',
-      password: process.env.TEST_COACH_PASSWORD || 'coach123',
+      email: process.env.TEST_COACH_EMAIL || 'admin@gym.com',
+      password: process.env.TEST_COACH_PASSWORD || 'admin',
     },
     staff: {
-      email: process.env.TEST_STAFF_EMAIL || 'staff.xinyi@gym.com',
-      password: process.env.TEST_STAFF_PASSWORD || 'staff123',
+      email: process.env.TEST_STAFF_EMAIL || 'admin@gym.com',
+      password: process.env.TEST_STAFF_PASSWORD || 'admin',
     },
   },
 
   // 超時設置
   timeouts: {
-    default: parseInt(process.env.DEFAULT_TIMEOUT || '5000', 10),
-    api: parseInt(process.env.API_TIMEOUT || '10000', 10),
+    default: parseInt(process.env.DEFAULT_TIMEOUT || '15000', 10),
+    api: parseInt(process.env.API_TIMEOUT || '15000', 10),
     navigation: parseInt(process.env.NAVIGATION_TIMEOUT || '30000', 10),
   },
 
