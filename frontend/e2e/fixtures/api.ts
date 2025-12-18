@@ -1,6 +1,7 @@
 import { APIRequestContext } from '@playwright/test'
+import { TestEnv } from '../config/test-env'
 
-const DIRECTUS_URL = process.env.DIRECTUS_URL || 'http://localhost:8055'
+const DIRECTUS_URL = TestEnv.directusUrl
 
 export interface DirectusAuthResponse {
   data: {

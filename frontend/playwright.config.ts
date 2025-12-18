@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { TestEnv } from './e2e/config/test-env'
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -6,14 +7,16 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  forbidOnly: !!TestEnv.isCI,
+  retries: TestEnv.isCI ? TestEnv.retries : 0,
+  workers: TestEnv.isCI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: TestEnv.baseUrl,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    actionTimeout: TestEnv.timeouts.default,
+    navigationTimeout: TestEnv.timeouts.navigation,
   },
 
   projects: [
@@ -25,8 +28,8 @@ export default defineConfig({
 
   webServer: {
     command: 'pnpm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    url: TestEnv.baseUrl,
+    reuseExistingServer: !TestEnv.isCI,
     timeout: 120000,
   },
 })

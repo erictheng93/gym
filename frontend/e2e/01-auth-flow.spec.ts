@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { TEST_USERS } from './fixtures/auth'
+import { TEST_USERS, login } from './fixtures/auth'
 
 test.describe('登录流程 E2E', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,18 +7,8 @@ test.describe('登录流程 E2E', () => {
   })
 
   test('应该成功登录并跳转到首页', async ({ page }) => {
-    // 填写登录表单
-    await page.fill('#email', TEST_USERS.admin.email)
-    await page.fill('#password', TEST_USERS.admin.password)
-
-    // 点击登录按钮
-    await page.click('button[type="submit"]')
-
-    // 等待导航完成
-    await page.waitForURL('/', { timeout: 10000 })
-
-    // 验证已经跳转到首页
-    await expect(page).toHaveURL('/')
+    // 使用 login 助手函数
+    await login(page, TEST_USERS.admin)
 
     // 验证页面包含预期内容（例如导航菜单）
     const navigation = page.locator('nav').or(page.locator('[role="navigation"]'))

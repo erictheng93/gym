@@ -22,8 +22,15 @@ const isShaking = ref(false)
 const isDark = ref(false)
 const mounted = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
   mounted.value = true
+
+  // Check if already authenticated and redirect
+  if (isAuthenticated.value) {
+    await navigateTo('/')
+    return
+  }
+
   // Check and apply theme
   const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME)
   if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -41,12 +48,6 @@ const toggleTheme = () => {
   localStorage.setItem(STORAGE_KEYS.THEME, theme)
 }
 
-watchEffect(() => {
-  if (isAuthenticated.value) {
-    navigateTo('/')
-  }
-})
-
 const handleSubmit = async () => {
   error.value = ''
 
@@ -56,12 +57,18 @@ const handleSubmit = async () => {
     return
   }
 
-  const result = await login(form.email, form.password)
+  try {
+    const result = await login(form.email, form.password)
 
-  if (result.success) {
-    await navigateTo('/')
-  } else {
-    error.value = result.error || MESSAGES.AUTH.LOGIN_ERROR
+    if (result.success) {
+      await navigateTo('/', { replace: true })
+    } else {
+      error.value = result.error || MESSAGES.AUTH.LOGIN_ERROR
+      triggerShake()
+    }
+  } catch (err) {
+    console.error('Login error:', err)
+    error.value = MESSAGES.AUTH.LOGIN_ERROR
     triggerShake()
   }
 }

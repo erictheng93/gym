@@ -4,6 +4,10 @@
  */
 
 import { vi } from 'vitest'
+import * as Vue from 'vue'
+
+// Make Vue composition API globally available (for Nuxt auto-imports)
+Object.assign(globalThis, Vue)
 
 // 创建全局状态存储
 const globalStateStore = new Map<string, any>()
@@ -48,6 +52,9 @@ export const mockOnMounted = vi.fn((callback: () => void) => {
 // Mock navigateTo
 export const mockNavigateTo = vi.fn().mockResolvedValue(undefined)
 
+// Mock defineNuxtRouteMiddleware
+export const mockDefineNuxtRouteMiddleware = (middleware: any) => middleware
+
 // Mock Directus instance (global)
 export const mockDirectusInstance = {
   login: vi.fn(),
@@ -74,6 +81,7 @@ globalThis.computed = mockComputed as any
 globalThis.watch = mockWatch as any
 globalThis.onMounted = mockOnMounted as any
 globalThis.navigateTo = mockNavigateTo as any
+globalThis.defineNuxtRouteMiddleware = mockDefineNuxtRouteMiddleware as any
 globalThis.useDirectus = vi.fn(() => mockDirectusInstance) as any
 globalThis.useAuth = vi.fn(() => mockAuthInstance) as any
 

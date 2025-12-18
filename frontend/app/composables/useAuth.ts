@@ -31,7 +31,6 @@ export const useAuth = () => {
   const login = async (email: string, password: string) => {
     isLoading.value = true
     try {
-      // Use client.login() with an object containing email and password
       await directus.login({ email, password })
       await fetchUser()
       await fetchCurrentEmployee()

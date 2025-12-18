@@ -85,6 +85,19 @@ describe('useHR', () => {
         await fetchRecentAttendances('emp-1')
 
       })
+
+      it('應該處理取得失敗的情況', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+
+        const { fetchRecentAttendances } = useHR()
+
+        await fetchRecentAttendances('emp-1', 7)
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch recent attendances:', expect.any(Error))
+
+        consoleErrorSpy.mockRestore()
+      })
     })
 
     describe('checkIn', () => {
@@ -242,6 +255,19 @@ describe('useHR', () => {
         await fetchLeaveBalances('emp-1')
 
       })
+
+      it('應該處理取得失敗的情況', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+
+        const { fetchLeaveBalances } = useHR()
+
+        await fetchLeaveBalances('emp-1', 2025)
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch leave balances:', expect.any(Error))
+
+        consoleErrorSpy.mockRestore()
+      })
     })
 
     describe('fetchLeaveRequests', () => {
@@ -284,6 +310,32 @@ describe('useHR', () => {
         await fetchLeaveRequests({ page: 2, limit: 10 })
 
       })
+
+      it('應該處理取得失敗的情況', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+
+        const { fetchLeaveRequests, isLeavesLoading } = useHR()
+
+        await fetchLeaveRequests({ employeeId: 'emp-1' })
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch leave requests:', expect.any(Error))
+        expect(isLeavesLoading.value).toBe(false)
+
+        consoleErrorSpy.mockRestore()
+      })
+
+      it('應該正確處理計數結果為 null 的情況', async () => {
+        mockDirectusInstance.request
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{ count: null }])
+
+        const { fetchLeaveRequests, leavesTotalCount } = useHR()
+
+        await fetchLeaveRequests()
+
+        expect(leavesTotalCount.value).toBe(0)
+      })
     })
 
     describe('fetchPendingApprovals', () => {
@@ -309,6 +361,400 @@ describe('useHR', () => {
         expect(pendingApprovals.value).toEqual(pendingLeaves)
       })
 
+      it('應該在沒有下屬時返回空陣列', async () => {
+        mockDirectusInstance.request.mockResolvedValueOnce([])
+
+        const { fetchPendingApprovals, pendingApprovals } = useHR()
+
+        await fetchPendingApprovals('supervisor-1')
+
+        expect(pendingApprovals.value).toEqual([])
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+      })
+
+      it('應該處理取得失敗的情況', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+
+        const { fetchPendingApprovals } = useHR()
+
+        await fetchPendingApprovals('supervisor-1')
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch pending approvals:', expect.any(Error))
+
+        consoleErrorSpy.mockRestore()
+      })
+    })
+
+    describe('applyLeave', () => {
+      it('應該成功申請休假', async () => {
+        const leaveData = {
+          employeeId: 'emp-1',
+          leaveType: 'ANNUAL',
+          startDate: '2025-02-01',
+          endDate: '2025-02-03',
+          reason: '家庭旅遊',
+          daysRequested: 3
+        }
+
+        const mockCreatedLeave: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          ...leaveData,
+          leave_status: 'PENDING'
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockCreatedLeave)
+          .mockResolvedValueOnce({})
+
+        const { applyLeave } = useHR()
+        const result = await applyLeave(leaveData)
+
+        expect(result).toEqual(mockCreatedLeave)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      })
+
+      it('應該支援半天假', async () => {
+        const leaveData = {
+          employeeId: 'emp-1',
+          leaveType: 'ANNUAL',
+          startDate: '2025-02-01',
+          endDate: '2025-02-01',
+          daysRequested: 0.5,
+          isHalfDay: true,
+          halfDayType: 'AM' as const
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce({ id: 'leave-1' })
+          .mockResolvedValueOnce({})
+
+        const { applyLeave } = useHR()
+        await applyLeave(leaveData)
+
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    describe('reviewLeave', () => {
+      it('應該成功核准休假並更新餘額', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          employee_id: 'emp-1',
+          leave_type: 'ANNUAL',
+          start_date: '2025-02-01',
+          end_date: '2025-02-03',
+          days_requested: 3,
+          leave_status: 'PENDING'
+        }
+
+        const mockBalance: Partial<LeaveBalance> = {
+          id: 'balance-1',
+          used_days: 5,
+          pending_days: 3
+        }
+
+        const mockApprovedLeave: Partial<LeaveRequest> = {
+          ...mockLeaveRequest,
+          leave_status: 'APPROVED'
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockLeaveRequest)
+          .mockResolvedValueOnce(mockApprovedLeave)
+          .mockResolvedValueOnce({})
+          .mockResolvedValueOnce([mockBalance])
+          .mockResolvedValueOnce({})
+
+        const { reviewLeave } = useHR()
+        const result = await reviewLeave('leave-1', 'supervisor-1', 'APPROVE', '同意')
+
+        expect(result).toEqual(mockApprovedLeave)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(5)
+      })
+
+      it('應該成功拒絕休假', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          leave_status: 'PENDING',
+          days_requested: 0
+        }
+
+        const mockRejectedLeave: Partial<LeaveRequest> = {
+          ...mockLeaveRequest,
+          leave_status: 'REJECTED'
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockLeaveRequest)
+          .mockResolvedValueOnce(mockRejectedLeave)
+          .mockResolvedValueOnce({})
+
+        const { reviewLeave } = useHR()
+        const result = await reviewLeave('leave-1', 'supervisor-1', 'REJECT', '日期衝突')
+
+        expect(result).toEqual(mockRejectedLeave)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+      })
+
+      it('應該在核准時正確更新休假餘額', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          employee_id: 'emp-1',
+          leave_type: 'SICK',
+          start_date: '2025-01-20',
+          days_requested: 2,
+          leave_status: 'PENDING'
+        }
+
+        const mockBalance: Partial<LeaveBalance> = {
+          id: 'balance-1',
+          used_days: 3,
+          pending_days: 2
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockLeaveRequest)
+          .mockResolvedValueOnce({ leave_status: 'APPROVED' })
+          .mockResolvedValueOnce({})
+          .mockResolvedValueOnce([mockBalance])
+          .mockResolvedValueOnce({})
+
+        const { reviewLeave } = useHR()
+        await reviewLeave('leave-1', 'supervisor-1', 'APPROVE')
+
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(5)
+      })
+
+      it('應該在沒有餘額記錄時不更新餘額', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          employee_id: 'emp-1',
+          leave_type: 'ANNUAL',
+          start_date: '2025-02-01',
+          days_requested: 3,
+          leave_status: 'PENDING'
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockLeaveRequest)
+          .mockResolvedValueOnce({ leave_status: 'APPROVED' })
+          .mockResolvedValueOnce({})
+          .mockResolvedValueOnce([])
+
+        const { reviewLeave } = useHR()
+        await reviewLeave('leave-1', 'supervisor-1', 'APPROVE')
+
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(4)
+      })
+    })
+
+    describe('cancelLeave', () => {
+      it('應該成功取消待審核的申請', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          leave_status: 'PENDING'
+        }
+
+        const mockCancelledLeave: Partial<LeaveRequest> = {
+          ...mockLeaveRequest,
+          leave_status: 'CANCELLED'
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockLeaveRequest)
+          .mockResolvedValueOnce(mockCancelledLeave)
+          .mockResolvedValueOnce({})
+
+        const { cancelLeave } = useHR()
+        const result = await cancelLeave('leave-1', 'emp-1')
+
+        expect(result).toEqual(mockCancelledLeave)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+      })
+
+      it('應該拒絕取消已核准的休假申請', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          leave_status: 'APPROVED'
+        }
+
+        mockDirectusInstance.request.mockResolvedValueOnce(mockLeaveRequest)
+
+        const { cancelLeave } = useHR()
+
+        await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('只能取消待審核的申請')
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+      })
+
+      it('應該拒絕取消已拒絕的休假申請', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          leave_status: 'REJECTED'
+        }
+
+        mockDirectusInstance.request.mockResolvedValueOnce(mockLeaveRequest)
+
+        const { cancelLeave } = useHR()
+
+        await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('只能取消待審核的申請')
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+      })
+
+      it('應該拒絕取消已取消的休假申請', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          leave_status: 'CANCELLED'
+        }
+
+        mockDirectusInstance.request.mockResolvedValueOnce(mockLeaveRequest)
+
+        const { cancelLeave } = useHR()
+
+        await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('只能取消待審核的申請')
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+      })
+
+      it('應該記錄取消動作到審核歷程', async () => {
+        const mockLeaveRequest: Partial<LeaveRequest> = {
+          id: 'leave-1',
+          leave_status: 'PENDING'
+        }
+
+        mockDirectusInstance.request
+          .mockResolvedValueOnce(mockLeaveRequest)
+          .mockResolvedValueOnce({ leave_status: 'CANCELLED' })
+          .mockResolvedValueOnce({ id: 'log-1' })
+
+        const { cancelLeave } = useHR()
+        await cancelLeave('leave-1', 'emp-1')
+
+        // 驗證呼叫了三次：readItem, updateItem, createItem (log)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+      })
+
+      it('應該處理取消失敗的情況', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Database error'))
+
+        const { cancelLeave } = useHR()
+
+        await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('Database error')
+
+        consoleErrorSpy.mockRestore()
+      })
+    })
+
+    describe('fetchApprovalHistory', () => {
+      it('應該成功取得審核歷程', async () => {
+        const mockHistory: Partial<LeaveApprovalLog>[] = [
+          {
+            id: 'log-1',
+            action: 'SUBMIT',
+            previous_status: null,
+            new_status: 'PENDING'
+          },
+          {
+            id: 'log-2',
+            action: 'APPROVE',
+            previous_status: 'PENDING',
+            new_status: 'APPROVED'
+          }
+        ]
+
+        mockDirectusInstance.request.mockResolvedValueOnce(mockHistory)
+
+        const { fetchApprovalHistory } = useHR()
+        const result = await fetchApprovalHistory('leave-1')
+
+        expect(result).toEqual(mockHistory)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+      })
+
+      it('應該依時間順序排列歷程記錄', async () => {
+        const mockHistory: Partial<LeaveApprovalLog>[] = [
+          {
+            id: 'log-1',
+            action: 'SUBMIT',
+            date_created: '2025-01-10T08:00:00Z'
+          },
+          {
+            id: 'log-2',
+            action: 'APPROVE',
+            date_created: '2025-01-12T10:00:00Z'
+          },
+          {
+            id: 'log-3',
+            action: 'COMPLETE',
+            date_created: '2025-01-15T09:00:00Z'
+          }
+        ]
+
+        mockDirectusInstance.request.mockResolvedValueOnce(mockHistory)
+
+        const { fetchApprovalHistory } = useHR()
+        const result = await fetchApprovalHistory('leave-1')
+
+        // 驗證是否按時間升序排列
+        expect(result).toHaveLength(3)
+        expect(result[0].action).toBe('SUBMIT')
+        expect(result[1].action).toBe('APPROVE')
+        expect(result[2].action).toBe('COMPLETE')
+      })
+
+      it('應該包含操作人資訊', async () => {
+        const mockHistory: Partial<LeaveApprovalLog>[] = [
+          {
+            id: 'log-1',
+            action: 'SUBMIT',
+            action_by: 'emp-1',
+            actor: { full_name: '張三' }
+          },
+          {
+            id: 'log-2',
+            action: 'APPROVE',
+            action_by: 'supervisor-1',
+            actor: { full_name: '李經理' }
+          }
+        ]
+
+        mockDirectusInstance.request.mockResolvedValueOnce(mockHistory)
+
+        const { fetchApprovalHistory } = useHR()
+        const result = await fetchApprovalHistory('leave-1')
+
+        expect(result[0].actor).toEqual({ full_name: '張三' })
+        expect(result[1].actor).toEqual({ full_name: '李經理' })
+      })
+
+      it('應該正確過濾指定的休假申請', async () => {
+        mockDirectusInstance.request.mockResolvedValueOnce([])
+
+        const { fetchApprovalHistory } = useHR()
+        const result = await fetchApprovalHistory('leave-123')
+
+        // 驗證有調用 request 且返回正確結果
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        expect(result).toEqual([])
+      })
+
+      it('應該處理取得失敗的情況', async () => {
+        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Network error'))
+
+        const { fetchApprovalHistory } = useHR()
+
+        await expect(fetchApprovalHistory('leave-1')).rejects.toThrow('Network error')
+      })
+
+      it('應該在沒有歷程記錄時返回空陣列', async () => {
+        mockDirectusInstance.request.mockResolvedValueOnce([])
+
+        const { fetchApprovalHistory } = useHR()
+        const result = await fetchApprovalHistory('leave-1')
+
+        expect(result).toEqual([])
+        expect(result).toHaveLength(0)
+      })
     })
   })
 })
