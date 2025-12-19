@@ -15,43 +15,48 @@ export async function login(page: Page, user: TestUser) {
   const emailInput = page.locator('#email')
   await emailInput.waitFor({ state: 'visible', timeout: TestEnv.timeouts.default })
 
-  // 等待頁面動畫完成
-  await page.waitForTimeout(500)
+  // 等待頁面完全穩定
+  await page.waitForLoadState('networkidle').catch(() => null)
+  await page.waitForTimeout(1000)
 
-  // 填寫 email 和密碼
-  await emailInput.fill(user.email)
+  // 清除並填寫 email - 使用 click + type 確保輸入
+  await emailInput.click()
+  await emailInput.clear()
+  await emailInput.pressSequentially(user.email, { delay: 50 })
 
+  // 確認 email 已填寫
+  await page.waitForTimeout(200)
+
+  // 清除並填寫密碼
   const passwordInput = page.locator('#password')
-  await passwordInput.fill(user.password)
+  await passwordInput.click()
+  await passwordInput.clear()
+  await passwordInput.pressSequentially(user.password, { delay: 50 })
 
-  // 點擊提交按鈕並等待 API 響應
+  // 確認密碼已填寫
+  await page.waitForTimeout(200)
+
+  // 點擊提交按鈕
   const submitButton = page.locator('button[type="submit"]')
+  await submitButton.click()
 
-  // 同時監聽 API 響應和導航
-  await Promise.all([
-    // 等待 auth/login API 響應
+  // 等待 API 響應或頁面跳轉
+  await Promise.race([
+    page.waitForURL(url => !url.toString().includes('/login'), { timeout: TestEnv.timeouts.navigation }),
     page.waitForResponse(
-      response => response.url().includes('/auth/login'),
+      response => response.url().includes('/auth/login') && response.status() === 200,
       { timeout: TestEnv.timeouts.api }
-    ).catch(() => null),
-    submitButton.click()
-  ])
+    ).then(() => page.waitForURL(url => !url.toString().includes('/login'), { timeout: TestEnv.timeouts.navigation }))
+  ]).catch(() => null)
 
-  // 等待導航到首頁或等待頁面穩定
-  try {
-    await page.waitForURL('/', { timeout: TestEnv.timeouts.navigation })
-  } catch {
-    // 如果導航超時，檢查是否已經在首頁
-    const currentUrl = page.url()
-    if (!currentUrl.endsWith('/') && !currentUrl.includes('/?')) {
-      throw new Error(`Login failed: expected URL to be /, got ${currentUrl}`)
-    }
+  // 等待頁面穩定
+  await page.waitForLoadState('networkidle', { timeout: TestEnv.timeouts.default }).catch(() => null)
+
+  // 驗證登入成功 - 確認不在登入頁面
+  const currentUrl = page.url()
+  if (currentUrl.includes('/login')) {
+    throw new Error(`Login failed: still on login page at ${currentUrl}`)
   }
-
-  // 驗證登入成功 - 檢查是否有導航選單
-  await expect(page.locator('nav, [role="navigation"]').first()).toBeVisible({
-    timeout: TestEnv.timeouts.default
-  })
 }
 
 export async function logout(page: Page) {

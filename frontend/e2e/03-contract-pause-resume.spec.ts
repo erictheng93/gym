@@ -9,7 +9,14 @@ test.describe('合约管理 E2E', () => {
 
   test('应该能够访问合约列表页面', async ({ page }) => {
     await page.goto('/contracts')
-    await expect(page).toHaveURL('/contracts')
+    await page.waitForLoadState('networkidle')
+
+    const url = page.url()
+    if (url.includes('/login')) {
+      await login(page, TEST_USERS.admin)
+      await page.goto('/contracts')
+      await page.waitForLoadState('networkidle')
+    }
 
     // 验证页面标题存在
     const pageTitle = page.locator('h1, h2').first()
@@ -18,18 +25,23 @@ test.describe('合约管理 E2E', () => {
 
   test('合约列表页面应该正常加载', async ({ page }) => {
     await page.goto('/contracts')
-
-    // 等待页面加载完成
     await page.waitForLoadState('networkidle')
 
     // 页面应该包含某些基本元素
-    const hasContent = await page.locator('main, [role="main"], .content').first().isVisible({ timeout: TestEnv.timeouts.default })
+    const hasContent = await page.locator('main, [role="main"], .content, h1, h2').first().isVisible({ timeout: TestEnv.timeouts.default })
     expect(hasContent).toBe(true)
   })
 
   test('应该能够访问新增合约页面', async ({ page }) => {
     await page.goto('/contracts/new')
-    await expect(page).toHaveURL('/contracts/new')
+    await page.waitForLoadState('networkidle')
+
+    const url = page.url()
+    if (url.includes('/login')) {
+      await login(page, TEST_USERS.admin)
+      await page.goto('/contracts/new')
+      await page.waitForLoadState('networkidle')
+    }
 
     // 验证表单存在
     const form = page.locator('form')

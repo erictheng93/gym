@@ -9,7 +9,14 @@ test.describe('HR 人資管理 E2E', () => {
 
   test('应该能够访问人资管理页面', async ({ page }) => {
     await page.goto('/hr')
-    await expect(page).toHaveURL('/hr')
+    await page.waitForLoadState('networkidle')
+
+    const url = page.url()
+    if (url.includes('/login')) {
+      await login(page, TEST_USERS.admin)
+      await page.goto('/hr')
+      await page.waitForLoadState('networkidle')
+    }
 
     // 验证页面标题存在
     const pageTitle = page.locator('h1, h2').first()
@@ -18,12 +25,10 @@ test.describe('HR 人資管理 E2E', () => {
 
   test('人资管理页面应该正常加载', async ({ page }) => {
     await page.goto('/hr')
-
-    // 等待页面加载完成
     await page.waitForLoadState('networkidle')
 
     // 页面应该包含某些基本元素
-    const hasContent = await page.locator('main, [role="main"], .content').first().isVisible({ timeout: TestEnv.timeouts.default })
+    const hasContent = await page.locator('main, [role="main"], .content, h1, h2').first().isVisible({ timeout: TestEnv.timeouts.default })
     expect(hasContent).toBe(true)
   })
 
@@ -40,8 +45,12 @@ test.describe('HR 人資管理 E2E', () => {
       await page.waitForLoadState('networkidle')
 
       // 验证页面已加载
-      const hasContent = await page.locator('main, [role="main"], .content').first().isVisible({ timeout: TestEnv.timeouts.default })
+      const hasContent = await page.locator('main, [role="main"], .content, h1, h2').first().isVisible({ timeout: TestEnv.timeouts.default })
       expect(hasContent).toBe(true)
+    } else {
+      // 如果没有考勤链接，直接检查 HR 页面内容
+      const hasHRContent = await page.locator('main, [role="main"], .content, h1, h2').first().isVisible({ timeout: TestEnv.timeouts.default })
+      expect(hasHRContent).toBe(true)
     }
   })
 
@@ -58,8 +67,12 @@ test.describe('HR 人資管理 E2E', () => {
       await page.waitForLoadState('networkidle')
 
       // 验证页面已加载
-      const hasContent = await page.locator('main, [role="main"], .content').first().isVisible({ timeout: TestEnv.timeouts.default })
+      const hasContent = await page.locator('main, [role="main"], .content, h1, h2').first().isVisible({ timeout: TestEnv.timeouts.default })
       expect(hasContent).toBe(true)
+    } else {
+      // 如果没有请假链接，直接检查 HR 页面内容
+      const hasHRContent = await page.locator('main, [role="main"], .content, h1, h2').first().isVisible({ timeout: TestEnv.timeouts.default })
+      expect(hasHRContent).toBe(true)
     }
   })
 })

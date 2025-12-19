@@ -22,7 +22,7 @@ if (fs.existsSync(envTestPath)) {
  */
 export const TestEnv = {
   // 應用 URL
-  baseUrl: process.env.BASE_URL || 'http://localhost:3001',
+  baseUrl: process.env.BASE_URL || 'http://localhost:3000',
 
   // Directus API URL
   directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500',
