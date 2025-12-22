@@ -10,7 +10,39 @@
  * 7. HR 休假審核流程：驗證上級審核下級，記錄審核歷史，更新休假餘額
  * 8. HR 考勤自動計算：打卡時自動計算工時、遲到、加班等
  * 9. 會員入場驗證：驗證會員合約有效性，記錄入場紀錄
+ * 10. Social Login 自動建立會員
+ *
+ * 第二階段優化：Redis 緩存整合
  */
+
+// ============================================
+// Redis 緩存工具 (可選 - 如果 ioredis 不可用則禁用)
+// ============================================
+let cacheModule = null;
+let cacheEnabled = false;
+
+// 嘗試動態導入緩存模組
+try {
+  // 注意：在 Directus 容器中可能需要先安裝 ioredis
+  // 如果導入失敗，緩存功能會被禁用但不影響核心功能
+  cacheModule = await import('./cache.js').catch(() => null);
+  if (cacheModule) {
+    cacheEnabled = true;
+    console.log('[GymHook] Redis cache module loaded successfully');
+  }
+} catch (e) {
+  console.log('[GymHook] Redis cache module not available, running without cache');
+}
+
+// 緩存函數包裝器 (如果緩存不可用則返回空操作)
+const isCacheAvailable = () => cacheEnabled && cacheModule?.isCacheAvailable?.();
+const getCachedMemberContract = async (id) => cacheEnabled ? cacheModule?.getCachedMemberContract?.(id) : null;
+const setCachedMemberContract = async (id, data) => cacheEnabled && cacheModule?.setCachedMemberContract?.(id, data);
+const invalidateMemberContract = async (id) => cacheEnabled && cacheModule?.invalidateMemberContract?.(id);
+const getCachedMemberStatus = async (id) => cacheEnabled ? cacheModule?.getCachedMemberStatus?.(id) : null;
+const setCachedMemberStatus = async (id, status) => cacheEnabled && cacheModule?.setCachedMemberStatus?.(id, status);
+const invalidateContract = async (id, memberId) => cacheEnabled && cacheModule?.invalidateContract?.(id, memberId);
+const recordPerformanceMetric = async (op, duration) => cacheEnabled && cacheModule?.recordPerformanceMetric?.(op, duration);
 
 export default ({ filter, action, init, schedule }, { services, database, getSchema }) => {
   const { ItemsService, UsersService } = services;
@@ -165,7 +197,7 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   // 2. 會員狀態自動更新邏輯
   // ============================================
 
-  // 當合約狀態更新時，同步更新會員狀態
+  // 當合約狀態更新時，同步更新會員狀態並清除緩存
   action('contracts.items.update', async ({ payload, keys }, { schema }) => {
     // 只在 contract_status 變更時處理
     if (!payload.contract_status) return;
@@ -188,6 +220,11 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         });
 
         if (!contract || !contract.member_id) continue;
+
+        // ========== 緩存清除 ==========
+        // 清除會員合約緩存 (合約狀態變更時必須清除)
+        invalidateMemberContract(contract.member_id).catch(() => {});
+        invalidateContract(contractId, contract.member_id).catch(() => {});
 
         // 查詢該會員的所有有效合約
         const memberContracts = await contractsService.readByQuery({
@@ -329,8 +366,37 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
 
   /**
    * 更新合約的付款狀態
+   * 使用原子 SQL 函數防止並發問題
    */
   async function updateContractPaymentStatus(contractId, schema) {
+    try {
+      // 使用原子 SQL 函數計算付款狀態 (防止 Race Condition)
+      const result = await database.raw(`
+        SELECT * FROM recalculate_payment_status(?::uuid)
+      `, [contractId]);
+
+      const row = result.rows?.[0] || result[0];
+
+      if (row?.success) {
+        if (row.old_status !== row.new_status) {
+          console.log(`[GymHook] Contract ${contractId} payment_status updated: ${row.old_status} -> ${row.new_status} (paid: ${row.paid_amount}/${row.total_amount}) [atomic]`);
+        }
+      }
+    } catch (error) {
+      // 如果原子函數不存在，回退到原始邏輯
+      if (error.message?.includes('recalculate_payment_status')) {
+        console.log('[GymHook] Atomic payment function not available, using fallback');
+        await fallbackUpdatePaymentStatus(contractId, schema);
+      } else {
+        console.error('[GymHook] Error updating contract payment status:', error);
+      }
+    }
+  }
+
+  /**
+   * 向後兼容：原始付款狀態更新邏輯
+   */
+  async function fallbackUpdatePaymentStatus(contractId, schema) {
     try {
       const contractsService = new ItemsService('contracts', {
         schema: schema,
@@ -342,14 +408,12 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         knex: database,
       });
 
-      // 取得合約資料
       const contract = await contractsService.readOne(contractId, {
         fields: ['id', 'total_amount', 'payment_status'],
       });
 
       if (!contract) return;
 
-      // 取得該合約的所有有效付款紀錄
       const payments = await paymentsService.readByQuery({
         filter: {
           contract_id: { _eq: contractId },
@@ -358,7 +422,6 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         fields: ['id', 'amount', 'payment_type'],
       });
 
-      // 計算已付金額 (收入 - 退款)
       let paidAmount = 0;
       for (const payment of payments) {
         const amount = parseFloat(payment.amount) || 0;
@@ -369,21 +432,19 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         }
       }
 
-      // 計算新的付款狀態
       const newPaymentStatus = calculatePaymentStatus(
         parseFloat(contract.total_amount) || 0,
         paidAmount
       );
 
-      // 只在狀態改變時更新
       if (newPaymentStatus !== contract.payment_status) {
         await contractsService.updateOne(contractId, {
           payment_status: newPaymentStatus,
         });
-        console.log(`[GymHook] Contract ${contractId} payment_status updated to ${newPaymentStatus} (paid: ${paidAmount}/${contract.total_amount})`);
+        console.log(`[GymHook] Contract ${contractId} payment_status updated to ${newPaymentStatus} (fallback)`);
       }
     } catch (error) {
-      console.error('[GymHook] Error updating contract payment status:', error);
+      console.error('[GymHook] Fallback payment status error:', error);
     }
   }
 
@@ -748,31 +809,53 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         console.log('[GymHook] leave_approval_logs table not available');
       }
 
-      // 更新休假餘額中的 pending_days
+      // 更新休假餘額中的 pending_days (使用原子操作)
       try {
-        const balancesService = new ItemsService('leave_balances', {
-          schema: schema,
-          knex: database,
-        });
-
         const year = new Date(payload.start_date).getFullYear();
-        const balances = await balancesService.readByQuery({
-          filter: {
-            employee_id: { _eq: payload.employee_id },
-            leave_type: { _eq: payload.leave_type },
-            year: { _eq: year },
-          },
-          limit: 1,
-        });
 
-        if (balances.length > 0) {
-          const currentPending = parseFloat(balances[0].pending_days) || 0;
-          await balancesService.updateOne(balances[0].id, {
-            pending_days: currentPending + daysRequested,
-          });
+        // 使用原子 SQL 函數更新餘額
+        const result = await database.raw(`
+          SELECT * FROM update_leave_balance(?::uuid, ?::varchar, ?::integer, ?::numeric, 0)
+        `, [payload.employee_id, payload.leave_type, year, daysRequested]);
+
+        const row = result.rows?.[0] || result[0];
+        if (row?.success) {
+          console.log(`[GymHook] Leave balance updated: pending=${row.new_pending} [atomic]`);
+        } else if (row) {
+          console.warn(`[GymHook] Leave balance update warning: ${row.message}`);
         }
       } catch (e) {
-        console.log('[GymHook] leave_balances table not available');
+        // 如果原子函數不存在，回退到原始邏輯
+        if (e.message?.includes('update_leave_balance')) {
+          console.log('[GymHook] Atomic leave function not available, using fallback');
+          try {
+            const balancesService = new ItemsService('leave_balances', {
+              schema: schema,
+              knex: database,
+            });
+
+            const year = new Date(payload.start_date).getFullYear();
+            const balances = await balancesService.readByQuery({
+              filter: {
+                employee_id: { _eq: payload.employee_id },
+                leave_type: { _eq: payload.leave_type },
+                year: { _eq: year },
+              },
+              limit: 1,
+            });
+
+            if (balances.length > 0) {
+              const currentPending = parseFloat(balances[0].pending_days) || 0;
+              await balancesService.updateOne(balances[0].id, {
+                pending_days: currentPending + daysRequested,
+              });
+            }
+          } catch (fallbackError) {
+            console.log('[GymHook] leave_balances table not available');
+          }
+        } else {
+          console.log('[GymHook] leave_balances table not available');
+        }
       }
 
       console.log(`[GymHook] Leave request ${key} submitted: ${daysRequested} days`);
@@ -917,44 +1000,77 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
           console.log('[GymHook] Could not create approval log');
         }
 
-        // 更新休假餘額
+        // 更新休假餘額 (使用原子操作)
         try {
-          const balancesService = new ItemsService('leave_balances', {
-            schema: schema,
-            knex: database,
-          });
-
           const year = new Date(request.start_date).getFullYear();
-          const balances = await balancesService.readByQuery({
-            filter: {
-              employee_id: { _eq: request.employee_id },
-              leave_type: { _eq: request.leave_type },
-              year: { _eq: year },
-            },
-            limit: 1,
-          });
+          const daysRequested = parseFloat(request.days_requested) || 0;
 
-          if (balances.length > 0) {
-            const balance = balances[0];
-            const daysRequested = parseFloat(request.days_requested) || 0;
-            const currentPending = parseFloat(balance.pending_days) || 0;
-            const currentUsed = parseFloat(balance.used_days) || 0;
+          let pendingDelta = 0;
+          let usedDelta = 0;
 
-            if (payload.leave_status === 'APPROVED') {
-              // 核准：pending 減少，used 增加
-              await balancesService.updateOne(balance.id, {
-                pending_days: Math.max(0, currentPending - daysRequested),
-                used_days: currentUsed + daysRequested,
-              });
-            } else if (['REJECTED', 'CANCELLED'].includes(payload.leave_status)) {
-              // 駁回/取消：pending 減少
-              await balancesService.updateOne(balance.id, {
-                pending_days: Math.max(0, currentPending - daysRequested),
-              });
-            }
+          if (payload.leave_status === 'APPROVED') {
+            // 核准：pending 減少，used 增加
+            pendingDelta = -daysRequested;
+            usedDelta = daysRequested;
+          } else if (['REJECTED', 'CANCELLED'].includes(payload.leave_status)) {
+            // 駁回/取消：pending 減少
+            pendingDelta = -daysRequested;
+          }
+
+          // 使用原子 SQL 函數更新餘額
+          const result = await database.raw(`
+            SELECT * FROM update_leave_balance(?::uuid, ?::varchar, ?::integer, ?::numeric, ?::numeric)
+          `, [request.employee_id, request.leave_type, year, pendingDelta, usedDelta]);
+
+          const row = result.rows?.[0] || result[0];
+          if (row?.success) {
+            console.log(`[GymHook] Leave balance updated: pending=${row.new_pending}, used=${row.new_used} [atomic]`);
+          } else if (row) {
+            console.warn(`[GymHook] Leave balance update warning: ${row.message}`);
           }
         } catch (e) {
-          console.log('[GymHook] Could not update leave balance');
+          // 如果原子函數不存在，回退到原始邏輯
+          if (e.message?.includes('update_leave_balance')) {
+            console.log('[GymHook] Atomic leave function not available, using fallback');
+            try {
+              const balancesService = new ItemsService('leave_balances', {
+                schema: schema,
+                knex: database,
+              });
+
+              const year = new Date(request.start_date).getFullYear();
+              const balances = await balancesService.readByQuery({
+                filter: {
+                  employee_id: { _eq: request.employee_id },
+                  leave_type: { _eq: request.leave_type },
+                  year: { _eq: year },
+                },
+                limit: 1,
+              });
+
+              if (balances.length > 0) {
+                const balance = balances[0];
+                const daysRequested = parseFloat(request.days_requested) || 0;
+                const currentPending = parseFloat(balance.pending_days) || 0;
+                const currentUsed = parseFloat(balance.used_days) || 0;
+
+                if (payload.leave_status === 'APPROVED') {
+                  await balancesService.updateOne(balance.id, {
+                    pending_days: Math.max(0, currentPending - daysRequested),
+                    used_days: currentUsed + daysRequested,
+                  });
+                } else if (['REJECTED', 'CANCELLED'].includes(payload.leave_status)) {
+                  await balancesService.updateOne(balance.id, {
+                    pending_days: Math.max(0, currentPending - daysRequested),
+                  });
+                }
+              }
+            } catch (fallbackError) {
+              console.log('[GymHook] Could not update leave balance (fallback)');
+            }
+          } else {
+            console.log('[GymHook] Could not update leave balance');
+          }
         }
 
         console.log(`[GymHook] Leave request ${requestId} ${payload.leave_status}`);
@@ -1108,11 +1224,13 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   });
 
   // ============================================
-  // 9. 會員入場驗證 Hooks
+  // 9. 會員入場驗證 Hooks (整合 Redis 緩存)
   // ============================================
 
   // 會員入場時驗證合約有效性
   filter('member_checkins.items.create', async (payload, meta, { schema }) => {
+    const startTime = Date.now();
+
     if (!payload.member_id) {
       throw new Error('缺少會員資訊');
     }
@@ -1128,45 +1246,86 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         knex: database,
       });
 
-      // 取得會員資訊
-      const member = await membersService.readOne(payload.member_id, {
-        fields: ['id', 'member_status', 'branch_id', 'full_name'],
-      });
+      // ========== 緩存優化：先檢查緩存 ==========
+      let member = null;
+      let validContract = null;
+      let cacheHit = false;
 
-      if (!member) {
-        throw new Error('會員不存在');
+      // 嘗試從緩存獲取會員合約資訊
+      const cachedData = await getCachedMemberContract(payload.member_id);
+
+      if (cachedData && cachedData.member && cachedData.contract) {
+        // 緩存命中：驗證緩存資料是否仍然有效
+        const today = new Date().toISOString().split('T')[0];
+        const contractEndDate = cachedData.contract.end_date;
+
+        // 檢查合約是否仍在有效期內
+        if (cachedData.member.member_status === 'ACTIVE' &&
+            cachedData.contract.contract_status === 'ACTIVE' &&
+            (!contractEndDate || contractEndDate >= today)) {
+          member = cachedData.member;
+          validContract = cachedData.contract;
+          cacheHit = true;
+          console.log(`[GymHook] Check-in cache HIT for member ${payload.member_id}`);
+        }
       }
 
-      if (member.member_status !== 'ACTIVE') {
-        throw new Error(`會員 ${member.full_name} 狀態為 ${member.member_status}，無法入場`);
-      }
+      // ========== 緩存未命中或資料過期：查詢數據庫 ==========
+      if (!cacheHit) {
+        // 取得會員資訊
+        member = await membersService.readOne(payload.member_id, {
+          fields: ['id', 'member_status', 'branch_id', 'full_name'],
+        });
 
-      // 檢查是否有有效合約
-      const today = new Date().toISOString().split('T')[0];
-      const validContracts = await contractsService.readByQuery({
-        filter: {
-          _and: [
-            { member_id: { _eq: payload.member_id } },
-            { contract_status: { _eq: 'ACTIVE' } },
-            { status: { _eq: 'active' } },
-            {
-              _or: [
-                { end_date: { _gte: today } },
-                { end_date: { _null: true } }, // 次數制沒有 end_date
-              ],
-            },
-          ],
-        },
-        fields: ['id', 'plan_id', 'remaining_counts', 'end_date'],
-        limit: 1,
-      });
+        if (!member) {
+          throw new Error('會員不存在');
+        }
 
-      if (validContracts.length === 0) {
-        throw new Error(`會員 ${member.full_name} 沒有有效合約，無法入場`);
+        if (member.member_status !== 'ACTIVE') {
+          throw new Error(`會員 ${member.full_name} 狀態為 ${member.member_status}，無法入場`);
+        }
+
+        // 檢查是否有有效合約
+        const today = new Date().toISOString().split('T')[0];
+        const validContracts = await contractsService.readByQuery({
+          filter: {
+            _and: [
+              { member_id: { _eq: payload.member_id } },
+              { contract_status: { _eq: 'ACTIVE' } },
+              { status: { _eq: 'active' } },
+              {
+                _or: [
+                  { end_date: { _gte: today } },
+                  { end_date: { _null: true } }, // 次數制沒有 end_date
+                ],
+              },
+            ],
+          },
+          fields: ['id', 'plan_id', 'remaining_counts', 'end_date', 'contract_status'],
+          limit: 1,
+        });
+
+        if (validContracts.length === 0) {
+          throw new Error(`會員 ${member.full_name} 沒有有效合約，無法入場`);
+        }
+
+        validContract = validContracts[0];
+
+        // 將資料寫入緩存 (非阻塞)
+        setCachedMemberContract(payload.member_id, {
+          member: {
+            id: member.id,
+            member_status: member.member_status,
+            branch_id: member.branch_id,
+            full_name: member.full_name,
+          },
+          contract: validContract,
+          cached_at: new Date().toISOString(),
+        }).catch(() => {}); // 忽略緩存錯誤
       }
 
       // 設定使用的合約
-      payload.contract_id = validContracts[0].id;
+      payload.contract_id = validContract.id;
 
       // 判斷是否跨店入場
       if (payload.branch_id && member.branch_id && payload.branch_id !== member.branch_id) {
@@ -1178,6 +1337,10 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         payload.check_time = new Date().toISOString();
       }
 
+      // 記錄性能指標
+      const duration = Date.now() - startTime;
+      recordPerformanceMetric('checkin_validation', duration).catch(() => {});
+
       return payload;
     } catch (error) {
       console.error('[GymHook] Member checkin validation error:', error);
@@ -1186,39 +1349,254 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   });
 
   // 會員入場後 - 如果是次數制合約，扣除次數
+  // 使用原子操作防止並發 Race Condition
   action('member_checkins.items.create', async ({ payload, key }, { schema }) => {
     if (!payload.contract_id) return;
 
+    try {
+      // 使用原子 SQL 函數扣除次數 (防止 Race Condition)
+      const result = await database.raw(`
+        SELECT * FROM deduct_contract_count(?::uuid, 1)
+      `, [payload.contract_id]);
+
+      const row = result.rows?.[0] || result[0];
+
+      if (row) {
+        if (row.success) {
+          console.log(`[GymHook] Member checkin: contract ${payload.contract_id} remaining ${row.remaining} (atomic) - ${row.message}`);
+
+          // 如果合約已過期，觸發會員狀態更新
+          if (row.contract_status === 'EXPIRED') {
+            console.log(`[GymHook] Contract ${payload.contract_id} expired (no remaining counts)`);
+
+            // 使用原子函數更新會員狀態
+            const contractsService = new ItemsService('contracts', {
+              schema: schema,
+              knex: database,
+            });
+            const contract = await contractsService.readOne(payload.contract_id, {
+              fields: ['member_id'],
+            });
+
+            if (contract?.member_id) {
+              await database.raw(`SELECT * FROM recalculate_member_status(?::uuid)`, [contract.member_id]);
+            }
+          }
+        } else {
+          console.warn(`[GymHook] Failed to deduct contract count: ${row.message}`);
+        }
+      }
+    } catch (error) {
+      // 如果原子函數不存在，回退到原始邏輯 (向後兼容)
+      if (error.message?.includes('deduct_contract_count')) {
+        console.log('[GymHook] Atomic function not available, using fallback logic');
+        await fallbackDeductCount(payload.contract_id, schema);
+      } else {
+        console.error('[GymHook] Error processing member checkin:', error);
+      }
+    }
+  });
+
+  // 向後兼容：原始扣除邏輯 (在原子函數不可用時使用)
+  async function fallbackDeductCount(contractId, schema) {
     try {
       const contractsService = new ItemsService('contracts', {
         schema: schema,
         knex: database,
       });
 
-      const contract = await contractsService.readOne(payload.contract_id, {
-        fields: ['id', 'remaining_counts', 'plan_id'],
+      const contract = await contractsService.readOne(contractId, {
+        fields: ['id', 'remaining_counts', 'plan_id', 'member_id'],
       });
 
-      // 如果是次數制合約 (有 remaining_counts)
       if (contract && contract.remaining_counts !== null) {
         const newCount = Math.max(0, contract.remaining_counts - 1);
 
-        await contractsService.updateOne(payload.contract_id, {
+        await contractsService.updateOne(contractId, {
           remaining_counts: newCount,
         });
 
-        // 如果次數用完，更新合約狀態
         if (newCount === 0) {
-          await contractsService.updateOne(payload.contract_id, {
+          await contractsService.updateOne(contractId, {
             contract_status: 'EXPIRED',
           });
-          console.log(`[GymHook] Contract ${payload.contract_id} expired (no remaining counts)`);
+          console.log(`[GymHook] Contract ${contractId} expired (fallback)`);
         }
 
-        console.log(`[GymHook] Member checkin: contract ${payload.contract_id} remaining ${newCount}`);
+        console.log(`[GymHook] Member checkin: contract ${contractId} remaining ${newCount} (fallback)`);
       }
     } catch (error) {
-      console.error('[GymHook] Error processing member checkin:', error);
+      console.error('[GymHook] Fallback deduct count error:', error);
+    }
+  }
+
+  // ============================================
+  // 10. Social Login - 會員自動建立 Hooks
+  // ============================================
+
+  /**
+   * 產生唯一的會員編號
+   * 格式: MYYMMDD#### (例如: M2506150001)
+   */
+  async function generateMemberCode(membersService) {
+    const prefix = 'M';
+    const today = new Date();
+    const dateStr = today.toISOString().slice(2, 10).replace(/-/g, ''); // YYMMDD
+
+    // 取得今天建立的會員數量
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+      const todayMembers = await membersService.readByQuery({
+        filter: {
+          date_created: {
+            _between: [startOfDay.toISOString(), endOfDay.toISOString()],
+          },
+        },
+        aggregate: { count: ['id'] },
+      });
+
+      const count = todayMembers[0]?.count?.id || 0;
+      const sequence = (parseInt(count) + 1).toString().padStart(4, '0');
+      return `${prefix}${dateStr}${sequence}`;
+    } catch (error) {
+      // 如果查詢失敗，使用時間戳作為備用
+      const timestamp = Date.now().toString().slice(-6);
+      return `${prefix}${dateStr}${timestamp}`;
+    }
+  }
+
+  /**
+   * 當透過 SSO 建立新 Directus 用戶時，自動建立會員記錄
+   * 這個 Hook 會在用戶透過 Google/LINE/Apple/Facebook 首次登入時觸發
+   */
+  action('users.create', async ({ payload, key }, { schema }) => {
+    // 只處理 SSO 用戶（有 provider 且不是 'default'）
+    if (!payload.provider || payload.provider === 'default') {
+      return;
+    }
+
+    // 取得環境變數中的會員 Role ID
+    const memberRoleId = process.env.MEMBER_ROLE_ID || 'b1000000-0000-0000-0000-000000000001';
+
+    // 只處理會員角色的用戶
+    if (payload.role !== memberRoleId) {
+      console.log(`[GymHook] SSO user ${key} is not a member role, skipping auto-creation`);
+      return;
+    }
+
+    try {
+      const membersService = new ItemsService('members', {
+        schema: schema,
+        knex: database,
+      });
+
+      const socialAccountsService = new ItemsService('member_social_accounts', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 檢查是否已有相同 email 的會員
+      let existingMember = null;
+      if (payload.email) {
+        const members = await membersService.readByQuery({
+          filter: { email: { _eq: payload.email } },
+          limit: 1,
+        });
+        existingMember = members[0] || null;
+      }
+
+      let memberId;
+
+      if (existingMember) {
+        // 已存在會員：連結 user_id
+        memberId = existingMember.id;
+        await membersService.updateOne(memberId, {
+          user_id: key,
+        });
+        console.log(`[GymHook] Linked existing member ${memberId} to SSO user ${key} (${payload.provider})`);
+      } else {
+        // 新會員：自動建立
+        const memberCode = await generateMemberCode(membersService);
+        const fullName = `${payload.first_name || ''} ${payload.last_name || ''}`.trim() ||
+                         payload.email?.split('@')[0] ||
+                         '新會員';
+
+        memberId = await membersService.createOne({
+          user_id: key,
+          member_code: memberCode,
+          full_name: fullName,
+          email: payload.email,
+          phone: null, // 社群登入通常沒有電話，之後補填
+          member_status: 'INACTIVE', // 需要購買合約才能變成 ACTIVE
+          join_date: new Date().toISOString().split('T')[0],
+          // branch_id 留空，之後由會員選擇
+        });
+
+        console.log(`[GymHook] Created new member ${memberId} (${memberCode}) for SSO user ${key} (${payload.provider})`);
+      }
+
+      // 建立社群帳號連結紀錄
+      try {
+        await socialAccountsService.createOne({
+          member_id: memberId,
+          provider: payload.provider,
+          provider_user_id: payload.external_identifier || key,
+          provider_email: payload.email,
+          provider_name: `${payload.first_name || ''} ${payload.last_name || ''}`.trim(),
+          is_primary: !existingMember, // 新會員時為主要登入方式
+          last_login_at: new Date().toISOString(),
+        });
+        console.log(`[GymHook] Created social account link: ${payload.provider} -> member ${memberId}`);
+      } catch (socialError) {
+        // member_social_accounts 表可能不存在
+        console.log('[GymHook] Could not create social account link:', socialError.message);
+      }
+
+    } catch (error) {
+      console.error('[GymHook] Error auto-creating member from SSO:', error);
+    }
+  });
+
+  /**
+   * 當用戶透過 SSO 登入時，更新 last_login_at
+   */
+  action('auth.login', async ({ payload, status, user, provider }, { schema }) => {
+    // 只處理 SSO 登入成功
+    if (!provider || provider === 'default' || status !== 'success') {
+      return;
+    }
+
+    try {
+      const socialAccountsService = new ItemsService('member_social_accounts', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 查找並更新社群帳號紀錄
+      const accounts = await socialAccountsService.readByQuery({
+        filter: {
+          _and: [
+            { provider: { _eq: provider } },
+            { provider_user_id: { _eq: user?.external_identifier || user?.id } },
+            { status: { _eq: 'active' } },
+          ],
+        },
+        limit: 1,
+      });
+
+      if (accounts.length > 0) {
+        await socialAccountsService.updateOne(accounts[0].id, {
+          last_login_at: new Date().toISOString(),
+        });
+        console.log(`[GymHook] Updated last_login_at for ${provider} account ${accounts[0].id}`);
+      }
+    } catch (error) {
+      // 忽略錯誤，不影響登入流程
+      console.log('[GymHook] Could not update social login timestamp');
     }
   });
 };

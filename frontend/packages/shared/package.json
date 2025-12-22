@@ -1,0 +1,17 @@
+{
+  "name": "@gym-nexus/shared",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types/index.ts",
+    "./composables": "./composables/index.ts",
+    "./utils": "./utils/index.ts"
+  },
+  "peerDependencies": {
+    "@directus/sdk": "^20.3.0",
+    "vue": "^3.5.0"
+  }
+}

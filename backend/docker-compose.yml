@@ -1,15 +1,65 @@
 services:
+  # ============================================
+  # Redis 緩存服務 (第二階段優化)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"           # LRU 淘汰策略
+      - "--appendonly"
+      - "yes"                   # 持久化
+      - "--tcp-keepalive"
+      - "60"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   database:
-    image: postgres:17
+    # 使用 PostGIS 映像以支援地理空間查詢
+    image: postgis/postgis:17-3.5
     restart: unless-stopped
     ports:
       - 5432:5432
     volumes:
-      - ./data/database:/var/lib/postgresql
+      - ./data/database:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: directus
       POSTGRES_PASSWORD: directus
       POSTGRES_DB: gym_nexus
+    # 生產環境連接池優化參數
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=300"           # 擴展最大連接數 (原 100)
+      - "-c"
+      - "shared_buffers=256MB"          # 共享緩衝區
+      - "-c"
+      - "effective_cache_size=1GB"      # 預期可用記憶體
+      - "-c"
+      - "work_mem=16MB"                 # 每個查詢的工作記憶體
+      - "-c"
+      - "maintenance_work_mem=128MB"    # 維護操作記憶體
+      - "-c"
+      - "random_page_cost=1.1"          # SSD 優化
+      - "-c"
+      - "effective_io_concurrency=200"  # SSD 並行 IO
+      - "-c"
+      - "idle_in_transaction_session_timeout=30000"  # 30 秒空閒事務超時
+      - "-c"
+      - "statement_timeout=60000"       # 60 秒查詢超時
+      - "-c"
+      - "lock_timeout=10000"            # 10 秒鎖等待超時
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U directus -d gym_nexus"]
       interval: 10s
@@ -20,12 +70,14 @@ services:
     image: directus/directus:11
     restart: unless-stopped
     ports:
-      - "0.0.0.0:8500:8055"
+      - "8500:8055"
     volumes:
       - ./uploads:/directus/uploads
       - ./extensions:/directus/extensions
     depends_on:
       database:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       SECRET: "replace-with-secure-random-string"
@@ -35,9 +87,87 @@ services:
       DB_DATABASE: gym_nexus
       DB_USER: directus
       DB_PASSWORD: directus
+      # 連接池優化配置 (Directus 11 支援的選項)
+      DB_POOL__MIN: "2"                   # 最小連接數
+      DB_POOL__MAX: "50"                  # 最大連接數
+      # ============================================
+      # Redis 緩存配置 (第二階段優化)
+      # ============================================
+      CACHE_ENABLED: "true"
+      CACHE_STORE: "redis"                # 使用 Redis 作為緩存存儲
+      CACHE_REDIS: "redis://redis:6379"   # Redis 連接字串
+      CACHE_TTL: "5m"                     # 預設緩存 5 分鐘
+      CACHE_AUTO_PURGE: "true"            # 自動清除過期緩存
+      CACHE_NAMESPACE: "gym"              # 緩存命名空間
+      # Redis 環境變數 (供 Hooks 使用)
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      # 效能優化
+      RATE_LIMITER_ENABLED: "false"       # 開發環境關閉限流
+      # 基礎配置
       ADMIN_EMAIL: admin@gym.com
       ADMIN_PASSWORD: admin
       WEBSOCKETS_ENABLED: "true"
       CORS_ENABLED: "true"
       CORS_ORIGIN: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3006,http://localhost:3007,http://localhost:3008,http://localhost:3009,http://localhost:3010,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004,http://127.0.0.1:3005,http://127.0.0.1:3006,http://127.0.0.1:3007,http://127.0.0.1:3008,http://127.0.0.1:3009,http://127.0.0.1:3010"
       CORS_CREDENTIALS: "true"
+
+      # ============================================
+      # OAuth / SSO Authentication Providers
+      # ============================================
+      # Enabled providers (comma-separated) - 設為空以禁用 OAuth
+      AUTH_PROVIDERS: "${AUTH_PROVIDERS:-}"
+
+      # Member role for OAuth users (created in migration 011)
+      MEMBER_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
+
+      # --- Google (OpenID Connect) ---
+      AUTH_GOOGLE_DRIVER: "openid"
+      AUTH_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      AUTH_GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      AUTH_GOOGLE_ISSUER_URL: "https://accounts.google.com/.well-known/openid-configuration"
+      AUTH_GOOGLE_IDENTIFIER_KEY: "email"
+      AUTH_GOOGLE_ICON: "google"
+      AUTH_GOOGLE_LABEL: "Google"
+      AUTH_GOOGLE_ALLOW_PUBLIC_REGISTRATION: "true"
+      AUTH_GOOGLE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
+
+      # --- LINE (OAuth 2.0 - Generic Driver) ---
+      AUTH_LINE_DRIVER: "oauth2"
+      AUTH_LINE_CLIENT_ID: "${LINE_CHANNEL_ID:-}"
+      AUTH_LINE_CLIENT_SECRET: "${LINE_CHANNEL_SECRET:-}"
+      AUTH_LINE_AUTHORIZE_URL: "https://access.line.me/oauth2/v2.1/authorize"
+      AUTH_LINE_ACCESS_URL: "https://api.line.me/oauth2/v2.1/token"
+      AUTH_LINE_PROFILE_URL: "https://api.line.me/v2/profile"
+      AUTH_LINE_SCOPE: "profile openid email"
+      AUTH_LINE_IDENTIFIER_KEY: "email"
+      AUTH_LINE_ICON: "chat"
+      AUTH_LINE_LABEL: "LINE"
+      AUTH_LINE_ALLOW_PUBLIC_REGISTRATION: "true"
+      AUTH_LINE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
+
+      # --- Apple (OpenID Connect) - Uncomment when ready ---
+      # AUTH_APPLE_DRIVER: "openid"
+      # AUTH_APPLE_CLIENT_ID: "${APPLE_CLIENT_ID:-}"
+      # AUTH_APPLE_CLIENT_SECRET: "${APPLE_CLIENT_SECRET:-}"
+      # AUTH_APPLE_ISSUER_URL: "https://appleid.apple.com/.well-known/openid-configuration"
+      # AUTH_APPLE_SCOPE: "name email"
+      # AUTH_APPLE_IDENTIFIER_KEY: "email"
+      # AUTH_APPLE_ICON: "apple"
+      # AUTH_APPLE_LABEL: "Apple"
+      # AUTH_APPLE_PARAMS: '{"response_mode":"form_post"}'
+      # AUTH_APPLE_ALLOW_PUBLIC_REGISTRATION: "true"
+      # AUTH_APPLE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
+
+      # --- Facebook (OAuth 2.0) - Uncomment when ready ---
+      # AUTH_FACEBOOK_DRIVER: "oauth2"
+      # AUTH_FACEBOOK_CLIENT_ID: "${FACEBOOK_CLIENT_ID:-}"
+      # AUTH_FACEBOOK_CLIENT_SECRET: "${FACEBOOK_CLIENT_SECRET:-}"
+      # AUTH_FACEBOOK_AUTHORIZE_URL: "https://www.facebook.com/dialog/oauth"
+      # AUTH_FACEBOOK_ACCESS_URL: "https://graph.facebook.com/oauth/access_token"
+      # AUTH_FACEBOOK_PROFILE_URL: "https://graph.facebook.com/me?fields=id,email,name,picture"
+      # AUTH_FACEBOOK_IDENTIFIER_KEY: "email"
+      # AUTH_FACEBOOK_ICON: "facebook"
+      # AUTH_FACEBOOK_LABEL: "Facebook"
+      # AUTH_FACEBOOK_ALLOW_PUBLIC_REGISTRATION: "true"
+      # AUTH_FACEBOOK_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
