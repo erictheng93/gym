@@ -48,7 +48,9 @@ export const useMemberAuth = () => {
   const apiUrl = config.public.directusUrl
 
   const member = useState<CurrentMember | null>('current_member', () => null)
-  const isAuthenticated = computed(() => !!member.value)
+  // User info for admin users without member records
+  const user = useState<{ id: string; email: string; name: string } | null>('current_user', () => null)
+  const isAuthenticated = computed(() => !!member.value || !!user.value)
   const isLoading = useState('member_auth_loading', () => false)
   const otpLoading = useState('otp_loading', () => false)
 
@@ -144,9 +146,59 @@ export const useMemberAuth = () => {
   }
 
   /**
-   * Legacy login method (for backwards compatibility)
+   * Email/Password login using Directus auth
    */
-  const login = async (phone: string, otp: string) => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message: string }> => {
+    isLoading.value = true
+    try {
+      // Directus standard login
+      const response = await $fetch<{
+        data: {
+          access_token: string
+          refresh_token: string
+          expires: number
+        }
+      }>(`${apiUrl}/auth/login`, {
+        method: 'POST',
+        body: { email, password },
+      })
+
+      if (response.data?.access_token) {
+        // Store tokens
+        accessToken.value = response.data.access_token
+        refreshToken.value = response.data.refresh_token
+
+        // Try to fetch member profile (may not exist for admin users)
+        await fetchMember()
+
+        // If no member record, fetch basic user info for admin users
+        if (!member.value) {
+          await fetchUser()
+        }
+
+        // Login successful - admin users may not have member records
+        return { success: true, message: '登入成功' }
+      }
+
+      return { success: false, message: '登入失敗' }
+    } catch (error: unknown) {
+      console.error('Login error:', error)
+      // Handle $fetch error response
+      if (typeof error === 'object' && error !== null && 'data' in error) {
+        const fetchError = error as { data?: { errors?: Array<{ message?: string }> } }
+        const errorMessage = fetchError.data?.errors?.[0]?.message || '帳號或密碼錯誤'
+        return { success: false, message: errorMessage }
+      }
+      return { success: false, message: '登入發生錯誤，請稍後再試' }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Legacy OTP login method (for backwards compatibility)
+   */
+  const loginWithOtp = async (phone: string, otp: string) => {
     return await verifyOtp(phone, otp)
   }
 
@@ -157,6 +209,7 @@ export const useMemberAuth = () => {
     accessToken.value = null
     refreshToken.value = null
     member.value = null
+    user.value = null
     await navigateTo('/login')
   }
 
@@ -243,15 +296,56 @@ export const useMemberAuth = () => {
   }
 
   /**
+   * Fetch current user info (for admin users without member records)
+   */
+  const fetchUser = async () => {
+    if (!accessToken.value) {
+      user.value = null
+      return
+    }
+
+    try {
+      const response = await $fetch<{
+        data: {
+          id: string
+          email: string
+          first_name: string | null
+          last_name: string | null
+        }
+      }>(`${apiUrl}/users/me`, {
+        headers: {
+          Authorization: `Bearer ${accessToken.value}`,
+        },
+      })
+
+      if (response.data?.id) {
+        user.value = {
+          id: response.data.id,
+          email: response.data.email,
+          name: [response.data.first_name, response.data.last_name].filter(Boolean).join(' ') || response.data.email,
+        }
+      } else {
+        user.value = null
+      }
+    } catch (error) {
+      console.error('Failed to fetch user:', error)
+      user.value = null
+    }
+  }
+
+  /**
    * Check authentication status
    */
   const checkAuth = async (): Promise<boolean> => {
-    if (member.value) {
+    if (member.value || user.value) {
       return true
     }
 
     if (accessToken.value) {
       await fetchMember()
+      if (!member.value) {
+        await fetchUser()
+      }
       return isAuthenticated.value
     }
 
@@ -259,6 +353,9 @@ export const useMemberAuth = () => {
       const refreshed = await refreshAccessToken()
       if (refreshed) {
         await fetchMember()
+        if (!member.value) {
+          await fetchUser()
+        }
         return isAuthenticated.value
       }
     }
@@ -357,6 +454,7 @@ export const useMemberAuth = () => {
 
   return {
     member,
+    user,
     isAuthenticated,
     isLoading,
     otpLoading,
@@ -364,9 +462,11 @@ export const useMemberAuth = () => {
     sendOtp,
     verifyOtp,
     login,
+    loginWithOtp,
     loginWithOAuth,
     logout,
     fetchMember,
+    fetchUser,
     checkAuth,
     refreshAccessToken,
     getAuthHeader,

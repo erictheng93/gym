@@ -1,4 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -8,31 +13,29 @@ export default defineNuxtConfig({
 
   modules: ['@vite-pwa/nuxt'],
 
-  // Auto-import utilities from shared package
+  // Vite aliases for proper path resolution
+  alias: {
+    '@shared': resolve(__dirname, '../../packages/shared'),
+    '@ui': resolve(__dirname, '../../packages/ui')
+  },
+
+  // Auto-import utilities from shared package using aliases
   imports: {
     imports: [
-      { from: '../../packages/shared/utils/formatters', name: 'formatDate' },
-      { from: '../../packages/shared/utils/formatters', name: 'formatCurrency' },
-      { from: '../../packages/shared/utils/formatters', name: 'formatNumber' },
-      { from: '../../packages/shared/utils/formatters', name: 'formatPhone' },
-      { from: '../../packages/shared/utils/formatters', name: 'formatRelativeTime' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getMemberStatusBadge' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getContractStatusBadge' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getPaymentStatusBadge' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getEmployeeStatusBadge' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getEmploymentTypeBadge' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getLeaveStatusBadge' },
-      { from: '../../packages/shared/utils/status-badges', name: 'getStatusBadge' },
-      // Form validation utilities
-      { from: '../../packages/ui/composables/useFormValidation', name: 'useFormValidation' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'required' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'email' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'phone' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'pattern' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'minLength' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'maxLength' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'min' },
-      { from: '../../packages/ui/composables/useFormValidation', name: 'max' }
+      { from: '@shared/utils/formatters', name: 'formatDate' },
+      { from: '@shared/utils/formatters', name: 'formatCurrency' },
+      { from: '@shared/utils/formatters', name: 'formatNumber' },
+      { from: '@shared/utils/formatters', name: 'formatPhone' },
+      { from: '@shared/utils/formatters', name: 'formatRelativeTime' },
+      { from: '@shared/utils/status-badges', name: 'getMemberStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getContractStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getPaymentStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getEmployeeStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getEmploymentTypeBadge' },
+      { from: '@shared/utils/status-badges', name: 'getLeaveStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getStatusBadge' }
+      // Note: Form validation utilities (useFormValidation, required, email, etc.)
+      // are auto-imported via the UI layer (extends: ['../../packages/ui'])
     ]
   },
 

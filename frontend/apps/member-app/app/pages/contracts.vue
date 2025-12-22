@@ -7,11 +7,22 @@ definePageMeta({
   middleware: 'auth'
 })
 
+const config = useRuntimeConfig()
+const apiUrl = config.public.directusUrl
+
 const directus = useDirectus()
-const { member } = useMemberAuth()
+const { member, accessToken } = useMemberAuth()
 
 const contracts = ref<Array<Contract & { plan?: { name: string, plan_type: string } }>>([])
 const isLoading = ref(true)
+
+// Pause modal state
+const showPauseModal = ref(false)
+const selectedContract = ref<Contract | null>(null)
+const pauseReason = ref('')
+const isSubmitting = ref(false)
+const errorMessage = ref('')
+const successMessage = ref('')
 
 const fetchContracts = async () => {
   if (!member.value) return
@@ -61,6 +72,118 @@ const paymentLabels: Record<string, string> = {
   PARTIAL: '部分付款',
   PAID: '已付清'
 }
+
+// Open pause modal
+const openPauseModal = (contract: Contract) => {
+  selectedContract.value = contract
+  pauseReason.value = ''
+  errorMessage.value = ''
+  showPauseModal.value = true
+}
+
+// Close pause modal
+const closePauseModal = () => {
+  showPauseModal.value = false
+  selectedContract.value = null
+  pauseReason.value = ''
+  errorMessage.value = ''
+}
+
+// Submit pause request
+const submitPause = async () => {
+  if (!selectedContract.value || !accessToken.value) return
+
+  if (pauseReason.value.trim().length < 5) {
+    errorMessage.value = '請輸入暫停原因（至少 5 個字）'
+    return
+  }
+
+  isSubmitting.value = true
+  errorMessage.value = ''
+
+  try {
+    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/contracts/${selectedContract.value.id}/pause`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken.value}`,
+      },
+      body: {
+        reason: pauseReason.value.trim(),
+      },
+    })
+
+    if (response.success) {
+      successMessage.value = response.message
+      closePauseModal()
+      await fetchContracts()
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        successMessage.value = ''
+      }, 3000)
+    } else {
+      errorMessage.value = response.message || '操作失敗'
+    }
+  } catch (error: unknown) {
+    console.error('Pause error:', error)
+    if (typeof error === 'object' && error !== null && 'data' in error) {
+      const fetchError = error as { data?: { message?: string } }
+      errorMessage.value = fetchError.data?.message || '操作失敗，請稍後再試'
+    } else {
+      errorMessage.value = '操作失敗，請稍後再試'
+    }
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// Resume contract
+const resumeContract = async (contract: Contract) => {
+  if (!accessToken.value) return
+
+  if (!confirm('確定要恢復此合約嗎？暫停期間將自動順延合約到期日。')) {
+    return
+  }
+
+  isSubmitting.value = true
+  errorMessage.value = ''
+
+  try {
+    const response = await $fetch<{
+      success: boolean
+      message: string
+      new_end_date?: string
+      days_extended?: number
+    }>(`${apiUrl}/gym/contracts/${contract.id}/resume`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken.value}`,
+      },
+    })
+
+    if (response.success) {
+      successMessage.value = response.message
+      await fetchContracts()
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        successMessage.value = ''
+      }, 3000)
+    } else {
+      errorMessage.value = response.message || '操作失敗'
+    }
+  } catch (error: unknown) {
+    console.error('Resume error:', error)
+    if (typeof error === 'object' && error !== null && 'data' in error) {
+      const fetchError = error as { data?: { message?: string } }
+      errorMessage.value = fetchError.data?.message || '操作失敗，請稍後再試'
+    } else {
+      errorMessage.value = '操作失敗，請稍後再試'
+    }
+  } finally {
+    isSubmitting.value = false
+  }
+}
 </script>
 
 <template>
@@ -68,6 +191,14 @@ const paymentLabels: Record<string, string> = {
     <header class="page-header">
       <h1 class="page-title">我的合約</h1>
     </header>
+
+    <!-- Success/Error Messages -->
+    <div v-if="successMessage" class="message success">
+      {{ successMessage }}
+    </div>
+    <div v-if="errorMessage && !showPauseModal" class="message error">
+      {{ errorMessage }}
+    </div>
 
     <div v-if="isLoading" class="loading">
       <p>載入中...</p>
@@ -86,7 +217,10 @@ const paymentLabels: Record<string, string> = {
         v-for="contract in contracts"
         :key="contract.id"
         class="contract-card"
-        :class="{ active: contract.contract_status === 'ACTIVE' }"
+        :class="{
+          active: contract.contract_status === 'ACTIVE',
+          paused: contract.contract_status === 'PAUSED'
+        }"
       >
         <div class="contract-header">
           <h3 class="contract-plan">{{ contract.plan?.name || '方案' }}</h3>
@@ -118,17 +252,81 @@ const paymentLabels: Record<string, string> = {
           </div>
         </div>
 
-        <div v-if="contract.contract_status === 'ACTIVE'" class="contract-actions">
-          <button class="action-btn">申請暫停</button>
+        <div v-if="contract.contract_status === 'ACTIVE' || contract.contract_status === 'PAUSED'" class="contract-actions">
+          <button
+            v-if="contract.contract_status === 'ACTIVE'"
+            class="action-btn pause"
+            :disabled="isSubmitting"
+            @click="openPauseModal(contract)"
+          >
+            申請暫停
+          </button>
+          <button
+            v-else-if="contract.contract_status === 'PAUSED'"
+            class="action-btn resume"
+            :disabled="isSubmitting"
+            @click="resumeContract(contract)"
+          >
+            恢復合約
+          </button>
         </div>
       </div>
     </div>
+
+    <!-- Pause Modal -->
+    <Teleport to="body">
+      <div v-if="showPauseModal" class="modal-overlay" @click.self="closePauseModal">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>申請暫停合約</h3>
+            <button class="close-btn" @click="closePauseModal">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <p class="modal-info">
+              暫停期間合約將無法使用，恢復後到期日將自動順延。
+            </p>
+
+            <div class="form-group">
+              <label for="pauseReason">暫停原因</label>
+              <textarea
+                id="pauseReason"
+                v-model="pauseReason"
+                placeholder="請輸入暫停原因（至少 5 個字）"
+                rows="3"
+              />
+            </div>
+
+            <div v-if="errorMessage" class="modal-error">
+              {{ errorMessage }}
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="closePauseModal">取消</button>
+            <button
+              class="btn-confirm"
+              :disabled="isSubmitting || pauseReason.trim().length < 5"
+              @click="submitPause"
+            >
+              {{ isSubmitting ? '處理中...' : '確認暫停' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
 .contracts-page {
   padding: 24px 16px;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
 }
 
 .page-header {
@@ -139,6 +337,25 @@ const paymentLabels: Record<string, string> = {
   font-size: 28px;
   font-weight: 700;
   color: var(--color-text);
+}
+
+.message {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.message.success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.message.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-error);
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .loading {
@@ -184,6 +401,11 @@ const paymentLabels: Record<string, string> = {
 
 .contract-card.active {
   border-color: var(--color-primary);
+  border-width: 2px;
+}
+
+.contract-card.paused {
+  border-color: #f59e0b;
   border-width: 2px;
 }
 
@@ -272,17 +494,185 @@ const paymentLabels: Record<string, string> = {
 .action-btn {
   width: 100%;
   padding: 12px;
-  background-color: transparent;
-  border: 1px solid var(--color-border);
   border-radius: 12px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
-.action-btn:active {
+.action-btn.pause {
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.action-btn.pause:active {
   background-color: var(--color-border);
+}
+
+.action-btn.resume {
+  background-color: var(--color-primary);
+  border: none;
+  color: white;
+}
+
+.action-btn.resume:active {
+  opacity: 0.9;
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: var(--color-surface);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.close-btn:active {
+  background-color: var(--color-border);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-info {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--color-text);
+  background-color: var(--color-background);
+  resize: none;
+  font-family: inherit;
+}
+
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.form-group textarea::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.modal-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-error);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.btn-cancel,
+.btn-confirm {
+  flex: 1;
+  padding: 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel {
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.btn-cancel:active {
+  background-color: var(--color-border);
+}
+
+.btn-confirm {
+  background-color: #f59e0b;
+  border: none;
+  color: white;
+}
+
+.btn-confirm:active {
+  opacity: 0.9;
+}
+
+.btn-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * QR Code Scanner Component
- * Uses ZXing library for browser-based QR code scanning
+ * Uses jsQR library for browser-based QR code scanning
  */
 
 const emit = defineEmits<{
@@ -20,26 +20,7 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const devices = ref<MediaDeviceInfo[]>([])
 const selectedDeviceId = ref('')
-let codeReader: any = null
 let mediaStream: MediaStream | null = null
-
-// Dynamic import of ZXing library
-const loadZxing = async () => {
-  const { BrowserQRCodeReader } = await import('@aspect-build/aspect-browser')
-    .catch(() => import('@aspect-build/aspect-browser'))
-    .catch(async () => {
-      // Fallback: try loading from @aspect-build/aspect-browser
-      const mod = await import('@aspect-build/aspect-browser')
-      return mod
-    })
-    .catch(async () => {
-      // Final fallback: use a simpler implementation
-      const { BrowserMultiFormatReader } = await import('@aspect-build/aspect-browser')
-      return { BrowserQRCodeReader: BrowserMultiFormatReader }
-    })
-
-  return BrowserQRCodeReader
-}
 
 // Initialize scanner
 const initScanner = async () => {

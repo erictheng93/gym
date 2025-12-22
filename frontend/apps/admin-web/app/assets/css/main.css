@@ -271,19 +271,27 @@ h1, h2, h3, h4, h5, h6 {
 .card {
   background: var(--color-bg-primary);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 8px 16px rgba(0, 0, 0, 0.04);
   transition: transform var(--duration-normal) var(--ease-out),
               box-shadow var(--duration-normal) var(--ease-out);
 }
 
 .card-interactive:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 8px 16px rgba(0, 0, 0, 0.06),
+    0 16px 32px rgba(0, 0, 0, 0.08);
 }
 
 .card-interactive:active {
-  transform: translateY(0);
-  box-shadow: var(--shadow-sm);
+  transform: scale(0.99);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 /* ============================================
@@ -309,17 +317,26 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-primary {
-  background: var(--color-accent);
+  background: linear-gradient(180deg, #0077ed 0%, #0071e3 100%);
   color: #ffffff;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .btn-primary:hover {
-  background: var(--color-accent-hover);
-  transform: scale(1.02);
+  background: linear-gradient(180deg, #0080f6 0%, #0077ed 100%);
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px rgba(0, 113, 227, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .btn-primary:active {
   transform: scale(0.98);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .btn-secondary {
@@ -397,7 +414,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .input:focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 4px var(--color-accent-light);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.25);
 }
 
 .input::placeholder {
@@ -427,23 +444,70 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .badge-success {
-  background: rgba(52, 199, 89, 0.15);
+  background: rgba(52, 199, 89, 0.12);
   color: var(--color-success);
 }
 
 .badge-warning {
-  background: rgba(255, 159, 10, 0.15);
+  background: rgba(255, 159, 10, 0.12);
   color: var(--color-warning);
 }
 
 .badge-error {
-  background: rgba(255, 59, 48, 0.15);
+  background: rgba(255, 59, 48, 0.12);
   color: var(--color-error);
 }
 
 .badge-accent {
   background: var(--color-accent-light);
   color: var(--color-accent);
+}
+
+/* ============================================
+   Apple-style Hairline Dividers
+   ============================================ */
+.divider {
+  height: 1px;
+  background: var(--color-divider);
+}
+
+.divider-hairline {
+  height: 0.5px;
+  background: var(--color-divider);
+}
+
+.border-hairline {
+  border-width: 0.5px;
+}
+
+/* ============================================
+   Haptic-like Visual Feedback
+   ============================================ */
+.haptic-press {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.haptic-press:active {
+  transform: scale(0.97);
+}
+
+.haptic-bounce {
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.haptic-bounce:active {
+  transform: scale(0.95);
+}
+
+/* Interactive list items with haptic feedback */
+.list-item-interactive {
+  transition: background-color var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+
+.list-item-interactive:active {
+  background: var(--color-bg-secondary);
+  transform: scale(0.99);
 }
 
 /* ============================================

@@ -43,22 +43,22 @@ withDefaults(defineProps<Props>(), {
 }
 
 .badge-success {
-  background: rgba(52, 199, 89, 0.15);
+  background: rgba(52, 199, 89, 0.12);
   color: var(--color-success);
 }
 
 .badge-warning {
-  background: rgba(255, 159, 10, 0.15);
+  background: rgba(255, 159, 10, 0.12);
   color: var(--color-warning);
 }
 
 .badge-error {
-  background: rgba(255, 59, 48, 0.15);
+  background: rgba(255, 59, 48, 0.12);
   color: var(--color-error);
 }
 
 .badge-info {
-  background: rgba(0, 122, 255, 0.1);
+  background: rgba(0, 122, 255, 0.12);
   color: #007aff;
 }
 

@@ -177,14 +177,14 @@ const userName = computed(() => {
   background: var(--color-bg-glass);
   backdrop-filter: blur(var(--blur-heavy));
   -webkit-backdrop-filter: blur(var(--blur-heavy));
-  border-right: 1px solid var(--color-border);
+  border-right: 0.5px solid var(--color-border);
 }
 
 /* Logo */
 .sidebar-header {
   padding-bottom: var(--space-lg);
   margin-bottom: var(--space-md);
-  border-bottom: 1px solid var(--color-divider);
+  border-bottom: 0.5px solid var(--color-divider);
 }
 
 .logo {
@@ -234,12 +234,20 @@ const userName = computed(() => {
 }
 
 .nav-link.active {
-  background: var(--color-accent);
+  background: linear-gradient(180deg, #0077ed 0%, #0071e3 100%);
   color: #ffffff;
+  box-shadow:
+    0 1px 3px rgba(0, 113, 227, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .nav-link.active .nav-icon {
   opacity: 1;
+}
+
+.nav-link:active:not(.active) {
+  transform: scale(0.98);
+  background: var(--color-bg-secondary);
 }
 
 .nav-icon {
@@ -258,7 +266,7 @@ const userName = computed(() => {
 /* Footer */
 .sidebar-footer {
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-divider);
+  border-top: 0.5px solid var(--color-divider);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -281,6 +289,10 @@ const userName = computed(() => {
 .theme-btn:hover {
   background: var(--color-accent-light);
   color: var(--color-accent);
+}
+
+.theme-btn:active {
+  transform: scale(0.92);
 }
 
 .user-info {
@@ -350,6 +362,11 @@ const userName = computed(() => {
 .logout-btn:hover {
   background: rgba(255, 59, 48, 0.1);
   color: var(--color-error);
+}
+
+.logout-btn:active {
+  transform: scale(0.98);
+  background: rgba(255, 59, 48, 0.15);
 }
 
 /* Main Content */

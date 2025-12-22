@@ -60,8 +60,8 @@ export const useSocialAuth = () => {
    * 可以根據環境設定過濾
    */
   const availableProviders = computed(() => {
-    // 預設只啟用 LINE 和 Google（第一階段）
-    const enabledProviders = ['line', 'google']
+    // 啟用 LINE、Google、Apple 登入
+    const enabledProviders = ['line', 'google', 'apple']
     return SOCIAL_PROVIDERS.filter(p => enabledProviders.includes(p.id))
   })
 

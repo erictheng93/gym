@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
   plugins: [vue()],
@@ -32,8 +35,15 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '~': fileURLToPath(new URL('./app', import.meta.url)),
-      '@': fileURLToPath(new URL('./app', import.meta.url)),
+      // App-specific aliases for monorepo
+      '~/constants': resolve(__dirname, 'apps/admin-web/app/constants'),
+      '~/composables': resolve(__dirname, 'apps/admin-web/app/composables'),
+      '~/utils': resolve(__dirname, 'apps/admin-web/app/utils'),
+      '~/types': resolve(__dirname, 'apps/admin-web/app/types'),
+      '~': resolve(__dirname, 'apps/admin-web/app'),
+      '@': resolve(__dirname, 'apps/admin-web/app'),
+      '@shared': resolve(__dirname, 'packages/shared'),
+      '@ui': resolve(__dirname, 'packages/ui'),
     }
   }
 })

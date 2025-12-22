@@ -131,11 +131,11 @@ export default {
         const { identifier, type = 'phone' } = req.body || {};
 
         if (!identifier) {
-          throw new InvalidPayloadError('identifier is required');
+          throw InvalidPayloadError('identifier is required');
         }
 
         if (!['phone', 'email'].includes(type)) {
-          throw new InvalidPayloadError('type must be "phone" or "email"');
+          throw InvalidPayloadError('type must be "phone" or "email"');
         }
 
         // Get client IP
@@ -152,9 +152,9 @@ export default {
         if (!row || !row.success) {
           // Rate limit exceeded or other error
           if (row?.message?.includes('上限') || row?.message?.includes('稍後')) {
-            throw new TooManyRequestsError(row?.message || 'Rate limit exceeded');
+            throw TooManyRequestsError(row?.message || 'Rate limit exceeded');
           }
-          throw new InvalidPayloadError(row?.message || 'Failed to generate OTP');
+          throw InvalidPayloadError(row?.message || 'Failed to generate OTP');
         }
 
         // In development, log the OTP to console
@@ -188,11 +188,11 @@ export default {
         const { identifier, type = 'phone', code } = req.body || {};
 
         if (!identifier || !code) {
-          throw new InvalidPayloadError('identifier and code are required');
+          throw InvalidPayloadError('identifier and code are required');
         }
 
         if (!['phone', 'email'].includes(type)) {
-          throw new InvalidPayloadError('type must be "phone" or "email"');
+          throw InvalidPayloadError('type must be "phone" or "email"');
         }
 
         // Call the atomic function to verify OTP
@@ -203,7 +203,7 @@ export default {
         const row = result.rows?.[0] || result[0];
 
         if (!row || !row.success) {
-          throw new UnauthorizedError(row?.message || 'Invalid or expired OTP');
+          throw UnauthorizedError(row?.message || 'Invalid or expired OTP');
         }
 
         const memberId = row.member_id;
@@ -220,7 +220,7 @@ export default {
         });
 
         if (!member) {
-          throw new NotFoundError('Member not found');
+          throw NotFoundError('Member not found');
         }
 
         // Generate JWT token for member
@@ -279,7 +279,7 @@ export default {
         const { refresh_token } = req.body || {};
 
         if (!refresh_token) {
-          throw new InvalidPayloadError('refresh_token is required');
+          throw InvalidPayloadError('refresh_token is required');
         }
 
         const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
@@ -289,11 +289,11 @@ export default {
         try {
           decoded = jwt.verify(refresh_token, jwtSecret);
         } catch (e) {
-          throw new UnauthorizedError('Invalid or expired refresh token');
+          throw UnauthorizedError('Invalid or expired refresh token');
         }
 
         if (decoded.type !== 'member_refresh') {
-          throw new UnauthorizedError('Invalid token type');
+          throw UnauthorizedError('Invalid token type');
         }
 
         // Get member details
@@ -308,7 +308,7 @@ export default {
         });
 
         if (!member || member.status !== 'active') {
-          throw new NotFoundError('Member not found or inactive');
+          throw NotFoundError('Member not found or inactive');
         }
 
         // Generate new tokens
@@ -355,7 +355,7 @@ export default {
       try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          throw new UnauthorizedError('Authorization header required');
+          throw UnauthorizedError('Authorization header required');
         }
 
         const token = authHeader.substring(7);
@@ -365,11 +365,11 @@ export default {
         try {
           decoded = jwt.verify(token, jwtSecret);
         } catch (e) {
-          throw new UnauthorizedError('Invalid or expired token');
+          throw UnauthorizedError('Invalid or expired token');
         }
 
         if (decoded.type !== 'member') {
-          throw new UnauthorizedError('Invalid token type');
+          throw UnauthorizedError('Invalid token type');
         }
 
         req.member = decoded;
@@ -395,7 +395,7 @@ export default {
         const { payload, branch_id, verified_by } = req.body || {};
 
         if (!payload) {
-          throw new InvalidPayloadError('QR payload is required');
+          throw InvalidPayloadError('QR payload is required');
         }
 
         // Parse QR payload
@@ -403,20 +403,20 @@ export default {
         try {
           qrData = typeof payload === 'string' ? JSON.parse(payload) : payload;
         } catch (e) {
-          throw new InvalidPayloadError('Invalid QR code format');
+          throw InvalidPayloadError('Invalid QR code format');
         }
 
         const { m: memberCode, t: timestamp, c: contractId } = qrData;
 
         if (!memberCode || !timestamp) {
-          throw new InvalidPayloadError('Invalid QR code data');
+          throw InvalidPayloadError('Invalid QR code data');
         }
 
         // Verify timestamp (30 seconds validity)
         const now = Date.now();
         const qrTime = Number(timestamp);
         if (isNaN(qrTime) || Math.abs(now - qrTime) > 30000) {
-          throw new InvalidPayloadError('QR Code 已過期，請重新掃描');
+          throw InvalidPayloadError('QR Code 已過期，請重新掃描');
         }
 
         const schema = await getSchema();
@@ -437,13 +437,13 @@ export default {
         });
 
         if (members.length === 0) {
-          throw new NotFoundError('會員不存在');
+          throw NotFoundError('會員不存在');
         }
 
         const member = members[0];
 
         if (member.member_status !== 'ACTIVE') {
-          throw new ForbiddenError(`會員狀態為 ${member.member_status}，無法入場`);
+          throw ForbiddenError(`會員狀態為 ${member.member_status}，無法入場`);
         }
 
         // Get active contract
@@ -462,7 +462,7 @@ export default {
           });
 
           if (!contract || contract.contract_status !== 'ACTIVE') {
-            throw new ForbiddenError('指定的合約無效');
+            throw ForbiddenError('指定的合約無效');
           }
         } else {
           // Find active contract
@@ -485,7 +485,7 @@ export default {
           });
 
           if (contracts.length === 0) {
-            throw new ForbiddenError('沒有有效合約，無法入場');
+            throw ForbiddenError('沒有有效合約，無法入場');
           }
 
           contract = contracts[0];
@@ -504,7 +504,7 @@ export default {
         // Check if count-based and has remaining counts
         if (plan?.plan_type === 'COUNT_BASED' && contract.remaining_counts !== null) {
           if (contract.remaining_counts <= 0) {
-            throw new ForbiddenError('剩餘次數不足，無法入場');
+            throw ForbiddenError('剩餘次數不足，無法入場');
           }
         }
 
@@ -576,11 +576,11 @@ export default {
         const { member_ids, branch_id, verified_by, check_type = 'ENTRY', notes } = req.body || {};
 
         if (!member_ids || !Array.isArray(member_ids) || member_ids.length === 0) {
-          throw new InvalidPayloadError('member_ids array is required');
+          throw InvalidPayloadError('member_ids array is required');
         }
 
         if (member_ids.length > 50) {
-          throw new InvalidPayloadError('Maximum 50 members per batch');
+          throw InvalidPayloadError('Maximum 50 members per batch');
         }
 
         const schema = await getSchema();
@@ -901,7 +901,7 @@ export default {
         const memberId = req.member.id;
 
         if (!session_id) {
-          throw new InvalidPayloadError('session_id is required');
+          throw InvalidPayloadError('session_id is required');
         }
 
         // Call atomic booking function
@@ -912,7 +912,7 @@ export default {
         const row = result.rows?.[0] || result[0];
 
         if (!row || !row.success) {
-          throw new InvalidPayloadError(row?.message || 'Booking failed');
+          throw InvalidPayloadError(row?.message || 'Booking failed');
         }
 
         console.log(`[GymEndpoint] Booking created: ${row.booking_id} for member ${memberId}`);
@@ -954,11 +954,11 @@ export default {
         });
 
         if (!booking) {
-          throw new NotFoundError('Booking not found');
+          throw NotFoundError('Booking not found');
         }
 
         if (booking.member_id !== req.member.id) {
-          throw new ForbiddenError('Cannot cancel other member\'s booking');
+          throw ForbiddenError('Cannot cancel other member\'s booking');
         }
 
         // Call atomic cancel function
@@ -969,7 +969,7 @@ export default {
         const row = result.rows?.[0] || result[0];
 
         if (!row || !row.success) {
-          throw new InvalidPayloadError(row?.message || 'Cancel failed');
+          throw InvalidPayloadError(row?.message || 'Cancel failed');
         }
 
         console.log(`[GymEndpoint] Booking cancelled: ${bookingId}`);
@@ -1098,7 +1098,7 @@ export default {
         });
 
         if (!session) {
-          throw new NotFoundError('Session not found');
+          throw NotFoundError('Session not found');
         }
 
         // Transform data
@@ -1305,7 +1305,7 @@ export default {
         const row = result.rows?.[0] || result[0];
 
         if (!row || !row.success) {
-          throw new InvalidPayloadError(row?.message || 'Attendance failed');
+          throw InvalidPayloadError(row?.message || 'Attendance failed');
         }
 
         console.log(`[GymEndpoint] Booking attended: ${bookingId}`);
@@ -1359,7 +1359,7 @@ export default {
         const memberId = req.member.id;
 
         if (!endpoint || !keys?.p256dh || !keys?.auth) {
-          throw new InvalidPayloadError('endpoint and keys are required');
+          throw InvalidPayloadError('endpoint and keys are required');
         }
 
         const deviceName = req.body.device_name || null;
@@ -1406,7 +1406,7 @@ export default {
         const { endpoint } = req.body || {};
 
         if (!endpoint) {
-          throw new InvalidPayloadError('endpoint is required');
+          throw InvalidPayloadError('endpoint is required');
         }
 
         const result = await database.raw(`
@@ -1438,7 +1438,7 @@ export default {
         const { endpoint, preferences } = req.body || {};
 
         if (!endpoint || !preferences) {
-          throw new InvalidPayloadError('endpoint and preferences are required');
+          throw InvalidPayloadError('endpoint and preferences are required');
         }
 
         const schema = await getSchema();
@@ -1456,7 +1456,7 @@ export default {
         });
 
         if (subs.length === 0) {
-          throw new NotFoundError('Subscription not found');
+          throw NotFoundError('Subscription not found');
         }
 
         await subscriptionsService.updateOne(subs[0].id, {
@@ -1508,7 +1508,7 @@ export default {
         });
 
         if (!member) {
-          throw new NotFoundError('Member not found');
+          throw NotFoundError('Member not found');
         }
 
         // Get active contracts
@@ -1543,6 +1543,182 @@ export default {
         });
       } catch (error) {
         console.error('[GymEndpoint] Get member profile error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    // ============================================
+    // 6. Contract Pause/Resume Endpoints
+    // ============================================
+
+    /**
+     * POST /gym/contracts/:id/pause
+     * Request to pause a contract
+     */
+    router.post('/contracts/:id/pause', memberAuthMiddleware, async (req, res) => {
+      try {
+        const contractId = req.params.id;
+        const { reason } = req.body || {};
+        const memberId = req.member.id;
+
+        if (!reason || reason.trim().length < 5) {
+          throw InvalidPayloadError('請提供暫停原因（至少 5 個字）');
+        }
+
+        const schema = await getSchema();
+        const contractsService = new ItemsService('contracts', {
+          schema,
+          knex: database,
+        });
+
+        // Verify contract belongs to member and is active
+        const contract = await contractsService.readOne(contractId, {
+          fields: ['id', 'member_id', 'contract_status', 'end_date', 'contract_no'],
+        });
+
+        if (!contract) {
+          throw NotFoundError('合約不存在');
+        }
+
+        if (contract.member_id !== memberId) {
+          throw ForbiddenError('無權操作此合約');
+        }
+
+        if (contract.contract_status !== 'ACTIVE') {
+          throw InvalidPayloadError(`合約狀態為 ${contract.contract_status}，無法暫停`);
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Create contract log for pause
+        const logsService = new ItemsService('contract_logs', {
+          schema,
+          knex: database,
+        });
+
+        await logsService.createOne({
+          contract_id: contractId,
+          log_type: 'PAUSE',
+          start_date: today,
+          reason: reason.trim(),
+          branch_id: req.member.branch_id,
+        });
+
+        // Update contract status
+        await contractsService.updateOne(contractId, {
+          contract_status: 'PAUSED',
+        });
+
+        console.log(`[GymEndpoint] Contract ${contract.contract_no} paused by member ${memberId}`);
+
+        res.json({
+          success: true,
+          message: '合約已暫停',
+          contract_no: contract.contract_no,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Contract pause error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * POST /gym/contracts/:id/resume
+     * Request to resume a paused contract
+     */
+    router.post('/contracts/:id/resume', memberAuthMiddleware, async (req, res) => {
+      try {
+        const contractId = req.params.id;
+        const memberId = req.member.id;
+
+        const schema = await getSchema();
+        const contractsService = new ItemsService('contracts', {
+          schema,
+          knex: database,
+        });
+
+        // Verify contract belongs to member and is paused
+        const contract = await contractsService.readOne(contractId, {
+          fields: ['id', 'member_id', 'contract_status', 'end_date', 'contract_no'],
+        });
+
+        if (!contract) {
+          throw NotFoundError('合約不存在');
+        }
+
+        if (contract.member_id !== memberId) {
+          throw ForbiddenError('無權操作此合約');
+        }
+
+        if (contract.contract_status !== 'PAUSED') {
+          throw InvalidPayloadError(`合約狀態為 ${contract.contract_status}，無法恢復`);
+        }
+
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+
+        // Find the pause log to calculate days
+        const logsService = new ItemsService('contract_logs', {
+          schema,
+          knex: database,
+        });
+
+        const pauseLogs = await logsService.readByQuery({
+          filter: {
+            _and: [
+              { contract_id: { _eq: contractId } },
+              { log_type: { _eq: 'PAUSE' } },
+              { end_date: { _null: true } },
+            ],
+          },
+          sort: ['-date_created'],
+          limit: 1,
+        });
+
+        let daysAffected = 0;
+        if (pauseLogs.length > 0) {
+          const pauseLog = pauseLogs[0];
+          const pauseStart = new Date(pauseLog.start_date);
+          daysAffected = Math.ceil((today - pauseStart) / (1000 * 60 * 60 * 24));
+
+          // Update the pause log with end date and days affected
+          await logsService.updateOne(pauseLog.id, {
+            end_date: todayStr,
+            days_affected: daysAffected,
+          });
+        }
+
+        // Extend contract end_date by days paused
+        let newEndDate = contract.end_date;
+        if (contract.end_date && daysAffected > 0) {
+          const endDate = new Date(contract.end_date);
+          endDate.setDate(endDate.getDate() + daysAffected);
+          newEndDate = endDate.toISOString().split('T')[0];
+        }
+
+        // Update contract status and end_date
+        await contractsService.updateOne(contractId, {
+          contract_status: 'ACTIVE',
+          end_date: newEndDate,
+        });
+
+        console.log(`[GymEndpoint] Contract ${contract.contract_no} resumed by member ${memberId}, extended by ${daysAffected} days`);
+
+        res.json({
+          success: true,
+          message: `合約已恢復${daysAffected > 0 ? `，到期日順延 ${daysAffected} 天` : ''}`,
+          contract_no: contract.contract_no,
+          new_end_date: newEndDate,
+          days_extended: daysAffected,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Contract resume error:', error);
         res.status(error.status || 500).json({
           success: false,
           message: error.message || 'Internal server error',
