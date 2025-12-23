@@ -347,6 +347,100 @@ export default {
       }
     });
 
+    /**
+     * POST /gym/auth/login
+     * Email/Password login for members
+     * Verifies credentials via Directus, then looks up member by email
+     */
+    router.post('/auth/login', async (req, res) => {
+      try {
+        const { email, password } = req.body || {};
+
+        if (!email || !password) {
+          throw InvalidPayloadError('email and password are required');
+        }
+
+        // Verify credentials with Directus
+        const authResponse = await fetch(`http://localhost:8055/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!authResponse.ok) {
+          const errorData = await authResponse.json().catch(() => ({}));
+          throw UnauthorizedError(errorData?.errors?.[0]?.message || '帳號或密碼錯誤');
+        }
+
+        // Credentials valid, now find member by email
+        const schema = await getSchema();
+        const membersService = new ItemsService('members', {
+          schema,
+          knex: database,
+        });
+
+        const members = await membersService.readByQuery({
+          filter: {
+            email: { _eq: email },
+            status: { _eq: 'active' },
+          },
+          fields: ['id', 'member_code', 'full_name', 'phone', 'email', 'branch_id', 'member_status'],
+          limit: 1,
+        });
+
+        if (members.length === 0) {
+          throw NotFoundError('此帳號沒有關聯的會員資料');
+        }
+
+        const member = members[0];
+
+        // Generate member JWT token
+        const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
+        const accessToken = jwt.sign(
+          {
+            id: member.id,
+            type: 'member',
+            member_code: member.member_code,
+            branch_id: member.branch_id,
+          },
+          jwtSecret,
+          { expiresIn: '24h' }
+        );
+
+        const refreshToken = jwt.sign(
+          {
+            id: member.id,
+            type: 'member_refresh',
+          },
+          jwtSecret,
+          { expiresIn: '7d' }
+        );
+
+        console.log(`[GymEndpoint] Member ${member.member_code} authenticated via email/password`);
+
+        res.json({
+          success: true,
+          message: '登入成功',
+          member: {
+            id: member.id,
+            member_code: member.member_code,
+            full_name: member.full_name,
+            member_status: member.member_status,
+            branch_id: member.branch_id,
+          },
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: 86400,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Email login error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
     // ============================================
     // Member Authentication Middleware
     // ============================================

@@ -36,6 +36,15 @@ interface OtpVerifyResponse {
   expires_in: number
 }
 
+interface EmailLoginResponse {
+  success: boolean
+  message: string
+  member: MemberUser
+  access_token: string
+  refresh_token: string
+  expires_in: number
+}
+
 interface MemberProfileResponse {
   success: boolean
   data: CurrentMember & {
@@ -48,9 +57,7 @@ export const useMemberAuth = () => {
   const apiUrl = config.public.directusUrl
 
   const member = useState<CurrentMember | null>('current_member', () => null)
-  // User info for admin users without member records
-  const user = useState<{ id: string; email: string; name: string } | null>('current_user', () => null)
-  const isAuthenticated = computed(() => !!member.value || !!user.value)
+  const isAuthenticated = computed(() => !!member.value)
   const isLoading = useState('member_auth_loading', () => false)
   const otpLoading = useState('otp_loading', () => false)
 
@@ -146,48 +153,38 @@ export const useMemberAuth = () => {
   }
 
   /**
-   * Email/Password login using Directus auth
+   * Email/Password login - requires member record
+   * Uses /gym/auth/login endpoint which validates credentials and returns member token
    */
   const login = async (email: string, password: string): Promise<{ success: boolean; message: string }> => {
     isLoading.value = true
     try {
-      // Directus standard login
-      const response = await $fetch<{
-        data: {
-          access_token: string
-          refresh_token: string
-          expires: number
-        }
-      }>(`${apiUrl}/auth/login`, {
+      const response = await $fetch<EmailLoginResponse>(`${apiUrl}/gym/auth/login`, {
         method: 'POST',
         body: { email, password },
       })
 
-      if (response.data?.access_token) {
+      if (response.success) {
         // Store tokens
-        accessToken.value = response.data.access_token
-        refreshToken.value = response.data.refresh_token
+        accessToken.value = response.access_token
+        refreshToken.value = response.refresh_token
 
-        // Try to fetch member profile (may not exist for admin users)
+        // Fetch full member profile
         await fetchMember()
 
-        // If no member record, fetch basic user info for admin users
-        if (!member.value) {
-          await fetchUser()
-        }
-
-        // Login successful - admin users may not have member records
-        return { success: true, message: '登入成功' }
+        return { success: true, message: response.message }
       }
 
-      return { success: false, message: '登入失敗' }
+      return { success: false, message: response.message || '登入失敗' }
     } catch (error: unknown) {
       console.error('Login error:', error)
       // Handle $fetch error response
       if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { errors?: Array<{ message?: string }> } }
-        const errorMessage = fetchError.data?.errors?.[0]?.message || '帳號或密碼錯誤'
-        return { success: false, message: errorMessage }
+        const fetchError = error as { data?: { message?: string } }
+        return {
+          success: false,
+          message: fetchError.data?.message || '帳號或密碼錯誤',
+        }
       }
       return { success: false, message: '登入發生錯誤，請稍後再試' }
     } finally {
@@ -209,7 +206,6 @@ export const useMemberAuth = () => {
     accessToken.value = null
     refreshToken.value = null
     member.value = null
-    user.value = null
     await navigateTo('/login')
   }
 
@@ -296,56 +292,15 @@ export const useMemberAuth = () => {
   }
 
   /**
-   * Fetch current user info (for admin users without member records)
-   */
-  const fetchUser = async () => {
-    if (!accessToken.value) {
-      user.value = null
-      return
-    }
-
-    try {
-      const response = await $fetch<{
-        data: {
-          id: string
-          email: string
-          first_name: string | null
-          last_name: string | null
-        }
-      }>(`${apiUrl}/users/me`, {
-        headers: {
-          Authorization: `Bearer ${accessToken.value}`,
-        },
-      })
-
-      if (response.data?.id) {
-        user.value = {
-          id: response.data.id,
-          email: response.data.email,
-          name: [response.data.first_name, response.data.last_name].filter(Boolean).join(' ') || response.data.email,
-        }
-      } else {
-        user.value = null
-      }
-    } catch (error) {
-      console.error('Failed to fetch user:', error)
-      user.value = null
-    }
-  }
-
-  /**
    * Check authentication status
    */
   const checkAuth = async (): Promise<boolean> => {
-    if (member.value || user.value) {
+    if (member.value) {
       return true
     }
 
     if (accessToken.value) {
       await fetchMember()
-      if (!member.value) {
-        await fetchUser()
-      }
       return isAuthenticated.value
     }
 
@@ -353,14 +308,11 @@ export const useMemberAuth = () => {
       const refreshed = await refreshAccessToken()
       if (refreshed) {
         await fetchMember()
-        if (!member.value) {
-          await fetchUser()
-        }
         return isAuthenticated.value
       }
     }
 
-    // 嘗試 OAuth session (Directus cookie-based auth)
+    // Try OAuth session (Directus cookie-based auth)
     try {
       const oauthResult = await loginWithOAuth()
       if (oauthResult.success) {
@@ -368,20 +320,20 @@ export const useMemberAuth = () => {
       }
     }
     catch {
-      // OAuth session 無效，繼續
+      // OAuth session invalid, continue
     }
 
     return false
   }
 
   /**
-   * OAuth 登入 - 透過 Directus session cookie 取得會員資料
-   * 在 OAuth callback 成功後呼叫此方法
+   * OAuth login - get member data via Directus session cookie
+   * Called after OAuth callback success
    */
   const loginWithOAuth = async (): Promise<{ success: boolean; error?: string; needsRegistration?: boolean }> => {
     isLoading.value = true
     try {
-      // 使用 Directus session cookie 取得當前用戶
+      // Use Directus session cookie to get current user
       const userResponse = await $fetch<{ data: { id: string; email: string; first_name: string | null; last_name: string | null } }>(`${apiUrl}/users/me`, {
         credentials: 'include',
       })
@@ -392,7 +344,7 @@ export const useMemberAuth = () => {
 
       const userId = userResponse.data.id
 
-      // 透過 user_id 查詢會員資料
+      // Query member data by user_id
       const membersResponse = await $fetch<{ data: (CurrentMember & { branch: { name: string } | null; contracts: Contract[] })[] }>(`${apiUrl}/items/members`, {
         credentials: 'include',
         params: {
@@ -403,7 +355,7 @@ export const useMemberAuth = () => {
       })
 
       if (!membersResponse.data || membersResponse.data.length === 0) {
-        // 沒有找到會員記錄 - 可能 hook 還沒建立
+        // No member record found
         return {
           success: false,
           error: '找不到會員資料，請稍後再試',
@@ -413,7 +365,7 @@ export const useMemberAuth = () => {
 
       const memberData = membersResponse.data[0]
 
-      // 找到有效合約
+      // Find active contract
       const activeContract = memberData.contracts?.find(
         (c: Contract) => c.contract_status === 'ACTIVE'
       ) || null
@@ -454,7 +406,6 @@ export const useMemberAuth = () => {
 
   return {
     member,
-    user,
     isAuthenticated,
     isLoading,
     otpLoading,
@@ -466,7 +417,6 @@ export const useMemberAuth = () => {
     loginWithOAuth,
     logout,
     fetchMember,
-    fetchUser,
     checkAuth,
     refreshAccessToken,
     getAuthHeader,
