@@ -30,6 +30,7 @@ backend/uploads/
 
 # Misc
 *.local
+*.local.json
 .dev.vars
 
 # Test reports
