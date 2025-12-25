@@ -1644,6 +1644,134 @@ export default {
       }
     });
 
+    /**
+     * POST /gym/member/complete-profile
+     * Complete member profile after social login
+     * Uses Directus session cookie for authentication
+     */
+    router.post('/member/complete-profile', async (req, res) => {
+      try {
+        const { full_name, phone, gender, birthday, branch_id, emergency_contact, emergency_phone } = req.body || {};
+
+        // Validate required fields
+        if (!full_name || !full_name.trim()) {
+          throw InvalidPayloadError('請輸入您的姓名');
+        }
+
+        if (!phone || !phone.trim()) {
+          throw InvalidPayloadError('請輸入您的手機號碼');
+        }
+
+        // Validate phone format (Taiwan mobile)
+        const cleanPhone = phone.replace(/[-\s]/g, '');
+        if (!/^09\d{8}$/.test(cleanPhone)) {
+          throw InvalidPayloadError('請輸入有效的手機號碼（09開頭，10位數字）');
+        }
+
+        // Validate gender if provided
+        if (gender && !['MALE', 'FEMALE', 'OTHER'].includes(gender)) {
+          throw InvalidPayloadError('性別格式不正確');
+        }
+
+        // Get current user from Directus session
+        // Try to get accountability from request (set by Directus auth)
+        let userId = req.accountability?.user;
+
+        // If no accountability, try to get from session cookie
+        if (!userId) {
+          // Try to read session from cookies and validate
+          const sessionToken = req.cookies?.directus_session_token;
+          if (sessionToken) {
+            try {
+              const sessionResult = await database('directus_sessions')
+                .where({ token: sessionToken })
+                .whereRaw('expires > NOW()')
+                .first();
+
+              if (sessionResult) {
+                userId = sessionResult.user;
+              }
+            } catch (e) {
+              console.error('[GymEndpoint] Session lookup error:', e);
+            }
+          }
+        }
+
+        if (!userId) {
+          throw UnauthorizedError('請先登入');
+        }
+
+        // Find member by user_id
+        const schema = await getSchema();
+        const membersService = new ItemsService('members', {
+          schema,
+          knex: database,
+        });
+
+        const members = await membersService.readByQuery({
+          filter: {
+            user_id: { _eq: userId },
+            status: { _eq: 'active' },
+          },
+          limit: 1,
+        });
+
+        if (!members || members.length === 0) {
+          throw NotFoundError('找不到會員資料，請聯繫客服');
+        }
+
+        const member = members[0];
+
+        // Prepare update data
+        const updateData = {
+          full_name: full_name.trim(),
+          phone: cleanPhone,
+        };
+
+        // Add optional fields if provided
+        if (gender) {
+          updateData.gender = gender;
+        }
+        if (birthday) {
+          updateData.birthday = birthday;
+        }
+        if (branch_id) {
+          updateData.branch_id = branch_id;
+        }
+        if (emergency_contact && emergency_contact.trim()) {
+          updateData.emergency_contact = emergency_contact.trim();
+        }
+        if (emergency_phone && emergency_phone.trim()) {
+          updateData.emergency_phone = emergency_phone.replace(/[-\s]/g, '');
+        }
+
+        // Update member
+        await membersService.updateOne(member.id, updateData);
+
+        // Fetch updated member
+        const updatedMember = await membersService.readOne(member.id, {
+          fields: [
+            'id', 'member_code', 'full_name', 'phone', 'email',
+            'gender', 'birthday', 'address',
+            'member_status', 'join_date',
+            'branch_id.id', 'branch_id.name',
+          ],
+        });
+
+        res.json({
+          success: true,
+          message: '資料已更新',
+          member: updatedMember,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Complete profile error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
     // ============================================
     // 6. Contract Pause/Resume Endpoints
     // ============================================

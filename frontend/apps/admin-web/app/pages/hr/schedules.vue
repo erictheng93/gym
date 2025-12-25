@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
-import type { ShiftSchedule } from '~/types/directus'
+import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/directus'
 
 definePageMeta({
   middleware: 'auth'
@@ -12,7 +12,12 @@ const {
   fetchShiftSchedules,
   createShiftSchedule,
   updateShiftSchedule,
-  deleteShiftSchedule
+  deleteShiftSchedule,
+  fetchShiftEmployees,
+  fetchBranchEmployees,
+  assignShiftToEmployee,
+  batchAssignShift,
+  removeEmployeeShift
 } = useHR()
 const { branches, fetchBranches } = useBranches()
 
@@ -22,6 +27,16 @@ const isEditing = ref(false)
 const isSubmitting = ref(false)
 const showDeleteModal = ref(false)
 const scheduleToDelete = ref<ShiftSchedule | null>(null)
+
+// Employee Assignment
+const showAssignModal = ref(false)
+const assigningSchedule = ref<ShiftSchedule | null>(null)
+const assignedEmployees = ref<EmployeeShift[]>([])
+const availableEmployees = ref<Employee[]>([])
+const selectedEmployees = ref<string[]>([])
+const assignEffectiveDate = ref('')
+const isAssigning = ref(false)
+const isLoadingEmployees = ref(false)
 
 const form = reactive({
   id: '',
@@ -170,6 +185,81 @@ const toggleDay = (day: string) => {
     form.applicable_days.push(day)
   }
 }
+
+// Employee Assignment Functions
+const openAssignModal = async (schedule: ShiftSchedule) => {
+  assigningSchedule.value = schedule
+  assignEffectiveDate.value = new Date().toISOString().split('T')[0]
+  selectedEmployees.value = []
+  isLoadingEmployees.value = true
+  showAssignModal.value = true
+
+  try {
+    // Fetch currently assigned employees
+    assignedEmployees.value = await fetchShiftEmployees(schedule.id)
+
+    // Fetch available employees from the branch
+    availableEmployees.value = await fetchBranchEmployees(schedule.branch_id)
+  } catch (error) {
+    console.error('Failed to load employees:', error)
+  } finally {
+    isLoadingEmployees.value = false
+  }
+}
+
+const isEmployeeAssigned = (employeeId: string) => {
+  return assignedEmployees.value.some(es => (es.employee as Employee)?.id === employeeId)
+}
+
+const toggleEmployeeSelection = (employeeId: string) => {
+  const index = selectedEmployees.value.indexOf(employeeId)
+  if (index > -1) {
+    selectedEmployees.value.splice(index, 1)
+  } else {
+    selectedEmployees.value.push(employeeId)
+  }
+}
+
+const handleAssign = async () => {
+  if (!assigningSchedule.value || selectedEmployees.value.length === 0 || isAssigning.value) return
+
+  isAssigning.value = true
+  try {
+    await batchAssignShift({
+      employeeIds: selectedEmployees.value,
+      shiftScheduleId: assigningSchedule.value.id,
+      effectiveDate: assignEffectiveDate.value
+    })
+
+    // Refresh assigned employees
+    assignedEmployees.value = await fetchShiftEmployees(assigningSchedule.value.id)
+    selectedEmployees.value = []
+  } catch (error) {
+    console.error('Failed to assign employees:', error)
+    alert('指派失敗')
+  } finally {
+    isAssigning.value = false
+  }
+}
+
+const handleRemoveAssignment = async (employeeShift: EmployeeShift) => {
+  if (!confirm('確定要移除此員工的班表指派嗎？')) return
+
+  try {
+    await removeEmployeeShift(employeeShift.id)
+    if (assigningSchedule.value) {
+      assignedEmployees.value = await fetchShiftEmployees(assigningSchedule.value.id)
+    }
+  } catch (error) {
+    console.error('Failed to remove assignment:', error)
+    alert('移除失敗')
+  }
+}
+
+const getAssignedCount = (scheduleId: string) => {
+  // This would need to be fetched per schedule, so we'll show it in the modal instead
+  return 0
+}
 </script>
 
 <template>
@@ -236,6 +326,14 @@ const toggleDay = (day: string) => {
             <span v-if="schedule.is_default" class="badge badge-accent">預設</span>
           </div>
           <div class="schedule-actions">
+            <button class="action-btn action-btn-primary" title="指派員工" @click="openAssignModal(schedule)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <line x1="19" x2="19" y1="8" y2="14"/>
+                <line x1="22" x2="16" y1="11" y2="11"/>
+              </svg>
+            </button>
             <button class="action-btn" title="編輯" @click="openEditModal(schedule)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
@@ -409,6 +507,141 @@ const toggleDay = (day: string) => {
         </div>
       </div>
     </Teleport>
+
+    <!-- Employee Assignment Modal -->
+    <Teleport to="body">
+      <div v-if="showAssignModal" class="modal-overlay" @click.self="showAssignModal = false">
+        <div class="modal-content glass-card modal-wide">
+          <div class="modal-header-assign">
+            <div>
+              <h3 class="modal-title">指派員工至班表</h3>
+              <p v-if="assigningSchedule" class="modal-subtitle">
+                {{ assigningSchedule.name }} ({{ formatTime(assigningSchedule.start_time) }} - {{ formatTime(assigningSchedule.end_time) }})
+              </p>
+            </div>
+            <button class="modal-close-btn" @click="showAssignModal = false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" x2="6" y1="6" y2="18"/>
+                <line x1="6" x2="18" y1="6" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="assign-modal-body">
+            <!-- Currently Assigned -->
+            <div class="assign-section">
+              <h4 class="assign-section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <polyline points="16 11 18 13 22 9"/>
+                </svg>
+                目前已指派 ({{ assignedEmployees.length }})
+              </h4>
+
+              <div v-if="isLoadingEmployees" class="assign-loading">
+                <div class="loading-spinner"></div>
+              </div>
+
+              <div v-else-if="assignedEmployees.length === 0" class="assign-empty">
+                尚未指派任何員工
+              </div>
+
+              <div v-else class="assigned-list">
+                <div
+                  v-for="es in assignedEmployees"
+                  :key="es.id"
+                  class="assigned-employee"
+                >
+                  <div class="employee-avatar">
+                    {{ ((es.employee as Employee)?.full_name || '?')[0] }}
+                  </div>
+                  <div class="employee-info">
+                    <span class="employee-name">{{ (es.employee as Employee)?.full_name }}</span>
+                    <span class="employee-code">{{ (es.employee as Employee)?.employee_code }}</span>
+                  </div>
+                  <span class="effective-date">自 {{ es.effective_date }}</span>
+                  <button class="remove-btn" @click="handleRemoveAssignment(es)" title="移除">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" x2="6" y1="6" y2="18"/>
+                      <line x1="6" x2="18" y1="6" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Available Employees to Assign -->
+            <div class="assign-section">
+              <h4 class="assign-section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <line x1="19" x2="19" y1="8" y2="14"/>
+                  <line x1="22" x2="16" y1="11" y2="11"/>
+                </svg>
+                指派新員工
+              </h4>
+
+              <div class="assign-form">
+                <div class="input-group">
+                  <label class="input-label">生效日期</label>
+                  <input
+                    v-model="assignEffectiveDate"
+                    type="date"
+                    class="input"
+                  />
+                </div>
+
+                <div class="employee-select-list">
+                  <div
+                    v-for="emp in availableEmployees"
+                    :key="emp.id"
+                    :class="['employee-select-item', { selected: selectedEmployees.includes(emp.id), assigned: isEmployeeAssigned(emp.id) }]"
+                    @click="!isEmployeeAssigned(emp.id) && toggleEmployeeSelection(emp.id)"
+                  >
+                    <div class="employee-checkbox">
+                      <svg v-if="selectedEmployees.includes(emp.id)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      <svg v-else-if="isEmployeeAssigned(emp.id)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                    </div>
+                    <div class="employee-avatar small">
+                      {{ (emp.full_name || '?')[0] }}
+                    </div>
+                    <div class="employee-info">
+                      <span class="employee-name">{{ emp.full_name }}</span>
+                      <span class="employee-code">{{ emp.employee_code }}</span>
+                    </div>
+                    <span v-if="isEmployeeAssigned(emp.id)" class="already-assigned-badge">已指派</span>
+                  </div>
+                </div>
+
+                <div v-if="selectedEmployees.length > 0" class="assign-footer">
+                  <span class="selected-count">已選擇 {{ selectedEmployees.length }} 位員工</span>
+                  <button
+                    class="btn btn-primary"
+                    :disabled="isAssigning"
+                    @click="handleAssign"
+                  >
+                    <span v-if="isAssigning" class="btn-spinner"></span>
+                    <template v-else>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      確認指派
+                    </template>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -561,6 +794,14 @@ const toggleDay = (day: string) => {
 .action-btn:hover {
   background: var(--color-bg-tertiary);
   color: var(--color-accent);
+}
+
+.action-btn-primary {
+  color: var(--color-accent);
+}
+
+.action-btn-primary:hover {
+  background: var(--color-accent-light);
 }
 
 .action-btn-danger:hover {
@@ -757,6 +998,256 @@ const toggleDay = (day: string) => {
 
 .btn-danger:hover {
   background: #e6352a;
+}
+
+/* Assignment Modal */
+.modal-wide {
+  max-width: 700px;
+}
+
+.modal-header-assign {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-xl);
+}
+
+.modal-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin-top: var(--space-xs);
+}
+
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast);
+}
+
+.modal-close-btn:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.assign-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.assign-section {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.assign-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-lg);
+}
+
+.assign-section-title svg {
+  color: var(--color-accent);
+}
+
+.assign-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-xl);
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.assign-empty {
+  text-align: center;
+  color: var(--color-text-tertiary);
+  padding: var(--space-lg);
+}
+
+.assigned-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.assigned-employee {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-md);
+}
+
+.employee-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #5856d6, #af52de);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.employee-avatar.small {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.employee-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.employee-name {
+  display: block;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.employee-code {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.effective-date {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.remove-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast);
+}
+
+.remove-btn:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--color-error);
+}
+
+.assign-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.employee-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.employee-select-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.employee-select-item:hover:not(.assigned) {
+  background: var(--color-bg-primary);
+}
+
+.employee-select-item.selected {
+  background: var(--color-accent-light);
+}
+
+.employee-select-item.assigned {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.employee-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.employee-select-item.selected .employee-checkbox {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: white;
+}
+
+.employee-select-item.assigned .employee-checkbox {
+  background: var(--color-bg-tertiary);
+  border-color: var(--color-border);
+  color: var(--color-text-tertiary);
+}
+
+.already-assigned-badge {
+  font-size: 11px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.assign-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-divider);
+}
+
+.selected-count {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.btn-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* Responsive */

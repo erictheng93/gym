@@ -246,6 +246,55 @@ export interface ShiftSchedule {
   branch?: Branch
 }
 
+// 補打卡申請
+export interface MakeupRequest extends BaseFields {
+  employee_id: string
+  branch_id: string
+  target_date: string
+  makeup_type: 'CHECK_IN' | 'CHECK_OUT' | 'BOTH'
+  requested_check_in: string | null
+  requested_check_out: string | null
+  reason: string
+  document_url: string | null
+  request_status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+  approver_id: string | null
+  approved_at: string | null
+  approval_notes: string | null
+  submitted_at: string | null
+  // Relations
+  employee?: Employee
+  branch?: Branch
+  approver?: Employee
+}
+
+// 補打卡審核歷程
+export interface MakeupApprovalLog {
+  id: string
+  date_created: string
+  makeup_request_id: string
+  action_by: string
+  action: 'SUBMIT' | 'APPROVE' | 'REJECT' | 'CANCEL'
+  previous_status: string | null
+  new_status: string | null
+  notes: string | null
+  // Relations
+  makeup_request?: MakeupRequest
+  actor?: Employee
+}
+
+// 員工班表指派
+export interface EmployeeShift {
+  id: string
+  date_created: string
+  employee_id: string
+  shift_schedule_id: string
+  effective_date: string
+  end_date: string | null
+  // Relations
+  employee?: Employee
+  shift_schedule?: ShiftSchedule
+}
+
 // 會員入場紀錄
 export interface MemberCheckin {
   id: string
@@ -297,4 +346,7 @@ export interface DirectusSchema {
   shift_schedules: ShiftSchedule[]
   payments: Payment[]
   member_checkins: MemberCheckin[]
+  makeup_requests: MakeupRequest[]
+  makeup_approval_logs: MakeupApprovalLog[]
+  employee_shifts: EmployeeShift[]
 }

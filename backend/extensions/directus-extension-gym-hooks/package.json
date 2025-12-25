@@ -12,6 +12,7 @@
     "build": "cp src/index.js dist/index.js"
   },
   "dependencies": {
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "web-push": "^3.6.7"
   }
 }

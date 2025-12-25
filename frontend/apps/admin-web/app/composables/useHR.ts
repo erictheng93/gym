@@ -1,5 +1,5 @@
-import { readItems, readItem, createItem, updateItem, aggregate } from '@directus/sdk'
-import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog, ShiftSchedule } from '~/types/directus'
+import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
+import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog, ShiftSchedule, MakeupRequest, MakeupApprovalLog, EmployeeShift, Employee } from '~/types/directus'
 
 export const useHR = () => {
   const directus = useDirectus()
@@ -476,6 +476,92 @@ export const useHR = () => {
   }
 
   // ============================================
+  // 今日考勤統計（Dashboard 用）
+  // ============================================
+
+  interface TodayAttendanceSummary {
+    totalEmployees: number
+    checkedIn: number
+    notCheckedIn: number
+    checkedOut: number
+    late: number
+    onLeave: number
+  }
+
+  const todayAttendanceSummary = useState<TodayAttendanceSummary | null>('hr_today_summary', () => null)
+
+  // 取得今日全員考勤概況
+  const fetchTodayAttendanceSummary = async (branchId?: string): Promise<TodayAttendanceSummary> => {
+    const today = new Date().toISOString().split('T')[0]
+
+    try {
+      // 取得員工總數
+      const employeeFilter: Record<string, unknown> = { employment_status: { _eq: 'ACTIVE' } }
+      if (branchId) employeeFilter.branch_id = { _eq: branchId }
+
+      const employeesResult = await directus.request(
+        aggregate('employees', {
+          aggregate: { count: '*' },
+          query: { filter: employeeFilter }
+        })
+      )
+      const totalEmployees = Number(employeesResult[0]?.count) || 0
+
+      // 取得今日考勤紀錄
+      const attendanceFilter: Record<string, unknown> = { attendance_date: { _eq: today } }
+      if (branchId) attendanceFilter.branch_id = { _eq: branchId }
+
+      const attendances = await directus.request(
+        readItems('attendances', {
+          filter: attendanceFilter,
+          fields: ['id', 'check_in', 'check_out', 'attendance_status']
+        })
+      ) as { id: string; check_in: string | null; check_out: string | null; attendance_status: string }[]
+
+      // 取得今日請假人數
+      const leaveFilter: Record<string, unknown> = {
+        leave_status: { _eq: 'APPROVED' },
+        start_date: { _lte: today },
+        end_date: { _gte: today }
+      }
+      const leaveResult = await directus.request(
+        aggregate('leave_requests', {
+          aggregate: { count: '*' },
+          query: { filter: leaveFilter }
+        })
+      )
+      const onLeave = Number(leaveResult[0]?.count) || 0
+
+      const checkedIn = attendances.filter(a => a.check_in).length
+      const checkedOut = attendances.filter(a => a.check_out).length
+      const late = attendances.filter(a => a.attendance_status === 'LATE').length
+      const notCheckedIn = totalEmployees - checkedIn - onLeave
+
+      const summary: TodayAttendanceSummary = {
+        totalEmployees,
+        checkedIn,
+        notCheckedIn: Math.max(0, notCheckedIn),
+        checkedOut,
+        late,
+        onLeave
+      }
+
+      todayAttendanceSummary.value = summary
+      return summary
+    } catch (error) {
+      console.error('Failed to fetch today attendance summary:', error)
+      return {
+        totalEmployees: 0,
+        checkedIn: 0,
+        notCheckedIn: 0,
+        checkedOut: 0,
+        late: 0,
+        onLeave: 0
+      }
+    }
+  }
+
+  // ============================================
   // 月度考勤報表
   // ============================================
 
@@ -606,6 +692,479 @@ export const useHR = () => {
     }
   }
 
+  // ============================================
+  // 補打卡申請
+  // ============================================
+
+  const makeupRequests = useState<MakeupRequest[]>('hr_makeup_requests', () => [])
+  const pendingMakeupApprovals = useState<MakeupRequest[]>('hr_pending_makeup_approvals', () => [])
+  const isMakeupLoading = useState('hr_makeup_loading', () => false)
+  const makeupTotalCount = useState('hr_makeup_total', () => 0)
+
+  // 取得員工補打卡申請
+  const fetchMakeupRequests = async (options?: {
+    employeeId?: string
+    status?: string
+    page?: number
+    limit?: number
+  }) => {
+    isMakeupLoading.value = true
+    const { employeeId, status, page = 1, limit = 20 } = options || {}
+
+    try {
+      const filter: Record<string, unknown> = {}
+      if (employeeId) filter.employee_id = { _eq: employeeId }
+      if (status) filter.request_status = { _eq: status }
+
+      const [data, countResult] = await Promise.all([
+        directus.request(
+          readItems('makeup_requests', {
+            filter,
+            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name', 'branch.name'],
+            sort: ['-date_created'],
+            limit,
+            offset: (page - 1) * limit
+          })
+        ),
+        directus.request(
+          aggregate('makeup_requests', {
+            aggregate: { count: '*' },
+            query: { filter }
+          })
+        )
+      ])
+
+      makeupRequests.value = data as MakeupRequest[]
+      makeupTotalCount.value = Number(countResult[0]?.count) || 0
+    } catch (error) {
+      console.error('Failed to fetch makeup requests:', error)
+    } finally {
+      isMakeupLoading.value = false
+    }
+  }
+
+  // 取得待審核的補打卡申請（主管用）
+  const fetchPendingMakeupApprovals = async (supervisorId: string) => {
+    try {
+      // 先取得此主管下屬的員工
+      const subordinates = await directus.request(
+        readItems('employees', {
+          filter: { supervisor_id: { _eq: supervisorId } },
+          fields: ['id']
+        })
+      )
+
+      if (subordinates.length === 0) {
+        pendingMakeupApprovals.value = []
+        return
+      }
+
+      const subordinateIds = subordinates.map((e: { id: string }) => e.id)
+
+      const data = await directus.request(
+        readItems('makeup_requests', {
+          filter: {
+            employee_id: { _in: subordinateIds },
+            request_status: { _eq: 'PENDING' }
+          },
+          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name', 'branch.name'],
+          sort: ['-submitted_at']
+        })
+      )
+
+      pendingMakeupApprovals.value = data as MakeupRequest[]
+    } catch (error) {
+      console.error('Failed to fetch pending makeup approvals:', error)
+    }
+  }
+
+  // 申請補打卡
+  const applyMakeup = async (makeupData: {
+    employeeId: string
+    branchId: string
+    targetDate: string
+    makeupType: 'CHECK_IN' | 'CHECK_OUT' | 'BOTH'
+    requestedCheckIn?: string
+    requestedCheckOut?: string
+    reason: string
+  }) => {
+    const data = await directus.request(
+      createItem('makeup_requests', {
+        employee_id: makeupData.employeeId,
+        branch_id: makeupData.branchId,
+        target_date: makeupData.targetDate,
+        makeup_type: makeupData.makeupType,
+        requested_check_in: makeupData.requestedCheckIn || null,
+        requested_check_out: makeupData.requestedCheckOut || null,
+        reason: makeupData.reason,
+        request_status: 'PENDING',
+        submitted_at: new Date().toISOString()
+      })
+    )
+
+    // 記錄審核歷程
+    await directus.request(
+      createItem('makeup_approval_logs', {
+        makeup_request_id: (data as MakeupRequest).id,
+        action_by: makeupData.employeeId,
+        action: 'SUBMIT',
+        previous_status: null,
+        new_status: 'PENDING',
+        notes: '提交補打卡申請'
+      })
+    )
+
+    return data as MakeupRequest
+  }
+
+  // 審核補打卡
+  const reviewMakeup = async (
+    makeupRequestId: string,
+    approverId: string,
+    action: 'APPROVE' | 'REJECT',
+    notes?: string
+  ) => {
+    const makeupRequest = await directus.request(
+      readItem('makeup_requests', makeupRequestId)
+    ) as MakeupRequest
+
+    const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+
+    // 更新補打卡申請狀態
+    const data = await directus.request(
+      updateItem('makeup_requests', makeupRequestId, {
+        request_status: newStatus,
+        approver_id: approverId,
+        approved_at: new Date().toISOString(),
+        approval_notes: notes || null
+      })
+    )
+
+    // 記錄審核歷程
+    await directus.request(
+      createItem('makeup_approval_logs', {
+        makeup_request_id: makeupRequestId,
+        action_by: approverId,
+        action,
+        previous_status: makeupRequest.request_status,
+        new_status: newStatus,
+        notes
+      })
+    )
+
+    // 如果核准，更新考勤紀錄
+    if (action === 'APPROVE') {
+      await applyMakeupToAttendance(makeupRequest)
+    }
+
+    return data as MakeupRequest
+  }
+
+  // 將補打卡應用到考勤紀錄
+  const applyMakeupToAttendance = async (makeupRequest: MakeupRequest) => {
+    // 查找該日是否已有考勤紀錄
+    const existingAttendances = await directus.request(
+      readItems('attendances', {
+        filter: {
+          employee_id: { _eq: makeupRequest.employee_id },
+          attendance_date: { _eq: makeupRequest.target_date }
+        },
+        limit: 1
+      })
+    ) as Attendance[]
+
+    const updateData: Partial<Attendance> = {
+      check_type: 'MAKEUP',
+      notes: `補打卡申請核准 - ${makeupRequest.reason}`
+    }
+
+    if (makeupRequest.makeup_type === 'CHECK_IN' || makeupRequest.makeup_type === 'BOTH') {
+      if (makeupRequest.requested_check_in) {
+        updateData.check_in = `${makeupRequest.target_date}T${makeupRequest.requested_check_in}`
+      }
+    }
+
+    if (makeupRequest.makeup_type === 'CHECK_OUT' || makeupRequest.makeup_type === 'BOTH') {
+      if (makeupRequest.requested_check_out) {
+        updateData.check_out = `${makeupRequest.target_date}T${makeupRequest.requested_check_out}`
+      }
+    }
+
+    if (existingAttendances.length > 0) {
+      // 更新現有紀錄
+      await directus.request(
+        updateItem('attendances', existingAttendances[0].id, updateData)
+      )
+    } else {
+      // 創建新紀錄
+      await directus.request(
+        createItem('attendances', {
+          employee_id: makeupRequest.employee_id,
+          branch_id: makeupRequest.branch_id,
+          attendance_date: makeupRequest.target_date,
+          attendance_status: 'PRESENT',
+          ...updateData
+        })
+      )
+    }
+  }
+
+  // 取消補打卡申請
+  const cancelMakeup = async (makeupRequestId: string, employeeId: string) => {
+    const makeupRequest = await directus.request(
+      readItem('makeup_requests', makeupRequestId)
+    ) as MakeupRequest
+
+    if (makeupRequest.request_status !== 'PENDING') {
+      throw new Error('只能取消待審核的申請')
+    }
+
+    const data = await directus.request(
+      updateItem('makeup_requests', makeupRequestId, {
+        request_status: 'CANCELLED'
+      })
+    )
+
+    await directus.request(
+      createItem('makeup_approval_logs', {
+        makeup_request_id: makeupRequestId,
+        action_by: employeeId,
+        action: 'CANCEL',
+        previous_status: 'PENDING',
+        new_status: 'CANCELLED',
+        notes: '取消申請'
+      })
+    )
+
+    return data as MakeupRequest
+  }
+
+  // 取得補打卡審核歷程
+  const fetchMakeupApprovalHistory = async (makeupRequestId: string) => {
+    const data = await directus.request(
+      readItems('makeup_approval_logs', {
+        filter: { makeup_request_id: { _eq: makeupRequestId } },
+        fields: ['*', 'actor.full_name'],
+        sort: ['date_created']
+      })
+    )
+    return data as MakeupApprovalLog[]
+  }
+
+  // ============================================
+  // 員工排班
+  // ============================================
+
+  const employeeShifts = useState<EmployeeShift[]>('hr_employee_shifts', () => [])
+  const isEmployeeShiftLoading = useState('hr_employee_shift_loading', () => false)
+
+  // 取得員工班表指派
+  const fetchEmployeeShifts = async (options?: {
+    employeeId?: string
+    shiftScheduleId?: string
+    branchId?: string
+    activeOnly?: boolean
+  }) => {
+    isEmployeeShiftLoading.value = true
+    const { employeeId, shiftScheduleId, branchId, activeOnly = true } = options || {}
+
+    try {
+      const filter: Record<string, unknown> = {}
+      if (employeeId) filter.employee_id = { _eq: employeeId }
+      if (shiftScheduleId) filter.shift_schedule_id = { _eq: shiftScheduleId }
+
+      // 如果只要有效的排班（未過期）
+      if (activeOnly) {
+        const today = new Date().toISOString().split('T')[0]
+        filter._and = [
+          { effective_date: { _lte: today } },
+          {
+            _or: [
+              { end_date: { _null: true } },
+              { end_date: { _gte: today } }
+            ]
+          }
+        ]
+      }
+
+      const data = await directus.request(
+        readItems('employee_shifts', {
+          filter,
+          fields: [
+            '*',
+            'employee.id', 'employee.full_name', 'employee.employee_code', 'employee.branch_id',
+            'shift_schedule.id', 'shift_schedule.name', 'shift_schedule.start_time', 'shift_schedule.end_time', 'shift_schedule.branch_id'
+          ],
+          sort: ['-date_created']
+        })
+      )
+
+      // 如果指定了 branchId，進一步過濾
+      let filtered = data as EmployeeShift[]
+      if (branchId) {
+        filtered = filtered.filter(es => {
+          const employee = es.employee as Employee | undefined
+          return employee?.branch_id === branchId
+        })
+      }
+
+      employeeShifts.value = filtered
+    } catch (error) {
+      console.error('Failed to fetch employee shifts:', error)
+    } finally {
+      isEmployeeShiftLoading.value = false
+    }
+  }
+
+  // 取得班表的指派員工
+  const fetchShiftEmployees = async (shiftScheduleId: string) => {
+    const today = new Date().toISOString().split('T')[0]
+
+    const data = await directus.request(
+      readItems('employee_shifts', {
+        filter: {
+          shift_schedule_id: { _eq: shiftScheduleId },
+          effective_date: { _lte: today },
+          _or: [
+            { end_date: { _null: true } },
+            { end_date: { _gte: today } }
+          ]
+        },
+        fields: [
+          '*',
+          'employee.id', 'employee.full_name', 'employee.employee_code', 'employee.branch_id'
+        ]
+      })
+    )
+
+    return data as EmployeeShift[]
+  }
+
+  // 取得員工的當前班表
+  const getEmployeeCurrentShift = async (employeeId: string) => {
+    const today = new Date().toISOString().split('T')[0]
+
+    const data = await directus.request(
+      readItems('employee_shifts', {
+        filter: {
+          employee_id: { _eq: employeeId },
+          effective_date: { _lte: today },
+          _or: [
+            { end_date: { _null: true } },
+            { end_date: { _gte: today } }
+          ]
+        },
+        fields: [
+          '*',
+          'shift_schedule.id', 'shift_schedule.name', 'shift_schedule.start_time',
+          'shift_schedule.end_time', 'shift_schedule.grace_period_minutes',
+          'shift_schedule.early_leave_minutes', 'shift_schedule.applicable_days'
+        ],
+        limit: 1
+      })
+    )
+
+    return (data[0] as EmployeeShift) || null
+  }
+
+  // 指派班表給員工
+  const assignShiftToEmployee = async (data: {
+    employeeId: string
+    shiftScheduleId: string
+    effectiveDate: string
+    endDate?: string
+  }) => {
+    // 先結束該員工目前的班表
+    const today = new Date().toISOString().split('T')[0]
+    const currentShift = await getEmployeeCurrentShift(data.employeeId)
+
+    if (currentShift && currentShift.shift_schedule_id !== data.shiftScheduleId) {
+      // 結束當前班表
+      await directus.request(
+        updateItem('employee_shifts', currentShift.id, {
+          end_date: new Date(new Date(data.effectiveDate).getTime() - 86400000).toISOString().split('T')[0]
+        })
+      )
+    }
+
+    // 創建新的班表指派
+    const result = await directus.request(
+      createItem('employee_shifts', {
+        employee_id: data.employeeId,
+        shift_schedule_id: data.shiftScheduleId,
+        effective_date: data.effectiveDate,
+        end_date: data.endDate || null
+      })
+    )
+
+    return result as EmployeeShift
+  }
+
+  // 批量指派班表給多個員工
+  const batchAssignShift = async (data: {
+    employeeIds: string[]
+    shiftScheduleId: string
+    effectiveDate: string
+    endDate?: string
+  }) => {
+    const results: EmployeeShift[] = []
+
+    for (const employeeId of data.employeeIds) {
+      const result = await assignShiftToEmployee({
+        employeeId,
+        shiftScheduleId: data.shiftScheduleId,
+        effectiveDate: data.effectiveDate,
+        endDate: data.endDate
+      })
+      results.push(result)
+    }
+
+    return results
+  }
+
+  // 更新員工班表指派
+  const updateEmployeeShift = async (shiftId: string, data: {
+    effectiveDate?: string
+    endDate?: string | null
+  }) => {
+    const result = await directus.request(
+      updateItem('employee_shifts', shiftId, {
+        effective_date: data.effectiveDate,
+        end_date: data.endDate
+      })
+    )
+    return result as EmployeeShift
+  }
+
+  // 移除員工班表指派（結束日期設為昨天）
+  const removeEmployeeShift = async (shiftId: string) => {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    const result = await directus.request(
+      updateItem('employee_shifts', shiftId, {
+        end_date: yesterday.toISOString().split('T')[0]
+      })
+    )
+    return result as EmployeeShift
+  }
+
+  // 取得分店員工列表（用於排班選擇）
+  const fetchBranchEmployees = async (branchId: string) => {
+    const data = await directus.request(
+      readItems('employees', {
+        filter: {
+          branch_id: { _eq: branchId },
+          employment_status: { _eq: 'ACTIVE' },
+          status: { _eq: 'active' }
+        },
+        fields: ['id', 'full_name', 'employee_code', 'job_title.name'],
+        sort: ['full_name']
+      })
+    )
+    return data as Employee[]
+  }
+
   return {
     // Attendance
     todayAttendance,
@@ -615,6 +1174,9 @@ export const useHR = () => {
     fetchRecentAttendances,
     checkIn,
     checkOut,
+    // Today Summary (Dashboard)
+    todayAttendanceSummary,
+    fetchTodayAttendanceSummary,
     // Leaves
     leaveRequests,
     leaveBalances,
@@ -642,6 +1204,28 @@ export const useHR = () => {
     calculateOvertimeHours,
     // Monthly Reports
     fetchMonthlyAttendanceStats,
-    fetchEmployeeMonthlyAttendance
+    fetchEmployeeMonthlyAttendance,
+    // Makeup Requests
+    makeupRequests,
+    pendingMakeupApprovals,
+    isMakeupLoading,
+    makeupTotalCount,
+    fetchMakeupRequests,
+    fetchPendingMakeupApprovals,
+    applyMakeup,
+    reviewMakeup,
+    cancelMakeup,
+    fetchMakeupApprovalHistory,
+    // Employee Shifts
+    employeeShifts,
+    isEmployeeShiftLoading,
+    fetchEmployeeShifts,
+    fetchShiftEmployees,
+    getEmployeeCurrentShift,
+    assignShiftToEmployee,
+    batchAssignShift,
+    updateEmployeeShift,
+    removeEmployeeShift,
+    fetchBranchEmployees
   }
 }

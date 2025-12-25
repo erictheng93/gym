@@ -404,6 +404,50 @@ export const useMemberAuth = () => {
     }
   }
 
+  /**
+   * Complete member profile after social login
+   */
+  const completeProfile = async (data: {
+    full_name: string
+    phone: string
+    gender?: 'MALE' | 'FEMALE' | 'OTHER' | null
+    birthday?: string
+    branch_id?: string
+    emergency_contact?: string
+    emergency_phone?: string
+  }): Promise<{ success: boolean; message: string }> => {
+    isLoading.value = true
+    try {
+      const response = await $fetch<{ success: boolean; message: string; member?: CurrentMember }>(`${apiUrl}/gym/member/complete-profile`, {
+        method: 'POST',
+        credentials: 'include',
+        body: data,
+      })
+
+      if (response.success) {
+        // Refresh member data
+        await loginWithOAuth()
+        return { success: true, message: response.message || '資料已更新' }
+      }
+
+      return { success: false, message: response.message || '更新資料失敗' }
+    }
+    catch (error: unknown) {
+      console.error('Complete profile error:', error)
+      if (typeof error === 'object' && error !== null && 'data' in error) {
+        const fetchError = error as { data?: { message?: string } }
+        return {
+          success: false,
+          message: fetchError.data?.message || '更新資料失敗，請稍後再試',
+        }
+      }
+      return { success: false, message: '更新資料失敗，請稍後再試' }
+    }
+    finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     member,
     isAuthenticated,
@@ -420,5 +464,6 @@ export const useMemberAuth = () => {
     checkAuth,
     refreshAccessToken,
     getAuthHeader,
+    completeProfile,
   }
 }

@@ -1,11 +1,9 @@
 <script setup lang="ts">
 /**
- * 休假管理頁面
- *
- * 使用 @gym-nexus/ui 組件庫重構
+ * 補打卡申請頁面
  */
 import { PAGES } from '~/constants'
-import type { LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/directus'
+import type { MakeupRequest, MakeupApprovalLog } from '~/types/directus'
 
 definePageMeta({
   middleware: 'auth'
@@ -13,61 +11,54 @@ definePageMeta({
 
 const { currentEmployee, checkAuth } = useAuth()
 const {
-  leaveRequests,
-  leaveBalances,
-  pendingApprovals,
-  isLeavesLoading,
-  leavesTotalCount,
-  fetchLeaveBalances,
-  fetchLeaveRequests,
-  fetchPendingApprovals,
-  applyLeave,
-  reviewLeave,
-  cancelLeave,
-  fetchApprovalHistory
+  makeupRequests,
+  pendingMakeupApprovals,
+  isMakeupLoading,
+  makeupTotalCount,
+  fetchMakeupRequests,
+  fetchPendingMakeupApprovals,
+  applyMakeup,
+  reviewMakeup,
+  cancelMakeup,
+  fetchMakeupApprovalHistory
 } = useHR()
 
-const activeTab = ref<'my-leaves' | 'apply' | 'approve'>('my-leaves')
+const activeTab = ref<'my-requests' | 'approve'>('my-requests')
 const selectedStatus = ref('')
 const currentPage = ref(1)
 const pageSize = 10
 
 // 申請表單
 const applyForm = ref({
-  leaveType: 'ANNUAL',
-  startDate: '',
-  endDate: '',
-  reason: '',
-  isHalfDay: false,
-  halfDayType: 'AM' as 'AM' | 'PM'
+  targetDate: '',
+  makeupType: 'BOTH' as 'CHECK_IN' | 'CHECK_OUT' | 'BOTH',
+  requestedCheckIn: '',
+  requestedCheckOut: '',
+  reason: ''
 })
 
 const isSubmitting = ref(false)
 const showApplyModal = ref(false)
 const showHistoryModal = ref(false)
 const showReviewModal = ref(false)
-const selectedLeaveHistory = ref<LeaveApprovalLog[]>([])
-const selectedLeaveId = ref('')
-const reviewData = ref<{ leaveId: string; action: 'APPROVE' | 'REJECT'; employeeName: string } | null>(null)
+const selectedHistory = ref<MakeupApprovalLog[]>([])
+const reviewData = ref<{ requestId: string; action: 'APPROVE' | 'REJECT'; employeeName: string } | null>(null)
 const reviewNotes = ref('')
 const isReviewing = ref(false)
 
-// 假別選項
-const leaveTypeOptions = [
-  { value: 'ANNUAL', label: PAGES.HR.LEAVES.ANNUAL, color: '#007aff' },
-  { value: 'SICK', label: PAGES.HR.LEAVES.SICK, color: '#ff3b30' },
-  { value: 'PERSONAL', label: PAGES.HR.LEAVES.PERSONAL, color: '#ff9500' },
-  { value: 'MATERNITY', label: PAGES.HR.LEAVES.MATERNITY, color: '#af52de' },
-  { value: 'BEREAVEMENT', label: PAGES.HR.LEAVES.BEREAVEMENT, color: '#8e8e93' },
-  { value: 'OTHER', label: PAGES.HR.LEAVES.OTHER, color: '#5856d6' }
+// 補打卡類型選項
+const makeupTypeOptions = [
+  { value: 'CHECK_IN', label: PAGES.HR.MAKEUP.CHECK_IN, color: '#34c759' },
+  { value: 'CHECK_OUT', label: PAGES.HR.MAKEUP.CHECK_OUT, color: '#ff9500' },
+  { value: 'BOTH', label: PAGES.HR.MAKEUP.BOTH, color: '#007aff' }
 ]
 
 const statusOptions = [
   { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: PAGES.HR.LEAVES.PENDING_APPROVAL },
-  { value: 'APPROVED', label: PAGES.HR.LEAVES.APPROVED },
-  { value: 'REJECTED', label: PAGES.HR.LEAVES.REJECTED },
-  { value: 'CANCELLED', label: PAGES.HR.LEAVES.CANCELLED }
+  { value: 'PENDING', label: PAGES.HR.MAKEUP.PENDING_APPROVAL },
+  { value: 'APPROVED', label: PAGES.HR.MAKEUP.APPROVED },
+  { value: 'REJECTED', label: PAGES.HR.MAKEUP.REJECTED },
+  { value: 'CANCELLED', label: PAGES.HR.MAKEUP.CANCELLED }
 ]
 
 onMounted(async () => {
@@ -81,21 +72,20 @@ const loadData = async () => {
   if (!currentEmployee.value?.id) return
 
   await Promise.all([
-    fetchLeaveBalances(currentEmployee.value.id),
-    fetchLeaveRequests({
+    fetchMakeupRequests({
       employeeId: currentEmployee.value.id,
       status: selectedStatus.value || undefined,
       page: currentPage.value,
       limit: pageSize
     }),
-    fetchPendingApprovals(currentEmployee.value.id)
+    fetchPendingMakeupApprovals(currentEmployee.value.id)
   ])
 }
 
 // 監聽篩選條件變化
 watch([selectedStatus, currentPage], () => {
   if (currentEmployee.value?.id) {
-    fetchLeaveRequests({
+    fetchMakeupRequests({
       employeeId: currentEmployee.value.id,
       status: selectedStatus.value || undefined,
       page: currentPage.value,
@@ -104,44 +94,22 @@ watch([selectedStatus, currentPage], () => {
   }
 })
 
-// 計算申請天數
-const calculateDays = computed(() => {
-  if (!applyForm.value.startDate || !applyForm.value.endDate) return 0
-  if (applyForm.value.isHalfDay) return 0.5
-
-  const start = new Date(applyForm.value.startDate)
-  const end = new Date(applyForm.value.endDate)
-  const diffTime = Math.abs(end.getTime() - start.getTime())
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
-})
-
-// 取得假別餘額
-const getBalance = (type: string) => {
-  const balance = leaveBalances.value.find(b => b.leave_type === type)
-  if (!balance) return { total: 0, used: 0, remaining: 0 }
-  return {
-    total: balance.total_days,
-    used: balance.used_days,
-    remaining: balance.total_days - balance.used_days - balance.pending_days
-  }
+// 取得類型標籤
+const getMakeupTypeLabel = (type: string) => {
+  return makeupTypeOptions.find(o => o.value === type)?.label || type
 }
 
-// 取得假別標籤
-const getLeaveTypeLabel = (type: string) => {
-  return leaveTypeOptions.find(o => o.value === type)?.label || type
-}
-
-const getLeaveTypeColor = (type: string) => {
-  return leaveTypeOptions.find(o => o.value === type)?.color || '#8e8e93'
+const getMakeupTypeColor = (type: string) => {
+  return makeupTypeOptions.find(o => o.value === type)?.color || '#8e8e93'
 }
 
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } => {
   const map: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
-    PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
-    APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
-    REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
-    CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' }
+    PENDING: { label: PAGES.HR.MAKEUP.PENDING_APPROVAL, variant: 'warning' },
+    APPROVED: { label: PAGES.HR.MAKEUP.APPROVED, variant: 'success' },
+    REJECTED: { label: PAGES.HR.MAKEUP.REJECTED, variant: 'error' },
+    CANCELLED: { label: PAGES.HR.MAKEUP.CANCELLED, variant: 'default' }
   }
   return map[status] || { label: status, variant: 'default' }
 }
@@ -151,7 +119,8 @@ const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    weekday: 'short'
   })
 }
 
@@ -165,42 +134,65 @@ const formatDateTime = (dateStr: string) => {
   })
 }
 
+const formatTime = (timeStr: string | null) => {
+  if (!timeStr) return '--:--'
+  return timeStr.substring(0, 5)
+}
+
+// 取得今天之前的最大日期
+const maxDate = computed(() => {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  return yesterday.toISOString().split('T')[0]
+})
+
 // 提交申請
 const handleApply = async () => {
-  if (!currentEmployee.value?.id || isSubmitting.value) return
-  if (!applyForm.value.startDate || !applyForm.value.endDate) {
-    alert('請選擇日期區間')
+  if (!currentEmployee.value?.id || !currentEmployee.value?.branch_id || isSubmitting.value) return
+  if (!applyForm.value.targetDate) {
+    alert('請選擇補打卡日期')
+    return
+  }
+  if (!applyForm.value.reason.trim()) {
+    alert('請輸入補打卡原因')
+    return
+  }
+
+  // 驗證時間
+  if ((applyForm.value.makeupType === 'CHECK_IN' || applyForm.value.makeupType === 'BOTH') && !applyForm.value.requestedCheckIn) {
+    alert('請輸入上班時間')
+    return
+  }
+  if ((applyForm.value.makeupType === 'CHECK_OUT' || applyForm.value.makeupType === 'BOTH') && !applyForm.value.requestedCheckOut) {
+    alert('請輸入下班時間')
     return
   }
 
   isSubmitting.value = true
   try {
-    await applyLeave({
+    await applyMakeup({
       employeeId: currentEmployee.value.id,
-      leaveType: applyForm.value.leaveType,
-      startDate: applyForm.value.startDate,
-      endDate: applyForm.value.endDate,
-      reason: applyForm.value.reason,
-      daysRequested: calculateDays.value,
-      isHalfDay: applyForm.value.isHalfDay,
-      halfDayType: applyForm.value.isHalfDay ? applyForm.value.halfDayType : undefined
+      branchId: currentEmployee.value.branch_id,
+      targetDate: applyForm.value.targetDate,
+      makeupType: applyForm.value.makeupType,
+      requestedCheckIn: applyForm.value.requestedCheckIn || undefined,
+      requestedCheckOut: applyForm.value.requestedCheckOut || undefined,
+      reason: applyForm.value.reason
     })
 
     // 重置表單
     applyForm.value = {
-      leaveType: 'ANNUAL',
-      startDate: '',
-      endDate: '',
-      reason: '',
-      isHalfDay: false,
-      halfDayType: 'AM'
+      targetDate: '',
+      makeupType: 'BOTH',
+      requestedCheckIn: '',
+      requestedCheckOut: '',
+      reason: ''
     }
 
     showApplyModal.value = false
-    activeTab.value = 'my-leaves'
     await loadData()
   } catch (error) {
-    console.error('Apply leave failed:', error)
+    console.error('Apply makeup failed:', error)
     alert('申請失敗，請稍後再試')
   } finally {
     isSubmitting.value = false
@@ -208,12 +200,12 @@ const handleApply = async () => {
 }
 
 // 取消申請
-const handleCancel = async (leaveId: string) => {
+const handleCancel = async (requestId: string) => {
   if (!currentEmployee.value?.id) return
-  if (!confirm('確定要取消此休假申請嗎？')) return
+  if (!confirm('確定要取消此補打卡申請嗎？')) return
 
   try {
-    await cancelLeave(leaveId, currentEmployee.value.id)
+    await cancelMakeup(requestId, currentEmployee.value.id)
     await loadData()
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : '操作失敗'
@@ -222,11 +214,11 @@ const handleCancel = async (leaveId: string) => {
 }
 
 // 開啟審核 Modal
-const openReviewModal = (leave: LeaveRequest, action: 'APPROVE' | 'REJECT') => {
+const openReviewModal = (request: MakeupRequest, action: 'APPROVE' | 'REJECT') => {
   reviewData.value = {
-    leaveId: leave.id,
+    requestId: request.id,
     action,
-    employeeName: (leave.employee as { full_name: string })?.full_name || '員工'
+    employeeName: (request.employee as { full_name: string })?.full_name || '員工'
   }
   reviewNotes.value = ''
   showReviewModal.value = true
@@ -238,8 +230,8 @@ const submitReview = async () => {
 
   isReviewing.value = true
   try {
-    await reviewLeave(
-      reviewData.value.leaveId,
+    await reviewMakeup(
+      reviewData.value.requestId,
       currentEmployee.value.id,
       reviewData.value.action,
       reviewNotes.value || undefined
@@ -257,14 +249,13 @@ const submitReview = async () => {
 }
 
 // 查看審核歷程
-const viewHistory = async (leaveId: string) => {
-  selectedLeaveId.value = leaveId
-  selectedLeaveHistory.value = await fetchApprovalHistory(leaveId)
+const viewHistory = async (requestId: string) => {
+  selectedHistory.value = await fetchMakeupApprovalHistory(requestId)
   showHistoryModal.value = true
 }
 
 // 總頁數
-const totalPages = computed(() => Math.ceil(leavesTotalCount.value / pageSize))
+const totalPages = computed(() => Math.ceil(makeupTotalCount.value / pageSize))
 
 // 取得動作標籤
 const getActionLabel = (action: string) => {
@@ -272,15 +263,14 @@ const getActionLabel = (action: string) => {
     SUBMIT: '提交申請',
     APPROVE: '核准',
     REJECT: '駁回',
-    CANCEL: '取消',
-    REVOKE: '撤回'
+    CANCEL: '取消'
   }
   return map[action] || action
 }
 </script>
 
 <template>
-  <PageContainer class="leaves-page">
+  <PageContainer class="makeup-page">
     <!-- Header -->
     <header class="page-header">
       <div class="header-content">
@@ -290,77 +280,40 @@ const getActionLabel = (action: string) => {
           </svg>
           {{ PAGES.HR.TITLE }}
         </NuxtLink>
-        <h1 class="text-headline">{{ PAGES.HR.LEAVES.TITLE }}</h1>
-        <p class="text-body text-secondary">{{ PAGES.HR.LEAVES.DESCRIPTION }}</p>
+        <h1 class="text-headline">{{ PAGES.HR.MAKEUP.TITLE }}</h1>
+        <p class="text-body text-secondary">{{ PAGES.HR.MAKEUP.DESCRIPTION }}</p>
       </div>
       <button class="btn btn-primary" @click="showApplyModal = true">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" x2="12" y1="5" y2="19"/>
           <line x1="5" x2="19" y1="12" y2="12"/>
         </svg>
-        {{ PAGES.HR.LEAVES.APPLY_LEAVE }}
+        {{ PAGES.HR.MAKEUP.APPLY_MAKEUP }}
       </button>
     </header>
-
-    <!-- Leave Balance Cards -->
-    <section class="balance-section">
-      <h2 class="section-title">{{ PAGES.HR.LEAVES.LEAVE_BALANCE }}</h2>
-      <div class="balance-grid">
-        <div
-          v-for="option in leaveTypeOptions.slice(0, 3)"
-          :key="option.value"
-          class="balance-card"
-          :style="{ '--accent-color': option.color }"
-        >
-          <div class="balance-header">
-            <span class="balance-type">{{ option.label }}</span>
-            <div class="balance-indicator" :style="{ background: option.color }"></div>
-          </div>
-          <div class="balance-numbers">
-            <div class="balance-remaining">
-              <span class="number">{{ getBalance(option.value).remaining }}</span>
-              <span class="unit">天</span>
-            </div>
-            <div class="balance-detail">
-              <span>{{ PAGES.HR.LEAVES.TOTAL_DAYS }}: {{ getBalance(option.value).total }}</span>
-              <span>{{ PAGES.HR.LEAVES.USED_DAYS }}: {{ getBalance(option.value).used }}</span>
-            </div>
-          </div>
-          <div class="balance-bar">
-            <div
-              class="bar-fill"
-              :style="{
-                width: `${(getBalance(option.value).used / getBalance(option.value).total) * 100}%`,
-                background: option.color
-              }"
-            ></div>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- Tabs -->
     <div class="tabs-container">
       <div class="tabs">
         <button
-          :class="['tab', { active: activeTab === 'my-leaves' }]"
-          @click="activeTab = 'my-leaves'"
+          :class="['tab', { active: activeTab === 'my-requests' }]"
+          @click="activeTab = 'my-requests'"
         >
-          {{ PAGES.HR.LEAVES.MY_LEAVES }}
+          {{ PAGES.HR.MAKEUP.MY_REQUESTS }}
         </button>
         <button
-          v-if="pendingApprovals.length > 0"
+          v-if="pendingMakeupApprovals.length > 0"
           :class="['tab', { active: activeTab === 'approve' }]"
           @click="activeTab = 'approve'"
         >
-          {{ PAGES.HR.LEAVES.PENDING_APPROVAL }}
-          <span class="tab-badge">{{ pendingApprovals.length }}</span>
+          {{ PAGES.HR.MAKEUP.PENDING_APPROVAL }}
+          <span class="tab-badge">{{ pendingMakeupApprovals.length }}</span>
         </button>
       </div>
     </div>
 
-    <!-- My Leaves Tab -->
-    <div v-if="activeTab === 'my-leaves'" class="tab-content">
+    <!-- My Requests Tab -->
+    <div v-if="activeTab === 'my-requests'" class="tab-content">
       <!-- Filters -->
       <div class="filters-bar">
         <select v-model="selectedStatus" class="input filter-select">
@@ -369,84 +322,86 @@ const getActionLabel = (action: string) => {
           </option>
         </select>
         <span class="result-count text-secondary">
-          共 {{ leavesTotalCount }} 筆
+          共 {{ makeupTotalCount }} 筆
         </span>
       </div>
 
-      <!-- Leave Requests List -->
-      <LoadingState v-if="isLeavesLoading" />
+      <!-- Requests List -->
+      <LoadingState v-if="isMakeupLoading" />
 
       <EmptyState
-        v-else-if="leaveRequests.length === 0"
-        :title="PAGES.HR.LEAVES.NO_LEAVES"
+        v-else-if="makeupRequests.length === 0"
+        :title="PAGES.HR.MAKEUP.NO_REQUESTS"
         icon="calendar"
-        :action-label="PAGES.HR.LEAVES.APPLY_LEAVE"
+        :action-label="PAGES.HR.MAKEUP.APPLY_MAKEUP"
         @action="showApplyModal = true"
       />
 
-      <div v-else class="leaves-list">
+      <div v-else class="requests-list">
         <div
-          v-for="(leave, index) in leaveRequests"
-          :key="leave.id"
-          class="leave-card"
+          v-for="(request, index) in makeupRequests"
+          :key="request.id"
+          class="request-card"
           :style="{ animationDelay: `${index * 0.05}s` }"
         >
-          <div class="leave-header">
-            <div class="leave-type-badge" :style="{ background: getLeaveTypeColor(leave.leave_type) }">
-              {{ getLeaveTypeLabel(leave.leave_type) }}
+          <div class="request-header">
+            <div class="request-type-badge" :style="{ background: getMakeupTypeColor(request.makeup_type) }">
+              {{ getMakeupTypeLabel(request.makeup_type) }}
             </div>
             <AppBadge
-              :label="getStatusBadgeConfig(leave.leave_status).label"
-              :variant="getStatusBadgeConfig(leave.leave_status).variant"
+              :label="getStatusBadgeConfig(request.request_status).label"
+              :variant="getStatusBadgeConfig(request.request_status).variant"
             />
           </div>
 
-          <div class="leave-body">
-            <div class="leave-dates">
-              <div class="date-range">
-                <span class="date">{{ formatDate(leave.start_date) }}</span>
-                <span class="date-separator">—</span>
-                <span class="date">{{ formatDate(leave.end_date) }}</span>
+          <div class="request-body">
+            <div class="request-date">
+              <div class="date-label">{{ PAGES.HR.MAKEUP.TARGET_DATE }}</div>
+              <div class="date-value">{{ formatDate(request.target_date) }}</div>
+            </div>
+
+            <div class="request-times">
+              <div v-if="request.makeup_type === 'CHECK_IN' || request.makeup_type === 'BOTH'" class="time-item">
+                <span class="time-label">{{ PAGES.HR.MAKEUP.REQUESTED_CHECK_IN }}</span>
+                <span class="time-value">{{ formatTime(request.requested_check_in) }}</span>
               </div>
-              <div class="days-count">
-                {{ leave.days_requested || calculateDays }} 天
-                <span v-if="leave.is_half_day" class="half-day-badge">
-                  ({{ leave.half_day_type === 'AM' ? '上午' : '下午' }})
-                </span>
+              <div v-if="request.makeup_type === 'CHECK_OUT' || request.makeup_type === 'BOTH'" class="time-item">
+                <span class="time-label">{{ PAGES.HR.MAKEUP.REQUESTED_CHECK_OUT }}</span>
+                <span class="time-value">{{ formatTime(request.requested_check_out) }}</span>
               </div>
             </div>
 
-            <p v-if="leave.reason" class="leave-reason">{{ leave.reason }}</p>
+            <p class="request-reason">{{ request.reason }}</p>
 
-            <div class="leave-meta">
+            <div class="request-meta">
               <span class="meta-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"/>
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
-                {{ formatDateTime(leave.submitted_at || leave.date_created) }}
+                {{ formatDateTime(request.submitted_at || request.date_created) }}
               </span>
-              <span v-if="leave.approver" class="meta-item">
+              <span v-if="request.approver" class="meta-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
-                {{ (leave.approver as { full_name: string }).full_name }}
+                {{ (request.approver as { full_name: string }).full_name }}
               </span>
             </div>
           </div>
 
-          <div class="leave-actions">
-            <button class="action-btn" @click="viewHistory(leave.id)" title="查看歷程">
+          <div class="request-actions">
+            <button class="action-btn" @click="viewHistory(request.id)" title="查看歷程">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
             </button>
             <button
-              v-if="leave.leave_status === 'PENDING'"
+              v-if="request.request_status === 'PENDING'"
               class="action-btn danger"
-              @click="handleCancel(leave.id)"
+              @click="handleCancel(request.id)"
               title="取消申請"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -470,59 +425,66 @@ const getActionLabel = (action: string) => {
     <!-- Approve Tab -->
     <div v-if="activeTab === 'approve'" class="tab-content">
       <EmptyState
-        v-if="pendingApprovals.length === 0"
+        v-if="pendingMakeupApprovals.length === 0"
         title="目前沒有待審核的申請"
         icon="check"
       />
 
-      <div v-else class="leaves-list">
+      <div v-else class="requests-list">
         <div
-          v-for="(leave, index) in pendingApprovals"
-          :key="leave.id"
-          class="leave-card approval-card"
+          v-for="(request, index) in pendingMakeupApprovals"
+          :key="request.id"
+          class="request-card approval-card"
           :style="{ animationDelay: `${index * 0.05}s` }"
         >
-          <div class="leave-header">
+          <div class="request-header">
             <div class="applicant-info">
               <div class="applicant-avatar">
-                {{ ((leave.employee as { full_name: string })?.full_name || '?')[0] }}
+                {{ ((request.employee as { full_name: string })?.full_name || '?')[0] }}
               </div>
               <div class="applicant-details">
-                <span class="applicant-name">{{ (leave.employee as { full_name: string })?.full_name }}</span>
-                <span class="applicant-code">{{ (leave.employee as { employee_code: string })?.employee_code }}</span>
+                <span class="applicant-name">{{ (request.employee as { full_name: string })?.full_name }}</span>
+                <span class="applicant-code">{{ (request.employee as { employee_code: string })?.employee_code }}</span>
               </div>
             </div>
-            <div class="leave-type-badge" :style="{ background: getLeaveTypeColor(leave.leave_type) }">
-              {{ getLeaveTypeLabel(leave.leave_type) }}
+            <div class="request-type-badge" :style="{ background: getMakeupTypeColor(request.makeup_type) }">
+              {{ getMakeupTypeLabel(request.makeup_type) }}
             </div>
           </div>
 
-          <div class="leave-body">
-            <div class="leave-dates">
-              <div class="date-range">
-                <span class="date">{{ formatDate(leave.start_date) }}</span>
-                <span class="date-separator">—</span>
-                <span class="date">{{ formatDate(leave.end_date) }}</span>
-              </div>
-              <div class="days-count">{{ leave.days_requested }} 天</div>
+          <div class="request-body">
+            <div class="request-date">
+              <div class="date-label">{{ PAGES.HR.MAKEUP.TARGET_DATE }}</div>
+              <div class="date-value">{{ formatDate(request.target_date) }}</div>
             </div>
 
-            <p v-if="leave.reason" class="leave-reason">{{ leave.reason }}</p>
+            <div class="request-times">
+              <div v-if="request.makeup_type === 'CHECK_IN' || request.makeup_type === 'BOTH'" class="time-item">
+                <span class="time-label">{{ PAGES.HR.MAKEUP.REQUESTED_CHECK_IN }}</span>
+                <span class="time-value">{{ formatTime(request.requested_check_in) }}</span>
+              </div>
+              <div v-if="request.makeup_type === 'CHECK_OUT' || request.makeup_type === 'BOTH'" class="time-item">
+                <span class="time-label">{{ PAGES.HR.MAKEUP.REQUESTED_CHECK_OUT }}</span>
+                <span class="time-value">{{ formatTime(request.requested_check_out) }}</span>
+              </div>
+            </div>
+
+            <p class="request-reason">{{ request.reason }}</p>
           </div>
 
           <div class="approval-actions">
-            <button class="btn btn-success" @click="openReviewModal(leave, 'APPROVE')">
+            <button class="btn btn-success" @click="openReviewModal(request, 'APPROVE')">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              {{ PAGES.HR.LEAVES.APPROVE }}
+              {{ PAGES.HR.MAKEUP.APPROVE }}
             </button>
-            <button class="btn btn-error-outline" @click="openReviewModal(leave, 'REJECT')">
+            <button class="btn btn-error-outline" @click="openReviewModal(request, 'REJECT')">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" x2="6" y1="6" y2="18"/>
                 <line x1="6" x2="18" y1="6" y2="18"/>
               </svg>
-              {{ PAGES.HR.LEAVES.REJECT }}
+              {{ PAGES.HR.MAKEUP.REJECT }}
             </button>
           </div>
         </div>
@@ -535,7 +497,7 @@ const getActionLabel = (action: string) => {
         <div v-if="showApplyModal" class="modal-overlay" @click.self="showApplyModal = false">
           <div class="modal-content">
             <div class="modal-header">
-              <h3>{{ PAGES.HR.LEAVES.APPLY_LEAVE }}</h3>
+              <h3>{{ PAGES.HR.MAKEUP.APPLY_MAKEUP }}</h3>
               <button class="modal-close" @click="showApplyModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="18" x2="6" y1="6" y2="18"/>
@@ -545,77 +507,65 @@ const getActionLabel = (action: string) => {
             </div>
 
             <div class="modal-body">
-              <!-- Leave Type -->
+              <!-- Target Date -->
               <div class="form-group">
-                <label class="form-label">{{ PAGES.HR.LEAVES.SELECT_LEAVE_TYPE }}</label>
+                <label class="form-label">{{ PAGES.HR.MAKEUP.TARGET_DATE }}</label>
+                <input
+                  v-model="applyForm.targetDate"
+                  type="date"
+                  class="input"
+                  :max="maxDate"
+                />
+                <p class="form-hint">只能補打過去日期的考勤紀錄</p>
+              </div>
+
+              <!-- Makeup Type -->
+              <div class="form-group">
+                <label class="form-label">{{ PAGES.HR.MAKEUP.MAKEUP_TYPE }}</label>
                 <div class="type-selector">
                   <button
-                    v-for="option in leaveTypeOptions"
+                    v-for="option in makeupTypeOptions"
                     :key="option.value"
-                    :class="['type-option', { active: applyForm.leaveType === option.value }]"
+                    :class="['type-option', { active: applyForm.makeupType === option.value }]"
                     :style="{ '--type-color': option.color }"
-                    @click="applyForm.leaveType = option.value"
+                    @click="applyForm.makeupType = option.value as 'CHECK_IN' | 'CHECK_OUT' | 'BOTH'"
                   >
                     {{ option.label }}
                   </button>
                 </div>
-                <div class="type-balance">
-                  剩餘 {{ getBalance(applyForm.leaveType).remaining }} 天
-                </div>
               </div>
 
-              <!-- Date Range -->
+              <!-- Requested Times -->
               <div class="form-group">
-                <label class="form-label">{{ PAGES.HR.LEAVES.SELECT_DATE_RANGE }}</label>
-                <div class="date-inputs">
-                  <input
-                    v-model="applyForm.startDate"
-                    type="date"
-                    class="input"
-                    :min="new Date().toISOString().split('T')[0]"
-                  />
-                  <span class="date-to">至</span>
-                  <input
-                    v-model="applyForm.endDate"
-                    type="date"
-                    class="input"
-                    :min="applyForm.startDate || new Date().toISOString().split('T')[0]"
-                  />
+                <label class="form-label">{{ PAGES.HR.MAKEUP.REQUESTED_TIME }}</label>
+                <div class="time-inputs">
+                  <div v-if="applyForm.makeupType === 'CHECK_IN' || applyForm.makeupType === 'BOTH'" class="time-input-group">
+                    <label>{{ PAGES.HR.MAKEUP.REQUESTED_CHECK_IN }}</label>
+                    <input
+                      v-model="applyForm.requestedCheckIn"
+                      type="time"
+                      class="input"
+                    />
+                  </div>
+                  <div v-if="applyForm.makeupType === 'CHECK_OUT' || applyForm.makeupType === 'BOTH'" class="time-input-group">
+                    <label>{{ PAGES.HR.MAKEUP.REQUESTED_CHECK_OUT }}</label>
+                    <input
+                      v-model="applyForm.requestedCheckOut"
+                      type="time"
+                      class="input"
+                    />
+                  </div>
                 </div>
-              </div>
-
-              <!-- Half Day -->
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input v-model="applyForm.isHalfDay" type="checkbox" class="checkbox" />
-                  <span>半天假</span>
-                </label>
-                <div v-if="applyForm.isHalfDay" class="half-day-options">
-                  <label :class="['radio-label', { active: applyForm.halfDayType === 'AM' }]">
-                    <input v-model="applyForm.halfDayType" type="radio" value="AM" />
-                    上午
-                  </label>
-                  <label :class="['radio-label', { active: applyForm.halfDayType === 'PM' }]">
-                    <input v-model="applyForm.halfDayType" type="radio" value="PM" />
-                    下午
-                  </label>
-                </div>
-              </div>
-
-              <!-- Days Summary -->
-              <div v-if="calculateDays > 0" class="days-summary">
-                <span>申請天數：</span>
-                <strong>{{ calculateDays }} 天</strong>
               </div>
 
               <!-- Reason -->
               <div class="form-group">
-                <label class="form-label">{{ PAGES.HR.LEAVES.REASON }}</label>
+                <label class="form-label">{{ PAGES.HR.MAKEUP.REASON }}</label>
                 <textarea
                   v-model="applyForm.reason"
                   class="input textarea"
                   rows="3"
-                  placeholder="請輸入請假原因..."
+                  :placeholder="PAGES.HR.MAKEUP.REASON_PLACEHOLDER"
                 ></textarea>
               </div>
             </div>
@@ -624,11 +574,11 @@ const getActionLabel = (action: string) => {
               <button class="btn btn-ghost" @click="showApplyModal = false">取消</button>
               <button
                 class="btn btn-primary"
-                :disabled="isSubmitting || !applyForm.startDate || !applyForm.endDate"
+                :disabled="isSubmitting || !applyForm.targetDate || !applyForm.reason"
                 @click="handleApply"
               >
                 <span v-if="isSubmitting" class="btn-spinner"></span>
-                <template v-else>{{ PAGES.HR.LEAVES.SUBMIT }}</template>
+                <template v-else>{{ PAGES.HR.MAKEUP.SUBMIT }}</template>
               </button>
             </div>
           </div>
@@ -642,7 +592,7 @@ const getActionLabel = (action: string) => {
         <div v-if="showHistoryModal" class="modal-overlay" @click.self="showHistoryModal = false">
           <div class="modal-content modal-sm">
             <div class="modal-header">
-              <h3>{{ PAGES.HR.LEAVES.APPROVAL_HISTORY }}</h3>
+              <h3>{{ PAGES.HR.MAKEUP.APPROVAL_HISTORY }}</h3>
               <button class="modal-close" @click="showHistoryModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="18" x2="6" y1="6" y2="18"/>
@@ -654,7 +604,7 @@ const getActionLabel = (action: string) => {
             <div class="modal-body">
               <div class="timeline">
                 <div
-                  v-for="log in selectedLeaveHistory"
+                  v-for="log in selectedHistory"
                   :key="log.id"
                   class="timeline-item"
                 >
@@ -683,7 +633,7 @@ const getActionLabel = (action: string) => {
         <div v-if="showReviewModal && reviewData" class="modal-overlay" @click.self="showReviewModal = false">
           <div class="modal-content modal-sm">
             <div class="modal-header">
-              <h3>{{ reviewData.action === 'APPROVE' ? '核准' : '駁回' }}休假申請</h3>
+              <h3>{{ reviewData.action === 'APPROVE' ? '核准' : '駁回' }}補打卡申請</h3>
               <button class="modal-close" @click="showReviewModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="18" x2="6" y1="6" y2="18"/>
@@ -708,7 +658,7 @@ const getActionLabel = (action: string) => {
                 </div>
                 <p class="review-message">
                   確定要{{ reviewData.action === 'APPROVE' ? '核准' : '駁回' }}
-                  <strong>{{ reviewData.employeeName }}</strong> 的休假申請嗎？
+                  <strong>{{ reviewData.employeeName }}</strong> 的補打卡申請嗎？
                 </p>
               </div>
 
@@ -718,7 +668,7 @@ const getActionLabel = (action: string) => {
                   v-model="reviewNotes"
                   class="input textarea"
                   rows="3"
-                  :placeholder="reviewData.action === 'APPROVE' ? '例：請注意工作交接' : '例：請重新選擇日期'"
+                  :placeholder="reviewData.action === 'APPROVE' ? '例：已確認考勤紀錄' : '例：請提供相關證明'"
                 ></textarea>
               </div>
             </div>
@@ -742,7 +692,7 @@ const getActionLabel = (action: string) => {
 </template>
 
 <style scoped>
-.leaves-page {
+.makeup-page {
   max-width: 1000px;
   margin: 0 auto;
 }
@@ -783,9 +733,9 @@ const getActionLabel = (action: string) => {
   margin-bottom: var(--space-xs);
 }
 
-/* Balance Section */
-.balance-section {
-  margin-bottom: var(--space-2xl);
+/* Tabs */
+.tabs-container {
+  margin-bottom: var(--space-xl);
   animation: sectionAppear 0.6s var(--ease-out) 0.1s backwards;
 }
 
@@ -794,94 +744,6 @@ const getActionLabel = (action: string) => {
     opacity: 0;
     transform: translateY(20px);
   }
-}
-
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: var(--space-lg);
-  color: var(--color-text-primary);
-}
-
-.balance-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-lg);
-}
-
-.balance-card {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-lg);
-}
-
-.balance-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-md);
-}
-
-.balance-type {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.balance-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.balance-numbers {
-  margin-bottom: var(--space-md);
-}
-
-.balance-remaining {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-xs);
-}
-
-.balance-remaining .number {
-  font-size: 36px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1;
-}
-
-.balance-remaining .unit {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-}
-
-.balance-detail {
-  display: flex;
-  gap: var(--space-md);
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-}
-
-.balance-bar {
-  height: 4px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width 0.5s var(--ease-out);
-}
-
-/* Tabs */
-.tabs-container {
-  margin-bottom: var(--space-xl);
-  animation: sectionAppear 0.6s var(--ease-out) 0.15s backwards;
 }
 
 .tabs {
@@ -953,14 +815,14 @@ const getActionLabel = (action: string) => {
   font-size: 14px;
 }
 
-/* Leaves List */
-.leaves-list {
+/* Requests List */
+.requests-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
 }
 
-.leave-card {
+.request-card {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
@@ -975,14 +837,14 @@ const getActionLabel = (action: string) => {
   }
 }
 
-.leave-header {
+.request-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-md);
 }
 
-.leave-type-badge {
+.request-type-badge {
   padding: var(--space-xs) var(--space-md);
   border-radius: var(--radius-full);
   font-size: 12px;
@@ -990,43 +852,51 @@ const getActionLabel = (action: string) => {
   color: white;
 }
 
-.leave-body {
+.request-body {
   margin-bottom: var(--space-md);
 }
 
-.leave-dates {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-sm);
+.request-date {
+  margin-bottom: var(--space-md);
 }
 
-.date-range {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+.date-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-xs);
 }
 
-.date {
-  font-weight: 500;
+.date-value {
+  font-size: 16px;
+  font-weight: 600;
   color: var(--color-text-primary);
 }
 
-.date-separator {
-  color: var(--color-text-tertiary);
+.request-times {
+  display: flex;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-md);
 }
 
-.days-count {
-  font-size: 14px;
-  color: var(--color-text-secondary);
+.time-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.half-day-badge {
+.time-label {
   font-size: 12px;
   color: var(--color-text-tertiary);
 }
 
-.leave-reason {
+.time-value {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.request-reason {
   font-size: 14px;
   color: var(--color-text-secondary);
   margin-bottom: var(--space-md);
@@ -1035,7 +905,7 @@ const getActionLabel = (action: string) => {
   border-radius: var(--radius-md);
 }
 
-.leave-meta {
+.request-meta {
   display: flex;
   gap: var(--space-lg);
 }
@@ -1048,7 +918,7 @@ const getActionLabel = (action: string) => {
   color: var(--color-text-tertiary);
 }
 
-.leave-actions {
+.request-actions {
   display: flex;
   gap: var(--space-xs);
   padding-top: var(--space-md);
@@ -1080,7 +950,7 @@ const getActionLabel = (action: string) => {
 }
 
 /* Approval Card */
-.approval-card .leave-header {
+.approval-card .request-header {
   flex-wrap: wrap;
   gap: var(--space-md);
 }
@@ -1231,6 +1101,12 @@ const getActionLabel = (action: string) => {
   margin-bottom: var(--space-sm);
 }
 
+.form-hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-xs);
+}
+
 .type-selector {
   display: flex;
   flex-wrap: wrap;
@@ -1259,74 +1135,20 @@ const getActionLabel = (action: string) => {
   color: white;
 }
 
-.type-balance {
-  margin-top: var(--space-sm);
-  font-size: 13px;
-  color: var(--color-text-tertiary);
-}
-
-.date-inputs {
+.time-inputs {
   display: flex;
-  align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-lg);
 }
 
-.date-inputs .input {
+.time-input-group {
   flex: 1;
 }
 
-.date-to {
+.time-input-group label {
+  display: block;
+  font-size: 12px;
   color: var(--color-text-tertiary);
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  cursor: pointer;
-}
-
-.checkbox {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--color-accent);
-}
-
-.half-day-options {
-  display: flex;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
-}
-
-.radio-label {
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.radio-label input {
-  display: none;
-}
-
-.radio-label.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: white;
-}
-
-.days-summary {
-  padding: var(--space-md);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-md);
-  text-align: center;
-  margin-bottom: var(--space-xl);
-}
-
-.days-summary strong {
-  color: var(--color-accent);
-  font-size: 18px;
+  margin-bottom: var(--space-xs);
 }
 
 .textarea {
@@ -1341,6 +1163,10 @@ const getActionLabel = (action: string) => {
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Timeline */
@@ -1511,17 +1337,12 @@ const getActionLabel = (action: string) => {
     width: 100%;
   }
 
-  .balance-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .leave-dates {
+  .request-times {
     flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-xs);
+    gap: var(--space-sm);
   }
 
-  .leave-meta {
+  .request-meta {
     flex-direction: column;
     gap: var(--space-sm);
   }
@@ -1534,12 +1355,8 @@ const getActionLabel = (action: string) => {
     width: 100%;
   }
 
-  .date-inputs {
+  .time-inputs {
     flex-direction: column;
-  }
-
-  .date-to {
-    display: none;
   }
 }
 </style>

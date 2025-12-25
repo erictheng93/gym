@@ -32,9 +32,9 @@ describe('useTheme', () => {
   })
 
   describe('theme initialization', () => {
-    it('should initialize with system theme by default', () => {
+    it('should initialize with light theme by default', () => {
       const { userTheme } = useTheme()
-      expect(userTheme.value).toBe('system')
+      expect(userTheme.value).toBe('light')
     })
 
     it('should return light theme on server', () => {
@@ -51,13 +51,15 @@ describe('useTheme', () => {
   describe('isDark computed', () => {
     it('should detect dark mode from system preference when theme is system', () => {
       matchMediaMock.matches = true
-      const { isDark } = useTheme()
+      const { isDark, setTheme } = useTheme()
+      setTheme('system')
       expect(isDark.value).toBe(true)
     })
 
     it('should detect light mode from system preference when theme is system', () => {
       matchMediaMock.matches = false
-      const { isDark } = useTheme()
+      const { isDark, setTheme } = useTheme()
+      setTheme('system')
       expect(isDark.value).toBe(false)
     })
 
@@ -77,13 +79,15 @@ describe('useTheme', () => {
   describe('theme computed', () => {
     it('should return "dark" when isDark is true', () => {
       matchMediaMock.matches = true
-      const { theme } = useTheme()
+      const { theme, setTheme } = useTheme()
+      setTheme('system')
       expect(theme.value).toBe('dark')
     })
 
     it('should return "light" when isDark is false', () => {
       matchMediaMock.matches = false
-      const { theme } = useTheme()
+      const { theme, setTheme } = useTheme()
+      setTheme('system')
       expect(theme.value).toBe('light')
     })
   })
@@ -126,7 +130,8 @@ describe('useTheme', () => {
 
     it('should switch from system to light when system prefers dark', () => {
       matchMediaMock.matches = true
-      const { userTheme, toggleTheme } = useTheme()
+      const { userTheme, setTheme, toggleTheme } = useTheme()
+      setTheme('system')
       expect(userTheme.value).toBe('system')
       toggleTheme()
       expect(userTheme.value).toBe('light')
@@ -134,7 +139,8 @@ describe('useTheme', () => {
 
     it('should switch from system to dark when system prefers light', () => {
       matchMediaMock.matches = false
-      const { userTheme, toggleTheme } = useTheme()
+      const { userTheme, setTheme, toggleTheme } = useTheme()
+      setTheme('system')
       expect(userTheme.value).toBe('system')
       toggleTheme()
       expect(userTheme.value).toBe('dark')
