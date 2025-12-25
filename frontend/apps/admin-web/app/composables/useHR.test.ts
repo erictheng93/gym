@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mockDirectusInstance } from '../../vitest.setup'
+import { mockDirectusInstance } from '@test/setup'
 import { useHR } from './useHR'
 import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/directus'
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '../../vitest.setup'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mockDirectusInstance } from '@test/setup'
 import { useAuth } from './useAuth'
 import { MESSAGES } from '~/constants'
 

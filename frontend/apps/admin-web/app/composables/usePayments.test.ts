@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '../../vitest.setup'
+import { mockDirectusInstance } from '@test/setup'
 import { usePayments } from './usePayments'
 import type { Payment } from '~/types/directus'
 

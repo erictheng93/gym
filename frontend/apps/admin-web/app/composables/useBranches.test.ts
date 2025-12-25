@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance } from '../../vitest.setup'
+import { mockDirectusInstance } from '@test/setup'
 import { useBranches } from './useBranches'
 import type { Branch, Employee } from '~/types/directus'
 

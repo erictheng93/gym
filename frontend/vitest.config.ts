@@ -35,6 +35,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      // Test setup alias
+      '@test/setup': resolve(__dirname, 'vitest.setup.ts'),
       // App-specific aliases for monorepo
       '~/constants': resolve(__dirname, 'apps/admin-web/app/constants'),
       '~/composables': resolve(__dirname, 'apps/admin-web/app/composables'),

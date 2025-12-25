@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mockAuthInstance, mockNavigateTo } from '../../vitest.setup'
+import { mockAuthInstance, mockNavigateTo } from '@test/setup'
 import authMiddleware from './auth'
 
 describe('auth middleware', () => {

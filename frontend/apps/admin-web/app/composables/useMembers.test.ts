@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '../../vitest.setup'
+import { mockDirectusInstance } from '@test/setup'
 import { useMembers } from './useMembers'
 import type { Member } from '~/types/directus'
 
