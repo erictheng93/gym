@@ -27,7 +27,7 @@ const {
   fetchApprovalHistory
 } = useHR()
 
-const activeTab = ref<'my-leaves' | 'apply' | 'approve'>('my-leaves')
+const activeTab = ref<'my-leaves' | 'apply' | 'approve' | 'balance'>('my-leaves')
 const selectedStatus = ref('')
 const currentPage = ref(1)
 const pageSize = 10
@@ -196,12 +196,13 @@ const handleApply = async () => {
       halfDayType: 'AM'
     }
 
+    useToast().success(MESSAGES.SUCCESS.LEAVE_CREATED)
     showApplyModal.value = false
     activeTab.value = 'my-leaves'
     await loadData()
   } catch (error) {
     console.error('Apply leave failed:', error)
-    alert('申請失敗，請稍後再試')
+    useToast().error(MESSAGES.ERRORS.LEAVE_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }
@@ -210,14 +211,24 @@ const handleApply = async () => {
 // 取消申請
 const handleCancel = async (leaveId: string) => {
   if (!currentEmployee.value?.id) return
-  if (!confirm('確定要取消此休假申請嗎？')) return
+
+  const { confirm } = useConfirm()
+  const confirmed = await confirm({
+    title: '取消休假申請',
+    message: '確定要取消此休假申請嗎？此操作將通知相關人員。',
+    type: 'warning'
+  })
+
+  if (!confirmed) return
 
   try {
     await cancelLeave(leaveId, currentEmployee.value.id)
+    useToast().success(MESSAGES.SUCCESS.LEAVE_CANCELLED)
     await loadData()
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : '操作失敗'
-    alert(errorMessage)
+    console.error('Cancel leave failed:', error)
+    const errorMessage = error instanceof Error ? error.message : MESSAGES.ERRORS.LEAVE_CANCEL_FAILED
+    useToast().error(errorMessage)
   }
 }
 
@@ -244,13 +255,17 @@ const submitReview = async () => {
       reviewData.value.action,
       reviewNotes.value || undefined
     )
+    const successMessage = reviewData.value.action === 'APPROVE'
+      ? MESSAGES.SUCCESS.LEAVE_APPROVED
+      : MESSAGES.SUCCESS.LEAVE_REJECTED
+    useToast().success(successMessage)
     showReviewModal.value = false
     reviewData.value = null
     reviewNotes.value = ''
     await loadData()
   } catch (error) {
     console.error('Review failed:', error)
-    alert('操作失敗')
+    useToast().error(MESSAGES.ERRORS.LEAVE_REVIEW_FAILED)
   } finally {
     isReviewing.value = false
   }
@@ -307,7 +322,7 @@ const getActionLabel = (action: string) => {
       <h2 class="section-title">{{ PAGES.HR.LEAVES.LEAVE_BALANCE }}</h2>
       <div class="balance-grid">
         <div
-          v-for="option in leaveTypeOptions.slice(0, 3)"
+          v-for="option in leaveTypeOptions"
           :key="option.value"
           class="balance-card"
           :style="{ '--accent-color': option.color }"
@@ -330,7 +345,7 @@ const getActionLabel = (action: string) => {
             <div
               class="bar-fill"
               :style="{
-                width: `${(getBalance(option.value).used / getBalance(option.value).total) * 100}%`,
+                width: `${getBalance(option.value).total > 0 ? (getBalance(option.value).used / getBalance(option.value).total) * 100 : 0}%`,
                 background: option.color
               }"
             ></div>
@@ -349,12 +364,17 @@ const getActionLabel = (action: string) => {
           {{ PAGES.HR.LEAVES.MY_LEAVES }}
         </button>
         <button
-          v-if="pendingApprovals.length > 0"
           :class="['tab', { active: activeTab === 'approve' }]"
           @click="activeTab = 'approve'"
         >
           {{ PAGES.HR.LEAVES.PENDING_APPROVAL }}
-          <span class="tab-badge">{{ pendingApprovals.length }}</span>
+          <span v-if="pendingApprovals.length > 0" class="tab-badge">{{ pendingApprovals.length }}</span>
+        </button>
+        <button
+          :class="['tab', { active: activeTab === 'balance' }]"
+          @click="activeTab = 'balance'"
+        >
+          休假餘額明細
         </button>
       </div>
     </div>
@@ -529,6 +549,115 @@ const getActionLabel = (action: string) => {
       </div>
     </div>
 
+    <!-- Balance Detail Tab -->
+    <div v-if="activeTab === 'balance'" class="tab-content">
+      <div class="balance-detail-section">
+        <h3 class="section-subtitle">{{ new Date().getFullYear() }} 年度休假統計</h3>
+
+        <div class="balance-table">
+          <div class="table-header">
+            <div class="table-cell">假別</div>
+            <div class="table-cell">年度總額</div>
+            <div class="table-cell">已使用</div>
+            <div class="table-cell">待審核</div>
+            <div class="table-cell">剩餘</div>
+            <div class="table-cell">使用率</div>
+          </div>
+          <div
+            v-for="option in leaveTypeOptions"
+            :key="option.value"
+            class="table-row"
+          >
+            <div class="table-cell">
+              <div class="type-badge-sm" :style="{ background: option.color }">
+                {{ option.label }}
+              </div>
+            </div>
+            <div class="table-cell">{{ getBalance(option.value).total }} 天</div>
+            <div class="table-cell">{{ getBalance(option.value).used }} 天</div>
+            <div class="table-cell">
+              {{ leaveBalances.find(b => b.leave_type === option.value)?.pending_days || 0 }} 天
+            </div>
+            <div class="table-cell">
+              <strong :style="{ color: getBalance(option.value).remaining < 1 ? '#ff3b30' : 'inherit' }">
+                {{ getBalance(option.value).remaining }} 天
+              </strong>
+            </div>
+            <div class="table-cell">
+              <div class="usage-bar">
+                <div
+                  class="usage-fill"
+                  :style="{
+                    width: `${getBalance(option.value).total > 0 ? (getBalance(option.value).used / getBalance(option.value).total) * 100 : 0}%`,
+                    background: option.color
+                  }"
+                ></div>
+                <span class="usage-text">
+                  {{ getBalance(option.value).total > 0 ? Math.round((getBalance(option.value).used / getBalance(option.value).total) * 100) : 0 }}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="balance-summary">
+          <div class="summary-card">
+            <div class="summary-icon" style="background: rgba(0, 122, 255, 0.1); color: #007aff;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                <line x1="16" x2="16" y1="2" y2="6"/>
+                <line x1="8" x2="8" y1="2" y2="6"/>
+                <line x1="3" x2="21" y1="10" y2="10"/>
+              </svg>
+            </div>
+            <div class="summary-content">
+              <span class="summary-label">年度總額</span>
+              <span class="summary-value">{{ leaveBalances.reduce((sum, b) => sum + b.total_days, 0) }} 天</span>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-icon" style="background: rgba(52, 199, 89, 0.1); color: #34c759;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <div class="summary-content">
+              <span class="summary-label">已使用</span>
+              <span class="summary-value">{{ leaveBalances.reduce((sum, b) => sum + b.used_days, 0) }} 天</span>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-icon" style="background: rgba(255, 149, 0, 0.1); color: #ff9500;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div class="summary-content">
+              <span class="summary-label">待審核</span>
+              <span class="summary-value">{{ leaveBalances.reduce((sum, b) => sum + b.pending_days, 0) }} 天</span>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-icon" style="background: rgba(88, 86, 214, 0.1); color: #5856d6;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <div class="summary-content">
+              <span class="summary-label">剩餘可用</span>
+              <span class="summary-value">
+                {{ leaveBalances.reduce((sum, b) => sum + (b.total_days - b.used_days - b.pending_days), 0) }} 天
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Apply Modal -->
     <Teleport to="body">
       <Transition name="modal">
@@ -664,8 +793,8 @@ const getActionLabel = (action: string) => {
                       <span class="timeline-action">{{ getActionLabel(log.action) }}</span>
                       <span class="timeline-time">{{ formatDateTime(log.date_created) }}</span>
                     </div>
-                    <div v-if="log.actor" class="timeline-actor">
-                      {{ (log.actor as { full_name: string }).full_name }}
+                    <div v-if="log.action_by" class="timeline-actor">
+                      {{ typeof log.action_by === 'object' ? (log.action_by as { full_name: string }).full_name : '系統' }}
                     </div>
                     <p v-if="log.notes" class="timeline-notes">{{ log.notes }}</p>
                   </div>
@@ -1500,6 +1629,138 @@ const getActionLabel = (action: string) => {
   transform: scale(0.95) translateY(20px);
 }
 
+/* Balance Detail Tab */
+.balance-detail-section {
+  animation: contentAppear 0.4s var(--ease-out);
+}
+
+.section-subtitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xl);
+}
+
+.balance-table {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  margin-bottom: var(--space-2xl);
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1.5fr;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-xl);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1.5fr;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--color-divider);
+  transition: background var(--duration-fast);
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.table-row:hover {
+  background: var(--color-bg-secondary);
+}
+
+.table-cell {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.type-badge-sm {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.usage-bar {
+  position: relative;
+  flex: 1;
+  height: 24px;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  border-radius: var(--radius-md);
+  transition: width 0.5s var(--ease-out);
+}
+
+.usage-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.balance-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-lg);
+}
+
+.summary-card {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.summary-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.summary-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.summary-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .page-header {
@@ -1540,6 +1801,27 @@ const getActionLabel = (action: string) => {
 
   .date-to {
     display: none;
+  }
+
+  .table-header,
+  .table-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+
+  .table-cell {
+    justify-content: space-between;
+  }
+
+  .table-cell::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+  }
+
+  .balance-summary {
+    grid-template-columns: 1fr;
   }
 }
 </style>

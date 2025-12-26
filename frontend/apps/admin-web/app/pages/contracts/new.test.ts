@@ -48,6 +48,14 @@ vi.stubGlobal('useBranches', () => ({
   fetchBranches: mockFetchBranches
 }))
 
+// Mock useToast
+vi.stubGlobal('useToast', () => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn()
+}))
+
 // Mock definePageMeta
 vi.stubGlobal('definePageMeta', vi.fn())
 

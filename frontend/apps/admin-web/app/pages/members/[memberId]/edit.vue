@@ -63,6 +63,7 @@ const loadMember = async () => {
     form.member_status = member.member_status
   } catch (error) {
     console.error('Failed to load member:', error)
+    useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
@@ -116,9 +117,11 @@ const handleSubmit = async () => {
     }
 
     await updateMember(memberId.value, memberData)
+    useToast().success(MESSAGES.SUCCESS.MEMBER_UPDATED)
     router.push(`/members/${memberId.value}`)
   } catch (error) {
     console.error('Failed to update member:', error)
+    useToast().error(MESSAGES.ERRORS.MEMBER_UPDATE_FAILED)
     errors.value.submit = '更新會員失敗，請稍後再試'
   } finally {
     isSubmitting.value = false

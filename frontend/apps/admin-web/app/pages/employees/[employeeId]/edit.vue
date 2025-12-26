@@ -8,7 +8,7 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const { getEmployee, updateEmployee } = useEmployees()
+const { getEmployee, updateEmployee, employees, fetchEmployees } = useEmployees()
 const { branches, fetchBranches } = useBranches()
 const { jobTitles, fetchJobTitles } = useJobTitles()
 
@@ -21,10 +21,15 @@ const employeeId = computed(() => route.params.employeeId as string)
 const form = reactive({
   full_name: '',
   employee_code: '',
+  phone: '',
+  email: '',
   branch_id: '',
   job_title_id: '',
+  supervisor_id: '',
+  user_id: '',
   employment_status: 'ACTIVE' as 'ACTIVE' | 'RESIGNED' | 'LEAVE',
   employment_type: 'FULL_TIME' as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE',
+  hire_date: '',
   basic_salary: null as number | null
 })
 
@@ -40,26 +45,51 @@ const employmentTypeOptions = [
   { value: 'FREELANCE', label: '外包' }
 ]
 
+const branchOptions = computed(() =>
+  branches.value.map(b => ({ value: b.id, label: b.name }))
+)
+
+const jobTitleOptions = computed(() =>
+  jobTitles.value.map(j => ({ value: j.id, label: j.name }))
+)
+
+const supervisorOptions = computed(() =>
+  employees.value
+    .filter(e => e.employment_status === 'ACTIVE' && e.id !== employeeId.value)
+    .map(e => ({ value: e.id, label: e.full_name }))
+)
+
 const loadEmployee = async () => {
   isLoading.value = true
   try {
     const employee = await getEmployee(employeeId.value)
     form.full_name = employee.full_name
     form.employee_code = employee.employee_code || ''
+    form.phone = employee.phone || ''
+    form.email = employee.email || ''
     form.branch_id = employee.branch_id || ''
     form.job_title_id = employee.job_title_id || ''
+    form.supervisor_id = employee.supervisor_id || ''
+    form.user_id = employee.user_id || ''
     form.employment_status = employee.employment_status
     form.employment_type = employee.employment_type
+    form.hire_date = employee.hire_date || ''
     form.basic_salary = employee.basic_salary
   } catch (error) {
     console.error('Failed to load employee:', error)
+    useToast().error(MESSAGES.ERRORS.EMPLOYEE_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
 }
 
 onMounted(async () => {
-  await Promise.all([loadEmployee(), fetchBranches(), fetchJobTitles()])
+  await Promise.all([
+    loadEmployee(),
+    fetchBranches(),
+    fetchJobTitles(),
+    fetchEmployees({ limit: 100, status: 'ACTIVE' })
+  ])
 })
 
 const validate = () => {
@@ -80,15 +110,22 @@ const handleSubmit = async () => {
     const employeeData = {
       ...form,
       employee_code: form.employee_code || null,
+      phone: form.phone || null,
+      email: form.email || null,
       branch_id: form.branch_id || null,
       job_title_id: form.job_title_id || null,
+      supervisor_id: form.supervisor_id || null,
+      user_id: form.user_id || null,
+      hire_date: form.hire_date || null,
       basic_salary: form.basic_salary || null
     }
 
     await updateEmployee(employeeId.value, employeeData)
+    useToast().success(MESSAGES.SUCCESS.EMPLOYEE_UPDATED)
     router.push(`/employees/${employeeId.value}`)
   } catch (error) {
     console.error('Failed to update employee:', error)
+    useToast().error(MESSAGES.ERRORS.EMPLOYEE_UPDATE_FAILED)
     errors.value.submit = '更新員工失敗，請稍後再試'
   } finally {
     isSubmitting.value = false
@@ -162,11 +199,43 @@ const handleSubmit = async () => {
             </div>
 
             <div class="input-group">
+              <label class="input-label">聯絡電話</label>
+              <input
+                v-model="form.phone"
+                type="tel"
+                class="input"
+                placeholder="請輸入聯絡電話"
+              />
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Email</label>
+              <input
+                v-model="form.email"
+                type="email"
+                class="input"
+                placeholder="請輸入 Email"
+              />
+            </div>
+          </div>
+        </section>
+
+        <!-- Organization Section -->
+        <section class="form-section glass-card">
+          <h2 class="section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+            </svg>
+            組織架構
+          </h2>
+
+          <div class="form-grid">
+            <div class="input-group required">
               <label class="input-label">所屬分店</label>
               <select v-model="form.branch_id" class="input">
                 <option value="">請選擇分店</option>
-                <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                  {{ branch.name }}
+                <option v-for="branch in branchOptions" :key="branch.value" :value="branch.value">
+                  {{ branch.label }}
                 </option>
               </select>
             </div>
@@ -175,10 +244,21 @@ const handleSubmit = async () => {
               <label class="input-label">職位</label>
               <select v-model="form.job_title_id" class="input">
                 <option value="">請選擇職位</option>
-                <option v-for="jobTitle in jobTitles" :key="jobTitle.id" :value="jobTitle.id">
-                  {{ jobTitle.name }}
+                <option v-for="jobTitle in jobTitleOptions" :key="jobTitle.value" :value="jobTitle.value">
+                  {{ jobTitle.label }}
                 </option>
               </select>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">直屬主管</label>
+              <select v-model="form.supervisor_id" class="input">
+                <option value="">請選擇主管（選填）</option>
+                <option v-for="supervisor in supervisorOptions" :key="supervisor.value" :value="supervisor.value">
+                  {{ supervisor.label }}
+                </option>
+              </select>
+              <span class="help-text">用於休假審核流程</span>
             </div>
           </div>
         </section>
@@ -231,6 +311,15 @@ const handleSubmit = async () => {
                   {{ opt.label }}
                 </label>
               </div>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">到職日期</label>
+              <input
+                v-model="form.hire_date"
+                type="date"
+                class="input"
+              />
             </div>
 
             <div class="input-group">

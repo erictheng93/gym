@@ -49,6 +49,7 @@ const loadBranch = async () => {
     form.status = data.status
   } catch (error) {
     console.error('Failed to load branch:', error)
+    useToast().error(MESSAGES.ERRORS.BRANCH_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
@@ -85,9 +86,11 @@ const handleSubmit = async () => {
     }
 
     await updateBranch(branchId.value, branchData)
+    useToast().success(MESSAGES.SUCCESS.BRANCH_UPDATED)
     router.push(`/branches/${branchId.value}`)
   } catch (error) {
     console.error('Failed to update branch:', error)
+    useToast().error(MESSAGES.ERRORS.BRANCH_UPDATE_FAILED)
     errors.value.submit = PAGES.BRANCHES.ERROR_UPDATE_FAILED
   } finally {
     isSubmitting.value = false

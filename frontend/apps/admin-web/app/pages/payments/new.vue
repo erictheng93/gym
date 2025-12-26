@@ -111,9 +111,11 @@ const handleSubmit = async () => {
     }
 
     await createPayment(paymentData)
+    useToast().success(MESSAGES.SUCCESS.PAYMENT_CREATED)
     router.push('/payments')
   } catch (error) {
     console.error('Failed to create payment:', error)
+    useToast().error(MESSAGES.ERRORS.PAYMENT_CREATE_FAILED)
     errors.value.submit = PAGES.PAYMENTS.ERROR_CREATE_FAILED
   } finally {
     isSubmitting.value = false

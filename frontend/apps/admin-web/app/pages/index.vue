@@ -73,6 +73,7 @@ const fetchDashboardData = async () => {
     recentContracts.value = contracts as any[]
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
+    useToast().error(MESSAGES.ERRORS.DASHBOARD_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }

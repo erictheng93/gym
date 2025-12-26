@@ -127,9 +127,11 @@ const handleSubmit = async () => {
     }
 
     await createContract(contractData)
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_CREATED)
     router.push('/contracts')
   } catch (error) {
     console.error('Failed to create contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_CREATE_FAILED)
     errors.value.submit = PAGES.CONTRACTS.ERROR_CREATE_FAILED
   } finally {
     isSubmitting.value = false

@@ -9,4 +9,7 @@ if (import.meta.client) {
   <NuxtLayout>
     <NuxtPage />
   </NuxtLayout>
+  <!-- Global Components -->
+  <ToastContainer />
+  <ConfirmDialog />
 </template>

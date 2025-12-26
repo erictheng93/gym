@@ -61,9 +61,11 @@ const handleSubmit = async () => {
     }
 
     await createBranch(branchData)
+    useToast().success(MESSAGES.SUCCESS.BRANCH_CREATED)
     router.push('/branches')
   } catch (error) {
     console.error('Failed to create branch:', error)
+    useToast().error(MESSAGES.ERRORS.BRANCH_CREATE_FAILED)
     setError('submit', PAGES.BRANCHES.ERROR_CREATE_FAILED)
   } finally {
     isSubmitting.value = false

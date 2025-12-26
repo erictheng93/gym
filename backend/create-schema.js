@@ -2,7 +2,7 @@
  * 使用 schema/apply 建立完整資料表結構
  */
 
-const DIRECTUS_URL = 'http://localhost:8055';
+const DIRECTUS_URL = 'http://localhost:8500';
 const ADMIN_EMAIL = 'admin@gym.com';
 const ADMIN_PASSWORD = 'admin';
 

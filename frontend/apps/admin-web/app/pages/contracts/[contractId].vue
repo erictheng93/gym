@@ -91,6 +91,7 @@ const searchMembers = async (query: string) => {
     memberSearchResults.value = data as Member[]
   } catch (error) {
     console.error('Failed to search members:', error)
+    useToast().error(MESSAGES.ERRORS.MEMBER_SEARCH_FAILED)
     memberSearchResults.value = []
   } finally {
     isSearching.value = false
@@ -150,6 +151,7 @@ const loadContract = async () => {
     }
   } catch (error) {
     console.error('Failed to load contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
@@ -242,9 +244,11 @@ const handlePause = async () => {
     })
 
     showPauseModal.value = false
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_PAUSED)
     await loadContract()
   } catch (error) {
     console.error('Failed to pause contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_PAUSE_FAILED)
   } finally {
     isProcessing.value = false
   }
@@ -271,9 +275,11 @@ const handleResume = async () => {
     })
 
     showResumeModal.value = false
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_RESUMED)
     await loadContract()
   } catch (error) {
     console.error('Failed to resume contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_RESUME_FAILED)
   } finally {
     isProcessing.value = false
   }
@@ -343,9 +349,11 @@ const handleTransfer = async () => {
 
     showTransferModal.value = false
     resetTransferForm()
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_TRANSFERRED)
     await loadContract()
   } catch (error) {
     console.error('Failed to transfer contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_TRANSFER_FAILED)
   } finally {
     isProcessing.value = false
   }
@@ -388,9 +396,11 @@ const handleTerminate = async () => {
     showTerminateModal.value = false
     terminateForm.reason = ''
     terminateForm.refundAmount = 0
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_TERMINATED)
     await loadContract()
   } catch (error) {
     console.error('Failed to terminate contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_TERMINATE_FAILED)
   } finally {
     isProcessing.value = false
   }
@@ -420,9 +430,11 @@ const handleExtend = async () => {
     showExtendModal.value = false
     extendForm.days = 0
     extendForm.reason = ''
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_EXTENDED)
     await loadContract()
   } catch (error) {
     console.error('Failed to extend contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_EXTEND_FAILED)
   } finally {
     isProcessing.value = false
   }
@@ -473,11 +485,13 @@ const handleRenew = async () => {
     renewForm.amount = 0
 
     // 導航到新合約
+    useToast().success(MESSAGES.SUCCESS.CONTRACT_RENEWED)
     if (newContract?.id) {
       navigateTo(`/contracts/${newContract.id}`)
     }
   } catch (error) {
     console.error('Failed to renew contract:', error)
+    useToast().error(MESSAGES.ERRORS.CONTRACT_RENEW_FAILED)
   } finally {
     isProcessing.value = false
   }

@@ -76,9 +76,11 @@ const handleSubmit = async () => {
     }
 
     await createMember(memberData)
+    useToast().success(MESSAGES.SUCCESS.MEMBER_CREATED)
     router.push('/members')
   } catch (error) {
     console.error('Failed to create member:', error)
+    useToast().error(MESSAGES.ERRORS.MEMBER_CREATE_FAILED)
     setError('submit', '建立會員失敗，請稍後再試')
   } finally {
     isSubmitting.value = false

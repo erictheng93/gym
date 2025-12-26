@@ -11,7 +11,7 @@ definePageMeta({
 })
 
 const router = useRouter()
-const { createEmployee } = useEmployees()
+const { createEmployee, employees, fetchEmployees } = useEmployees()
 const { branches, fetchBranches } = useBranches()
 const { jobTitles, fetchJobTitles } = useJobTitles()
 
@@ -20,10 +20,15 @@ const isSubmitting = ref(false)
 const form = reactive({
   full_name: '',
   employee_code: '',
+  phone: '',
+  email: '',
   branch_id: '',
   job_title_id: '',
+  supervisor_id: '',
+  user_id: '',
   employment_status: 'ACTIVE' as 'ACTIVE' | 'RESIGNED' | 'LEAVE',
   employment_type: 'FULL_TIME' as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE',
+  hire_date: '',
   basic_salary: null as number | null
 })
 
@@ -37,6 +42,12 @@ const branchOptions = computed(() =>
 
 const jobTitleOptions = computed(() =>
   jobTitles.value.map(j => ({ value: j.id, label: j.name }))
+)
+
+const supervisorOptions = computed(() =>
+  employees.value
+    .filter(e => e.employment_status === 'ACTIVE')
+    .map(e => ({ value: e.id, label: e.full_name }))
 )
 
 const employmentStatusOptions = [
@@ -53,7 +64,11 @@ const employmentTypeOptions = [
 
 // Initial load
 onMounted(async () => {
-  await Promise.all([fetchBranches(), fetchJobTitles()])
+  await Promise.all([
+    fetchBranches(),
+    fetchJobTitles(),
+    fetchEmployees({ limit: 100, status: 'ACTIVE' })
+  ])
   if (branches.value.length > 0 && !form.branch_id) {
     form.branch_id = branches.value[0].id
   }
@@ -74,15 +89,22 @@ const handleSubmit = async () => {
     const employeeData = {
       ...form,
       employee_code: form.employee_code || null,
+      phone: form.phone || null,
+      email: form.email || null,
       branch_id: form.branch_id || null,
       job_title_id: form.job_title_id || null,
+      supervisor_id: form.supervisor_id || null,
+      user_id: form.user_id || null,
+      hire_date: form.hire_date || null,
       basic_salary: form.basic_salary || null
     }
 
     await createEmployee(employeeData)
+    useToast().success(MESSAGES.SUCCESS.EMPLOYEE_CREATED)
     router.push('/employees')
   } catch (error) {
     console.error('Failed to create employee:', error)
+    useToast().error(MESSAGES.ERRORS.EMPLOYEE_CREATE_FAILED)
     setError('submit', '建立員工失敗，請稍後再試')
   } finally {
     isSubmitting.value = false
@@ -142,11 +164,38 @@ const handleSubmit = async () => {
             placeholder="自動產生或手動輸入"
           />
 
+          <FormInput
+            v-model="form.phone"
+            label="聯絡電話"
+            type="tel"
+            placeholder="請輸入聯絡電話"
+          />
+
+          <FormInput
+            v-model="form.email"
+            label="Email"
+            type="email"
+            placeholder="請輸入 Email"
+          />
+        </div>
+      </section>
+
+      <!-- Organization Section -->
+      <section class="form-section glass-card">
+        <h2 class="section-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+          </svg>
+          組織架構
+        </h2>
+
+        <div class="form-grid">
           <FormSelect
             v-model="form.branch_id"
             label="所屬分店"
             :options="branchOptions"
             placeholder="請選擇分店"
+            :required="true"
           />
 
           <FormSelect
@@ -154,6 +203,14 @@ const handleSubmit = async () => {
             label="職位"
             :options="jobTitleOptions"
             placeholder="請選擇職位"
+          />
+
+          <FormSelect
+            v-model="form.supervisor_id"
+            label="直屬主管"
+            :options="supervisorOptions"
+            placeholder="請選擇主管（選填）"
+            help-text="用於休假審核流程"
           />
         </div>
       </section>
@@ -178,6 +235,12 @@ const handleSubmit = async () => {
             v-model="form.employment_type"
             label="聘用類型"
             :options="employmentTypeOptions"
+          />
+
+          <FormInput
+            v-model="form.hire_date"
+            label="到職日期"
+            type="date"
           />
 
           <FormInput

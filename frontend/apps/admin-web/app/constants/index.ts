@@ -206,22 +206,140 @@ export const MESSAGES = {
 
   // Errors
   ERRORS: {
+    // Generic
     GENERIC: '發生錯誤，請稍後再試',
     NETWORK: '網路連線錯誤',
     NOT_FOUND: '找不到資料',
     UNAUTHORIZED: '權限不足',
     SERVER: '伺服器錯誤',
     REQUIRED_NAME: '請輸入姓名',
+
+    // Member
+    MEMBER_CREATE_FAILED: '建立會員失敗，請檢查輸入資料',
+    MEMBER_UPDATE_FAILED: '更新會員資料失敗，請稍後再試',
+    MEMBER_DELETE_FAILED: '刪除會員失敗，該會員可能有關聯的合約',
+    MEMBER_FETCH_FAILED: '載入會員資料失敗，請稍後再試',
+
+    // Contract
+    CONTRACT_CREATE_FAILED: '建立合約失敗，請稍後再試',
+    CONTRACT_UPDATE_FAILED: '更新合約失敗，請稍後再試',
+    CONTRACT_DELETE_FAILED: '刪除合約失敗，請稍後再試',
+    CONTRACT_FETCH_FAILED: '載入合約資料失敗，請稍後再試',
+    CONTRACT_PAUSE_FAILED: '暫停合約失敗，請稍後再試',
+    CONTRACT_RESUME_FAILED: '恢復合約失敗，請稍後再試',
+    CONTRACT_TRANSFER_FAILED: '轉讓合約失敗，請稍後再試',
+    CONTRACT_TERMINATE_FAILED: '終止合約失敗，請稍後再試',
+    CONTRACT_EXTEND_FAILED: '延期合約失敗，請稍後再試',
+
+    // Payment
+    PAYMENT_CREATE_FAILED: '建立付款紀錄失敗，請稍後再試',
+    PAYMENT_UPDATE_FAILED: '更新付款紀錄失敗，請稍後再試',
+    PAYMENT_DELETE_FAILED: '刪除付款紀錄失敗，請稍後再試',
+    PAYMENT_FETCH_FAILED: '載入付款紀錄失敗，請稍後再試',
+
+    // Plan
+    PLAN_CREATE_FAILED: '建立方案失敗，請稍後再試',
+    PLAN_UPDATE_FAILED: '更新方案失敗，請稍後再試',
+    PLAN_DELETE_FAILED: '刪除方案失敗，請稍後再試',
+    PLAN_FETCH_FAILED: '載入方案資料失敗，請稍後再試',
+
+    // Employee
+    EMPLOYEE_CREATE_FAILED: '建立員工失敗，請稍後再試',
+    EMPLOYEE_UPDATE_FAILED: '更新員工資料失敗，請稍後再試',
+    EMPLOYEE_DELETE_FAILED: '刪除員工失敗，請稍後再試',
+    EMPLOYEE_FETCH_FAILED: '載入員工資料失敗，請稍後再試',
+
+    // Branch
+    BRANCH_CREATE_FAILED: '建立分店失敗，請稍後再試',
+    BRANCH_UPDATE_FAILED: '更新分店資料失敗，請稍後再試',
+    BRANCH_DELETE_FAILED: '刪除分店失敗，請稍後再試',
+    BRANCH_FETCH_FAILED: '載入分店資料失敗，請稍後再試',
+
+    // HR
+    ATTENDANCE_FETCH_FAILED: '載入考勤資料失敗，請稍後再試',
+    LEAVE_CREATE_FAILED: '建立休假申請失敗，請稍後再試',
+    LEAVE_UPDATE_FAILED: '更新休假申請失敗，請稍後再試',
+    LEAVE_CANCEL_FAILED: '取消休假申請失敗，請稍後再試',
+    LEAVE_REVIEW_FAILED: '審核休假申請失敗，請稍後再試',
+    MAKEUP_CREATE_FAILED: '建立補打卡申請失敗，請稍後再試',
+    MAKEUP_CANCEL_FAILED: '取消補打卡申請失敗，請稍後再試',
+    MAKEUP_REVIEW_FAILED: '審核補打卡申請失敗，請稍後再試',
+    SCHEDULE_CREATE_FAILED: '建立班表失敗，請稍後再試',
+    SCHEDULE_UPDATE_FAILED: '更新班表失敗，請稍後再試',
+    SCHEDULE_DELETE_FAILED: '刪除班表失敗，請稍後再試',
+    SCHEDULE_ASSIGN_FAILED: '指派班表失敗，請稍後再試',
+
+    // Checkin
     CHECKIN: '入場登記失敗，請稍後再試',
+    CHECKIN_VERIFY_FAILED: '驗證失敗，請稍後再試',
+
+    // Report
+    REPORT_FETCH_FAILED: '載入報表資料失敗，請稍後再試',
+    REPORT_EXPORT_FAILED: '匯出報表失敗，請稍後再試',
   },
 
   // Success
   SUCCESS: {
+    // Generic
     SAVED: '儲存成功',
     DELETED: '刪除成功',
     UPDATED: '更新成功',
     CREATED: '建立成功',
+
+    // Member
+    MEMBER_CREATED: '會員建立成功',
+    MEMBER_UPDATED: '會員資料更新成功',
+    MEMBER_DELETED: '會員刪除成功',
+
+    // Contract
+    CONTRACT_CREATED: '合約建立成功',
+    CONTRACT_UPDATED: '合約更新成功',
+    CONTRACT_DELETED: '合約刪除成功',
+    CONTRACT_PAUSED: '合約已暫停',
+    CONTRACT_RESUMED: '合約已恢復',
+    CONTRACT_TRANSFERRED: '合約轉讓成功',
+    CONTRACT_TERMINATED: '合約已終止',
+    CONTRACT_EXTENDED: '合約延期成功',
+
+    // Payment
+    PAYMENT_CREATED: '付款紀錄建立成功',
+    PAYMENT_UPDATED: '付款紀錄更新成功',
+    PAYMENT_DELETED: '付款紀錄刪除成功',
+
+    // Plan
+    PLAN_CREATED: '方案建立成功',
+    PLAN_UPDATED: '方案更新成功',
+    PLAN_DELETED: '方案刪除成功',
+
+    // Employee
+    EMPLOYEE_CREATED: '員工建立成功',
+    EMPLOYEE_UPDATED: '員工資料更新成功',
+    EMPLOYEE_DELETED: '員工刪除成功',
+
+    // Branch
+    BRANCH_CREATED: '分店建立成功',
+    BRANCH_UPDATED: '分店資料更新成功',
+    BRANCH_DELETED: '分店刪除成功',
+
+    // HR
+    LEAVE_CREATED: '休假申請已送出',
+    LEAVE_CANCELLED: '休假申請已取消',
+    LEAVE_APPROVED: '休假申請已核准',
+    LEAVE_REJECTED: '休假申請已駁回',
+    MAKEUP_CREATED: '補打卡申請已送出',
+    MAKEUP_CANCELLED: '補打卡申請已取消',
+    MAKEUP_APPROVED: '補打卡申請已核准',
+    MAKEUP_REJECTED: '補打卡申請已駁回',
+    SCHEDULE_CREATED: '班表建立成功',
+    SCHEDULE_UPDATED: '班表更新成功',
+    SCHEDULE_DELETED: '班表刪除成功',
+    SCHEDULE_ASSIGNED: '班表指派成功',
+
+    // Checkin
     CHECKIN: '入場成功!',
+
+    // Report
+    REPORT_EXPORTED: '報表匯出成功',
   },
 
   // Navigation Menu

@@ -18,7 +18,10 @@ export default defineConfig({
       '**/.nuxt/**',
       '**/cypress/**',
       '**/e2e/**',
-      '**/.{idea,git,cache,output,temp}/**'
+      '**/.{idea,git,cache,output,temp}/**',
+      // Exclude Playwright tests (root-level .spec.ts files)
+      'test-*.spec.ts',
+      'playwright*.spec.ts'
     ],
     coverage: {
       provider: 'v8',

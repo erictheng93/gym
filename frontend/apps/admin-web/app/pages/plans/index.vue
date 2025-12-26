@@ -51,9 +51,11 @@ const handleDelete = async () => {
   if (!planToDelete.value) return
   try {
     await deletePlan(planToDelete.value)
+    useToast().success(MESSAGES.SUCCESS.PLAN_DELETED)
     await fetchPlans({ status: '' })
   } catch (error) {
     console.error('Failed to delete plan:', error)
+    useToast().error(MESSAGES.ERRORS.PLAN_DELETE_FAILED)
   } finally {
     showDeleteConfirm.value = false
     planToDelete.value = null

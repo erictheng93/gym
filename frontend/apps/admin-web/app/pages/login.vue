@@ -68,6 +68,7 @@ const handleSubmit = async () => {
     }
   } catch (err) {
     console.error('Login error:', err)
+    useToast().error(MESSAGES.AUTH.LOGIN_ERROR)
     error.value = MESSAGES.AUTH.LOGIN_ERROR
     triggerShake()
   }

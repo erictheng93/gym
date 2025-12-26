@@ -140,9 +140,11 @@ const handleSubmit = async () => {
     }
 
     showModal.value = false
+    useToast().success(isEdit.value ? MESSAGES.SUCCESS.SCHEDULE_UPDATED : MESSAGES.SUCCESS.SCHEDULE_CREATED)
     await fetchShiftSchedules(selectedBranch.value || undefined)
   } catch (error) {
     console.error('Failed to save shift schedule:', error)
+    useToast().error(isEdit.value ? MESSAGES.ERRORS.SCHEDULE_UPDATE_FAILED : MESSAGES.ERRORS.SCHEDULE_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }
@@ -158,11 +160,13 @@ const handleDelete = async () => {
 
   try {
     await deleteShiftSchedule(scheduleToDelete.value.id)
+    useToast().success(MESSAGES.SUCCESS.SCHEDULE_DELETED)
     showDeleteModal.value = false
     scheduleToDelete.value = null
     await fetchShiftSchedules(selectedBranch.value || undefined)
   } catch (error) {
     console.error('Failed to delete shift schedule:', error)
+    useToast().error(MESSAGES.ERRORS.SCHEDULE_DELETE_FAILED)
   }
 }
 
@@ -234,25 +238,34 @@ const handleAssign = async () => {
     // Refresh assigned employees
     assignedEmployees.value = await fetchShiftEmployees(assigningSchedule.value.id)
     selectedEmployees.value = []
+    useToast().success(MESSAGES.SUCCESS.SCHEDULE_ASSIGNED)
   } catch (error) {
     console.error('Failed to assign employees:', error)
-    alert('指派失敗')
+    useToast().error(MESSAGES.ERRORS.SCHEDULE_ASSIGN_FAILED)
   } finally {
     isAssigning.value = false
   }
 }
 
 const handleRemoveAssignment = async (employeeShift: EmployeeShift) => {
-  if (!confirm('確定要移除此員工的班表指派嗎？')) return
+  const { confirm } = useConfirm()
+  const confirmed = await confirm({
+    title: '移除班表指派',
+    message: '確定要移除此員工的班表指派嗎？',
+    type: 'warning'
+  })
+
+  if (!confirmed) return
 
   try {
     await removeEmployeeShift(employeeShift.id)
+    useToast().success('班表指派已移除')
     if (assigningSchedule.value) {
       assignedEmployees.value = await fetchShiftEmployees(assigningSchedule.value.id)
     }
   } catch (error) {
     console.error('Failed to remove assignment:', error)
-    alert('移除失敗')
+    useToast().error('移除班表指派失敗，請稍後再試')
   }
 }
 

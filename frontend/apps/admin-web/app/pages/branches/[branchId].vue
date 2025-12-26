@@ -30,6 +30,7 @@ const loadBranch = async () => {
     employees.value = await fetchBranchEmployees(branchId.value)
   } catch (error) {
     console.error('Failed to load branch:', error)
+    useToast().error(MESSAGES.ERRORS.BRANCH_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
@@ -58,9 +59,11 @@ const handleToggleStatus = async () => {
     const newStatus = branch.value.status === 'active' ? 'archived' : 'active'
     await updateBranch(branch.value.id, { status: newStatus })
     branch.value.status = newStatus
+    useToast().success(newStatus === 'active' ? MESSAGES.SUCCESS.BRANCH_ACTIVATED : MESSAGES.SUCCESS.BRANCH_ARCHIVED)
     showArchiveModal.value = false
   } catch (error) {
     console.error('Failed to update branch status:', error)
+    useToast().error(MESSAGES.ERRORS.BRANCH_UPDATE_STATUS_FAILED)
   }
 }
 
@@ -69,9 +72,11 @@ const handleDelete = async () => {
   isDeleting.value = true
   try {
     await deleteBranch(branch.value.id)
+    useToast().success(MESSAGES.SUCCESS.BRANCH_DELETED)
     router.push('/branches')
   } catch (error) {
     console.error('Failed to delete branch:', error)
+    useToast().error(MESSAGES.ERRORS.BRANCH_DELETE_FAILED)
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false

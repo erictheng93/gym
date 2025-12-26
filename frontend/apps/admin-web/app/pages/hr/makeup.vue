@@ -190,10 +190,11 @@ const handleApply = async () => {
     }
 
     showApplyModal.value = false
+    useToast().success(MESSAGES.SUCCESS.MAKEUP_CREATED)
     await loadData()
   } catch (error) {
     console.error('Apply makeup failed:', error)
-    alert('申請失敗，請稍後再試')
+    useToast().error(MESSAGES.ERRORS.MAKEUP_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }
@@ -202,14 +203,24 @@ const handleApply = async () => {
 // 取消申請
 const handleCancel = async (requestId: string) => {
   if (!currentEmployee.value?.id) return
-  if (!confirm('確定要取消此補打卡申請嗎？')) return
+
+  const { confirm } = useConfirm()
+  const confirmed = await confirm({
+    title: '取消補打卡申請',
+    message: '確定要取消此補打卡申請嗎？此操作將通知相關人員。',
+    type: 'warning'
+  })
+
+  if (!confirmed) return
 
   try {
     await cancelMakeup(requestId, currentEmployee.value.id)
+    useToast().success(MESSAGES.SUCCESS.MAKEUP_CANCELLED)
     await loadData()
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : '操作失敗'
-    alert(errorMessage)
+    console.error('Cancel makeup failed:', error)
+    const errorMessage = error instanceof Error ? error.message : MESSAGES.ERRORS.MAKEUP_CANCEL_FAILED
+    useToast().error(errorMessage)
   }
 }
 
@@ -236,13 +247,17 @@ const submitReview = async () => {
       reviewData.value.action,
       reviewNotes.value || undefined
     )
+    const successMessage = reviewData.value.action === 'APPROVE'
+      ? MESSAGES.SUCCESS.MAKEUP_APPROVED
+      : MESSAGES.SUCCESS.MAKEUP_REJECTED
+    useToast().success(successMessage)
     showReviewModal.value = false
     reviewData.value = null
     reviewNotes.value = ''
     await loadData()
   } catch (error) {
     console.error('Review failed:', error)
-    alert('操作失敗')
+    useToast().error(MESSAGES.ERRORS.MAKEUP_REVIEW_FAILED)
   } finally {
     isReviewing.value = false
   }

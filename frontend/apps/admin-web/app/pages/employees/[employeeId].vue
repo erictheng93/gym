@@ -23,6 +23,7 @@ const loadEmployee = async () => {
     employee.value = await getEmployee(employeeId.value)
   } catch (error) {
     console.error('Failed to load employee:', error)
+    useToast().error(MESSAGES.ERRORS.EMPLOYEE_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
@@ -67,9 +68,11 @@ const handleDelete = async () => {
   isDeleting.value = true
   try {
     await deleteEmployee(employee.value.id)
+    useToast().success(MESSAGES.SUCCESS.EMPLOYEE_DELETED)
     router.push('/employees')
   } catch (error) {
     console.error('Failed to delete employee:', error)
+    useToast().error(MESSAGES.ERRORS.EMPLOYEE_DELETE_FAILED)
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false

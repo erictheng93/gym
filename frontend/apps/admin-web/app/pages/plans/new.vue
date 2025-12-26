@@ -75,9 +75,11 @@ const handleSubmit = async () => {
     }
 
     await createPlan(planData)
+    useToast().success(MESSAGES.SUCCESS.PLAN_CREATED)
     router.push('/plans')
   } catch (error) {
     console.error('Failed to create plan:', error)
+    useToast().error(MESSAGES.ERRORS.PLAN_CREATE_FAILED)
     errors.value.submit = PAGES.PLANS.ERROR_CREATE_FAILED
   } finally {
     isSubmitting.value = false

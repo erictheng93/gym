@@ -26,6 +26,7 @@ const loadMember = async () => {
     await fetchContracts({ memberId: memberId.value })
   } catch (error) {
     console.error('Failed to load member:', error)
+    useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
   } finally {
     isLoading.value = false
   }
@@ -73,9 +74,11 @@ const handleDelete = async () => {
   isDeleting.value = true
   try {
     await deleteMember(member.value.id)
+    useToast().success(MESSAGES.SUCCESS.MEMBER_DELETED)
     router.push('/members')
   } catch (error) {
     console.error('Failed to delete member:', error)
+    useToast().error(MESSAGES.ERRORS.MEMBER_DELETE_FAILED)
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false

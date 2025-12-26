@@ -1,34 +1,80 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES } from '~/constants'
+import { useReports } from '~/composables/useReports'
+import type { RevenueReport, MemberGrowthReport, ContractExpiryReport, MemberActivityReport } from '~/composables/useReports'
+import { exportRevenueReport, exportMemberGrowthReport, exportContractExpiryReport, exportMemberActivityReport } from '~/utils/export'
+import GoogleSheetsExport from '~/components/GoogleSheetsExport.vue'
 
 const { branches, fetchBranches } = useBranches()
+const { getRevenueReport, getMemberGrowthReport, getContractExpiryReport, getMemberActivityReport } = useReports()
+
 const selectedBranch = ref('')
 const selectedPeriod = ref('month')
+const loading = ref(true)
 
-onMounted(() => {
-  fetchBranches()
+// Real report data
+const revenueReport = ref<RevenueReport | null>(null)
+const memberGrowthReport = ref<MemberGrowthReport | null>(null)
+const contractExpiryReport = ref<ContractExpiryReport | null>(null)
+const memberActivityReport = ref<MemberActivityReport | null>(null)
+
+// Computed stats from real data
+const stats = computed(() => {
+  if (!revenueReport.value || !memberGrowthReport.value || !contractExpiryReport.value || !memberActivityReport.value) {
+    return {
+      revenue: 0,
+      revenueChange: 0,
+      newMembers: 0,
+      newMembersChange: 0,
+      activeContracts: 0,
+      contractsChange: 0,
+      checkins: 0,
+      checkinsChange: 0
+    }
+  }
+
+  return {
+    revenue: revenueReport.value.summary.net_revenue,
+    revenueChange: 12.5, // TODO: Calculate from historical data
+    newMembers: memberGrowthReport.value.summary.total_new_members,
+    newMembersChange: 8.2, // TODO: Calculate from historical data
+    activeContracts: contractExpiryReport.value.summary.total_expiring,
+    contractsChange: 5.1, // TODO: Calculate from historical data
+    checkins: memberActivityReport.value.summary.total_check_ins,
+    checkinsChange: -2.3 // TODO: Calculate from historical data
+  }
 })
 
-// Mock data for reports
-const stats = ref({
-  revenue: 458000,
-  revenueChange: 12.5,
-  newMembers: 45,
-  newMembersChange: 8.2,
-  activeContracts: 156,
-  contractsChange: 5.1,
-  checkins: 1250,
-  checkinsChange: -2.3
-})
+// Last 6 months revenue data
+const revenueByMonth = computed(() => {
+  if (!revenueReport.value) return []
 
-const revenueByMonth = ref([
-  { month: '七月', revenue: 320000 },
-  { month: '八月', revenue: 380000 },
-  { month: '九月', revenue: 350000 },
-  { month: '十月', revenue: 420000 },
-  { month: '十一月', revenue: 410000 },
-  { month: '十二月', revenue: 458000 }
-])
+  // Group by month and sum
+  const monthlyData: Record<string, number> = {}
+  revenueReport.value.data.forEach(item => {
+    const date = new Date(item.payment_day)
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const monthName = date.toLocaleDateString('zh-TW', { month: 'long' }).replace('月', '月')
+
+    if (!monthlyData[monthKey]) {
+      monthlyData[monthKey] = 0
+    }
+    monthlyData[monthKey] += parseFloat(item.net_revenue)
+  })
+
+  // Convert to array and sort by date
+  return Object.entries(monthlyData)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-6)
+    .map(([key, revenue]) => {
+      const [year, month] = key.split('-')
+      const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
+      return {
+        month: monthNames[parseInt(month) - 1],
+        revenue
+      }
+    })
+})
 
 const topPlans = ref([
   { name: '年卡方案', count: 42, revenue: 411600 },
@@ -37,6 +83,53 @@ const topPlans = ref([
   { name: '季卡方案', count: 15, revenue: 54000 },
   { name: '月卡方案', count: 12, revenue: 18000 }
 ])
+
+// Load all reports
+const loadReports = async () => {
+  try {
+    loading.value = true
+
+    // Calculate date range based on selected period
+    const endDate = new Date().toISOString().split('T')[0]
+    let startDate: string
+
+    switch (selectedPeriod.value) {
+      case 'week':
+        const weekAgo = new Date()
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        startDate = weekAgo.toISOString().split('T')[0]
+        break
+      case 'year':
+        const yearAgo = new Date()
+        yearAgo.setFullYear(yearAgo.getFullYear() - 1)
+        startDate = yearAgo.toISOString().split('T')[0]
+        break
+      case 'month':
+      default:
+        const monthAgo = new Date()
+        monthAgo.setMonth(monthAgo.getMonth() - 1)
+        startDate = monthAgo.toISOString().split('T')[0]
+        break
+    }
+
+    // Fetch all reports in parallel
+    const [revenue, growth, expiry, activity] = await Promise.all([
+      getRevenueReport(startDate, endDate, selectedBranch.value || undefined),
+      getMemberGrowthReport(startDate, endDate, selectedBranch.value || undefined),
+      getContractExpiryReport(30, selectedBranch.value || undefined),
+      getMemberActivityReport(startDate, endDate, selectedBranch.value || undefined)
+    ])
+
+    revenueReport.value = revenue
+    memberGrowthReport.value = growth
+    contractExpiryReport.value = expiry
+    memberActivityReport.value = activity
+  } catch (error) {
+    console.error('Failed to load reports:', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(value)
@@ -47,7 +140,20 @@ const formatPercent = (value: number) => {
   return `${prefix}${value.toFixed(1)}%`
 }
 
-const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.revenue)))
+const maxRevenue = computed(() => {
+  if (revenueByMonth.value.length === 0) return 1
+  return Math.max(...revenueByMonth.value.map(m => m.revenue))
+})
+
+// Watch for filter changes
+watch([selectedBranch, selectedPeriod], () => {
+  loadReports()
+})
+
+onMounted(async () => {
+  await fetchBranches()
+  await loadReports()
+})
 </script>
 
 <template>
@@ -196,30 +302,86 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
     <div class="quick-actions">
       <h3>{{ PAGES.REPORTS.EXPORT_REPORTS }}</h3>
       <div class="actions-grid">
-        <button class="action-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
-          </svg>
-          <span>{{ PAGES.REPORTS.EXPORT_REVENUE }}</span>
-        </button>
-        <button class="action-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
-          </svg>
-          <span>{{ PAGES.REPORTS.EXPORT_MEMBERS }}</span>
-        </button>
-        <button class="action-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
-          </svg>
-          <span>{{ PAGES.REPORTS.EXPORT_CONTRACTS }}</span>
-        </button>
-        <button class="action-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
-          </svg>
-          <span>{{ PAGES.REPORTS.EXPORT_CHECKINS }}</span>
-        </button>
+        <!-- Revenue Export -->
+        <div class="export-wrapper">
+          <GoogleSheetsExport
+            v-if="revenueReport"
+            :data="revenueReport.data"
+            report-type="revenue"
+            :filename="`營收報表_${new Date().toISOString().split('T')[0]}`"
+          />
+          <p class="export-label">{{ PAGES.REPORTS.EXPORT_REVENUE }}</p>
+        </div>
+
+        <!-- Member Growth Export -->
+        <div class="export-wrapper">
+          <GoogleSheetsExport
+            v-if="memberGrowthReport"
+            :data="memberGrowthReport.data"
+            report-type="member-growth"
+            :filename="`會員成長報表_${new Date().toISOString().split('T')[0]}`"
+          />
+          <p class="export-label">{{ PAGES.REPORTS.EXPORT_MEMBERS }}</p>
+        </div>
+
+        <!-- Contract Expiry Export -->
+        <div class="export-wrapper">
+          <GoogleSheetsExport
+            v-if="contractExpiryReport"
+            :data="contractExpiryReport.data"
+            report-type="contract-expiry"
+            :filename="`合約到期提醒_${new Date().toISOString().split('T')[0]}`"
+          />
+          <p class="export-label">{{ PAGES.REPORTS.EXPORT_CONTRACTS }}</p>
+        </div>
+
+        <!-- Member Activity Export -->
+        <div class="export-wrapper">
+          <GoogleSheetsExport
+            v-if="memberActivityReport"
+            :data="memberActivityReport.data"
+            report-type="member-activity"
+            :filename="`會員活躍度報表_${new Date().toISOString().split('T')[0]}`"
+          />
+          <p class="export-label">{{ PAGES.REPORTS.EXPORT_CHECKINS }}</p>
+        </div>
+      </div>
+
+      <!-- Legacy Export Options (CSV, Excel, PDF) -->
+      <div class="legacy-exports">
+        <p class="section-subtitle">或使用傳統格式匯出：</p>
+        <div class="legacy-actions">
+          <button
+            v-if="revenueReport"
+            @click="exportRevenueReport(revenueReport.data, 'excel')"
+            class="legacy-btn"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+            Excel (營收)
+          </button>
+          <button
+            v-if="memberGrowthReport"
+            @click="exportMemberGrowthReport(memberGrowthReport.data, 'excel')"
+            class="legacy-btn"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+            Excel (會員成長)
+          </button>
+          <button
+            v-if="contractExpiryReport"
+            @click="exportContractExpiryReport(contractExpiryReport.data, 'pdf')"
+            class="legacy-btn"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+            PDF (合約到期)
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -549,27 +711,61 @@ const maxRevenue = computed(() => Math.max(...revenueByMonth.value.map(m => m.re
 .actions-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-md);
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
 }
 
-.action-btn {
+.export-wrapper {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
+}
+
+.export-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  text-align: center;
+}
+
+.legacy-exports {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-md) 0;
+}
+
+.legacy-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.legacy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  color: var(--color-text-primary);
-  font-size: 14px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);
 }
 
-.action-btn:hover {
+.legacy-btn:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
+  background: var(--color-bg-primary);
 }
 
 @media (max-width: 1200px) {
