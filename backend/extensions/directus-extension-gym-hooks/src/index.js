@@ -22,17 +22,14 @@ let cacheModule = null;
 let cacheEnabled = false;
 
 // 嘗試動態導入緩存模組
-try {
-  // 注意：在 Directus 容器中可能需要先安裝 ioredis
-  // 如果導入失敗，緩存功能會被禁用但不影響核心功能
-  cacheModule = await import('./cache.js').catch(() => null);
-  if (cacheModule) {
-    cacheEnabled = true;
-    console.log('[GymHook] Redis cache module loaded successfully');
-  }
-} catch (e) {
+// 注意：不使用 await，緩存功能將在後續異步初始化
+import('./cache.js').then((module) => {
+  cacheModule = module;
+  cacheEnabled = true;
+  console.log('[GymHook] Redis cache module loaded successfully');
+}).catch(() => {
   console.log('[GymHook] Redis cache module not available, running without cache');
-}
+});
 
 // 緩存函數包裝器 (如果緩存不可用則返回空操作)
 const isCacheAvailable = () => cacheEnabled && cacheModule?.isCacheAvailable?.();
@@ -123,6 +120,46 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
       console.log(`[GymHook] Contract ${payload.contract_id} resumed to ACTIVE`);
     } catch (error) {
       console.error('[GymHook] Error resuming contract:', error);
+    }
+  });
+
+  // 當使用課程（CLASS_USED）時，自動扣除 remaining_counts
+  action('contract_logs.items.create', async ({ payload, key }, { schema }) => {
+    if (payload.log_type !== 'CLASS_USED') return;
+    if (!payload.contract_id) return;
+
+    try {
+      const contractsService = new ItemsService('contracts', {
+        schema: schema,
+        knex: database,
+      });
+
+      // 讀取合約資料
+      const contract = await contractsService.readOne(payload.contract_id, {
+        fields: ['id', 'remaining_counts', 'contract_status'],
+      });
+
+      // 確保合約有 remaining_counts (COUNT_BASED 合約)
+      if (contract && contract.remaining_counts !== null && contract.remaining_counts > 0) {
+        const newCount = contract.remaining_counts - 1;
+
+        // 更新剩餘次數
+        await contractsService.updateOne(payload.contract_id, {
+          remaining_counts: newCount,
+        });
+
+        console.log(`[GymHook] Class used: contract ${payload.contract_id} remaining ${newCount}`);
+
+        // 如果用完了，自動標記為 EXPIRED
+        if (newCount === 0) {
+          await contractsService.updateOne(payload.contract_id, {
+            contract_status: 'EXPIRED',
+          });
+          console.log(`[GymHook] Contract ${payload.contract_id} expired (all classes used)`);
+        }
+      }
+    } catch (error) {
+      console.error('[GymHook] Error deducting class count:', error);
     }
   });
 
@@ -1608,18 +1645,15 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   let pushService = null;
   let pushEnabled = false;
 
-  try {
-    pushService = await import('./push-service.js').catch(() => null);
-    if (pushService) {
-      console.log('[GymHook] Push notification module loaded');
-    }
-  } catch (e) {
-    console.log('[GymHook] Push notification module not available');
-  }
+  // 異步載入推播服務模組
+  import('./push-service.js').then((module) => {
+    pushService = module;
+    pushEnabled = true;
+    console.log('[GymHook] Push notification module loaded');
 
-  // 初始化推播服務
-  if (typeof init === 'function' && pushService) {
-    init('app.after', async () => {
+    // 初始化推播服務
+    if (typeof init === 'function') {
+      init('app.after', async () => {
       try {
         // 從環境變數讀取 VAPID keys
         const env = {
@@ -1638,7 +1672,10 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         console.error('[GymHook] Push service init error:', error);
       }
     });
-  }
+    }
+  }).catch(() => {
+    console.log('[GymHook] Push notification module not available');
+  });
 
   /**
    * 處理待發送的推播通知

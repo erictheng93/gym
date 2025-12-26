@@ -1948,6 +1948,349 @@ export default {
       }
     });
 
+    // ============================================
+    // 7. Reports Endpoints (報表API)
+    // ============================================
+
+    /**
+     * GET /gym/reports/revenue
+     * 營收報表 - 按日期和分店統計營收
+     * Query params: start_date, end_date, branch_id (optional)
+     */
+    router.get('/reports/revenue', async (req, res) => {
+      try {
+        const { start_date, end_date, branch_id } = req.query;
+
+        // Default to last 30 days if not specified
+        const endDate = end_date || new Date().toISOString().split('T')[0];
+        const startDate = start_date || (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          return d.toISOString().split('T')[0];
+        })();
+
+        // Build query with optional branch filter
+        let query = `
+          SELECT
+            payment_day,
+            branch_id,
+            branch_name,
+            transaction_count,
+            total_income,
+            total_refund,
+            net_revenue,
+            unique_members,
+            cash_income,
+            credit_card_income,
+            bank_transfer_income,
+            line_pay_income
+          FROM revenue_daily_summary
+          WHERE payment_day BETWEEN ?::date AND ?::date
+        `;
+
+        const params = [startDate, endDate];
+
+        if (branch_id) {
+          query += ` AND branch_id = ?::uuid`;
+          params.push(branch_id);
+        }
+
+        query += ` ORDER BY payment_day DESC`;
+
+        const result = await database.raw(query, params);
+        const rows = result.rows || result;
+
+        // Calculate totals
+        const totals = rows.reduce((acc, row) => ({
+          total_income: (acc.total_income || 0) + parseFloat(row.total_income || 0),
+          total_refund: (acc.total_refund || 0) + parseFloat(row.total_refund || 0),
+          net_revenue: (acc.net_revenue || 0) + parseFloat(row.net_revenue || 0),
+          transaction_count: (acc.transaction_count || 0) + parseInt(row.transaction_count || 0),
+        }), {});
+
+        res.json({
+          success: true,
+          period: { start_date: startDate, end_date: endDate },
+          summary: {
+            total_income: totals.total_income || 0,
+            total_refund: totals.total_refund || 0,
+            net_revenue: totals.net_revenue || 0,
+            total_transactions: totals.transaction_count || 0,
+            average_daily_revenue: rows.length > 0 ? (totals.net_revenue / rows.length).toFixed(2) : 0,
+          },
+          data: rows,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Revenue report error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * GET /gym/reports/member-growth
+     * 會員成長報表 - 統計新增會員趨勢
+     * Query params: start_date, end_date, branch_id (optional)
+     */
+    router.get('/reports/member-growth', async (req, res) => {
+      try {
+        const { start_date, end_date, branch_id } = req.query;
+
+        // Default to last 30 days
+        const endDate = end_date || new Date().toISOString().split('T')[0];
+        const startDate = start_date || (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          return d.toISOString().split('T')[0];
+        })();
+
+        let query = `
+          SELECT
+            join_day,
+            branch_id,
+            branch_name,
+            new_members,
+            active_members,
+            male_count,
+            female_count,
+            sales_persons_involved
+          FROM member_growth_summary
+          WHERE join_day BETWEEN ?::date AND ?::date
+        `;
+
+        const params = [startDate, endDate];
+
+        if (branch_id) {
+          query += ` AND branch_id = ?::uuid`;
+          params.push(branch_id);
+        }
+
+        query += ` ORDER BY join_day DESC`;
+
+        const result = await database.raw(query, params);
+        const rows = result.rows || result;
+
+        // Calculate totals
+        const totals = rows.reduce((acc, row) => ({
+          total_new_members: (acc.total_new_members || 0) + parseInt(row.new_members || 0),
+          total_male: (acc.total_male || 0) + parseInt(row.male_count || 0),
+          total_female: (acc.total_female || 0) + parseInt(row.female_count || 0),
+        }), {});
+
+        // Get current total members count
+        const totalMembersResult = await database.raw(`
+          SELECT COUNT(*) as count
+          FROM members
+          WHERE status = 'active'
+          ${branch_id ? `AND branch_id = ?::uuid` : ''}
+        `, branch_id ? [branch_id] : []);
+
+        const totalMembers = parseInt((totalMembersResult.rows?.[0] || totalMembersResult[0])?.count || 0);
+
+        res.json({
+          success: true,
+          period: { start_date: startDate, end_date: endDate },
+          summary: {
+            total_new_members: totals.total_new_members || 0,
+            total_members: totalMembers,
+            average_daily_growth: rows.length > 0 ? (totals.total_new_members / rows.length).toFixed(2) : 0,
+            gender_distribution: {
+              male: totals.total_male || 0,
+              female: totals.total_female || 0,
+            },
+          },
+          data: rows,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Member growth report error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * GET /gym/reports/contract-expiry
+     * 合約到期提醒報表 - 列出即將到期的合約
+     * Query params: days_ahead (default: 30), branch_id (optional), limit (default: 100)
+     */
+    router.get('/reports/contract-expiry', async (req, res) => {
+      try {
+        const { days_ahead = 30, branch_id, limit = 100 } = req.query;
+
+        let query = `
+          SELECT
+            contract_id,
+            contract_no,
+            member_id,
+            member_name,
+            member_code,
+            member_phone,
+            member_email,
+            branch_id,
+            branch_name,
+            plan_name,
+            start_date,
+            end_date,
+            contract_status,
+            payment_status,
+            days_until_expiry,
+            sales_person_id,
+            sales_person_name,
+            total_amount,
+            total_paid,
+            outstanding_amount
+          FROM contract_expiry_alerts
+          WHERE days_until_expiry <= ?::integer
+        `;
+
+        const params = [parseInt(days_ahead)];
+
+        if (branch_id) {
+          query += ` AND branch_id = ?::uuid`;
+          params.push(branch_id);
+        }
+
+        query += ` ORDER BY days_until_expiry ASC LIMIT ?::integer`;
+        params.push(parseInt(limit));
+
+        const result = await database.raw(query, params);
+        const rows = result.rows || result;
+
+        // Group by expiry urgency
+        const groupedData = {
+          urgent: rows.filter(r => r.days_until_expiry <= 7),
+          soon: rows.filter(r => r.days_until_expiry > 7 && r.days_until_expiry <= 30),
+          upcoming: rows.filter(r => r.days_until_expiry > 30),
+        };
+
+        res.json({
+          success: true,
+          summary: {
+            total_expiring: rows.length,
+            urgent_count: groupedData.urgent.length,
+            soon_count: groupedData.soon.length,
+            upcoming_count: groupedData.upcoming.length,
+          },
+          grouped: groupedData,
+          data: rows,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Contract expiry report error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * GET /gym/reports/member-activity
+     * 會員活躍度報表 - 基於 check-in 統計
+     * Query params: start_date, end_date, branch_id (optional)
+     */
+    router.get('/reports/member-activity', async (req, res) => {
+      try {
+        const { start_date, end_date, branch_id } = req.query;
+
+        // Default to last 30 days
+        const endDate = end_date || new Date().toISOString().split('T')[0];
+        const startDate = start_date || (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          return d.toISOString().split('T')[0];
+        })();
+
+        let query = `
+          SELECT
+            activity_day,
+            branch_id,
+            branch_name,
+            total_check_ins,
+            unique_members,
+            qr_code_count,
+            manual_count,
+            card_count,
+            morning_count,
+            afternoon_count,
+            evening_count
+          FROM member_activity_summary
+          WHERE activity_day BETWEEN ?::date AND ?::date
+        `;
+
+        const params = [startDate, endDate];
+
+        if (branch_id) {
+          query += ` AND branch_id = ?::uuid`;
+          params.push(branch_id);
+        }
+
+        query += ` ORDER BY activity_day DESC`;
+
+        const result = await database.raw(query, params);
+        const rows = result.rows || result;
+
+        // Calculate totals
+        const totals = rows.reduce((acc, row) => ({
+          total_check_ins: (acc.total_check_ins || 0) + parseInt(row.total_check_ins || 0),
+          total_unique_members: (acc.total_unique_members || 0) + parseInt(row.unique_members || 0),
+          qr_code_total: (acc.qr_code_total || 0) + parseInt(row.qr_code_count || 0),
+          manual_total: (acc.manual_total || 0) + parseInt(row.manual_count || 0),
+          card_total: (acc.card_total || 0) + parseInt(row.card_count || 0),
+        }), {});
+
+        res.json({
+          success: true,
+          period: { start_date: startDate, end_date: endDate },
+          summary: {
+            total_check_ins: totals.total_check_ins || 0,
+            average_daily_check_ins: rows.length > 0 ? (totals.total_check_ins / rows.length).toFixed(2) : 0,
+            method_distribution: {
+              qr_code: totals.qr_code_total || 0,
+              manual: totals.manual_total || 0,
+              card: totals.card_total || 0,
+            },
+          },
+          data: rows,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Member activity report error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * POST /gym/reports/refresh
+     * 刷新報表物化視圖 (admin only)
+     */
+    router.post('/reports/refresh', async (req, res) => {
+      try {
+        // TODO: Add admin authentication check
+
+        await database.raw('SELECT refresh_report_views()');
+
+        console.log('[GymEndpoint] Report views refreshed');
+
+        res.json({
+          success: true,
+          message: '報表資料已更新',
+          refreshed_at: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Refresh reports error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
     console.log('[GymEndpoint] Gym API endpoints registered');
   },
 };
