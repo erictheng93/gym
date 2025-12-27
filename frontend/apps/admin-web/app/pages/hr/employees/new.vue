@@ -101,7 +101,7 @@ const handleSubmit = async () => {
 
     await createEmployee(employeeData)
     useToast().success(MESSAGES.SUCCESS.EMPLOYEE_CREATED)
-    router.push('/employees')
+    router.push('/hr/employees')
   } catch (error) {
     console.error('Failed to create employee:', error)
     useToast().error(MESSAGES.ERRORS.EMPLOYEE_CREATE_FAILED)

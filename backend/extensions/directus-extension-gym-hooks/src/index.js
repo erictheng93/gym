@@ -11,8 +11,9 @@
  * 8. HR 考勤自動計算：打卡時自動計算工時、遲到、加班等
  * 9. 會員入場驗證：驗證會員合約有效性，記錄入場紀錄
  * 10. Social Login 自動建立會員
+ * 11. 權限檢查系統：基於 job_titles.permissions_config 和 employees.custom_permissions 的細粒度權限控制
  *
- * 第二階段優化：Redis 緩存整合
+ * 第二階段優化：Redis 緩存整合 + 權限檢查緩存
  */
 
 // ============================================
@@ -1867,4 +1868,262 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
       console.error('[GymHook] Failed to queue cancellation notifications:', error);
     }
   });
+
+  // ============================================
+  // 11. 權限檢查系統
+  // ============================================
+
+  /**
+   * 權限緩存 - 避免重複查詢資料庫
+   * 格式: { userId: { permissions: {...}, timestamp: Date } }
+   */
+  const permissionCache = new Map();
+  const PERMISSION_CACHE_TTL = 5 * 60 * 1000; // 5 分鐘
+
+  /**
+   * 集合名稱到權限模組的對應
+   */
+  const COLLECTION_TO_MODULE = {
+    members: 'members',
+    contracts: 'contracts',
+    payments: 'payments',
+    membership_plans: 'plans',
+    employees: 'employees',
+    branches: 'branches',
+    checkin_logs: 'checkin',
+    attendance_records: 'hr',
+    leave_requests: 'hr',
+    leave_balances: 'hr',
+    makeup_punch_requests: 'hr',
+    schedules: 'hr',
+    // 報表相關集合 (未來實作)
+    reports: 'reports',
+    // 系統設定
+    job_titles: 'settings',
+    system_settings: 'settings',
+  };
+
+  /**
+   * 操作到權限動作的對應
+   */
+  const OPERATION_TO_ACTION = {
+    'items.create': 'create',
+    'items.read': 'read',
+    'items.update': 'update',
+    'items.delete': 'delete',
+  };
+
+  /**
+   * 取得員工的有效權限
+   * 優先使用 custom_permissions，否則使用 job_title.permissions_config
+   */
+  async function getEffectivePermissions(userId) {
+    try {
+      // 檢查緩存
+      const cached = permissionCache.get(userId);
+      if (cached && (Date.now() - cached.timestamp) < PERMISSION_CACHE_TTL) {
+        return cached.permissions;
+      }
+
+      // 查詢員工資料
+      const result = await database.raw(`
+        SELECT
+          e.id,
+          e.custom_permissions,
+          jt.permissions_config as job_title_permissions
+        FROM employees e
+        LEFT JOIN job_titles jt ON jt.id = e.job_title_id
+        WHERE e.user_id = $1
+          AND e.status = 'active'
+        LIMIT 1
+      `, [userId]);
+
+      const employee = result.rows?.[0];
+      if (!employee) {
+        // 如果找不到員工記錄，返回空權限
+        console.log(`[PermissionCheck] No active employee found for user ${userId}`);
+        return {};
+      }
+
+      // 決定使用哪一個權限配置
+      let permissions = {};
+      if (employee.custom_permissions && typeof employee.custom_permissions === 'object') {
+        permissions = employee.custom_permissions;
+        console.log(`[PermissionCheck] Using custom permissions for employee ${employee.id}`);
+      } else if (employee.job_title_permissions && typeof employee.job_title_permissions === 'object') {
+        permissions = employee.job_title_permissions;
+        console.log(`[PermissionCheck] Using job title permissions for employee ${employee.id}`);
+      } else {
+        console.log(`[PermissionCheck] No permissions configured for employee ${employee.id}`);
+      }
+
+      // 存入緩存
+      permissionCache.set(userId, {
+        permissions,
+        timestamp: Date.now(),
+      });
+
+      return permissions;
+    } catch (error) {
+      console.error('[PermissionCheck] Error fetching permissions:', error);
+      return {};
+    }
+  }
+
+  /**
+   * 清除權限緩存
+   */
+  function invalidatePermissionCache(userId) {
+    if (userId) {
+      permissionCache.delete(userId);
+    } else {
+      permissionCache.clear();
+    }
+  }
+
+  /**
+   * 檢查使用者是否有執行操作的權限
+   */
+  async function checkPermission(userId, collection, action) {
+    const permissions = await getEffectivePermissions(userId);
+
+    // 取得對應的模組名稱
+    const module = COLLECTION_TO_MODULE[collection];
+    if (!module) {
+      // 如果集合沒有對應的權限模組，允許存取
+      return true;
+    }
+
+    // 檢查權限
+    const hasPermission = permissions[module]?.[action] === true;
+
+    if (!hasPermission) {
+      console.log(`[PermissionCheck] Permission denied: user=${userId}, collection=${collection}, action=${action}, module=${module}`);
+    }
+
+    return hasPermission;
+  }
+
+  /**
+   * 權限檢查 Filter Hook
+   * 在 CRUD 操作之前檢查權限
+   */
+  ['items.create', 'items.read', 'items.update', 'items.delete'].forEach(operation => {
+    filter(operation, async (input, { collection, accountability, schema }) => {
+      // 跳過系統操作（沒有 accountability）
+      if (!accountability || !accountability.user) {
+        return input;
+      }
+
+      // 跳過管理員
+      if (accountability.admin === true) {
+        return input;
+      }
+
+      // 跳過內部系統集合
+      if (collection.startsWith('directus_')) {
+        return input;
+      }
+
+      try {
+        const action = OPERATION_TO_ACTION[operation];
+        const hasPermission = await checkPermission(accountability.user, collection, action);
+
+        if (!hasPermission) {
+          const module = COLLECTION_TO_MODULE[collection];
+          throw new Error(`權限不足：您沒有權限${getActionName(action)}${getModuleName(module)}`);
+        }
+
+        return input;
+      } catch (error) {
+        // 如果是權限錯誤，直接拋出
+        if (error.message && error.message.includes('權限不足')) {
+          throw error;
+        }
+        // 其他錯誤記錄但允許繼續
+        console.error('[PermissionCheck] Error in permission check:', error);
+        return input;
+      }
+    });
+  });
+
+  /**
+   * 當員工或職位資料更新時，清除權限緩存
+   */
+  action('employees.items.update', async ({ keys }) => {
+    try {
+      // 查詢受影響員工的 user_id
+      const result = await database.raw(`
+        SELECT user_id FROM employees WHERE id = ANY($1::uuid[])
+      `, [keys]);
+
+      const userIds = result.rows?.map(r => r.user_id).filter(Boolean) || [];
+      userIds.forEach(userId => invalidatePermissionCache(userId));
+
+      console.log(`[PermissionCheck] Invalidated permission cache for ${userIds.length} users`);
+    } catch (error) {
+      console.error('[PermissionCheck] Error invalidating cache:', error);
+    }
+  });
+
+  action('job_titles.items.update', async ({ keys }) => {
+    try {
+      // 清空所有緩存，因為不知道哪些員工使用這些職位
+      invalidatePermissionCache();
+      console.log('[PermissionCheck] Cleared all permission cache due to job title update');
+    } catch (error) {
+      console.error('[PermissionCheck] Error invalidating cache:', error);
+    }
+  });
+
+  /**
+   * 輔助函數：取得操作名稱
+   */
+  function getActionName(action) {
+    const actionNames = {
+      create: '新增',
+      read: '檢視',
+      update: '編輯',
+      delete: '刪除',
+    };
+    return actionNames[action] || action;
+  }
+
+  /**
+   * 輔助函數：取得模組名稱
+   */
+  function getModuleName(module) {
+    const moduleNames = {
+      members: '會員',
+      contracts: '合約',
+      payments: '付款紀錄',
+      plans: '會籍方案',
+      employees: '員工',
+      branches: '分店',
+      checkin: '入場紀錄',
+      hr: '人資資料',
+      reports: '報表',
+      settings: '系統設定',
+    };
+    return moduleNames[module] || module;
+  }
+
+  // 定期清理過期的權限緩存
+  if (typeof schedule === 'function') {
+    schedule('*/30 * * * *', async () => {
+      const now = Date.now();
+      let cleanedCount = 0;
+
+      for (const [userId, cache] of permissionCache.entries()) {
+        if ((now - cache.timestamp) >= PERMISSION_CACHE_TTL) {
+          permissionCache.delete(userId);
+          cleanedCount++;
+        }
+      }
+
+      if (cleanedCount > 0) {
+        console.log(`[PermissionCheck] Cleaned ${cleanedCount} expired permission cache entries`);
+      }
+    });
+  }
 };

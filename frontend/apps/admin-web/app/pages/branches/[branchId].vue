@@ -253,7 +253,7 @@ const handleDelete = async () => {
             {{ PAGES.BRANCHES.EMPLOYEES }}
             <span class="employee-count">({{ employees.length }})</span>
           </h2>
-          <NuxtLink to="/employees/new" class="btn btn-primary btn-small">
+          <NuxtLink to="/hr/employees/new" class="btn btn-primary btn-small">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14"/><path d="M12 5v14"/>
             </svg>
@@ -277,7 +277,7 @@ const handleDelete = async () => {
           <NuxtLink
             v-for="employee in employees"
             :key="employee.id"
-            :to="`/employees/${employee.id}`"
+            :to="`/hr/employees/${employee.id}`"
             class="employee-card card card-interactive"
           >
             <div class="employee-avatar">

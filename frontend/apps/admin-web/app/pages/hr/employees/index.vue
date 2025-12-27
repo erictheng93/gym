@@ -99,7 +99,7 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
       title="員工管理"
       description="管理所有員工資料與權限"
       action-label="新增員工"
-      action-to="/employees/new"
+      action-to="/hr/employees/new"
       action-icon="user-plus"
     />
 
@@ -148,7 +148,7 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
       empty-description="新增第一位員工開始使用系統"
       empty-icon="users"
       empty-action-label="新增員工"
-      empty-action-to="/employees/new"
+      empty-action-to="/hr/employees/new"
       row-clickable
       @row-click="handleRowClick"
     >
@@ -253,7 +253,7 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
 
       <template #footer>
         <button class="btn btn-ghost" @click="showModal = false">關閉</button>
-        <NuxtLink :to="`/employees/${selectedEmployee?.id}/edit`" class="btn btn-primary">
+        <NuxtLink :to="`/hr/employees/${selectedEmployee?.id}/edit`" class="btn btn-primary">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
             <path d="m15 5 4 4"/>

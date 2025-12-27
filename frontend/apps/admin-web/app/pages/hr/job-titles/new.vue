@@ -90,7 +90,7 @@ const handleSubmit = async () => {
       permissions_config: form.permissions_config
     })
     useToast().success(MESSAGES.SUCCESS.JOB_TITLE_CREATED)
-    router.push('/settings/job-titles')
+    router.push('/hr/job-titles')
   } catch (error) {
     console.error('Failed to create job title:', error)
     useToast().error(MESSAGES.ERRORS.JOB_TITLE_CREATE_FAILED)

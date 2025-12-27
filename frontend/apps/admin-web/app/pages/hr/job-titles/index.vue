@@ -26,7 +26,7 @@ onMounted(async () => {
 
 // Handle edit
 const handleEdit = (jobTitle: JobTitle) => {
-  router.push(`/settings/job-titles/${jobTitle.id}/edit`)
+  router.push(`/hr/job-titles/${jobTitle.id}/edit`)
 }
 
 // Handle delete confirm
@@ -80,7 +80,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
       description="管理職位與權限設定"
     >
       <template #actions>
-        <NuxtLink to="/settings/job-titles/new" class="btn btn-primary">
+        <NuxtLink to="/hr/job-titles/new" class="btn btn-primary">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12h14"/><path d="M12 5v14"/>
           </svg>
@@ -104,7 +104,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
         </svg>
         <h3>尚無職位</h3>
         <p>建立您的第一個職位以開始管理員工權限</p>
-        <NuxtLink to="/settings/job-titles/new" class="btn btn-primary">
+        <NuxtLink to="/hr/job-titles/new" class="btn btn-primary">
           新增職位
         </NuxtLink>
       </div>

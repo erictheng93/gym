@@ -74,6 +74,20 @@ const hrModules = [
     to: '/hr/reports',
     icon: 'chart',
     gradient: 'from-orange-500 to-amber-400'
+  },
+  {
+    title: '員工管理',
+    description: '管理所有員工資料與檔案',
+    to: '/hr/employees',
+    icon: 'users',
+    gradient: 'from-indigo-500 to-blue-400'
+  },
+  {
+    title: '職位管理',
+    description: '管理職位與權限設定',
+    to: '/hr/job-titles',
+    icon: 'shield',
+    gradient: 'from-slate-500 to-gray-400'
   }
 ]
 
@@ -316,6 +330,16 @@ const getLeaveTypeLabel = (type: string) => {
             <svg v-else-if="module.icon === 'chart'" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 3v18h18"/>
               <path d="m19 9-5 5-4-4-3 3"/>
+            </svg>
+            <svg v-else-if="module.icon === 'users'" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <svg v-else-if="module.icon === 'shield'" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
+              <path d="m9 12 2 2 4-4"/>
             </svg>
           </div>
           <div class="module-content">
@@ -672,6 +696,16 @@ const getLeaveTypeLabel = (type: string) => {
 .module-icon.from-rose-500 {
   --tw-gradient-from: #f43f5e;
   --tw-gradient-to: #ef4444;
+}
+
+.module-icon.from-indigo-500 {
+  --tw-gradient-from: #6366f1;
+  --tw-gradient-to: #3b82f6;
+}
+
+.module-icon.from-slate-500 {
+  --tw-gradient-from: #64748b;
+  --tw-gradient-to: #94a3b8;
 }
 
 .module-content {

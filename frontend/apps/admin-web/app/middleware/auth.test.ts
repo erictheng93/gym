@@ -98,7 +98,7 @@ describe('auth middleware', () => {
     })
 
     it('應該在訪問員工頁面時重定向未認證用戶', async () => {
-      const to = { path: '/employees' }
+      const to = { path: '/hr/employees' }
       mockAuthInstance.checkAuth.mockResolvedValueOnce(false)
 
       await authMiddleware(to)

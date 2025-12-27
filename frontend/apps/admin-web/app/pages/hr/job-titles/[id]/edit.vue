@@ -38,7 +38,7 @@ const loadJobTitle = async () => {
   } catch (error) {
     console.error('Failed to load job title:', error)
     useToast().error(MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED)
-    router.push('/settings/job-titles')
+    router.push('/hr/job-titles')
   } finally {
     isLoading.value = false
   }
@@ -110,7 +110,7 @@ const handleSubmit = async () => {
       permissions_config: form.permissions_config
     })
     useToast().success(MESSAGES.SUCCESS.JOB_TITLE_UPDATED)
-    router.push('/settings/job-titles')
+    router.push('/hr/job-titles')
   } catch (error) {
     console.error('Failed to update job title:', error)
     useToast().error(MESSAGES.ERRORS.JOB_TITLE_UPDATE_FAILED)

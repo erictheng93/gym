@@ -32,11 +32,6 @@ const menuItems = [
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>`
   },
   {
-    label: MESSAGES.NAV.EMPLOYEES,
-    to: '/employees',
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
-  },
-  {
     label: MESSAGES.NAV.BRANCHES,
     to: '/branches',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`
@@ -49,7 +44,37 @@ const menuItems = [
   {
     label: MESSAGES.NAV.HR,
     to: '/hr',
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>`
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>`,
+    submenu: [
+      {
+        label: '考勤打卡',
+        to: '/hr/attendance'
+      },
+      {
+        label: '休假管理',
+        to: '/hr/leaves'
+      },
+      {
+        label: '補打卡申請',
+        to: '/hr/makeup'
+      },
+      {
+        label: '班表管理',
+        to: '/hr/schedules'
+      },
+      {
+        label: '考勤報表',
+        to: '/hr/reports'
+      },
+      {
+        label: '員工管理',
+        to: '/hr/employees'
+      },
+      {
+        label: '職位管理',
+        to: '/hr/job-titles'
+      }
+    ]
   },
   {
     label: MESSAGES.NAV.REPORTS,
@@ -58,9 +83,51 @@ const menuItems = [
   },
 ]
 
+// Submenu expansion state
+const expandedMenus = ref<Set<string>>(new Set())
+
+// Check if menu has submenu expanded based on current route
+const initExpandedMenus = () => {
+  menuItems.forEach(item => {
+    if (item.submenu) {
+      const hasActiveSubmenu = item.submenu.some(sub => route.path.startsWith(sub.to))
+      if (hasActiveSubmenu || route.path.startsWith(item.to)) {
+        expandedMenus.value.add(item.label)
+      }
+    }
+  })
+}
+
+// Initialize on mount
+onMounted(() => {
+  initExpandedMenus()
+})
+
+// Watch route changes to auto-expand parent menu
+watch(() => route.path, () => {
+  initExpandedMenus()
+})
+
+const toggleSubmenu = (label: string) => {
+  if (expandedMenus.value.has(label)) {
+    expandedMenus.value.delete(label)
+  } else {
+    expandedMenus.value.add(label)
+  }
+}
+
+const isMenuExpanded = (label: string) => {
+  return expandedMenus.value.has(label)
+}
+
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/'
   return route.path.startsWith(path)
+}
+
+const isSubmenuActive = (item: typeof menuItems[0]) => {
+  if (!item.submenu) return isActive(item.to)
+  return item.submenu.some(sub => route.path.startsWith(sub.to)) || route.path.startsWith(item.to)
 }
 
 const userInitial = computed(() => {
@@ -103,7 +170,29 @@ const userName = computed(() => {
         <nav class="sidebar-nav">
           <ul class="nav-list">
             <li v-for="item in menuItems" :key="item.to" class="nav-item">
-              <NuxtLink :to="item.to" class="nav-link" :class="{ active: isActive(item.to) }">
+              <!-- Menu with submenu -->
+              <template v-if="item.submenu">
+                <button
+                  class="nav-link nav-link-parent"
+                  :class="{ active: isSubmenuActive(item), expanded: isMenuExpanded(item.label) }"
+                  @click="toggleSubmenu(item.label)"
+                >
+                  <span class="nav-icon" v-html="item.icon" />
+                  <span class="nav-label">{{ item.label }}</span>
+                  <svg class="nav-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"/>
+                  </svg>
+                </button>
+                <ul class="submenu" :class="{ expanded: isMenuExpanded(item.label) }">
+                  <li v-for="subitem in item.submenu" :key="subitem.to" class="submenu-item">
+                    <NuxtLink :to="subitem.to" class="submenu-link" :class="{ active: isActive(subitem.to) }">
+                      {{ subitem.label }}
+                    </NuxtLink>
+                  </li>
+                </ul>
+              </template>
+              <!-- Regular menu item -->
+              <NuxtLink v-else :to="item.to" class="nav-link" :class="{ active: isActive(item.to) }">
                 <span class="nav-icon" v-html="item.icon" />
                 <span class="nav-label">{{ item.label }}</span>
               </NuxtLink>
@@ -261,6 +350,100 @@ const userName = computed(() => {
 .nav-link:hover .nav-icon,
 .nav-link.active .nav-icon {
   opacity: 1;
+}
+
+/* Parent menu with submenu */
+.nav-link-parent {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+.nav-link-parent .nav-label {
+  flex: 1;
+  text-align: left;
+}
+
+.nav-chevron {
+  opacity: 0.5;
+  transition: all var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.nav-link-parent.expanded .nav-chevron {
+  transform: rotate(90deg);
+}
+
+.nav-link-parent:hover .nav-chevron,
+.nav-link-parent.active .nav-chevron {
+  opacity: 1;
+}
+
+/* Submenu */
+.submenu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--duration-normal) var(--ease-out);
+}
+
+.submenu.expanded {
+  max-height: 500px;
+}
+
+.submenu-item {
+  margin: 0;
+}
+
+.submenu-link {
+  display: block;
+  padding: 10px 14px 10px 48px;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) var(--ease-out);
+  position: relative;
+}
+
+.submenu-link::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.submenu-link:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  padding-left: 50px;
+}
+
+.submenu-link:hover::before {
+  background: var(--color-accent);
+  transform: translateY(-50%) scale(1.3);
+}
+
+.submenu-link.active {
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.submenu-link.active::before {
+  background: var(--color-accent);
+  transform: translateY(-50%) scale(1.5);
 }
 
 /* Footer */

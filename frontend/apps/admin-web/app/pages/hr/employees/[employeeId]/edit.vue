@@ -216,7 +216,7 @@ const handleSubmit = async () => {
 
     await updateEmployee(employeeId.value, employeeData)
     useToast().success(MESSAGES.SUCCESS.EMPLOYEE_UPDATED)
-    router.push(`/employees/${employeeId.value}`)
+    router.push(`/hr/employees/${employeeId.value}`)
   } catch (error) {
     console.error('Failed to update employee:', error)
     useToast().error(MESSAGES.ERRORS.EMPLOYEE_UPDATE_FAILED)
