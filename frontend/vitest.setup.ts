@@ -5,9 +5,51 @@
 
 import { vi } from 'vitest'
 import * as Vue from 'vue'
+import {
+  useFormValidation,
+  required,
+  email,
+  phone,
+  pattern,
+  minLength,
+  maxLength,
+  min,
+  max,
+  between,
+  positive,
+  dateNotFuture,
+  dateNotPast,
+  dateRange,
+  phoneLength,
+  arrayLength,
+  taiwanId,
+  taxId
+} from './packages/ui/composables'
 
 // Make Vue composition API globally available (for Nuxt auto-imports)
 Object.assign(globalThis, Vue)
+
+// Make form validation composables globally available
+Object.assign(globalThis, {
+  useFormValidation,
+  required,
+  email,
+  phone,
+  pattern,
+  minLength,
+  maxLength,
+  min,
+  max,
+  between,
+  positive,
+  dateNotFuture,
+  dateNotPast,
+  dateRange,
+  phoneLength,
+  arrayLength,
+  taiwanId,
+  taxId
+})
 
 // 创建全局状态存储
 const globalStateStore = new Map<string, any>()

@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
 import type { MembershipPlan } from '~/types/directus'
+import {
+  required,
+  positive,
+  between,
+  minLength,
+  maxLength
+} from '@gym-nexus/ui/composables'
 
 definePageMeta({
   middleware: 'auth'
@@ -25,15 +32,6 @@ const form = reactive({
 
 // Form validation - 使用 composable
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
-
-// Import validation rules
-const {
-  required,
-  positive,
-  between,
-  minLength,
-  maxLength
-} = await import('@gym-nexus/ui/composables')
 
 const planTypeOptions = [
   { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },

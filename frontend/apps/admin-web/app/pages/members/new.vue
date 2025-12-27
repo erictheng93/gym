@@ -5,6 +5,17 @@
  * 使用 @gym-nexus/ui 表單組件重構
  */
 import { MESSAGES, PAGES, LABELS } from '~/constants'
+import {
+  required,
+  email,
+  phone,
+  phoneLength,
+  minLength,
+  maxLength,
+  between,
+  dateNotFuture,
+  arrayLength
+} from '@gym-nexus/ui/composables'
 
 definePageMeta({
   middleware: 'auth'
@@ -32,19 +43,6 @@ const form = reactive({
 
 // Form validation
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
-
-// Import validation rules
-const {
-  required,
-  email,
-  phone,
-  phoneLength,
-  minLength,
-  maxLength,
-  between,
-  dateNotFuture,
-  arrayLength
-} = await import('@gym-nexus/ui/composables')
 
 // Options
 const genderOptions = [

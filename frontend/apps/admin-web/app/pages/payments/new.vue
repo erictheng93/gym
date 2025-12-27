@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
+import {
+  required,
+  positive,
+  between,
+  maxLength,
+  dateNotFuture
+} from '@gym-nexus/ui/composables'
 
 definePageMeta({
   middleware: 'auth'
@@ -30,15 +37,6 @@ const memberContracts = ref<typeof contracts.value>([])
 
 // Form validation - 使用 composable
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
-
-// Import validation rules
-const {
-  required,
-  positive,
-  between,
-  maxLength,
-  dateNotFuture
-} = await import('@gym-nexus/ui/composables')
 
 const paymentMethods = [
   { value: 'CASH', label: LABELS.PAYMENT_METHOD.CASH, icon: '💵' },

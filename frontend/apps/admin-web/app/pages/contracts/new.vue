@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
+import { required, positive, between, maxLength } from '@gym-nexus/ui/composables'
 
 definePageMeta({
   middleware: 'auth'
@@ -19,14 +20,6 @@ const totalSteps = 3
 
 // Form validation - 使用 composable
 const { errors, validate, setError, clearErrors, clearFieldError } = useFormValidation<typeof form>()
-
-// Import validation rules
-const {
-  required,
-  positive,
-  between,
-  maxLength
-} = await import('@gym-nexus/ui/composables')
 
 const form = reactive({
   member_id: route.query.member as string || '',

@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { MESSAGES, PAGES, LABELS } from '~/constants'
+import {
+  required,
+  email,
+  phone,
+  phoneLength,
+  minLength,
+  maxLength,
+  between,
+  dateNotFuture,
+  arrayLength
+} from '@gym-nexus/ui/composables'
 
 definePageMeta({
   middleware: 'auth',
@@ -35,19 +46,6 @@ const newTag = ref('')
 
 // Form validation - 使用 composable
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
-
-// Import validation rules
-const {
-  required,
-  email,
-  phone,
-  phoneLength,
-  minLength,
-  maxLength,
-  between,
-  dateNotFuture,
-  arrayLength
-} = await import('@gym-nexus/ui/composables')
 
 const genderOptions = [
   { value: 'M', label: '男' },
