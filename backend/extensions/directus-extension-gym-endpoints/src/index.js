@@ -5,9 +5,93 @@
  * 2. QR Code Checkin - Verify QR code and process member check-in
  * 3. Class Bookings - Book/cancel classes with atomic operations
  * 4. Push Notifications - VAPID key and subscription management
+ * 5. Reports - 報表查詢和刷新
  */
 
 import crypto from 'crypto';
+
+// ============================================
+// Redis 緩存工具 (可選 - 報表緩存)
+// ============================================
+let redisClient = null;
+let redisAvailable = false;
+
+// 嘗試連接 Redis
+async function initRedis() {
+  try {
+    const Redis = (await import('ioredis')).default;
+    const host = process.env.REDIS_HOST || 'redis';
+    const port = parseInt(process.env.REDIS_PORT || '6379', 10);
+
+    redisClient = new Redis({
+      host,
+      port,
+      retryStrategy: (times) => times > 2 ? null : Math.min(times * 100, 1000),
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+    });
+
+    redisClient.on('connect', () => {
+      redisAvailable = true;
+      console.log('[GymEndpoint] Redis connected for report caching');
+    });
+
+    redisClient.on('error', () => {
+      redisAvailable = false;
+    });
+
+    await redisClient.connect();
+  } catch (error) {
+    console.log('[GymEndpoint] Redis not available, reports will not be cached');
+  }
+}
+
+// 初始化 Redis 連接（非阻塞）
+initRedis();
+
+// 報表緩存函數
+const REPORT_CACHE_TTL = 600; // 10 分鐘
+const CACHE_PREFIX = 'gym:report:';
+
+async function getCachedReport(reportType, queryKey) {
+  if (!redisAvailable || !redisClient) return null;
+  try {
+    const key = `${CACHE_PREFIX}${reportType}:${queryKey}`;
+    const data = await redisClient.get(key);
+    if (data) {
+      console.log(`[GymEndpoint] Cache HIT: ${reportType}`);
+      return JSON.parse(data);
+    }
+    console.log(`[GymEndpoint] Cache MISS: ${reportType}`);
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function setCachedReport(reportType, queryKey, data) {
+  if (!redisAvailable || !redisClient) return;
+  try {
+    const key = `${CACHE_PREFIX}${reportType}:${queryKey}`;
+    await redisClient.setex(key, REPORT_CACHE_TTL, JSON.stringify(data));
+    console.log(`[GymEndpoint] Cache SET: ${reportType}`);
+  } catch (error) {
+    // 忽略緩存錯誤
+  }
+}
+
+async function invalidateReportCache() {
+  if (!redisAvailable || !redisClient) return;
+  try {
+    const keys = await redisClient.keys(`${CACHE_PREFIX}*`);
+    if (keys.length > 0) {
+      await redisClient.del(...keys);
+      console.log(`[GymEndpoint] Invalidated ${keys.length} report cache entries`);
+    }
+  } catch (error) {
+    console.log('[GymEndpoint] Error invalidating cache:', error.message);
+  }
+}
 
 // ============================================
 // Simple JWT implementation (無需外部依賴)
@@ -1969,6 +2053,13 @@ export default {
           return d.toISOString().split('T')[0];
         })();
 
+        // 嘗試從緩存獲取
+        const cacheKey = `${startDate}_${endDate}_${branch_id || 'all'}`;
+        const cached = await getCachedReport('revenue', cacheKey);
+        if (cached) {
+          return res.json(cached);
+        }
+
         // Build query with optional branch filter
         let query = `
           SELECT
@@ -2008,7 +2099,7 @@ export default {
           transaction_count: (acc.transaction_count || 0) + parseInt(row.transaction_count || 0),
         }), {});
 
-        res.json({
+        const response = {
           success: true,
           period: { start_date: startDate, end_date: endDate },
           summary: {
@@ -2019,7 +2110,12 @@ export default {
             average_daily_revenue: rows.length > 0 ? (totals.net_revenue / rows.length).toFixed(2) : 0,
           },
           data: rows,
-        });
+        };
+
+        // 緩存響應
+        await setCachedReport('revenue', cacheKey, response);
+
+        res.json(response);
       } catch (error) {
         console.error('[GymEndpoint] Revenue report error:', error);
         res.status(error.status || 500).json({
@@ -2045,6 +2141,13 @@ export default {
           d.setDate(d.getDate() - 30);
           return d.toISOString().split('T')[0];
         })();
+
+        // 嘗試從緩存獲取
+        const cacheKey = `${startDate}_${endDate}_${branch_id || 'all'}`;
+        const cached = await getCachedReport('member-growth', cacheKey);
+        if (cached) {
+          return res.json(cached);
+        }
 
         let query = `
           SELECT
@@ -2089,7 +2192,7 @@ export default {
 
         const totalMembers = parseInt((totalMembersResult.rows?.[0] || totalMembersResult[0])?.count || 0);
 
-        res.json({
+        const response = {
           success: true,
           period: { start_date: startDate, end_date: endDate },
           summary: {
@@ -2102,7 +2205,12 @@ export default {
             },
           },
           data: rows,
-        });
+        };
+
+        // 緩存響應
+        await setCachedReport('member-growth', cacheKey, response);
+
+        res.json(response);
       } catch (error) {
         console.error('[GymEndpoint] Member growth report error:', error);
         res.status(error.status || 500).json({
@@ -2120,6 +2228,13 @@ export default {
     router.get('/reports/contract-expiry', async (req, res) => {
       try {
         const { days_ahead = 30, branch_id, limit = 100 } = req.query;
+
+        // 嘗試從緩存獲取 (合約到期提醒用較短的 TTL)
+        const cacheKey = `${days_ahead}_${branch_id || 'all'}_${limit}`;
+        const cached = await getCachedReport('contract-expiry', cacheKey);
+        if (cached) {
+          return res.json(cached);
+        }
 
         let query = `
           SELECT
@@ -2167,7 +2282,7 @@ export default {
           upcoming: rows.filter(r => r.days_until_expiry > 30),
         };
 
-        res.json({
+        const response = {
           success: true,
           summary: {
             total_expiring: rows.length,
@@ -2177,7 +2292,12 @@ export default {
           },
           grouped: groupedData,
           data: rows,
-        });
+        };
+
+        // 緩存響應 (合約到期提醒緩存 5 分鐘)
+        await setCachedReport('contract-expiry', cacheKey, response);
+
+        res.json(response);
       } catch (error) {
         console.error('[GymEndpoint] Contract expiry report error:', error);
         res.status(error.status || 500).json({
@@ -2203,6 +2323,13 @@ export default {
           d.setDate(d.getDate() - 30);
           return d.toISOString().split('T')[0];
         })();
+
+        // 嘗試從緩存獲取
+        const cacheKey = `${startDate}_${endDate}_${branch_id || 'all'}`;
+        const cached = await getCachedReport('member-activity', cacheKey);
+        if (cached) {
+          return res.json(cached);
+        }
 
         let query = `
           SELECT
@@ -2242,7 +2369,7 @@ export default {
           card_total: (acc.card_total || 0) + parseInt(row.card_count || 0),
         }), {});
 
-        res.json({
+        const response = {
           success: true,
           period: { start_date: startDate, end_date: endDate },
           summary: {
@@ -2255,7 +2382,12 @@ export default {
             },
           },
           data: rows,
-        });
+        };
+
+        // 緩存響應
+        await setCachedReport('member-activity', cacheKey, response);
+
+        res.json(response);
       } catch (error) {
         console.error('[GymEndpoint] Member activity report error:', error);
         res.status(error.status || 500).json({
@@ -2271,16 +2403,59 @@ export default {
      */
     router.post('/reports/refresh', async (req, res) => {
       try {
-        // TODO: Add admin authentication check
+        // 驗證用戶身份
+        const userId = req.accountability?.user;
+        if (!userId) {
+          return res.status(401).json({
+            success: false,
+            message: '請先登入',
+          });
+        }
+
+        // 檢查是否為 Directus 管理員
+        const isDirectusAdmin = req.accountability?.admin === true;
+
+        // 如果不是 Directus 管理員，檢查自定義權限
+        if (!isDirectusAdmin) {
+          const permissionResult = await database.raw(`
+            SELECT
+              COALESCE(e.custom_permissions, jt.permissions_config) as permissions
+            FROM employees e
+            LEFT JOIN job_titles jt ON jt.id = e.job_title_id
+            WHERE e.user_id = $1
+              AND e.status = 'active'
+            LIMIT 1
+          `, [userId]);
+
+          const employee = permissionResult.rows?.[0];
+          const permissions = employee?.permissions || {};
+
+          // 檢查是否有 reports.manage 權限
+          const hasReportManagePermission = permissions?.reports?.manage === true;
+
+          if (!hasReportManagePermission) {
+            console.log(`[GymEndpoint] Reports refresh denied for user ${userId}: no reports.manage permission`);
+            return res.status(403).json({
+              success: false,
+              message: '權限不足：您沒有權限刷新報表資料',
+            });
+          }
+        }
+
+        console.log(`[GymEndpoint] Reports refresh authorized for user ${userId} (admin: ${isDirectusAdmin})`);
 
         await database.raw('SELECT refresh_report_views()');
 
-        console.log('[GymEndpoint] Report views refreshed');
+        // 清除報表緩存
+        await invalidateReportCache();
+
+        console.log('[GymEndpoint] Report views refreshed and cache cleared');
 
         res.json({
           success: true,
           message: '報表資料已更新',
           refreshed_at: new Date().toISOString(),
+          cache_cleared: true,
         });
       } catch (error) {
         console.error('[GymEndpoint] Refresh reports error:', error);

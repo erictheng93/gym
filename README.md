@@ -16,6 +16,7 @@
 | **[PRD.md](./PRD.md)** | 產品需求文件 - 功能規格、使用者角色、驗收標準 | PM、利害關係人、QA |
 | **[健身房系統架構設計.md](./健身房系統架構設計.md)** | 技術架構文件 - 資料庫 Schema、欄位定義、權限實作 | 開發者、DBA |
 | **[backend/DATABASE_INDEXES.md](./backend/DATABASE_INDEXES.md)** | 資料庫索引優化文件 - 100+ 索引、性能基準 | DBA、後端開發者 |
+| **[backend/REPORTS_API.md](./backend/REPORTS_API.md)** | 報表 API 文件 - 營收、會員成長、合約到期提醒 | 前端開發者、API 使用者 |
 | **[CLAUDE.md](./CLAUDE.md)** | AI 開發助理指引 - 專案結構與開發命令 | AI 工具、新進開發者 |
 
 ---
@@ -110,16 +111,20 @@
 gym-nexus/
 ├── backend/                    # Directus 後端
 │   ├── extensions/             # 自訂 Hooks & Endpoints
-│   │   ├── hooks/              # 生命週期鉤子 (合約到期通知等)
-│   │   └── endpoints/          # 自訂 API (PDF 生成等)
+│   │   ├── gym-hooks/          # 生命週期鉤子 (合約到期、Email 通知)
+│   │   │   ├── index.js        # 主要 Hook 邏輯
+│   │   │   ├── cache.js        # Redis 快取模組
+│   │   │   └── email-service.js # Email 模板與發送服務
+│   │   └── gym-endpoints/      # 自訂 API (報表、QR Code、Push)
 │   ├── migrations/             # 資料庫遷移腳本
 │   │   ├── 005_optimize_indexes.sql      # 索引優化（40+ 索引）
 │   │   └── 006_postgis_spatial_indexes.sql # PostGIS 空間索引
 │   ├── schema/                 # 資料庫 Schema 快照
 │   ├── uploads/                # 本地上傳檔案 (開發用)
 │   ├── DATABASE_INDEXES.md     # 📊 索引優化文件（100+ 索引）
+│   ├── REPORTS_API.md          # 📈 報表 API 文件
 │   ├── docker-compose.yml      # 開發環境容器配置
-│   └── .env.example            # 環境變數範本
+│   └── .env.example            # 環境變數範本（含 SMTP、VAPID）
 │
 ├── frontend/                   # Nuxt 3 前端 (Monorepo)
 │   ├── apps/
@@ -279,22 +284,25 @@ NUXT_PUBLIC_APP_NAME=Gym Nexus
 - [x] 基礎權限設定 (Role-based + Row-level)
 - [x] 會員 CRUD 與標籤系統
 
-### 🚧 Phase 2: 營運深化 (進行中)
-- [ ] HR 打卡與休假系統
-- [ ] 合約異動邏輯 (請假順延自動計算)
-- [ ] 財務收款紀錄
-- [ ] 基礎報表 (日/月營收)
+### ✅ Phase 2: 營運深化 (已完成)
+- [x] HR 打卡與休假系統 (GPS/IP 驗證、補打卡申請)
+- [x] 合約異動邏輯 (請假順延自動計算)
+- [x] 財務收款紀錄 (多元支付方式)
+- [x] 基礎報表 (日/月營收、會員成長、活躍度分析)
+- [x] 報表 API 快取 (Redis 10 分鐘 TTL)
 
-### 📋 Phase 3: 會員端 & 進階功能
-- [ ] Nuxt 會員端 App (PWA)
-- [ ] 入場條碼 / QR Code 掃描
-- [ ] 總部戰情室 Dashboard
-- [ ] 通知系統 (合約到期提醒)
+### ✅ Phase 3: 會員端 & 進階功能 (已完成)
+- [x] Nuxt 會員端 App (PWA)
+- [x] 入場條碼 / QR Code 掃描
+- [x] 總部戰情室 Dashboard
+- [x] 通知系統 (Email + Push Notifications)
+- [x] 合約到期 Email 提醒 (7/3/1 天)
+- [x] 表單驗證組件 (useFormValidation)
 
-### 🔮 Phase 4: 擴充功能
+### 🚧 Phase 4: 擴充功能 (進行中)
 - [ ] Wger 運動數據整合 (身體數據、訓練日誌)
 - [ ] 課程預約系統
-- [ ] 進階報表與數據分析
+- [x] 進階報表與數據分析 (Looker Studio 整合)
 - [ ] Mobile App (Capacitor)
 
 ---

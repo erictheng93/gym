@@ -9,5 +9,14 @@ export {
   minLength,
   maxLength,
   min,
-  max
+  max,
+  between,
+  positive,
+  dateNotFuture,
+  dateNotPast,
+  dateRange,
+  phoneLength,
+  arrayLength,
+  taiwanId,
+  taxId
 } from './useFormValidation'

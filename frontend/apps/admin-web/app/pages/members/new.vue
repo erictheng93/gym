@@ -33,6 +33,19 @@ const form = reactive({
 // Form validation
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
 
+// Import validation rules
+const {
+  required,
+  email,
+  phone,
+  phoneLength,
+  minLength,
+  maxLength,
+  between,
+  dateNotFuture,
+  arrayLength
+} = await import('@gym-nexus/ui/composables')
+
 // Options
 const genderOptions = [
   { value: 'M', label: LABELS.GENDER.MALE },
@@ -57,9 +70,23 @@ const handleSubmit = async () => {
   clearErrors()
 
   const isValid = validate(form, {
-    full_name: [required(PAGES.MEMBERS.NAME_PLACEHOLDER)],
+    full_name: [
+      required('請輸入會員姓名'),
+      minLength(2, '姓名至少需要 2 個字'),
+      maxLength(50, '姓名不能超過 50 個字')
+    ],
     email: [email('Email 格式不正確')],
-    phone: [phone('電話格式不正確')]
+    phone: [
+      phone('電話格式不正確'),
+      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
+    ],
+    emergency_phone: [
+      phone('緊急聯絡電話格式不正確'),
+      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
+    ],
+    birthday: [dateNotFuture('生日不能是未來日期')],
+    height: [between(50, 300, '身高需介於 50-300 公分')],
+    tags: [arrayLength(10, '最多只能有 10 個標籤')]
   })
 
   if (!isValid) return
@@ -144,6 +171,7 @@ const handleSubmit = async () => {
           <FormDatePicker
             v-model="form.birthday"
             :label="MESSAGES.FORM.BIRTHDAY"
+            :error="errors.birthday"
           />
 
           <FormInput
@@ -151,8 +179,9 @@ const handleSubmit = async () => {
             label="身高 (cm)"
             type="number"
             placeholder="例：175"
-            :min="0"
+            :min="50"
             :max="300"
+            :error="errors.height"
           />
 
           <FormSelect
@@ -201,6 +230,7 @@ const handleSubmit = async () => {
             label="緊急聯絡電話"
             type="tel"
             placeholder="0912-345-678"
+            :error="errors.emergency_phone"
           />
         </div>
       </section>
@@ -218,6 +248,8 @@ const handleSubmit = async () => {
           v-model="form.tags"
           placeholder="輸入標籤..."
           :add-button-text="MESSAGES.FORM.ADD"
+          :max-tags="10"
+          :error="errors.tags"
         />
       </section>
 

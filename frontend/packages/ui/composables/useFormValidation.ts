@@ -139,6 +139,145 @@ export const max = (maxValue: number, message?: string): ValidationRule<number |
 }
 
 /**
+ * 數值範圍驗證（包含邊界）
+ */
+export const between = (minValue: number, maxValue: number, message?: string): ValidationRule<number | null> => {
+  return (value) => {
+    if (value === null || value === undefined) return undefined
+    if (value < minValue || value > maxValue) {
+      return message || `數值必須介於 ${minValue} 至 ${maxValue} 之間`
+    }
+    return undefined
+  }
+}
+
+/**
+ * 正數驗證（大於 0）
+ */
+export const positive = (message = '數值必須大於 0'): ValidationRule<number | null> => {
+  return (value) => {
+    if (value === null || value === undefined) return undefined
+    if (value <= 0) {
+      return message
+    }
+    return undefined
+  }
+}
+
+/**
+ * 日期不能是未來日期
+ */
+export const dateNotFuture = (message = '日期不能是未來日期'): ValidationRule<string> => {
+  return (value) => {
+    if (!value) return undefined
+    const inputDate = new Date(value)
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
+    if (inputDate > today) {
+      return message
+    }
+    return undefined
+  }
+}
+
+/**
+ * 日期不能是過去日期
+ */
+export const dateNotPast = (message = '日期不能是過去日期'): ValidationRule<string> => {
+  return (value) => {
+    if (!value) return undefined
+    const inputDate = new Date(value)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (inputDate < today) {
+      return message
+    }
+    return undefined
+  }
+}
+
+/**
+ * 日期範圍驗證
+ */
+export const dateRange = (minDate?: string, maxDate?: string, message?: string): ValidationRule<string> => {
+  return (value) => {
+    if (!value) return undefined
+    const inputDate = new Date(value)
+    if (minDate) {
+      const min = new Date(minDate)
+      if (inputDate < min) {
+        return message || `日期不能早於 ${minDate}`
+      }
+    }
+    if (maxDate) {
+      const max = new Date(maxDate)
+      if (inputDate > max) {
+        return message || `日期不能晚於 ${maxDate}`
+      }
+    }
+    return undefined
+  }
+}
+
+/**
+ * 電話長度驗證（只計算數字）
+ */
+export const phoneLength = (minDigits = 8, maxDigits = 15, message?: string): ValidationRule<string> => {
+  return (value) => {
+    if (!value) return undefined
+    const digitsOnly = value.replace(/\D/g, '')
+    if (digitsOnly.length < minDigits) {
+      return message || `電話號碼至少需要 ${minDigits} 位數字`
+    }
+    if (digitsOnly.length > maxDigits) {
+      return message || `電話號碼不能超過 ${maxDigits} 位數字`
+    }
+    return undefined
+  }
+}
+
+/**
+ * 陣列長度驗證（適用於標籤等）
+ */
+export const arrayLength = (maxItems: number, message?: string): ValidationRule<unknown[]> => {
+  return (value) => {
+    if (!value || !Array.isArray(value)) return undefined
+    if (value.length > maxItems) {
+      return message || `最多只能有 ${maxItems} 個項目`
+    }
+    return undefined
+  }
+}
+
+/**
+ * 台灣身分證字號驗證
+ */
+export const taiwanId = (message = '身分證字號格式不正確'): ValidationRule<string> => {
+  return (value) => {
+    if (!value) return undefined
+    const idRegex = /^[A-Z][12]\d{8}$/
+    if (!idRegex.test(value.toUpperCase())) {
+      return message
+    }
+    return undefined
+  }
+}
+
+/**
+ * 台灣統一編號驗證
+ */
+export const taxId = (message = '統一編號格式不正確'): ValidationRule<string> => {
+  return (value) => {
+    if (!value) return undefined
+    const taxIdRegex = /^\d{8}$/
+    if (!taxIdRegex.test(value)) {
+      return message
+    }
+    return undefined
+  }
+}
+
+/**
  * 表單驗證 Composable
  */
 export function useFormValidation<T extends Record<string, unknown>>() {

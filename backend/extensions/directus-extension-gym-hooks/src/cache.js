@@ -17,6 +17,7 @@ const CACHE_CONFIG = {
     EMPLOYEE_PERMISSIONS: 600, // 員工權限 10 分鐘
     JOB_TITLE_PERMISSIONS: 3600, // 職稱權限 1 小時
     BRANCH_CONFIG: 1800,       // 分店設定 30 分鐘
+    REPORT_DATA: 600,          // 報表數據 10 分鐘
   },
   // 緩存 Key 前綴
   PREFIX: 'gym:',
@@ -383,6 +384,81 @@ export async function getCacheStats() {
 }
 
 // ============================================
+// 報表數據緩存
+// ============================================
+
+/**
+ * 獲取報表數據 (從緩存)
+ * @param {string} reportType - 報表類型 (revenue, member_growth, contract_expiry, member_activity)
+ * @param {string} cacheKey - 查詢參數組成的緩存鍵
+ * @returns {Promise<object|null>} 報表數據或 null
+ */
+export async function getCachedReportData(reportType, queryKey) {
+  try {
+    const client = getRedisClient();
+    if (!isConnected) return null;
+
+    const key = cacheKey('report', reportType, queryKey);
+    const data = await client.get(key);
+
+    if (data) {
+      console.log(`[GymCache] HIT report:${reportType}:${queryKey.substring(0, 20)}`);
+      return JSON.parse(data);
+    }
+
+    console.log(`[GymCache] MISS report:${reportType}:${queryKey.substring(0, 20)}`);
+    return null;
+  } catch (error) {
+    console.log('[GymCache] Error getting report data:', error.message);
+    return null;
+  }
+}
+
+/**
+ * 設置報表數據緩存
+ * @param {string} reportType - 報表類型
+ * @param {string} queryKey - 查詢參數組成的緩存鍵
+ * @param {object} data - 報表數據
+ * @param {number} ttl - 可選的自定義 TTL (秒)
+ */
+export async function setCachedReportData(reportType, queryKey, data, ttl = null) {
+  try {
+    const client = getRedisClient();
+    if (!isConnected) return;
+
+    const key = cacheKey('report', reportType, queryKey);
+    const cacheTtl = ttl || CACHE_CONFIG.TTL.REPORT_DATA;
+    await client.setex(key, cacheTtl, JSON.stringify(data));
+    console.log(`[GymCache] SET report:${reportType}:${queryKey.substring(0, 20)} (TTL: ${cacheTtl}s)`);
+  } catch (error) {
+    console.log('[GymCache] Error setting report data:', error.message);
+  }
+}
+
+/**
+ * 清除報表緩存 (當物化視圖刷新時調用)
+ * @param {string} reportType - 可選，指定報表類型；不指定則清除所有報表緩存
+ */
+export async function invalidateReportCache(reportType = null) {
+  try {
+    const client = getRedisClient();
+    if (!isConnected) return;
+
+    const pattern = reportType
+      ? `${CACHE_CONFIG.PREFIX}report:${reportType}:*`
+      : `${CACHE_CONFIG.PREFIX}report:*`;
+
+    const keys = await client.keys(pattern);
+    if (keys.length > 0) {
+      await client.del(...keys);
+      console.log(`[GymCache] Invalidated ${keys.length} report cache entries (type: ${reportType || 'all'})`);
+    }
+  } catch (error) {
+    console.log('[GymCache] Error invalidating report cache:', error.message);
+  }
+}
+
+// ============================================
 // 性能監控緩存 (用於追蹤慢查詢)
 // ============================================
 
@@ -468,4 +544,8 @@ export default {
   getCacheStats,
   recordPerformanceMetric,
   getPerformanceStats,
+  // 報表緩存
+  getCachedReportData,
+  setCachedReportData,
+  invalidateReportCache,
 };

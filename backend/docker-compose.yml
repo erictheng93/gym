@@ -171,3 +171,22 @@ services:
       # AUTH_FACEBOOK_LABEL: "Facebook"
       # AUTH_FACEBOOK_ALLOW_PUBLIC_REGISTRATION: "true"
       # AUTH_FACEBOOK_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
+
+      # ============================================
+      # Email Configuration (SMTP)
+      # ============================================
+      EMAIL_TRANSPORT: "${EMAIL_TRANSPORT:-smtp}"
+      EMAIL_FROM: "${EMAIL_FROM:-noreply@gym-nexus.com}"
+      EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-}"
+      EMAIL_SMTP_PORT: "${EMAIL_SMTP_PORT:-587}"
+      EMAIL_SMTP_USER: "${EMAIL_SMTP_USER:-}"
+      EMAIL_SMTP_PASSWORD: "${EMAIL_SMTP_PASSWORD:-}"
+      EMAIL_SMTP_SECURE: "${EMAIL_SMTP_SECURE:-false}"
+      EMAIL_SMTP_IGNORE_TLS: "${EMAIL_SMTP_IGNORE_TLS:-false}"
+
+      # ============================================
+      # Push Notification (VAPID for Web Push)
+      # ============================================
+      VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
+      VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
+      VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:admin@gym-nexus.com}"

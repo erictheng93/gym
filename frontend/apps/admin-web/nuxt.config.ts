@@ -48,7 +48,11 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500'
+      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500',
+      // Google OAuth 2.0 configuration
+      googleClientId: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      googleRedirectUri: process.env.NUXT_PUBLIC_GOOGLE_REDIRECT_URI || 'http://localhost:3001/settings/google-integration/callback',
+      googleScopes: process.env.NUXT_PUBLIC_GOOGLE_SCOPES || 'https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive.file'
     }
   },
 

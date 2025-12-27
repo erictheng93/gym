@@ -12,13 +12,24 @@ const selectedBranch = ref('')
 const selectedPeriod = ref('month')
 const loading = ref(true)
 
-// Real report data
+// Real report data - current period
 const revenueReport = ref<RevenueReport | null>(null)
 const memberGrowthReport = ref<MemberGrowthReport | null>(null)
 const contractExpiryReport = ref<ContractExpiryReport | null>(null)
 const memberActivityReport = ref<MemberActivityReport | null>(null)
 
-// Computed stats from real data
+// Previous period data for comparison
+const prevRevenueReport = ref<RevenueReport | null>(null)
+const prevMemberGrowthReport = ref<MemberGrowthReport | null>(null)
+const prevMemberActivityReport = ref<MemberActivityReport | null>(null)
+
+// Helper to calculate percentage change
+const calculateChange = (current: number, previous: number): number => {
+  if (previous === 0) return current > 0 ? 100 : 0
+  return ((current - previous) / previous) * 100
+}
+
+// Computed stats from real data with actual trend calculations
 const stats = computed(() => {
   if (!revenueReport.value || !memberGrowthReport.value || !contractExpiryReport.value || !memberActivityReport.value) {
     return {
@@ -33,15 +44,33 @@ const stats = computed(() => {
     }
   }
 
+  // Calculate revenue change
+  const currentRevenue = revenueReport.value.summary.net_revenue
+  const prevRevenue = prevRevenueReport.value?.summary.net_revenue ?? 0
+  const revenueChange = calculateChange(currentRevenue, prevRevenue)
+
+  // Calculate new members change
+  const currentMembers = memberGrowthReport.value.summary.total_new_members
+  const prevMembers = prevMemberGrowthReport.value?.summary.total_new_members ?? 0
+  const newMembersChange = calculateChange(currentMembers, prevMembers)
+
+  // Calculate check-ins change
+  const currentCheckins = memberActivityReport.value.summary.total_check_ins
+  const prevCheckins = prevMemberActivityReport.value?.summary.total_check_ins ?? 0
+  const checkinsChange = calculateChange(currentCheckins, prevCheckins)
+
+  // Contract expiry doesn't need comparison - it's a current state
+  const activeContracts = contractExpiryReport.value.summary.total_expiring
+
   return {
-    revenue: revenueReport.value.summary.net_revenue,
-    revenueChange: 12.5, // TODO: Calculate from historical data
-    newMembers: memberGrowthReport.value.summary.total_new_members,
-    newMembersChange: 8.2, // TODO: Calculate from historical data
-    activeContracts: contractExpiryReport.value.summary.total_expiring,
-    contractsChange: 5.1, // TODO: Calculate from historical data
-    checkins: memberActivityReport.value.summary.total_check_ins,
-    checkinsChange: -2.3 // TODO: Calculate from historical data
+    revenue: currentRevenue,
+    revenueChange,
+    newMembers: currentMembers,
+    newMembersChange,
+    activeContracts,
+    contractsChange: 0, // Contract expiry is not a trend metric
+    checkins: currentCheckins,
+    checkinsChange
   }
 })
 
@@ -90,40 +119,71 @@ const loadReports = async () => {
     loading.value = true
 
     // Calculate date range based on selected period
-    const endDate = new Date().toISOString().split('T')[0]
-    let startDate: string
+    const endDate = new Date()
+    let startDate: Date
+    let prevEndDate: Date
+    let prevStartDate: Date
 
     switch (selectedPeriod.value) {
       case 'week':
-        const weekAgo = new Date()
-        weekAgo.setDate(weekAgo.getDate() - 7)
-        startDate = weekAgo.toISOString().split('T')[0]
+        startDate = new Date(endDate)
+        startDate.setDate(startDate.getDate() - 7)
+        // Previous week
+        prevEndDate = new Date(startDate)
+        prevEndDate.setDate(prevEndDate.getDate() - 1)
+        prevStartDate = new Date(prevEndDate)
+        prevStartDate.setDate(prevStartDate.getDate() - 7)
         break
       case 'year':
-        const yearAgo = new Date()
-        yearAgo.setFullYear(yearAgo.getFullYear() - 1)
-        startDate = yearAgo.toISOString().split('T')[0]
+        startDate = new Date(endDate)
+        startDate.setFullYear(startDate.getFullYear() - 1)
+        // Previous year
+        prevEndDate = new Date(startDate)
+        prevEndDate.setDate(prevEndDate.getDate() - 1)
+        prevStartDate = new Date(prevEndDate)
+        prevStartDate.setFullYear(prevStartDate.getFullYear() - 1)
         break
       case 'month':
       default:
-        const monthAgo = new Date()
-        monthAgo.setMonth(monthAgo.getMonth() - 1)
-        startDate = monthAgo.toISOString().split('T')[0]
+        startDate = new Date(endDate)
+        startDate.setMonth(startDate.getMonth() - 1)
+        // Previous month
+        prevEndDate = new Date(startDate)
+        prevEndDate.setDate(prevEndDate.getDate() - 1)
+        prevStartDate = new Date(prevEndDate)
+        prevStartDate.setMonth(prevStartDate.getMonth() - 1)
         break
     }
 
-    // Fetch all reports in parallel
-    const [revenue, growth, expiry, activity] = await Promise.all([
-      getRevenueReport(startDate, endDate, selectedBranch.value || undefined),
-      getMemberGrowthReport(startDate, endDate, selectedBranch.value || undefined),
-      getContractExpiryReport(30, selectedBranch.value || undefined),
-      getMemberActivityReport(startDate, endDate, selectedBranch.value || undefined)
+    const formatDate = (d: Date) => d.toISOString().split('T')[0]
+    const branchId = selectedBranch.value || undefined
+
+    // Fetch current and previous period reports in parallel
+    const [
+      revenue, growth, expiry, activity,
+      prevRevenue, prevGrowth, prevActivity
+    ] = await Promise.all([
+      // Current period
+      getRevenueReport(formatDate(startDate), formatDate(endDate), branchId),
+      getMemberGrowthReport(formatDate(startDate), formatDate(endDate), branchId),
+      getContractExpiryReport(30, branchId),
+      getMemberActivityReport(formatDate(startDate), formatDate(endDate), branchId),
+      // Previous period for comparison
+      getRevenueReport(formatDate(prevStartDate), formatDate(prevEndDate), branchId),
+      getMemberGrowthReport(formatDate(prevStartDate), formatDate(prevEndDate), branchId),
+      getMemberActivityReport(formatDate(prevStartDate), formatDate(prevEndDate), branchId)
     ])
 
+    // Set current period data
     revenueReport.value = revenue
     memberGrowthReport.value = growth
     contractExpiryReport.value = expiry
     memberActivityReport.value = activity
+
+    // Set previous period data for trend calculation
+    prevRevenueReport.value = prevRevenue
+    prevMemberGrowthReport.value = prevGrowth
+    prevMemberActivityReport.value = prevActivity
   } catch (error) {
     console.error('Failed to load reports:', error)
   } finally {

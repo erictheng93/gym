@@ -14,7 +14,6 @@ const { branches, fetchBranches } = useBranches()
 
 const isLoading = ref(true)
 const isSubmitting = ref(false)
-const errors = ref<Record<string, string>>({})
 
 const form = reactive({
   member_id: route.query.member as string || '',
@@ -28,6 +27,18 @@ const form = reactive({
 })
 
 const memberContracts = ref<typeof contracts.value>([])
+
+// Form validation - 使用 composable
+const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+
+// Import validation rules
+const {
+  required,
+  positive,
+  between,
+  maxLength,
+  dateNotFuture
+} = await import('@gym-nexus/ui/composables')
 
 const paymentMethods = [
   { value: 'CASH', label: LABELS.PAYMENT_METHOD.CASH, icon: '💵' },
@@ -83,19 +94,24 @@ onMounted(async () => {
   isLoading.value = false
 })
 
-const validate = () => {
-  errors.value = {}
-
-  if (!form.member_id) errors.value.member_id = PAGES.PAYMENTS.ERROR_SELECT_MEMBER
-  if (form.amount <= 0) errors.value.amount = PAGES.PAYMENTS.ERROR_AMOUNT_POSITIVE
-  if (!form.payment_date) errors.value.payment_date = PAGES.PAYMENTS.ERROR_SELECT_DATE
-  if (!form.branch_id) errors.value.branch_id = PAGES.PAYMENTS.ERROR_SELECT_BRANCH
-
-  return Object.keys(errors.value).length === 0
-}
-
 const handleSubmit = async () => {
-  if (!validate()) return
+  clearErrors()
+
+  const isValid = validate(form, {
+    member_id: [required(PAGES.PAYMENTS.ERROR_SELECT_MEMBER)],
+    amount: [
+      positive(PAGES.PAYMENTS.ERROR_AMOUNT_POSITIVE),
+      between(1, 10000000, '金額需介於 1 至 10,000,000 之間')
+    ],
+    payment_date: [
+      required(PAGES.PAYMENTS.ERROR_SELECT_DATE),
+      dateNotFuture('付款日期不能是未來日期')
+    ],
+    branch_id: [required(PAGES.PAYMENTS.ERROR_SELECT_BRANCH)],
+    notes: [maxLength(500, '備註不能超過 500 個字')]
+  })
+
+  if (!isValid) return
 
   isSubmitting.value = true
   try {
@@ -116,7 +132,7 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('Failed to create payment:', error)
     useToast().error(MESSAGES.ERRORS.PAYMENT_CREATE_FAILED)
-    errors.value.submit = PAGES.PAYMENTS.ERROR_CREATE_FAILED
+    setError('submit', PAGES.PAYMENTS.ERROR_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }

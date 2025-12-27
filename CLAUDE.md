@@ -65,6 +65,16 @@ gym-nexus/
 - **Pause Logic:** When a contract is paused, `end_date` must auto-extend by pause duration
 - **Cross-branch Entry:** Members belong to one primary branch but system supports cross-branch access logging
 
+### Notification System
+- **Email (SMTP):** Configurable via `EMAIL_SMTP_*` env vars, supports contract expiry reminders, booking confirmations, welcome emails
+- **Push Notifications:** Web Push via VAPID keys (`VAPID_*` env vars)
+- **Email Templates:** Located in `backend/extensions/directus-extension-gym-hooks/src/email-service.js`
+
+### Reports API
+- **Endpoints:** `/gym/reports/revenue`, `/gym/reports/member-growth`, `/gym/reports/contract-expiry`, `/gym/reports/member-activity`
+- **Caching:** Optional Redis caching for report queries (10-minute TTL)
+- **Documentation:** See `backend/REPORTS_API.md` for detailed API docs
+
 ### Database Performance
 - **PostgreSQL 18 + PostGIS 3.6**: Latest version with spatial query support
 - **100+ Optimized Indexes**: B-tree, GIN (JSONB), GiST (spatial/range), BRIN (timeseries), Partial

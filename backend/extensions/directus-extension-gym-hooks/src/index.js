@@ -41,6 +41,7 @@ const getCachedMemberStatus = async (id) => cacheEnabled ? cacheModule?.getCache
 const setCachedMemberStatus = async (id, status) => cacheEnabled && cacheModule?.setCachedMemberStatus?.(id, status);
 const invalidateContract = async (id, memberId) => cacheEnabled && cacheModule?.invalidateContract?.(id, memberId);
 const recordPerformanceMetric = async (op, duration) => cacheEnabled && cacheModule?.recordPerformanceMetric?.(op, duration);
+const invalidateReportCache = async (reportType) => cacheEnabled && cacheModule?.invalidateReportCache?.(reportType);
 
 export default ({ filter, action, init, schedule }, { services, database, getSchema }) => {
   const { ItemsService, UsersService } = services;
@@ -611,11 +612,21 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   // ============================================
 
   /**
-   * 創建到期通知紀錄
+   * 創建到期通知紀錄 (同時發送 Email)
    */
   async function createExpirationNotifications(schema) {
     try {
       const contractsService = new ItemsService('contracts', {
+        schema: schema,
+        knex: database,
+      });
+
+      const membersService = new ItemsService('members', {
+        schema: schema,
+        knex: database,
+      });
+
+      const plansService = new ItemsService('membership_plans', {
         schema: schema,
         knex: database,
       });
@@ -652,7 +663,7 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
               { status: { _eq: 'active' } },
             ],
           },
-          fields: ['id', 'contract_no', 'member_id', 'end_date', 'branch_id'],
+          fields: ['id', 'contract_no', 'member_id', 'end_date', 'branch_id', 'plan_id'],
         });
 
         // 為每個即將到期的合約創建通知
@@ -681,6 +692,51 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
               status: 'active',
             });
             console.log(`[GymHook] Created ${days}-day expiration notification for contract ${contract.contract_no}`);
+
+            // ========== 發送 Email 通知 ==========
+            if (emailServiceLoaded && emailService && emailService.isEmailEnabled()) {
+              try {
+                // 取得會員資訊
+                const member = await membersService.readOne(contract.member_id, {
+                  fields: ['id', 'full_name', 'email'],
+                });
+
+                // 取得方案名稱
+                let planName = '會籍方案';
+                if (contract.plan_id) {
+                  try {
+                    const plan = await plansService.readOne(contract.plan_id, {
+                      fields: ['name'],
+                    });
+                    planName = plan?.name || planName;
+                  } catch (e) {
+                    // 忽略錯誤
+                  }
+                }
+
+                if (member && member.email) {
+                  const emailContent = emailService.buildContractExpiryEmail({
+                    memberName: member.full_name || '會員',
+                    contractNo: contract.contract_no,
+                    planName: planName,
+                    expiryDate: contract.end_date,
+                    daysRemaining: days,
+                  });
+
+                  const result = await emailService.sendEmail({
+                    to: member.email,
+                    subject: emailContent.subject,
+                    html: emailContent.html,
+                  });
+
+                  if (result.success) {
+                    console.log(`[GymHook] Sent ${days}-day expiration email to ${member.email}`);
+                  }
+                }
+              } catch (emailError) {
+                console.error(`[GymHook] Failed to send expiration email:`, emailError.message);
+              }
+            }
           }
         }
       }
@@ -1575,6 +1631,27 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         });
 
         console.log(`[GymHook] Created new member ${memberId} (${memberCode}) for SSO user ${key} (${payload.provider})`);
+
+        // ========== 發送歡迎 Email ==========
+        if (emailServiceLoaded && emailService && emailService.isEmailEnabled() && payload.email) {
+          try {
+            const emailContent = emailService.buildWelcomeEmail({
+              memberName: fullName,
+              memberCode: memberCode,
+              branchName: null, // SSO 用戶尚未選擇分店
+            });
+
+            await emailService.sendEmail({
+              to: payload.email,
+              subject: emailContent.subject,
+              html: emailContent.html,
+            });
+
+            console.log(`[GymHook] Sent welcome email to ${payload.email}`);
+          } catch (emailError) {
+            console.error(`[GymHook] Failed to send welcome email:`, emailError.message);
+          }
+        }
       }
 
       // 建立社群帳號連結紀錄
@@ -1646,6 +1723,19 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   let pushService = null;
   let pushEnabled = false;
 
+  // 動態導入 Email 服務
+  let emailService = null;
+  let emailServiceLoaded = false;
+
+  // 異步載入 Email 服務模組
+  import('./email-service.js').then((module) => {
+    emailService = module;
+    emailServiceLoaded = true;
+    console.log('[GymHook] Email service module loaded');
+  }).catch(() => {
+    console.log('[GymHook] Email service module not available');
+  });
+
   // 異步載入推播服務模組
   import('./push-service.js').then((module) => {
     pushService = module;
@@ -1669,8 +1759,17 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         } else {
           console.log('[GymHook] Push notifications disabled (VAPID keys not configured)');
         }
+
+        // 初始化 Email 服務
+        if (emailServiceLoaded && emailService) {
+          const schema = await getSchema();
+          const emailEnabled = emailService.initEmailService(services, schema);
+          if (emailEnabled) {
+            console.log('[GymHook] Email notifications enabled');
+          }
+        }
       } catch (error) {
-        console.error('[GymHook] Push service init error:', error);
+        console.error('[GymHook] Notification services init error:', error);
       }
     });
     }
@@ -2125,5 +2224,32 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
         console.log(`[PermissionCheck] Cleaned ${cleanedCount} expired permission cache entries`);
       }
     });
+
+    // ============================================
+    // 報表物化視圖自動刷新 (每天凌晨 4:00 和下午 4:00)
+    // ============================================
+    schedule('0 4,16 * * *', async () => {
+      const startTime = Date.now();
+      console.log('[GymHook] Starting scheduled report views refresh...');
+
+      try {
+        await database.raw('SELECT refresh_report_views()');
+
+        const duration = Date.now() - startTime;
+        console.log(`[GymHook] Report views refreshed successfully in ${duration}ms`);
+
+        // 記錄效能指標（如果 Redis 可用）
+        if (cacheEnabled) {
+          await recordPerformanceMetric('report_views_refresh', duration);
+          // 清除報表緩存，確保下次查詢獲取最新數據
+          await invalidateReportCache();
+          console.log('[GymHook] Report cache invalidated after views refresh');
+        }
+      } catch (error) {
+        console.error('[GymHook] Failed to refresh report views:', error.message);
+      }
+    });
+
+    console.log('[GymHook] Scheduled report views refresh: 04:00 and 16:00 daily');
   }
 };

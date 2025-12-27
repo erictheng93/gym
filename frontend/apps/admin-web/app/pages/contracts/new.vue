@@ -14,9 +14,19 @@ const { branches, fetchBranches } = useBranches()
 
 const isLoading = ref(true)
 const isSubmitting = ref(false)
-const errors = ref<Record<string, string>>({})
 const currentStep = ref(1)
 const totalSteps = 3
+
+// Form validation - 使用 composable
+const { errors, validate, setError, clearErrors, clearFieldError } = useFormValidation<typeof form>()
+
+// Import validation rules
+const {
+  required,
+  positive,
+  between,
+  maxLength
+} = await import('@gym-nexus/ui/composables')
 
 const form = reactive({
   member_id: route.query.member as string || '',
@@ -64,24 +74,34 @@ onMounted(async () => {
 })
 
 const validateStep = (step: number) => {
-  errors.value = {}
+  clearErrors()
 
   if (step === 1) {
-    if (!form.member_id) errors.value.member_id = PAGES.CONTRACTS.ERROR_SELECT_MEMBER
-    if (!form.plan_id) errors.value.plan_id = PAGES.CONTRACTS.ERROR_SELECT_PLAN
-    if (!form.branch_id) errors.value.branch_id = PAGES.CONTRACTS.ERROR_SELECT_BRANCH
-    if (!form.start_date) errors.value.start_date = PAGES.CONTRACTS.ERROR_SELECT_START_DATE
+    return validate(form, {
+      member_id: [required(PAGES.CONTRACTS.ERROR_SELECT_MEMBER)],
+      plan_id: [required(PAGES.CONTRACTS.ERROR_SELECT_PLAN)],
+      branch_id: [required(PAGES.CONTRACTS.ERROR_SELECT_BRANCH)],
+      start_date: [required(PAGES.CONTRACTS.ERROR_SELECT_START_DATE)]
+    })
   }
 
   if (step === 2) {
-    if (form.total_amount <= 0) errors.value.total_amount = PAGES.CONTRACTS.ERROR_AMOUNT_POSITIVE
+    return validate(form, {
+      total_amount: [
+        positive(PAGES.CONTRACTS.ERROR_AMOUNT_POSITIVE),
+        between(1, 10000000, '合約金額需介於 1 至 10,000,000 之間')
+      ],
+      notes: [maxLength(500, '備註不能超過 500 個字')]
+    })
   }
 
   if (step === 3) {
-    if (!form.digital_signature) errors.value.digital_signature = PAGES.CONTRACTS.ERROR_SIGNATURE_REQUIRED
+    return validate(form, {
+      digital_signature: [required(PAGES.CONTRACTS.ERROR_SIGNATURE_REQUIRED)]
+    })
   }
 
-  return Object.keys(errors.value).length === 0
+  return true
 }
 
 const nextStep = () => {
@@ -132,7 +152,7 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('Failed to create contract:', error)
     useToast().error(MESSAGES.ERRORS.CONTRACT_CREATE_FAILED)
-    errors.value.submit = PAGES.CONTRACTS.ERROR_CREATE_FAILED
+    setError('submit', PAGES.CONTRACTS.ERROR_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }

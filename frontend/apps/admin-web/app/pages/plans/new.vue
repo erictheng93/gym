@@ -10,7 +10,6 @@ const router = useRouter()
 const { createPlan } = usePlans()
 
 const isSubmitting = ref(false)
-const errors = ref<Record<string, string>>({})
 
 const form = reactive({
   name: '',
@@ -24,41 +23,48 @@ const form = reactive({
   status: 'active' as 'active' | 'archived'
 })
 
+// Form validation - 使用 composable
+const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+
+// Import validation rules
+const {
+  required,
+  positive,
+  between,
+  minLength,
+  maxLength
+} = await import('@gym-nexus/ui/composables')
+
 const planTypeOptions = [
   { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },
   { value: 'COUNT_BASED', label: LABELS.CONTRACT_TYPE.COUNT_BASED }
 ]
 
-const validate = () => {
-  errors.value = {}
-
-  if (!form.name.trim()) {
-    errors.value.name = PAGES.PLANS.ERROR_NAME_REQUIRED
-  }
-
-  if (!form.plan_type) {
-    errors.value.plan_type = PAGES.PLANS.ERROR_TYPE_REQUIRED
-  }
-
-  if (!form.price || form.price <= 0) {
-    errors.value.price = PAGES.PLANS.ERROR_PRICE_POSITIVE
-  }
-
-  if (form.plan_type === 'TIME_BASED') {
-    if (!form.duration_months || form.duration_months <= 0) {
-      errors.value.duration_months = PAGES.PLANS.ERROR_DURATION_POSITIVE
-    }
-  } else {
-    if (!form.class_counts || form.class_counts <= 0) {
-      errors.value.class_counts = PAGES.PLANS.ERROR_CLASS_COUNTS_POSITIVE
-    }
-  }
-
-  return Object.keys(errors.value).length === 0
-}
-
 const handleSubmit = async () => {
-  if (!validate()) return
+  clearErrors()
+
+  // 基本驗證規則
+  const baseRules = {
+    name: [
+      required(PAGES.PLANS.ERROR_NAME_REQUIRED),
+      minLength(2, '方案名稱至少需要 2 個字'),
+      maxLength(50, '方案名稱不能超過 50 個字')
+    ],
+    plan_type: [required(PAGES.PLANS.ERROR_TYPE_REQUIRED)],
+    price: [
+      positive(PAGES.PLANS.ERROR_PRICE_POSITIVE),
+      between(1, 10000000, '價格需介於 1 至 10,000,000 之間')
+    ],
+    description: [maxLength(500, '描述不能超過 500 個字')]
+  }
+
+  // 根據方案類型添加額外驗證
+  const typeSpecificRules = form.plan_type === 'TIME_BASED'
+    ? { duration_months: [positive(PAGES.PLANS.ERROR_DURATION_POSITIVE), between(1, 120, '月數需介於 1 至 120 之間')] }
+    : { class_counts: [positive(PAGES.PLANS.ERROR_CLASS_COUNTS_POSITIVE), between(1, 9999, '堂數需介於 1 至 9999 之間')] }
+
+  const isValid = validate(form, { ...baseRules, ...typeSpecificRules })
+  if (!isValid) return
 
   isSubmitting.value = true
   try {
@@ -80,7 +86,7 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('Failed to create plan:', error)
     useToast().error(MESSAGES.ERRORS.PLAN_CREATE_FAILED)
-    errors.value.submit = PAGES.PLANS.ERROR_CREATE_FAILED
+    setError('submit', PAGES.PLANS.ERROR_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }

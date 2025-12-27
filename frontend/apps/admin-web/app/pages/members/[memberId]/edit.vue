@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
+import { MESSAGES, PAGES, LABELS } from '~/constants'
 
 definePageMeta({
   middleware: 'auth',
@@ -13,7 +14,6 @@ const { branches, fetchBranches } = useBranches()
 
 const isLoading = ref(true)
 const isSubmitting = ref(false)
-const errors = ref<Record<string, string>>({})
 
 const memberId = computed(() => route.params.memberId as string)
 
@@ -32,6 +32,22 @@ const form = reactive({
 })
 
 const newTag = ref('')
+
+// Form validation - 使用 composable
+const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+
+// Import validation rules
+const {
+  required,
+  email,
+  phone,
+  phoneLength,
+  minLength,
+  maxLength,
+  between,
+  dateNotFuture,
+  arrayLength
+} = await import('@gym-nexus/ui/composables')
 
 const genderOptions = [
   { value: 'M', label: '男' },
@@ -85,26 +101,30 @@ const removeTag = (tag: string) => {
   form.tags = form.tags.filter(t => t !== tag)
 }
 
-const validate = () => {
-  errors.value = {}
-
-  if (!form.full_name.trim()) {
-    errors.value.full_name = '請輸入會員姓名'
-  }
-
-  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-    errors.value.email = 'Email 格式不正確'
-  }
-
-  if (form.phone && !/^[0-9-+() ]+$/.test(form.phone)) {
-    errors.value.phone = '電話格式不正確'
-  }
-
-  return Object.keys(errors.value).length === 0
-}
-
 const handleSubmit = async () => {
-  if (!validate()) return
+  clearErrors()
+
+  const isValid = validate(form, {
+    full_name: [
+      required('請輸入會員姓名'),
+      minLength(2, '姓名至少需要 2 個字'),
+      maxLength(50, '姓名不能超過 50 個字')
+    ],
+    email: [email('Email 格式不正確')],
+    phone: [
+      phone('電話格式不正確'),
+      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
+    ],
+    emergency_phone: [
+      phone('緊急聯絡電話格式不正確'),
+      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
+    ],
+    birthday: [dateNotFuture('生日不能是未來日期')],
+    height: [between(50, 300, '身高需介於 50-300 公分')],
+    tags: [arrayLength(10, '最多只能有 10 個標籤')]
+  })
+
+  if (!isValid) return
 
   isSubmitting.value = true
   try {
@@ -122,7 +142,7 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('Failed to update member:', error)
     useToast().error(MESSAGES.ERRORS.MEMBER_UPDATE_FAILED)
-    errors.value.submit = '更新會員失敗，請稍後再試'
+    setError('submit', '更新會員失敗，請稍後再試')
   } finally {
     isSubmitting.value = false
   }
@@ -219,7 +239,9 @@ const handleSubmit = async () => {
                 v-model="form.birthday"
                 type="date"
                 class="input"
+                :class="{ 'input-error': errors.birthday }"
               />
+              <span v-if="errors.birthday" class="error-text">{{ errors.birthday }}</span>
             </div>
 
             <div class="input-group">
@@ -228,10 +250,12 @@ const handleSubmit = async () => {
                 v-model.number="form.height"
                 type="number"
                 class="input"
+                :class="{ 'input-error': errors.height }"
                 placeholder="例：175"
-                min="0"
+                min="50"
                 max="300"
               />
+              <span v-if="errors.height" class="error-text">{{ errors.height }}</span>
             </div>
 
             <div class="input-group">
@@ -296,8 +320,10 @@ const handleSubmit = async () => {
                 v-model="form.emergency_phone"
                 type="tel"
                 class="input"
+                :class="{ 'input-error': errors.emergency_phone }"
                 placeholder="0912-345-678"
               />
+              <span v-if="errors.emergency_phone" class="error-text">{{ errors.emergency_phone }}</span>
             </div>
           </div>
         </section>
@@ -328,10 +354,13 @@ const handleSubmit = async () => {
                 type="text"
                 class="input"
                 placeholder="輸入標籤..."
+                :disabled="form.tags.length >= 10"
                 @keydown.enter.prevent="addTag"
               />
-              <button type="button" class="btn btn-secondary btn-small" @click="addTag">新增</button>
+              <button type="button" class="btn btn-secondary btn-small" :disabled="form.tags.length >= 10" @click="addTag">新增</button>
             </div>
+            <span v-if="errors.tags" class="error-text">{{ errors.tags }}</span>
+            <span v-else-if="form.tags.length >= 10" class="hint-text">已達標籤上限（10 個）</span>
           </div>
         </section>
 
@@ -496,6 +525,11 @@ const handleSubmit = async () => {
 .error-text {
   font-size: 13px;
   color: var(--color-error);
+}
+
+.hint-text {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
 }
 
 /* Radio Group */

@@ -49,6 +49,10 @@ export default defineConfig({
       '@': resolve(__dirname, 'apps/admin-web/app'),
       '@shared': resolve(__dirname, 'packages/shared'),
       '@ui': resolve(__dirname, 'packages/ui'),
+      // Package aliases for monorepo
+      '@gym-nexus/ui/composables': resolve(__dirname, 'packages/ui/composables'),
+      '@gym-nexus/ui/components': resolve(__dirname, 'packages/ui/components'),
+      '@gym-nexus/ui': resolve(__dirname, 'packages/ui'),
     }
   }
 })
