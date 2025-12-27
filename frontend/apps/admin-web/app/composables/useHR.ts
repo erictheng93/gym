@@ -368,7 +368,7 @@ export const useHR = () => {
     const data = await directus.request(
       readItems('leave_approval_logs', {
         filter: { leave_request_id: { _eq: leaveRequestId } },
-        fields: ['*', 'actor.full_name'],
+        fields: ['*', 'action_by.full_name'],
         sort: ['date_created']
       })
     )

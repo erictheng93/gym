@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
+import { PERMISSION_MODULES, createEmptyPermissions } from '~/constants/permissions'
+import type { JobTitle } from '~/types/directus'
 
 definePageMeta({
   middleware: 'auth',
@@ -10,13 +12,17 @@ const route = useRoute()
 const router = useRouter()
 const { getEmployee, updateEmployee, employees, fetchEmployees } = useEmployees()
 const { branches, fetchBranches } = useBranches()
-const { jobTitles, fetchJobTitles } = useJobTitles()
+const { jobTitles, fetchJobTitles, getJobTitle } = useJobTitles()
 
 const isLoading = ref(true)
 const isSubmitting = ref(false)
 const errors = ref<Record<string, string>>({})
 
 const employeeId = computed(() => route.params.employeeId as string)
+
+// Custom permissions state
+const useCustomPermissions = ref(false)
+const currentJobTitle = ref<JobTitle | null>(null)
 
 const form = reactive({
   full_name: '',
@@ -30,7 +36,8 @@ const form = reactive({
   employment_status: 'ACTIVE' as 'ACTIVE' | 'RESIGNED' | 'LEAVE',
   employment_type: 'FULL_TIME' as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE',
   hire_date: '',
-  basic_salary: null as number | null
+  basic_salary: null as number | null,
+  custom_permissions: createEmptyPermissions()
 })
 
 const employmentStatusOptions = [
@@ -75,11 +82,97 @@ const loadEmployee = async () => {
     form.employment_type = employee.employment_type
     form.hire_date = employee.hire_date || ''
     form.basic_salary = employee.basic_salary
+
+    // Load custom permissions if exists
+    if (employee.custom_permissions && typeof employee.custom_permissions === 'object') {
+      form.custom_permissions = employee.custom_permissions as Record<string, Record<string, boolean>>
+      useCustomPermissions.value = true
+    }
+
+    // Load job title permissions
+    if (employee.job_title_id) {
+      await loadJobTitlePermissions(employee.job_title_id)
+    }
   } catch (error) {
     console.error('Failed to load employee:', error)
     useToast().error(MESSAGES.ERRORS.EMPLOYEE_LOAD_FAILED)
   } finally {
     isLoading.value = false
+  }
+}
+
+const loadJobTitlePermissions = async (jobTitleId: string) => {
+  try {
+    const jobTitle = await getJobTitle(jobTitleId)
+    currentJobTitle.value = jobTitle
+  } catch (error) {
+    console.error('Failed to load job title:', error)
+  }
+}
+
+// Watch job title changes to load permissions
+watch(() => form.job_title_id, async (newJobTitleId) => {
+  if (newJobTitleId) {
+    await loadJobTitlePermissions(newJobTitleId)
+  } else {
+    currentJobTitle.value = null
+  }
+})
+
+// Permission helpers
+const toggleModuleAll = (moduleKey: string, value: boolean) => {
+  const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
+  if (!module || !form.custom_permissions[moduleKey]) return
+
+  module.actions.forEach(action => {
+    form.custom_permissions[moduleKey][action.key] = value
+  })
+}
+
+const isModuleFullyEnabled = (moduleKey: string) => {
+  const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
+  if (!module || !form.custom_permissions[moduleKey]) return false
+
+  return module.actions.every(action =>
+    form.custom_permissions[moduleKey][action.key] === true
+  )
+}
+
+const isModulePartiallyEnabled = (moduleKey: string) => {
+  const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
+  if (!module || !form.custom_permissions[moduleKey]) return false
+
+  const enabledCount = module.actions.filter(action =>
+    form.custom_permissions[moduleKey][action.key] === true
+  ).length
+
+  return enabledCount > 0 && enabledCount < module.actions.length
+}
+
+// Get effective permission (custom or inherited from job title)
+const getEffectivePermission = (moduleKey: string, actionKey: string): boolean => {
+  if (useCustomPermissions.value) {
+    return form.custom_permissions[moduleKey]?.[actionKey] || false
+  }
+  return currentJobTitle.value?.permissions_config?.[moduleKey]?.[actionKey] || false
+}
+
+// Check if permission is custom (different from job title)
+const isCustomPermission = (moduleKey: string, actionKey: string): boolean => {
+  if (!useCustomPermissions.value || !currentJobTitle.value) return false
+  const jobTitlePerm = currentJobTitle.value.permissions_config?.[moduleKey]?.[actionKey] || false
+  const customPerm = form.custom_permissions[moduleKey]?.[actionKey] || false
+  return jobTitlePerm !== customPerm
+}
+
+// Toggle custom permissions on/off
+const toggleCustomPermissions = () => {
+  useCustomPermissions.value = !useCustomPermissions.value
+  if (!useCustomPermissions.value) {
+    // Reset custom permissions to job title permissions
+    if (currentJobTitle.value?.permissions_config) {
+      form.custom_permissions = JSON.parse(JSON.stringify(currentJobTitle.value.permissions_config))
+    }
   }
 }
 
@@ -117,7 +210,8 @@ const handleSubmit = async () => {
       supervisor_id: form.supervisor_id || null,
       user_id: form.user_id || null,
       hire_date: form.hire_date || null,
-      basic_salary: form.basic_salary || null
+      basic_salary: form.basic_salary || null,
+      custom_permissions: useCustomPermissions.value ? form.custom_permissions : null
     }
 
     await updateEmployee(employeeId.value, employeeData)
@@ -331,6 +425,91 @@ const handleSubmit = async () => {
                 placeholder="請輸入金額"
                 min="0"
               />
+            </div>
+          </div>
+        </section>
+
+        <!-- Custom Permissions Section -->
+        <section v-if="currentJobTitle" class="form-section glass-card">
+          <div class="section-header-with-toggle">
+            <h2 class="section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              自訂權限
+            </h2>
+
+            <label class="toggle-switch">
+              <input
+                type="checkbox"
+                v-model="useCustomPermissions"
+                @change="toggleCustomPermissions"
+              />
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">{{ useCustomPermissions ? '使用自訂權限' : '使用職位預設權限' }}</span>
+            </label>
+          </div>
+
+          <!-- Inherited Permissions Info -->
+          <div v-if="!useCustomPermissions" class="info-banner">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+            </svg>
+            <span>此員工使用職位「{{ currentJobTitle.name }}」的預設權限</span>
+          </div>
+
+          <!-- Custom Permissions Editor -->
+          <div v-else class="permissions-grid">
+            <div
+              v-for="module in PERMISSION_MODULES"
+              :key="module.key"
+              class="permission-module"
+            >
+              <div class="module-header">
+                <div class="module-info">
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      :checked="isModuleFullyEnabled(module.key)"
+                      :indeterminate="isModulePartiallyEnabled(module.key)"
+                      @change="toggleModuleAll(module.key, ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="module-name">{{ module.label }}</span>
+                  </label>
+                  <p class="module-description">{{ module.description }}</p>
+                </div>
+              </div>
+
+              <div class="module-actions">
+                <label
+                  v-for="action in module.actions"
+                  :key="action.key"
+                  class="action-checkbox"
+                  :class="{ 'is-custom': isCustomPermission(module.key, action.key) }"
+                >
+                  <input
+                    v-model="form.custom_permissions[module.key][action.key]"
+                    type="checkbox"
+                  />
+                  <span>{{ action.label }}</span>
+                  <svg
+                    v-if="isCustomPermission(module.key, action.key)"
+                    class="custom-indicator"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    title="已覆寫職位預設權限"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
+                  </svg>
+                </label>
+              </div>
             </div>
           </div>
         </section>
@@ -555,9 +734,176 @@ const handleSubmit = async () => {
   animation: spin 0.8s linear infinite;
 }
 
+/* Custom Permissions Section */
+.section-header-with-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xl);
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.toggle-switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--color-accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(24px);
+}
+
+.toggle-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.info-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-accent-light);
+  border-radius: var(--radius-md);
+  color: var(--color-accent);
+  font-size: 14px;
+}
+
+.info-banner svg {
+  flex-shrink: 0;
+}
+
+/* Permissions Grid */
+.permissions-grid {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.permission-module {
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.permission-module:hover {
+  border-color: var(--color-accent-light);
+  background: var(--color-surface-hover);
+}
+
+.module-header {
+  margin-bottom: var(--space-md);
+}
+
+.module-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.module-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.module-description {
+  margin: 0;
+  padding-left: 28px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.module-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.action-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.action-checkbox input:checked + span {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.action-checkbox.is-custom {
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(255, 159, 10, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.custom-indicator {
+  color: var(--color-warning);
+  margin-left: auto;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-header-with-toggle {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .module-actions {
     grid-template-columns: 1fr;
   }
 

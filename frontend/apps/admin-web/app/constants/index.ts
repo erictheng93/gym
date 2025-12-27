@@ -255,6 +255,12 @@ export const MESSAGES = {
     BRANCH_DELETE_FAILED: '刪除分店失敗，請稍後再試',
     BRANCH_FETCH_FAILED: '載入分店資料失敗，請稍後再試',
 
+    // Job Title
+    JOB_TITLE_CREATE_FAILED: '建立職位失敗，請稍後再試',
+    JOB_TITLE_UPDATE_FAILED: '更新職位資料失敗，請稍後再試',
+    JOB_TITLE_DELETE_FAILED: '刪除職位失敗，請稍後再試',
+    JOB_TITLE_FETCH_FAILED: '載入職位資料失敗，請稍後再試',
+
     // HR
     ATTENDANCE_FETCH_FAILED: '載入考勤資料失敗，請稍後再試',
     LEAVE_CREATE_FAILED: '建立休假申請失敗，請稍後再試',
@@ -320,6 +326,11 @@ export const MESSAGES = {
     BRANCH_CREATED: '分店建立成功',
     BRANCH_UPDATED: '分店資料更新成功',
     BRANCH_DELETED: '分店刪除成功',
+
+    // Job Title
+    JOB_TITLE_CREATED: '職位建立成功',
+    JOB_TITLE_UPDATED: '職位資料更新成功',
+    JOB_TITLE_DELETED: '職位刪除成功',
 
     // HR
     LEAVE_CREATED: '休假申請已送出',

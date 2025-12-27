@@ -4,7 +4,7 @@
  *
  * 使用 @gym-nexus/ui 組件庫重構
  */
-import { PAGES } from '~/constants'
+import { PAGES, MESSAGES } from '~/constants'
 import type { LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/directus'
 
 definePageMeta({
