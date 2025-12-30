@@ -61,17 +61,18 @@ export const useMemberAuth = () => {
   const isLoading = useState('member_auth_loading', () => false)
   const otpLoading = useState('otp_loading', () => false)
 
-  // Token management
+  // Token management - secure only in production (HTTPS)
+  const isSecure = import.meta.env.PROD
   const accessToken = useCookie('member_access_token', {
     maxAge: 60 * 60 * 24, // 24 hours
-    secure: true,
-    sameSite: 'strict',
+    secure: isSecure,
+    sameSite: 'lax',
   })
 
   const refreshToken = useCookie('member_refresh_token', {
     maxAge: 60 * 60 * 24 * 7, // 7 days
-    secure: true,
-    sameSite: 'strict',
+    secure: isSecure,
+    sameSite: 'lax',
   })
 
   /**
@@ -129,8 +130,8 @@ export const useMemberAuth = () => {
         accessToken.value = response.access_token
         refreshToken.value = response.refresh_token
 
-        // Fetch full member profile
-        await fetchMember()
+        // Fetch full member profile with the token directly
+        await fetchMember(response.access_token)
 
         return { success: true, message: response.message }
       }
@@ -169,8 +170,8 @@ export const useMemberAuth = () => {
         accessToken.value = response.access_token
         refreshToken.value = response.refresh_token
 
-        // Fetch full member profile
-        await fetchMember()
+        // Fetch full member profile with the token directly
+        await fetchMember(response.access_token)
 
         return { success: true, message: response.message }
       }
@@ -241,20 +242,27 @@ export const useMemberAuth = () => {
 
   /**
    * Fetch current member profile
+   * @param token - Optional token to use instead of reading from cookie
+   * @param retryCount - Internal retry counter
    */
-  const fetchMember = async () => {
-    if (!accessToken.value) {
+  const fetchMember = async (token?: string, retryCount = 0) => {
+    const authToken = token || accessToken.value
+    console.log('[Auth] fetchMember called, token exists:', !!authToken)
+    if (!authToken) {
       member.value = null
       return
     }
 
     try {
+      console.log('[Auth] Fetching member from API...')
       const response = await $fetch<MemberProfileResponse>(`${apiUrl}/gym/member/me`, {
         headers: {
-          Authorization: `Bearer ${accessToken.value}`,
+          // Use custom header to avoid Directus intercepting the token
+          'X-Member-Token': authToken,
         },
       })
 
+      console.log('[Auth] API response:', response.success, response.data?.id)
       if (response.success && response.data) {
         const data = response.data
 
@@ -274,17 +282,21 @@ export const useMemberAuth = () => {
           member_status: data.member_status,
           activeContract,
         }
+        console.log('[Auth] Member set:', member.value?.id)
       } else {
+        console.log('[Auth] Response not successful or no data')
         member.value = null
       }
     } catch (error) {
       console.error('Failed to fetch member:', error)
 
-      // Try to refresh token
-      const refreshed = await refreshAccessToken()
-      if (refreshed) {
-        // Retry fetching member
-        return await fetchMember()
+      // Try to refresh token (only once to prevent infinite loop)
+      if (retryCount < 1) {
+        const refreshed = await refreshAccessToken()
+        if (refreshed && accessToken.value) {
+          // Retry fetching member with the new token
+          return await fetchMember(accessToken.value, retryCount + 1)
+        }
       }
 
       member.value = null
@@ -295,12 +307,16 @@ export const useMemberAuth = () => {
    * Check authentication status
    */
   const checkAuth = async (): Promise<boolean> => {
+    console.log('[Auth] checkAuth called, member exists:', !!member.value, 'token exists:', !!accessToken.value)
     if (member.value) {
+      console.log('[Auth] Already authenticated')
       return true
     }
 
     if (accessToken.value) {
+      console.log('[Auth] Token found, fetching member...')
       await fetchMember()
+      console.log('[Auth] After fetchMember, isAuthenticated:', isAuthenticated.value)
       return isAuthenticated.value
     }
 
@@ -396,11 +412,12 @@ export const useMemberAuth = () => {
 
   /**
    * Get authorization header for API calls
+   * Uses X-Member-Token to avoid Directus intercepting the token
    */
   const getAuthHeader = () => {
     if (!accessToken.value) return {}
     return {
-      Authorization: `Bearer ${accessToken.value}`,
+      'X-Member-Token': accessToken.value,
     }
   }
 

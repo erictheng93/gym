@@ -531,12 +531,16 @@ export default {
 
     const memberAuthMiddleware = async (req, res, next) => {
       try {
+        // Use custom header 'X-Member-Token' to avoid Directus intercepting Authorization header
+        // Also check Authorization header for backwards compatibility with direct API calls
+        const memberToken = req.headers['x-member-token'];
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          throw UnauthorizedError('Authorization header required');
+        const token = memberToken || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null);
+
+        if (!token) {
+          throw UnauthorizedError('Authentication required');
         }
 
-        const token = authHeader.substring(7);
         const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
 
         let decoded;

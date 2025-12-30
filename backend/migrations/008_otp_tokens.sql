@@ -87,10 +87,10 @@ BEGIN
     -- Rate limit check: 1 per minute
     SELECT COUNT(*) INTO v_minute_count
     FROM otp_send_logs
-    WHERE identifier = p_identifier
-      AND identifier_type = p_identifier_type
-      AND sent_at > v_one_minute_ago
-      AND success = TRUE;
+    WHERE otp_send_logs.identifier = p_identifier
+      AND otp_send_logs.identifier_type = p_identifier_type
+      AND otp_send_logs.sent_at > v_one_minute_ago
+      AND otp_send_logs.success = TRUE;
 
     IF v_minute_count >= 1 THEN
         RETURN QUERY SELECT FALSE, NULL::VARCHAR(6), NULL::TIMESTAMPTZ, '請稍後再試，每分鐘只能發送一次'::TEXT;
@@ -100,10 +100,10 @@ BEGIN
     -- Rate limit check: 5 per hour
     SELECT COUNT(*) INTO v_hour_count
     FROM otp_send_logs
-    WHERE identifier = p_identifier
-      AND identifier_type = p_identifier_type
-      AND sent_at > v_one_hour_ago
-      AND success = TRUE;
+    WHERE otp_send_logs.identifier = p_identifier
+      AND otp_send_logs.identifier_type = p_identifier_type
+      AND otp_send_logs.sent_at > v_one_hour_ago
+      AND otp_send_logs.success = TRUE;
 
     IF v_hour_count >= 5 THEN
         RETURN QUERY SELECT FALSE, NULL::VARCHAR(6), NULL::TIMESTAMPTZ, '已達每小時發送上限，請稍後再試'::TEXT;

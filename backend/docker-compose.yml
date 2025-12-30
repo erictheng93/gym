@@ -26,8 +26,8 @@ services:
       retries: 5
 
   database:
-    # 使用 PostGIS 映像以支援地理空間查詢 (PostgreSQL 18 + PostGIS 3.6)
-    image: postgis/postgis:18-3.6
+    # 使用 PostGIS 映像以支援地理空間查詢 (PostgreSQL 17 + PostGIS 3.4)
+    image: postgis/postgis:17-3.4
     restart: unless-stopped
     ports:
       - 5444:5432
@@ -111,6 +111,7 @@ services:
       CORS_ENABLED: "true"
       CORS_ORIGIN: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3006,http://localhost:3007,http://localhost:3008,http://localhost:3009,http://localhost:3010,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004,http://127.0.0.1:3005,http://127.0.0.1:3006,http://127.0.0.1:3007,http://127.0.0.1:3008,http://127.0.0.1:3009,http://127.0.0.1:3010"
       CORS_CREDENTIALS: "true"
+      CORS_ALLOWED_HEADERS: "Content-Type,Authorization,X-Member-Token"
 
       # ============================================
       # OAuth / SSO Authentication Providers
@@ -173,11 +174,12 @@ services:
       # AUTH_FACEBOOK_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
 
       # ============================================
-      # Email Configuration (SMTP)
+      # Email Configuration (Amazon SES SMTP)
       # ============================================
+      # See backend/.env.example for setup instructions
       EMAIL_TRANSPORT: "${EMAIL_TRANSPORT:-smtp}"
-      EMAIL_FROM: "${EMAIL_FROM:-noreply@gym-nexus.com}"
-      EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-}"
+      EMAIL_FROM: "${EMAIL_FROM:-Gym Nexus <noreply@gym-nexus.com>}"
+      EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-email-smtp.ap-northeast-1.amazonaws.com}"
       EMAIL_SMTP_PORT: "${EMAIL_SMTP_PORT:-587}"
       EMAIL_SMTP_USER: "${EMAIL_SMTP_USER:-}"
       EMAIL_SMTP_PASSWORD: "${EMAIL_SMTP_PASSWORD:-}"

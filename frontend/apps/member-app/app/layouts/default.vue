@@ -11,6 +11,9 @@ const navItems = [
 
 <template>
   <div class="app-layout safe-area-top safe-area-bottom">
+    <!-- Toast Notifications -->
+    <ToastContainer />
+
     <!-- Main Content -->
     <main class="main-content">
       <slot />
