@@ -6,6 +6,9 @@
  * 3. Class Bookings - Book/cancel classes with atomic operations
  * 4. Push Notifications - VAPID key and subscription management
  * 5. Reports - 報表查詢和刷新
+ * 6. Member Profile - 會員資料管理
+ * 7. Contracts - 合約暫停/恢復
+ * 8. Notification Preferences - 通知偏好設定 (LINE/Push/Email/SMS)
  */
 
 import crypto from 'crypto';
@@ -2464,6 +2467,877 @@ export default {
       } catch (error) {
         console.error('[GymEndpoint] Refresh reports error:', error);
         res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    // ============================================
+    // 8. Notification Preferences Endpoints
+    // ============================================
+
+    /**
+     * GET /gym/notifications/preferences
+     * Get member's notification preferences and available channels
+     */
+    router.get('/notifications/preferences', memberAuthMiddleware, async (req, res) => {
+      try {
+        const memberId = req.member.id;
+
+        // Get or create preferences
+        let prefsResult = await database.raw(`
+          SELECT * FROM member_notification_preferences
+          WHERE member_id = ?::uuid
+        `, [memberId]);
+
+        let preferences = prefsResult.rows?.[0];
+
+        // Create default preferences if not exists
+        if (!preferences) {
+          await database.raw(`
+            INSERT INTO member_notification_preferences (member_id)
+            VALUES (?::uuid)
+            ON CONFLICT (member_id) DO NOTHING
+          `, [memberId]);
+
+          prefsResult = await database.raw(`
+            SELECT * FROM member_notification_preferences
+            WHERE member_id = ?::uuid
+          `, [memberId]);
+          preferences = prefsResult.rows?.[0];
+        }
+
+        // Check channel availability
+        const channelsResult = await database.raw(`
+          SELECT
+            EXISTS(SELECT 1 FROM member_social_accounts
+                   WHERE member_id = ?::uuid AND provider = 'line' AND status = 'active') as has_line,
+            EXISTS(SELECT 1 FROM push_subscriptions
+                   WHERE member_id = ?::uuid AND status = 'active' AND error_count < 5) as has_push,
+            (SELECT email IS NOT NULL AND email != '' FROM members WHERE id = ?::uuid) as has_email,
+            (SELECT phone IS NOT NULL AND phone != '' FROM members WHERE id = ?::uuid) as has_phone
+        `, [memberId, memberId, memberId, memberId]);
+
+        const channels = channelsResult.rows?.[0] || {};
+
+        res.json({
+          success: true,
+          preferences: {
+            // Channel toggles
+            enable_line: preferences?.enable_line ?? true,
+            enable_push: preferences?.enable_push ?? true,
+            enable_email: preferences?.enable_email ?? true,
+            enable_sms: preferences?.enable_sms ?? false,
+            // Notification types
+            notify_booking_confirmation: preferences?.notify_booking_confirmation ?? true,
+            notify_booking_reminder: preferences?.notify_booking_reminder ?? true,
+            notify_booking_cancelled: preferences?.notify_booking_cancelled ?? true,
+            notify_contract_expiry: preferences?.notify_contract_expiry ?? true,
+            notify_payment_confirmation: preferences?.notify_payment_confirmation ?? true,
+            notify_promotions: preferences?.notify_promotions ?? false,
+            notify_system: preferences?.notify_system ?? true,
+            // Quiet hours
+            quiet_hours_enabled: preferences?.quiet_hours_enabled ?? false,
+            quiet_hours_start: preferences?.quiet_hours_start ?? '22:00',
+            quiet_hours_end: preferences?.quiet_hours_end ?? '08:00',
+            // SMS settings
+            sms_fallback_enabled: preferences?.sms_fallback_enabled ?? false,
+            sms_otp_only: preferences?.sms_otp_only ?? true,
+          },
+          available_channels: {
+            line: channels.has_line || false,
+            push: channels.has_push || false,
+            email: channels.has_email || false,
+            sms: channels.has_phone || false,
+          },
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Get notification preferences error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * PATCH /gym/notifications/preferences
+     * Update member's notification preferences
+     */
+    router.patch('/notifications/preferences', memberAuthMiddleware, async (req, res) => {
+      try {
+        const memberId = req.member.id;
+        const updates = req.body || {};
+
+        // Allowed fields for update
+        const allowedFields = [
+          'enable_line', 'enable_push', 'enable_email', 'enable_sms',
+          'notify_booking_confirmation', 'notify_booking_reminder', 'notify_booking_cancelled',
+          'notify_contract_expiry', 'notify_payment_confirmation', 'notify_promotions', 'notify_system',
+          'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
+          'sms_fallback_enabled', 'sms_otp_only',
+        ];
+
+        // Filter valid updates
+        const validUpdates = {};
+        for (const [key, value] of Object.entries(updates)) {
+          if (allowedFields.includes(key)) {
+            validUpdates[key] = value;
+          }
+        }
+
+        if (Object.keys(validUpdates).length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: '沒有有效的欄位可更新',
+          });
+        }
+
+        // Ensure preferences record exists
+        await database.raw(`
+          INSERT INTO member_notification_preferences (member_id)
+          VALUES (?::uuid)
+          ON CONFLICT (member_id) DO NOTHING
+        `, [memberId]);
+
+        // Build dynamic UPDATE
+        const setClauses = Object.keys(validUpdates).map((key, i) => `${key} = $${i + 2}`);
+        const values = [memberId, ...Object.values(validUpdates)];
+
+        await database.raw(`
+          UPDATE member_notification_preferences
+          SET ${setClauses.join(', ')}, date_updated = NOW()
+          WHERE member_id = $1::uuid
+        `, values);
+
+        // Fetch updated preferences
+        const result = await database.raw(`
+          SELECT * FROM member_notification_preferences
+          WHERE member_id = ?::uuid
+        `, [memberId]);
+
+        res.json({
+          success: true,
+          message: '通知設定已更新',
+          preferences: result.rows?.[0],
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Update notification preferences error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * GET /gym/notifications/history
+     * Get member's notification history
+     */
+    router.get('/notifications/history', memberAuthMiddleware, async (req, res) => {
+      try {
+        const memberId = req.member.id;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        const offset = parseInt(req.query.offset) || 0;
+
+        const result = await database.raw(`
+          SELECT
+            id, notification_type, title, body,
+            successful_channel, overall_status, sent_at,
+            reference_type, reference_id, date_created
+          FROM notification_logs
+          WHERE member_id = ?::uuid
+          ORDER BY date_created DESC
+          LIMIT ?::integer OFFSET ?::integer
+        `, [memberId, limit, offset]);
+
+        // Get total count
+        const countResult = await database.raw(`
+          SELECT COUNT(*) as total FROM notification_logs WHERE member_id = ?::uuid
+        `, [memberId]);
+
+        res.json({
+          success: true,
+          data: result.rows || [],
+          pagination: {
+            limit,
+            offset,
+            total: parseInt(countResult.rows?.[0]?.total || 0),
+          },
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Get notification history error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * GET /gym/notifications/channels
+     * Get available notification channels status
+     */
+    router.get('/notifications/channels', memberAuthMiddleware, async (req, res) => {
+      try {
+        const memberId = req.member.id;
+
+        // Get detailed channel info
+        const result = await database.raw(`
+          SELECT
+            m.email,
+            m.phone,
+            msa.provider_user_id as line_user_id,
+            msa.provider_name as line_display_name,
+            msa.linked_at as line_linked_at,
+            ps.id as push_subscription_id,
+            ps.device_name as push_device_name,
+            ps.date_created as push_subscribed_at
+          FROM members m
+          LEFT JOIN member_social_accounts msa
+            ON msa.member_id = m.id AND msa.provider = 'line' AND msa.status = 'active'
+          LEFT JOIN push_subscriptions ps
+            ON ps.member_id = m.id AND ps.status = 'active' AND ps.error_count < 5
+          WHERE m.id = ?::uuid
+        `, [memberId]);
+
+        const row = result.rows?.[0] || {};
+
+        res.json({
+          success: true,
+          channels: {
+            line: {
+              available: !!row.line_user_id,
+              displayName: row.line_display_name,
+              linkedAt: row.line_linked_at,
+            },
+            push: {
+              available: !!row.push_subscription_id,
+              deviceName: row.push_device_name,
+              subscribedAt: row.push_subscribed_at,
+            },
+            email: {
+              available: !!row.email,
+              address: row.email ? row.email.replace(/(.{2}).*(@.*)/, '$1***$2') : null, // Mask email
+            },
+            sms: {
+              available: !!row.phone,
+              phone: row.phone ? row.phone.replace(/(\d{4}).*(\d{3})/, '$1****$2') : null, // Mask phone
+            },
+          },
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Get notification channels error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * POST /gym/notifications/test
+     * Send a test notification (development only)
+     */
+    router.post('/notifications/test', memberAuthMiddleware, async (req, res) => {
+      // Only allow in development
+      if (env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          success: false,
+          message: '測試功能僅在開發環境可用',
+        });
+      }
+
+      try {
+        const memberId = req.member.id;
+        const { channel, type = 'test' } = req.body || {};
+
+        // Dynamic import notification service
+        let notificationService;
+        try {
+          notificationService = await import('../../../directus-extension-gym-hooks/src/notification-service.js');
+        } catch (e) {
+          return res.status(500).json({
+            success: false,
+            message: 'NotificationService not available',
+          });
+        }
+
+        if (!notificationService.isInitialized()) {
+          return res.status(500).json({
+            success: false,
+            message: 'NotificationService not initialized',
+          });
+        }
+
+        const result = await notificationService.sendNotification({
+          memberId,
+          type,
+          data: {
+            message: '這是一則測試通知',
+            memberName: req.member.full_name || req.member.member_code,
+          },
+          forcedChannels: channel ? [channel] : undefined,
+        });
+
+        res.json({
+          success: result.success,
+          channel: result.channel,
+          attempts: result.attempts,
+          error: result.error,
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Test notification error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    // ============================================
+    // 9. Branch Notification Config (Admin)
+    // ============================================
+
+    /**
+     * Admin authentication middleware
+     * Requires Directus admin or branch manager with notification_config permission
+     */
+    const adminNotificationMiddleware = async (req, res, next) => {
+      try {
+        const userId = req.accountability?.user;
+        if (!userId) {
+          return res.status(401).json({ success: false, message: '請先登入' });
+        }
+
+        // Directus admin has full access
+        if (req.accountability?.admin === true) {
+          req.adminBranchId = null; // null means all branches
+          return next();
+        }
+
+        // Check if user is employee with notification config permission
+        const empResult = await database.raw(`
+          SELECT
+            e.id,
+            e.branch_id,
+            jt.permissions_config,
+            e.custom_permissions
+          FROM employees e
+          JOIN job_titles jt ON e.job_title_id = jt.id
+          WHERE e.user_id = ?::uuid AND e.status = 'active'
+        `, [userId]);
+
+        if (empResult.rows?.length === 0) {
+          return res.status(403).json({ success: false, message: '無權限' });
+        }
+
+        const emp = empResult.rows[0];
+        const permissions = { ...emp.permissions_config, ...emp.custom_permissions };
+
+        // Check for notification_config or admin permission
+        if (!permissions.notification_config && !permissions.admin && !permissions.settings) {
+          return res.status(403).json({ success: false, message: '無通知設定權限' });
+        }
+
+        req.adminBranchId = emp.branch_id;
+        req.employeeId = emp.id;
+        next();
+      } catch (error) {
+        console.error('[GymEndpoint] Admin auth error:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    };
+
+    /**
+     * GET /gym/admin/notification-config
+     * Get branch notification configuration
+     */
+    router.get('/admin/notification-config', adminNotificationMiddleware, async (req, res) => {
+      try {
+        const branchId = req.query.branch_id || req.adminBranchId;
+
+        if (!branchId && req.adminBranchId !== null) {
+          return res.status(400).json({
+            success: false,
+            message: '請指定分店',
+          });
+        }
+
+        let result;
+        if (branchId) {
+          result = await database.raw(`
+            SELECT
+              bnc.*,
+              b.name as branch_name
+            FROM branch_notification_config bnc
+            RIGHT JOIN branches b ON b.id = bnc.branch_id
+            WHERE b.id = ?::uuid
+          `, [branchId]);
+        } else {
+          // Admin can see all branches
+          result = await database.raw(`
+            SELECT
+              b.id as branch_id,
+              b.name as branch_name,
+              bnc.id as config_id,
+              bnc.line_channel_access_token IS NOT NULL as has_line_config,
+              bnc.mitake_username IS NOT NULL as has_sms_config,
+              bnc.is_active,
+              bnc.date_updated
+            FROM branches b
+            LEFT JOIN branch_notification_config bnc ON bnc.branch_id = b.id
+            WHERE b.status = 'active'
+            ORDER BY b.name
+          `);
+
+          return res.json({
+            success: true,
+            branches: result.rows,
+          });
+        }
+
+        const config = result.rows?.[0];
+
+        // Mask sensitive data
+        res.json({
+          success: true,
+          config: {
+            branch_id: branchId,
+            branch_name: config?.branch_name,
+            has_line_config: !!config?.line_channel_access_token,
+            line_channel_access_token_preview: config?.line_channel_access_token
+              ? `${config.line_channel_access_token.substring(0, 10)}...`
+              : null,
+            has_sms_config: !!config?.mitake_username,
+            mitake_username: config?.mitake_username || null,
+            sms_sender_name: config?.sms_sender_name || null,
+            is_active: config?.is_active ?? true,
+            date_updated: config?.date_updated,
+          },
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Get notification config error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * PATCH /gym/admin/notification-config
+     * Update branch notification configuration
+     */
+    router.patch('/admin/notification-config', adminNotificationMiddleware, async (req, res) => {
+      try {
+        const branchId = req.body.branch_id || req.adminBranchId;
+
+        if (!branchId) {
+          return res.status(400).json({
+            success: false,
+            message: '請指定分店',
+          });
+        }
+
+        // Non-admin can only update their own branch
+        if (req.adminBranchId && req.adminBranchId !== branchId) {
+          return res.status(403).json({
+            success: false,
+            message: '無權限修改其他分店設定',
+          });
+        }
+
+        const {
+          line_channel_access_token,
+          line_channel_secret,
+          mitake_username,
+          mitake_password,
+          sms_sender_name,
+          is_active,
+        } = req.body;
+
+        // Build update fields (only include provided values)
+        const updates = {};
+        if (line_channel_access_token !== undefined) updates.line_channel_access_token = line_channel_access_token || null;
+        if (line_channel_secret !== undefined) updates.line_channel_secret = line_channel_secret || null;
+        if (mitake_username !== undefined) updates.mitake_username = mitake_username || null;
+        if (mitake_password !== undefined) updates.mitake_password = mitake_password || null;
+        if (sms_sender_name !== undefined) updates.sms_sender_name = sms_sender_name || null;
+        if (is_active !== undefined) updates.is_active = is_active;
+
+        if (Object.keys(updates).length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: '請提供要更新的欄位',
+          });
+        }
+
+        updates.date_updated = new Date().toISOString();
+
+        // Upsert config
+        const existingResult = await database.raw(`
+          SELECT id FROM branch_notification_config WHERE branch_id = ?::uuid
+        `, [branchId]);
+
+        if (existingResult.rows?.length > 0) {
+          // Update
+          const setClauses = Object.keys(updates).map((key, i) => `${key} = $${i + 2}`).join(', ');
+          await database.raw(`
+            UPDATE branch_notification_config
+            SET ${setClauses}
+            WHERE branch_id = $1::uuid
+          `, [branchId, ...Object.values(updates)]);
+        } else {
+          // Insert
+          updates.branch_id = branchId;
+          updates.date_created = new Date().toISOString();
+          const columns = Object.keys(updates).join(', ');
+          const placeholders = Object.keys(updates).map((_, i) => `$${i + 1}`).join(', ');
+          await database.raw(`
+            INSERT INTO branch_notification_config (${columns})
+            VALUES (${placeholders})
+          `, Object.values(updates));
+        }
+
+        res.json({
+          success: true,
+          message: '設定已更新',
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Update notification config error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * POST /gym/admin/notification-config/test
+     * Test notification configuration
+     */
+    router.post('/admin/notification-config/test', adminNotificationMiddleware, async (req, res) => {
+      try {
+        const branchId = req.body.branch_id || req.adminBranchId;
+        const { channel } = req.body; // 'line' or 'sms'
+
+        if (!branchId) {
+          return res.status(400).json({
+            success: false,
+            message: '請指定分店',
+          });
+        }
+
+        if (!channel || !['line', 'sms'].includes(channel)) {
+          return res.status(400).json({
+            success: false,
+            message: '請指定測試通道 (line 或 sms)',
+          });
+        }
+
+        // Get branch config
+        const configResult = await database.raw(`
+          SELECT * FROM branch_notification_config WHERE branch_id = ?::uuid
+        `, [branchId]);
+
+        const config = configResult.rows?.[0];
+
+        if (channel === 'line') {
+          const token = config?.line_channel_access_token || env.LINE_CHANNEL_ACCESS_TOKEN;
+          if (!token) {
+            return res.json({
+              success: false,
+              channel: 'line',
+              message: '未設定 LINE Channel Access Token',
+            });
+          }
+
+          // Test LINE API by getting bot info
+          try {
+            const response = await fetch('https://api.line.me/v2/bot/info', {
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+
+            if (response.ok) {
+              const botInfo = await response.json();
+              return res.json({
+                success: true,
+                channel: 'line',
+                message: 'LINE 設定有效',
+                details: {
+                  botName: botInfo.displayName,
+                  botUserId: botInfo.userId,
+                },
+              });
+            } else {
+              const error = await response.json();
+              return res.json({
+                success: false,
+                channel: 'line',
+                message: 'LINE Token 無效',
+                error: error.message,
+              });
+            }
+          } catch (e) {
+            return res.json({
+              success: false,
+              channel: 'line',
+              message: 'LINE API 連線失敗',
+              error: e.message,
+            });
+          }
+        }
+
+        if (channel === 'sms') {
+          const username = config?.mitake_username || env.MITAKE_USERNAME;
+          const password = config?.mitake_password || env.MITAKE_PASSWORD;
+
+          if (!username || !password) {
+            return res.json({
+              success: false,
+              channel: 'sms',
+              message: '未設定三竹簡訊帳號',
+            });
+          }
+
+          // Test Mitake API by checking balance
+          try {
+            const smsService = await import('../../../directus-extension-gym-hooks/src/sms-service.js');
+            const balance = await smsService.checkBalance({ username, password });
+
+            return res.json({
+              success: true,
+              channel: 'sms',
+              message: '簡訊設定有效',
+              details: {
+                balance: balance.points,
+                accountPoint: balance.accountPoint,
+              },
+            });
+          } catch (e) {
+            return res.json({
+              success: false,
+              channel: 'sms',
+              message: '簡訊帳號驗證失敗',
+              error: e.message,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[GymEndpoint] Test notification config error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    // ============================================
+    // 10. Notification Usage Statistics (Billing)
+    // ============================================
+
+    /**
+     * GET /gym/admin/notification-usage
+     * Get notification usage statistics for billing
+     */
+    router.get('/admin/notification-usage', adminNotificationMiddleware, async (req, res) => {
+      try {
+        const branchId = req.query.branch_id || req.adminBranchId;
+        const { start_date, end_date, group_by = 'day' } = req.query;
+
+        // Default to current month
+        const now = new Date();
+        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endDate = end_date || now.toISOString().split('T')[0];
+
+        // Get SMS usage and costs
+        let smsQuery = `
+          SELECT
+            ${group_by === 'day' ? "DATE(date_created) as period" : "DATE_TRUNC('month', date_created) as period"},
+            branch_id,
+            COUNT(*) as total_sent,
+            COUNT(*) FILTER (WHERE status = 'sent') as success_count,
+            COUNT(*) FILTER (WHERE status = 'failed') as failed_count,
+            SUM(COALESCE(cost, 0)) as total_cost,
+            SUM(segments) as total_segments
+          FROM sms_logs
+          WHERE date_created >= ?::date AND date_created < (?::date + INTERVAL '1 day')
+        `;
+
+        const smsParams = [startDate, endDate];
+
+        if (branchId) {
+          smsQuery += ` AND branch_id = ?::uuid`;
+          smsParams.push(branchId);
+        }
+
+        smsQuery += ` GROUP BY period${branchId ? '' : ', branch_id'} ORDER BY period DESC`;
+
+        const smsResult = await database.raw(smsQuery, smsParams);
+
+        // Get LINE usage
+        let lineQuery = `
+          SELECT
+            ${group_by === 'day' ? "DATE(date_created) as period" : "DATE_TRUNC('month', date_created) as period"},
+            branch_id,
+            COUNT(*) as total_sent,
+            COUNT(*) FILTER (WHERE status = 'sent') as success_count,
+            COUNT(*) FILTER (WHERE status = 'failed') as failed_count,
+            message_type,
+            COUNT(*) as type_count
+          FROM line_message_logs
+          WHERE date_created >= ?::date AND date_created < (?::date + INTERVAL '1 day')
+        `;
+
+        const lineParams = [startDate, endDate];
+
+        if (branchId) {
+          lineQuery += ` AND branch_id = ?::uuid`;
+          lineParams.push(branchId);
+        }
+
+        lineQuery += ` GROUP BY period, message_type${branchId ? '' : ', branch_id'} ORDER BY period DESC`;
+
+        const lineResult = await database.raw(lineQuery, lineParams);
+
+        // Get overall notification logs
+        let notificationQuery = `
+          SELECT
+            ${group_by === 'day' ? "DATE(date_created) as period" : "DATE_TRUNC('month', date_created) as period"},
+            notification_type,
+            successful_channel,
+            overall_status,
+            COUNT(*) as count
+          FROM notification_logs
+          WHERE date_created >= ?::date AND date_created < (?::date + INTERVAL '1 day')
+        `;
+
+        const notificationParams = [startDate, endDate];
+
+        if (branchId) {
+          notificationQuery += ` AND branch_id = ?::uuid`;
+          notificationParams.push(branchId);
+        }
+
+        notificationQuery += ` GROUP BY period, notification_type, successful_channel, overall_status ORDER BY period DESC`;
+
+        const notificationResult = await database.raw(notificationQuery, notificationParams);
+
+        // Calculate summary
+        const smsSummary = smsResult.rows?.reduce((acc, row) => ({
+          total_sent: acc.total_sent + parseInt(row.total_sent || 0),
+          success_count: acc.success_count + parseInt(row.success_count || 0),
+          failed_count: acc.failed_count + parseInt(row.failed_count || 0),
+          total_cost: acc.total_cost + parseFloat(row.total_cost || 0),
+          total_segments: acc.total_segments + parseInt(row.total_segments || 0),
+        }), { total_sent: 0, success_count: 0, failed_count: 0, total_cost: 0, total_segments: 0 });
+
+        const lineSummary = lineResult.rows?.reduce((acc, row) => ({
+          total_sent: acc.total_sent + parseInt(row.total_sent || 0),
+          success_count: acc.success_count + parseInt(row.success_count || 0),
+          failed_count: acc.failed_count + parseInt(row.failed_count || 0),
+        }), { total_sent: 0, success_count: 0, failed_count: 0 });
+
+        res.json({
+          success: true,
+          period: { start_date: startDate, end_date: endDate, group_by },
+          branch_id: branchId || 'all',
+          summary: {
+            sms: smsSummary,
+            line: lineSummary,
+          },
+          details: {
+            sms: smsResult.rows || [],
+            line: lineResult.rows || [],
+            notifications: notificationResult.rows || [],
+          },
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Get notification usage error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * GET /gym/admin/notification-usage/export
+     * Export notification usage as CSV for billing
+     */
+    router.get('/admin/notification-usage/export', adminNotificationMiddleware, async (req, res) => {
+      try {
+        const branchId = req.query.branch_id || req.adminBranchId;
+        const { start_date, end_date, format = 'csv' } = req.query;
+
+        // Default to current month
+        const now = new Date();
+        const startDate = start_date || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const endDate = end_date || now.toISOString().split('T')[0];
+
+        // Get detailed SMS logs
+        let query = `
+          SELECT
+            sl.date_created,
+            b.name as branch_name,
+            m.full_name as member_name,
+            sl.phone_number,
+            sl.message_type,
+            sl.status,
+            sl.segments,
+            sl.cost,
+            sl.provider_message_id
+          FROM sms_logs sl
+          LEFT JOIN branches b ON b.id = sl.branch_id
+          LEFT JOIN members m ON m.id = sl.member_id
+          WHERE sl.date_created >= ?::date AND sl.date_created < (?::date + INTERVAL '1 day')
+        `;
+
+        const params = [startDate, endDate];
+
+        if (branchId) {
+          query += ` AND sl.branch_id = ?::uuid`;
+          params.push(branchId);
+        }
+
+        query += ` ORDER BY sl.date_created DESC`;
+
+        const result = await database.raw(query, params);
+        const rows = result.rows || [];
+
+        if (format === 'csv') {
+          // Generate CSV
+          const headers = ['日期時間', '分店', '會員', '電話', '類型', '狀態', '則數', '費用', '訊息ID'];
+          const csvRows = [headers.join(',')];
+
+          for (const row of rows) {
+            csvRows.push([
+              row.date_created,
+              row.branch_name || '',
+              row.member_name || '',
+              row.phone_number || '',
+              row.message_type || '',
+              row.status || '',
+              row.segments || 1,
+              row.cost || 0,
+              row.provider_message_id || '',
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+          }
+
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', `attachment; filename="sms-usage-${startDate}-${endDate}.csv"`);
+          res.send('\uFEFF' + csvRows.join('\n')); // BOM for Excel
+        } else {
+          res.json({
+            success: true,
+            data: rows,
+          });
+        }
+      } catch (error) {
+        console.error('[GymEndpoint] Export notification usage error:', error);
+        res.status(500).json({
           success: false,
           message: error.message || 'Internal server error',
         });

@@ -1727,6 +1727,18 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
   let emailService = null;
   let emailServiceLoaded = false;
 
+  // 動態導入 LINE 服務
+  let lineService = null;
+  let lineServiceLoaded = false;
+
+  // 動態導入 SMS 服務
+  let smsService = null;
+  let smsServiceLoaded = false;
+
+  // 動態導入統一通知服務
+  let notificationService = null;
+  let notificationServiceLoaded = false;
+
   // 異步載入 Email 服務模組
   import('./email-service.js').then((module) => {
     emailService = module;
@@ -1734,6 +1746,33 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
     console.log('[GymHook] Email service module loaded');
   }).catch(() => {
     console.log('[GymHook] Email service module not available');
+  });
+
+  // 異步載入 LINE 服務模組
+  import('./line-service.js').then((module) => {
+    lineService = module;
+    lineServiceLoaded = true;
+    console.log('[GymHook] LINE service module loaded');
+  }).catch(() => {
+    console.log('[GymHook] LINE service module not available');
+  });
+
+  // 異步載入 SMS 服務模組
+  import('./sms-service.js').then((module) => {
+    smsService = module;
+    smsServiceLoaded = true;
+    console.log('[GymHook] SMS service module loaded');
+  }).catch(() => {
+    console.log('[GymHook] SMS service module not available');
+  });
+
+  // 異步載入統一通知服務模組
+  import('./notification-service.js').then((module) => {
+    notificationService = module;
+    notificationServiceLoaded = true;
+    console.log('[GymHook] NotificationService module loaded');
+  }).catch(() => {
+    console.log('[GymHook] NotificationService module not available');
   });
 
   // 異步載入推播服務模組
@@ -1767,6 +1806,38 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
           if (emailEnabled) {
             console.log('[GymHook] Email notifications enabled');
           }
+        }
+
+        // 初始化統一通知服務 (NotificationService)
+        if (notificationServiceLoaded && notificationService) {
+          const schema = await getSchema();
+          const env = {
+            // LINE Messaging API
+            LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+            LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET,
+            // Push (VAPID)
+            VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+            VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+            VAPID_SUBJECT: process.env.VAPID_SUBJECT || 'mailto:admin@gym-nexus.com',
+            // Email (SMTP)
+            EMAIL_SMTP_HOST: process.env.EMAIL_SMTP_HOST,
+            // SMS (Mitake)
+            MITAKE_USERNAME: process.env.MITAKE_USERNAME,
+            MITAKE_PASSWORD: process.env.MITAKE_PASSWORD,
+            MITAKE_API_URL: process.env.MITAKE_API_URL,
+            MITAKE_COST_PER_SMS: process.env.MITAKE_COST_PER_SMS,
+            // General
+            NODE_ENV: process.env.NODE_ENV,
+          };
+
+          notificationService.initNotificationService({
+            services,
+            schema,
+            env,
+            database,
+          });
+
+          console.log('[GymHook] NotificationService initialized with channels:', notificationService.getEnabledChannels().join(', ') || 'none');
         }
       } catch (error) {
         console.error('[GymHook] Notification services init error:', error);

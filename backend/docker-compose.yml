@@ -192,3 +192,20 @@ services:
       VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
       VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
       VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:admin@gym-nexus.com}"
+
+      # ============================================
+      # LINE Messaging API (Notifications)
+      # ============================================
+      # Separate from LINE Login - for sending push notifications
+      LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
+      LINE_MESSAGING_CHANNEL_SECRET: "${LINE_MESSAGING_CHANNEL_SECRET:-}"
+
+      # ============================================
+      # SMS Gateway (Mitake 三竹簡訊)
+      # ============================================
+      MITAKE_USERNAME: "${MITAKE_USERNAME:-}"
+      MITAKE_PASSWORD: "${MITAKE_PASSWORD:-}"
+      MITAKE_API_URL: "${MITAKE_API_URL:-https://smsapi.mitake.com.tw/api/mtk/SmSend}"
+      MITAKE_COST_PER_SMS: "${MITAKE_COST_PER_SMS:-0.5}"
+      SMS_DAILY_LIMIT_PER_MEMBER: "${SMS_DAILY_LIMIT_PER_MEMBER:-5}"
+      SMS_OTP_ONLY: "${SMS_OTP_ONLY:-false}"
