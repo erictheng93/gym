@@ -529,6 +529,222 @@ export default {
     });
 
     // ============================================
+    // Password Management Endpoints
+    // ============================================
+
+    /**
+     * POST /gym/auth/forgot-password
+     * Send password reset email to member
+     */
+    router.post('/auth/forgot-password', async (req, res) => {
+      try {
+        const { email } = req.body || {};
+
+        if (!email) {
+          throw InvalidPayloadError('email is required');
+        }
+
+        const schema = await getSchema();
+        const membersService = new ItemsService('members', {
+          schema,
+          knex: database,
+        });
+
+        // Find member by email
+        const members = await membersService.readByQuery({
+          filter: {
+            email: { _eq: email },
+            status: { _eq: 'active' },
+          },
+          fields: ['id', 'member_code', 'full_name', 'email', 'user_id'],
+          limit: 1,
+        });
+
+        // Always return success to prevent email enumeration
+        if (members.length === 0) {
+          console.log(`[GymEndpoint] Password reset requested for unknown email: ${email}`);
+          res.json({
+            success: true,
+            message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
+          });
+          return;
+        }
+
+        const member = members[0];
+
+        // Check if member has a linked user account
+        if (!member.user_id) {
+          console.log(`[GymEndpoint] Password reset requested for member without user account: ${email}`);
+          res.json({
+            success: true,
+            message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
+          });
+          return;
+        }
+
+        // Generate reset token (JWT with 24h expiry)
+        const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
+        const resetToken = jwt.sign(
+          {
+            id: member.id,
+            user_id: member.user_id,
+            email: member.email,
+            type: 'password_reset',
+          },
+          jwtSecret,
+          { expiresIn: '24h' }
+        );
+
+        // Store reset token in database for additional validation
+        try {
+          await database.raw(`
+            INSERT INTO password_reset_tokens (id, member_id, token_hash, expires_at, created_at)
+            VALUES (gen_random_uuid(), ?, ?, NOW() + INTERVAL '24 hours', NOW())
+            ON CONFLICT (member_id) DO UPDATE
+            SET token_hash = EXCLUDED.token_hash,
+                expires_at = EXCLUDED.expires_at,
+                used_at = NULL
+          `, [member.id, crypto.createHash('sha256').update(resetToken).digest('hex')]);
+        } catch (dbError) {
+          // Table might not exist, create it
+          console.log('[GymEndpoint] Creating password_reset_tokens table...');
+          await database.raw(`
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              member_id UUID NOT NULL UNIQUE REFERENCES members(id) ON DELETE CASCADE,
+              token_hash VARCHAR(255) NOT NULL,
+              expires_at TIMESTAMPTZ NOT NULL,
+              used_at TIMESTAMPTZ,
+              created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+          `);
+          // Retry insert
+          await database.raw(`
+            INSERT INTO password_reset_tokens (id, member_id, token_hash, expires_at, created_at)
+            VALUES (gen_random_uuid(), ?, ?, NOW() + INTERVAL '24 hours', NOW())
+          `, [member.id, crypto.createHash('sha256').update(resetToken).digest('hex')]);
+        }
+
+        // Build reset URL
+        const frontendUrl = process.env.MEMBER_APP_URL || 'http://localhost:3002';
+        const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+        // Send reset email
+        try {
+          const emailService = await import('../../directus-extension-gym-hooks/src/email-service.js');
+          if (emailService && emailService.isEmailEnabled && emailService.isEmailEnabled()) {
+            const emailContent = emailService.buildPasswordResetEmail({
+              memberName: member.full_name,
+              resetUrl: resetUrl,
+              expiresIn: '24 小時',
+            });
+            await emailService.sendEmail({
+              to: member.email,
+              subject: emailContent.subject,
+              html: emailContent.html,
+            });
+            console.log(`[GymEndpoint] Password reset email sent to ${email}`);
+          } else {
+            console.log(`[GymEndpoint] Email not configured. Reset URL: ${resetUrl}`);
+          }
+        } catch (emailError) {
+          console.log(`[GymEndpoint] Email service error:`, emailError.message);
+          console.log(`[GymEndpoint] Reset URL (for testing): ${resetUrl}`);
+        }
+
+        res.json({
+          success: true,
+          message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
+          // Only include reset URL in development for testing
+          ...(process.env.NODE_ENV === 'development' && { resetUrl }),
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Forgot password error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    /**
+     * POST /gym/auth/reset-password
+     * Reset password using token
+     */
+    router.post('/auth/reset-password', async (req, res) => {
+      try {
+        const { token, new_password } = req.body || {};
+
+        if (!token || !new_password) {
+          throw InvalidPayloadError('token and new_password are required');
+        }
+
+        // Validate password strength
+        if (new_password.length < 8) {
+          throw InvalidPayloadError('密碼至少需要 8 個字元');
+        }
+        if (!/\d/.test(new_password)) {
+          throw InvalidPayloadError('密碼需要包含至少一個數字');
+        }
+
+        // Verify JWT token
+        const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
+        let decoded;
+        try {
+          decoded = jwt.verify(token, jwtSecret);
+        } catch (e) {
+          throw UnauthorizedError('重置連結已過期或無效，請重新申請');
+        }
+
+        if (decoded.type !== 'password_reset') {
+          throw UnauthorizedError('無效的重置連結');
+        }
+
+        // Verify token hash in database (prevent reuse)
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const tokenResult = await database.raw(`
+          SELECT * FROM password_reset_tokens
+          WHERE member_id = ? AND token_hash = ? AND used_at IS NULL AND expires_at > NOW()
+        `, [decoded.id, tokenHash]);
+
+        const tokenRecord = tokenResult.rows?.[0] || tokenResult[0];
+        if (!tokenRecord) {
+          throw UnauthorizedError('重置連結已使用或過期，請重新申請');
+        }
+
+        // Update password in Directus
+        const usersService = new UsersService({
+          schema: await getSchema(),
+          knex: database,
+        });
+
+        await usersService.updateOne(decoded.user_id, {
+          password: new_password,
+        });
+
+        // Mark token as used
+        await database.raw(`
+          UPDATE password_reset_tokens
+          SET used_at = NOW()
+          WHERE member_id = ?
+        `, [decoded.id]);
+
+        console.log(`[GymEndpoint] Password reset successful for member ${decoded.id}`);
+
+        res.json({
+          success: true,
+          message: '密碼重置成功，請使用新密碼登入',
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Reset password error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
+
+    // ============================================
     // Member Authentication Middleware
     // ============================================
 
@@ -566,6 +782,81 @@ export default {
         });
       }
     };
+
+    /**
+     * POST /gym/auth/change-password
+     * Change password for authenticated member
+     */
+    router.post('/auth/change-password', memberAuthMiddleware, async (req, res) => {
+      try {
+        const { current_password, new_password } = req.body || {};
+        const memberId = req.member.id;
+
+        if (!current_password || !new_password) {
+          throw InvalidPayloadError('current_password and new_password are required');
+        }
+
+        // Validate password strength
+        if (new_password.length < 8) {
+          throw InvalidPayloadError('新密碼至少需要 8 個字元');
+        }
+        if (!/\d/.test(new_password)) {
+          throw InvalidPayloadError('新密碼需要包含至少一個數字');
+        }
+        if (current_password === new_password) {
+          throw InvalidPayloadError('新密碼不能與當前密碼相同');
+        }
+
+        const schema = await getSchema();
+        const membersService = new ItemsService('members', {
+          schema,
+          knex: database,
+        });
+
+        // Get member with user_id
+        const member = await membersService.readOne(memberId, {
+          fields: ['id', 'email', 'user_id'],
+        });
+
+        if (!member || !member.user_id) {
+          throw InvalidPayloadError('此帳號無法使用密碼修改功能');
+        }
+
+        // Verify current password by attempting login
+        const authResponse = await fetch(`http://localhost:8055/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: member.email, password: current_password }),
+        });
+
+        if (!authResponse.ok) {
+          throw UnauthorizedError('當前密碼錯誤');
+        }
+
+        // Update password
+        const usersService = new UsersService({
+          schema,
+          knex: database,
+        });
+
+        await usersService.updateOne(member.user_id, {
+          password: new_password,
+        });
+
+        console.log(`[GymEndpoint] Password changed for member ${memberId}`);
+
+        res.json({
+          success: true,
+          message: '密碼修改成功',
+        });
+      } catch (error) {
+        console.error('[GymEndpoint] Change password error:', error);
+        res.status(error.status || 500).json({
+          success: false,
+          message: error.message || 'Internal server error',
+        });
+      }
+    });
 
     // ============================================
     // 2. QR Code Check-in Endpoint

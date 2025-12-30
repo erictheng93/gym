@@ -465,6 +465,101 @@ export const useMemberAuth = () => {
     }
   }
 
+  /**
+   * Request password reset email
+   */
+  const forgotPassword = async (email: string): Promise<{ success: boolean; message: string; resetUrl?: string }> => {
+    try {
+      const response = await $fetch<{ success: boolean; message: string; resetUrl?: string }>(`${apiUrl}/gym/auth/forgot-password`, {
+        method: 'POST',
+        body: { email },
+      })
+
+      return {
+        success: response.success,
+        message: response.message,
+        resetUrl: response.resetUrl, // Only in development
+      }
+    }
+    catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'data' in error) {
+        const fetchError = error as { data?: { message?: string } }
+        return {
+          success: false,
+          message: fetchError.data?.message || '發送失敗，請稍後再試',
+        }
+      }
+      return { success: false, message: '發送失敗，請稍後再試' }
+    }
+  }
+
+  /**
+   * Reset password using token
+   */
+  const resetPassword = async (token: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/auth/reset-password`, {
+        method: 'POST',
+        body: {
+          token,
+          new_password: newPassword,
+        },
+      })
+
+      return {
+        success: response.success,
+        message: response.message,
+      }
+    }
+    catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'data' in error) {
+        const fetchError = error as { data?: { message?: string } }
+        return {
+          success: false,
+          message: fetchError.data?.message || '重置密碼失敗',
+        }
+      }
+      return { success: false, message: '重置密碼失敗，請稍後再試' }
+    }
+  }
+
+  /**
+   * Change password for logged-in user
+   */
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+    if (!accessToken.value) {
+      return { success: false, message: '請先登入' }
+    }
+
+    try {
+      const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'X-Member-Token': accessToken.value,
+        },
+        body: {
+          current_password: currentPassword,
+          new_password: newPassword,
+        },
+      })
+
+      return {
+        success: response.success,
+        message: response.message,
+      }
+    }
+    catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'data' in error) {
+        const fetchError = error as { data?: { message?: string } }
+        return {
+          success: false,
+          message: fetchError.data?.message || '密碼變更失敗',
+        }
+      }
+      return { success: false, message: '密碼變更失敗，請稍後再試' }
+    }
+  }
+
   return {
     member,
     isAuthenticated,
@@ -482,5 +577,8 @@ export const useMemberAuth = () => {
     refreshAccessToken,
     getAuthHeader,
     completeProfile,
+    forgotPassword,
+    resetPassword,
+    changePassword,
   }
 }

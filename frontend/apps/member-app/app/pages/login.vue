@@ -254,7 +254,7 @@ onUnmounted(() => {
             </div>
 
             <div class="form-footer">
-              <a href="#" class="forgot-link">忘記密碼？</a>
+              <NuxtLink to="/auth/forgot-password" class="forgot-link">忘記密碼？</NuxtLink>
             </div>
 
             <p v-if="error" class="error-message">{{ error }}</p>
