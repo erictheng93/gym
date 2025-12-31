@@ -1,1 +1,2 @@
-export * from './useDirectus'
+export { useDirectus } from './useDirectus'
+export type { DirectusInstance } from './useDirectus'

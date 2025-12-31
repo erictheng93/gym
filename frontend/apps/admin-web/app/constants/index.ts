@@ -282,6 +282,15 @@ export const MESSAGES = {
     // Report
     REPORT_FETCH_FAILED: '載入報表資料失敗，請稍後再試',
     REPORT_EXPORT_FAILED: '匯出報表失敗，請稍後再試',
+
+    // Class Category
+    CATEGORY_CREATE_FAILED: '建立課程類別失敗，請稍後再試',
+    CATEGORY_UPDATE_FAILED: '更新課程類別失敗，請稍後再試',
+    CATEGORY_DELETE_FAILED: '刪除課程類別失敗，請稍後再試',
+    CATEGORY_FETCH_FAILED: '載入課程類別失敗，請稍後再試',
+
+    // Dashboard
+    DASHBOARD_LOAD_FAILED: '載入儀表板資料失敗',
   },
 
   // Success
@@ -351,6 +360,11 @@ export const MESSAGES = {
 
     // Report
     REPORT_EXPORTED: '報表匯出成功',
+
+    // Class Category
+    CATEGORY_CREATED: '課程類別建立成功',
+    CATEGORY_UPDATED: '課程類別更新成功',
+    CATEGORY_DELETED: '課程類別刪除成功',
   },
 
   // Navigation Menu
@@ -365,6 +379,8 @@ export const MESSAGES = {
     CHECKIN: '會員入場',
     HR: '人資管理',
     REPORTS: '營運報表',
+    CLASSES: '課程管理',
+    CLASS_CATEGORIES: '課程類別',
   },
 
   // User
@@ -854,6 +870,59 @@ export const PAGES = {
       SELECT_DATE: '選擇日期',
       SELECT_TYPE: '選擇類型',
     },
+  },
+
+  // Class Categories
+  CLASS_CATEGORIES: {
+    TITLE: '課程類別管理',
+    DESCRIPTION: '管理課程類別與子類別設定',
+    ADD_CATEGORY: '新增類別',
+    EDIT_CATEGORY: '編輯類別',
+    NO_CATEGORIES: '尚無課程類別',
+    NO_CATEGORIES_HINT: '建立第一個類別開始管理課程',
+    TOTAL_CATEGORIES: '總類別數',
+    ACTIVE_CATEGORIES: '啟用類別',
+    ROOT_CATEGORIES: '主類別',
+    SUB_CATEGORIES: '子類別',
+    // Form Labels
+    CATEGORY_NAME: '類別名稱',
+    CATEGORY_NAME_PLACEHOLDER: '請輸入類別名稱',
+    CATEGORY_NAME_EN: '英文名稱',
+    CATEGORY_NAME_EN_PLACEHOLDER: '請輸入英文名稱（選填）',
+    CATEGORY_CODE: '類別代碼',
+    CATEGORY_CODE_PLACEHOLDER: '請輸入類別代碼（如 yoga）',
+    PARENT_CATEGORY: '父類別',
+    SELECT_PARENT_PLACEHOLDER: '選擇父類別（留空為主類別）',
+    ICON: '圖示',
+    COLOR: '主題色',
+    DESCRIPTION: '類別說明',
+    DESCRIPTION_PLACEHOLDER: '請輸入類別說明（選填）',
+    IS_ACTIVE: '啟用狀態',
+    REQUIRES_EQUIPMENT: '需要器材',
+    EQUIPMENT_LIST: '器材列表',
+    VISIBILITY: '可見性',
+    VISIBILITY_SHARED: '所有分店可見',
+    VISIBILITY_OWNER_ONLY: '僅擁有者分店',
+    OWNER_BRANCH: '擁有者分店',
+    // Table Headers
+    NAME: '名稱',
+    CODE: '代碼',
+    PARENT: '父類別',
+    STATUS: '狀態',
+    ACTIONS: '操作',
+    // Status
+    ENABLED: '啟用',
+    DISABLED: '停用',
+    // Actions
+    VIEW: '查看',
+    EDIT: '編輯',
+    DELETE: '刪除',
+    CONFIRM_DELETE: '確定要刪除此類別嗎？',
+    DELETE_WARNING: '刪除後將無法恢復，相關課程將失去類別關聯',
+    // Validation
+    ERROR_NAME_REQUIRED: '請輸入類別名稱',
+    ERROR_CODE_REQUIRED: '請輸入類別代碼',
+    ERROR_CODE_EXISTS: '此代碼已存在',
   },
 } as const
 

@@ -10,16 +10,26 @@ export const useContracts = () => {
     memberId?: string
     branchId?: string
     status?: string
+    search?: string
     limit?: number
   }) => {
     isLoading.value = true
-    const { memberId, branchId, status, limit = 50 } = options || {}
+    const { memberId, branchId, status, search, limit = 50 } = options || {}
 
     try {
       const filter: Record<string, unknown> = {}
       if (memberId) filter.member_id = { _eq: memberId }
       if (branchId) filter.branch_id = { _eq: branchId }
       if (status) filter.contract_status = { _eq: status }
+
+      // Add search filter
+      if (search) {
+        filter._or = [
+          { contract_no: { _icontains: search } },
+          { 'member_id': { 'full_name': { _icontains: search } } },
+          { 'member_id': { 'member_code': { _icontains: search } } }
+        ]
+      }
 
       const data = await directus.request(
         readItems('contracts', {

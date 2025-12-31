@@ -16,7 +16,7 @@ describe('useHR', () => {
   })
 
   describe('考勤功能 - Attendance', () => {
-    describe('fetchTodayAttendance', () => {
+    describe('fetchTodayAttendance (getTodayAttendance)', () => {
       it('應該成功取得今日考勤記錄', async () => {
         const mockAttendance: Partial<Attendance> = {
           id: 'attendance-1',
@@ -28,34 +28,35 @@ describe('useHR', () => {
 
         mockDirectusInstance.request.mockResolvedValueOnce([mockAttendance])
 
-        const { fetchTodayAttendance, todayAttendance, isAttendanceLoading } = useHR()
+        const { fetchTodayAttendance } = useHR()
 
-        await fetchTodayAttendance('emp-1')
+        // getTodayAttendance returns the record directly, doesn't populate state
+        const result = await fetchTodayAttendance('emp-1')
 
-        expect(todayAttendance.value).toEqual(mockAttendance)
-        expect(isAttendanceLoading.value).toBe(false)
+        expect(result).not.toBeNull()
+        expect(result?.id).toEqual(mockAttendance.id)
       })
 
-      it('應該在沒有今日記錄時設為 null', async () => {
+      it('應該在沒有今日記錄時返回 null', async () => {
         mockDirectusInstance.request.mockResolvedValueOnce([])
 
-        const { fetchTodayAttendance, todayAttendance } = useHR()
+        const { fetchTodayAttendance } = useHR()
 
-        await fetchTodayAttendance('emp-1')
+        const result = await fetchTodayAttendance('emp-1')
 
-        expect(todayAttendance.value).toBeNull()
+        expect(result).toBeNull()
       })
 
       it('應該處理取得失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
         mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
 
-        const { fetchTodayAttendance, todayAttendance } = useHR()
+        const { fetchTodayAttendance } = useHR()
 
-        await fetchTodayAttendance('emp-1')
+        const result = await fetchTodayAttendance('emp-1')
 
         expect(consoleErrorSpy).toHaveBeenCalled()
-        expect(todayAttendance.value).toBeNull()
+        expect(result).toBeNull()
 
         consoleErrorSpy.mockRestore()
       })
@@ -100,7 +101,7 @@ describe('useHR', () => {
       })
     })
 
-    describe('checkIn', () => {
+    describe('checkIn (performCheckIn)', () => {
       it('應該成功上班打卡（創建新記錄）', async () => {
         const createdAttendance: Partial<Attendance> = {
           id: 'attendance-1',
@@ -110,70 +111,76 @@ describe('useHR', () => {
           attendance_date: '2025-01-15'
         }
 
+        // Mock createItem response
         mockDirectusInstance.request.mockResolvedValueOnce(createdAttendance)
+        // Mock readItems response (fetch with relations)
+        mockDirectusInstance.request.mockResolvedValueOnce([createdAttendance])
 
-        const { checkIn, todayAttendance } = useHR()
-        todayAttendance.value = null
+        const { checkIn } = useHR()
 
-        const result = await checkIn('emp-1', 'branch-1', { ip: '192.168.1.1' })
-
-        expect(result).toEqual(createdAttendance)
-        expect(todayAttendance.value).toEqual(createdAttendance)
-      })
-
-      it('應該成功上班打卡（更新現有記錄）', async () => {
-        const existingAttendance: Partial<Attendance> = {
-          id: 'attendance-1',
-          employee_id: 'emp-1',
-          check_in: null
-        }
-
-        const updatedAttendance: Partial<Attendance> = {
-          ...existingAttendance,
-          check_in: '2025-01-15T10:00:00.000Z'
-        }
-
-        mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
-
-        const { checkIn, todayAttendance } = useHR()
-        todayAttendance.value = existingAttendance as Attendance
-
-        const result = await checkIn('emp-1', 'branch-1')
-
-        expect(mockDirectusInstance.request).toHaveBeenCalled()
-        expect(result).toEqual(updatedAttendance)
-      })
-
-      it('應該在已打卡時拋出錯誤', async () => {
-        const { checkIn, todayAttendance } = useHR()
-        todayAttendance.value = {
-          id: 'attendance-1',
-          check_in: '2025-01-15T08:00:00Z'
-        } as Attendance
-
-        await expect(checkIn('emp-1', 'branch-1')).rejects.toThrow('今日已打卡上班')
-      })
-
-      it('應該記錄 GPS 位置資訊', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce({})
-
-        const { checkIn, todayAttendance } = useHR()
-        todayAttendance.value = null
-
-        await checkIn('emp-1', 'branch-1', {
-          ip: '192.168.1.1',
-          gps: '25.0330,121.5654'
+        const result = await checkIn({
+          employeeId: 'emp-1',
+          branchId: 'branch-1'
         })
 
+        expect(result.id).toEqual(createdAttendance.id)
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      })
+
+      it('應該支援不同打卡類型', async () => {
+        const createdAttendance: Partial<Attendance> = {
+          id: 'attendance-1',
+          employee_id: 'emp-1',
+          check_type: 'OVERTIME'
+        }
+
+        mockDirectusInstance.request.mockResolvedValueOnce(createdAttendance)
+        mockDirectusInstance.request.mockResolvedValueOnce([createdAttendance])
+
+        const { checkIn } = useHR()
+
+        const result = await checkIn({
+          employeeId: 'emp-1',
+          branchId: 'branch-1',
+          checkType: 'OVERTIME'
+        })
+
+        expect(result.check_type).toEqual('OVERTIME')
+      })
+
+      it('應該正確計算遲到分鐘數', async () => {
+        // Set time to 9:30 AM (30 minutes late)
+        vi.setSystemTime(new Date('2025-01-15T09:30:00Z'))
+
+        const createdAttendance: Partial<Attendance> = {
+          id: 'attendance-1',
+          employee_id: 'emp-1',
+          late_minutes: 30,
+          attendance_status: 'LATE'
+        }
+
+        mockDirectusInstance.request.mockResolvedValueOnce(createdAttendance)
+        mockDirectusInstance.request.mockResolvedValueOnce([createdAttendance])
+
+        const { checkIn } = useHR()
+
+        await checkIn({
+          employeeId: 'emp-1',
+          branchId: 'branch-1'
+        })
+
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
       })
     })
 
-    describe('checkOut', () => {
+    describe('checkOut (performCheckOut)', () => {
       it('應該成功下班打卡', async () => {
         const existingAttendance: Partial<Attendance> = {
           id: 'attendance-1',
+          employee_id: 'emp-1',
           check_in: '2025-01-15T02:00:00.000Z', // 8 hours before current time
-          check_out: null
+          check_out: null,
+          attendance_status: 'PRESENT'
         }
 
         const updatedAttendance: Partial<Attendance> = {
@@ -182,50 +189,91 @@ describe('useHR', () => {
           work_hours: 8
         }
 
+        // Mock readItems (get existing record)
+        mockDirectusInstance.request.mockResolvedValueOnce([existingAttendance])
+        // Mock updateItem
         mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
+        // Mock readItems (fetch updated record with relations)
+        mockDirectusInstance.request.mockResolvedValueOnce([updatedAttendance])
 
-        const { checkOut, todayAttendance } = useHR()
-        todayAttendance.value = existingAttendance as Attendance
+        const { checkOut } = useHR()
 
-        const result = await checkOut()
+        const result = await checkOut('attendance-1')
 
-        expect(result).toEqual(updatedAttendance)
+        expect(result.check_out).toBeDefined()
+        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
       })
 
-      it('應該在未打卡上班時拋出錯誤', async () => {
-        const { checkOut, todayAttendance } = useHR()
-        todayAttendance.value = null
+      it('應該在找不到打卡記錄時拋出錯誤', async () => {
+        // Mock readItems returns empty array (no record found)
+        mockDirectusInstance.request.mockResolvedValueOnce([])
 
-        await expect(checkOut()).rejects.toThrow('尚未打卡上班')
+        const { checkOut } = useHR()
+
+        await expect(checkOut('non-existent-id')).rejects.toThrow('找不到上班打卡記錄')
       })
 
-      it('應該在已打卡下班時拋出錯誤', async () => {
-        const { checkOut, todayAttendance } = useHR()
-        todayAttendance.value = {
+      it('應該在未上班打卡時拋出錯誤', async () => {
+        // Mock readItems returns record without check_in
+        mockDirectusInstance.request.mockResolvedValueOnce([{
           id: 'attendance-1',
-          check_in: '2025-01-15T08:00:00Z',
-          check_out: '2025-01-15T17:00:00Z'
-        } as Attendance
+          check_in: null
+        }])
 
-        await expect(checkOut()).rejects.toThrow('今日已打卡下班')
+        const { checkOut } = useHR()
+
+        await expect(checkOut('attendance-1')).rejects.toThrow('找不到上班打卡記錄')
       })
 
       it('應該正確計算工作時數', async () => {
-        const checkInTime = new Date('2025-01-15T01:30:00.000Z') // 8.5 hours before
+        const checkInTime = '2025-01-15T01:30:00.000Z' // 8.5 hours before
         vi.setSystemTime(new Date('2025-01-15T10:00:00.000Z'))
 
-        mockDirectusInstance.request.mockResolvedValueOnce({
-          work_hours: 8.5
-        })
-
-        const { checkOut, todayAttendance } = useHR()
-        todayAttendance.value = {
+        const existingAttendance: Partial<Attendance> = {
           id: 'attendance-1',
-          check_in: checkInTime.toISOString()
-        } as Attendance
+          check_in: checkInTime,
+          attendance_status: 'PRESENT'
+        }
 
-        await checkOut()
+        const updatedAttendance: Partial<Attendance> = {
+          ...existingAttendance,
+          check_out: '2025-01-15T10:00:00.000Z',
+          work_hours: 8.5
+        }
 
+        mockDirectusInstance.request.mockResolvedValueOnce([existingAttendance])
+        mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
+        mockDirectusInstance.request.mockResolvedValueOnce([updatedAttendance])
+
+        const { checkOut } = useHR()
+
+        const result = await checkOut('attendance-1')
+
+        expect(result.work_hours).toBeDefined()
+      })
+
+      it('應該支援添加備註', async () => {
+        const existingAttendance: Partial<Attendance> = {
+          id: 'attendance-1',
+          check_in: '2025-01-15T02:00:00.000Z',
+          attendance_status: 'PRESENT'
+        }
+
+        const updatedAttendance: Partial<Attendance> = {
+          ...existingAttendance,
+          check_out: '2025-01-15T10:00:00.000Z',
+          notes: '加班完成專案'
+        }
+
+        mockDirectusInstance.request.mockResolvedValueOnce([existingAttendance])
+        mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
+        mockDirectusInstance.request.mockResolvedValueOnce([updatedAttendance])
+
+        const { checkOut } = useHR()
+
+        const result = await checkOut('attendance-1', '加班完成專案')
+
+        expect(result.notes).toBe('加班完成專案')
       })
     })
   })

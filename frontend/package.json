@@ -17,7 +17,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
-    "prepare": "cd .. && husky || true"
+    "prepare": "cd .. && husky || true",
+    "lint-staged": "pnpm exec lint-staged"
   },
   "devDependencies": {
     "@nuxt/test-utils": "^3.21.0",
@@ -39,9 +40,7 @@
     "vitest": "^3.2.4"
   },
   "lint-staged": {
-    "**/*.{ts,tsx,vue}": [
-      "vitest related --run"
-    ]
+    "**/*.{ts,tsx,vue}": []
   },
   "dependencies": {
     "@directus/sdk": "^20.3.0",

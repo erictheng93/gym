@@ -9,6 +9,7 @@
  * - 內建分頁
  * - 行點擊事件
  * - 插槽自定義渲染
+ * - 批量選擇
  *
  * @example
  * <DataTable
@@ -23,6 +24,8 @@
  *   empty-action-label="新增會員"
  *   empty-action-to="/members/new"
  *   row-clickable
+ *   selectable
+ *   v-model:selected="selectedIds"
  *   @row-click="handleRowClick"
  * >
  *   <template #status="{ row }">
@@ -78,6 +81,10 @@ interface Props {
   rowKey?: keyof T | string
   /** 是否顯示操作欄 */
   showActions?: boolean
+  /** 是否啟用批量選擇 */
+  selectable?: boolean
+  /** 已選擇的項目 ID 列表 (v-model:selected) */
+  selected?: string[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -91,12 +98,15 @@ const props = withDefaults(defineProps<Props>(), {
   rowClickable: false,
   animated: true,
   rowKey: 'id',
-  showActions: false
+  showActions: false,
+  selectable: false,
+  selected: () => []
 })
 
 const emit = defineEmits<{
   'row-click': [row: T, index: number]
   'empty-action': []
+  'update:selected': [selected: string[]]
 }>()
 
 // 取得欄位的值
@@ -127,6 +137,48 @@ const handleRowClick = (row: T, index: number) => {
     emit('row-click', row, index)
   }
 }
+
+// 選擇相關邏輯
+const isAllSelected = computed(() => {
+  if (!props.selectable || props.data.length === 0) return false
+  return props.data.every(row => props.selected.includes(String(getRowKey(row, 0))))
+})
+
+const isIndeterminate = computed(() => {
+  if (!props.selectable || props.data.length === 0) return false
+  const selectedCount = props.data.filter(row =>
+    props.selected.includes(String(getRowKey(row, 0)))
+  ).length
+  return selectedCount > 0 && selectedCount < props.data.length
+})
+
+const isRowSelected = (row: T) => {
+  return props.selected.includes(String(getRowKey(row, 0)))
+}
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    // Deselect all current page items
+    const currentIds = props.data.map(row => String(getRowKey(row, 0)))
+    const newSelected = props.selected.filter(id => !currentIds.includes(id))
+    emit('update:selected', newSelected)
+  } else {
+    // Select all current page items
+    const currentIds = props.data.map(row => String(getRowKey(row, 0)))
+    const newSelected = [...new Set([...props.selected, ...currentIds])]
+    emit('update:selected', newSelected)
+  }
+}
+
+const toggleRowSelect = (row: T, event: Event) => {
+  event.stopPropagation()
+  const rowId = String(getRowKey(row, 0))
+  if (props.selected.includes(rowId)) {
+    emit('update:selected', props.selected.filter(id => id !== rowId))
+  } else {
+    emit('update:selected', [...props.selected, rowId])
+  }
+}
 </script>
 
 <template>
@@ -150,10 +202,29 @@ const handleRowClick = (row: T, index: number) => {
       <slot name="empty" />
     </EmptyState>
 
+    <!-- Batch Actions Toolbar -->
+    <slot v-if="selectable && selected.length > 0" name="batch-actions" :selected="selected" :count="selected.length">
+      <div class="batch-actions-bar">
+        <span class="selected-count">已選擇 {{ selected.length }} 項</span>
+        <button type="button" class="btn btn-ghost btn-small" @click="emit('update:selected', [])">
+          清除選擇
+        </button>
+      </div>
+    </slot>
+
     <!-- Data Table -->
-    <table v-else class="data-table">
+    <table v-else-if="data.length > 0" class="data-table">
       <thead>
         <tr>
+          <th v-if="selectable" class="checkbox-cell">
+            <input
+              type="checkbox"
+              class="table-checkbox"
+              :checked="isAllSelected"
+              :indeterminate="isIndeterminate"
+              @change="toggleSelectAll"
+            />
+          </th>
           <th
             v-for="column in columns"
             :key="String(column.key)"
@@ -174,11 +245,20 @@ const handleRowClick = (row: T, index: number) => {
           :key="getRowKey(row, index)"
           :class="[
             animated ? 'stagger-item' : '',
-            rowClickable ? 'clickable-row' : ''
+            rowClickable ? 'clickable-row' : '',
+            selectable && isRowSelected(row) ? 'selected-row' : ''
           ]"
           :style="animated ? { animationDelay: `${index * 0.03}s` } : {}"
           @click="handleRowClick(row, index)"
         >
+          <td v-if="selectable" class="checkbox-cell" @click.stop>
+            <input
+              type="checkbox"
+              class="table-checkbox"
+              :checked="isRowSelected(row)"
+              @change="(e) => toggleRowSelect(row, e)"
+            />
+          </td>
           <td
             v-for="column in columns"
             :key="String(column.key)"
@@ -279,6 +359,40 @@ const handleRowClick = (row: T, index: number) => {
 
 .data-table tbody tr:hover .actions-cell {
   opacity: 1;
+}
+
+/* Batch Actions Bar */
+.batch-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-accent-light, rgba(0, 113, 227, 0.08));
+  border-bottom: 1px solid var(--color-accent, #0071e3);
+}
+
+.selected-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-accent, #0071e3);
+}
+
+/* Checkbox Cell */
+.checkbox-cell {
+  width: 48px;
+  text-align: center;
+}
+
+.table-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent, #0071e3);
+  cursor: pointer;
+}
+
+/* Selected Row */
+.selected-row {
+  background: var(--color-accent-light, rgba(0, 113, 227, 0.05)) !important;
 }
 
 /* Alignment */

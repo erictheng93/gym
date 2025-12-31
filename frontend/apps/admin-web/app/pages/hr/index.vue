@@ -7,12 +7,8 @@ definePageMeta({
 
 const { currentEmployee, checkAuth } = useAuth()
 const { branches, fetchBranches } = useBranches()
-const {
-  todayAttendanceSummary,
-  fetchTodayAttendanceSummary,
-  pendingApprovals,
-  fetchPendingApprovals
-} = useHR()
+const { todayAttendanceSummary, fetchTodayAttendanceSummary } = useAttendance()
+const { pendingApprovals, fetchPendingApprovals } = useLeaveRequests()
 
 const isLoading = ref(true)
 const selectedBranch = ref('')

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ClassSession } from '~/composables/useClasses'
 import type { Booking } from '~/composables/useBookings'
+import type { ReviewEligibility } from '~/composables/useReviews'
 
 definePageMeta({
   middleware: 'auth'
@@ -18,6 +19,7 @@ const {
   getBookingForSession,
   isLoading: bookingsLoading
 } = useBookings()
+const { checkEligibility } = useReviews()
 
 // State
 const activeTab = ref<'schedule' | 'my-bookings'>('schedule')
@@ -28,6 +30,11 @@ const bookingToCancel = ref<Booking | null>(null)
 const isProcessing = ref(false)
 const error = ref('')
 const successMessage = ref('')
+
+// Review state
+const showReviewModal = ref(false)
+const reviewBooking = ref<Booking | null>(null)
+const reviewEligibility = ref<ReviewEligibility | null>(null)
 
 // Fetch data on mount
 onMounted(async () => {
@@ -156,6 +163,33 @@ const formatDate = (dateStr: string): string => {
 }
 
 const isLoading = computed(() => classesLoading.value || bookingsLoading.value)
+
+// Review handlers
+const handleReview = async (booking: Booking) => {
+  reviewBooking.value = booking
+  const eligibility = await checkEligibility(booking.id)
+  reviewEligibility.value = eligibility
+  showReviewModal.value = true
+}
+
+const handleReviewSubmitted = async () => {
+  showReviewModal.value = false
+  reviewBooking.value = null
+  reviewEligibility.value = null
+  // Refresh bookings to update has_review flag
+  await fetchMyBookings()
+}
+
+const getReviewClassName = (booking: Booking | null): string => {
+  if (!booking) return ''
+  return booking.class_name || booking.session?.schedule?.class?.name || '課程'
+}
+
+const getReviewSessionDate = (booking: Booking | null): string => {
+  if (!booking) return ''
+  const dateStr = booking.session_date || booking.session?.session_date || ''
+  return formatDate(dateStr)
+}
 </script>
 
 <template>
@@ -248,6 +282,7 @@ const isLoading = computed(() => classesLoading.value || bookingsLoading.value)
             v-for="booking in pastBookings.slice(0, 10)"
             :key="booking.id"
             :booking="booking"
+            @review="handleReview(booking)"
           />
         </div>
       </section>
@@ -363,6 +398,19 @@ const isLoading = computed(() => classesLoading.value || bookingsLoading.value)
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Review Modal - 使用 Lazy 前缀按需加載 -->
+    <LazyReviewFormModal
+      :show="showReviewModal"
+      :booking-id="reviewBooking?.id || ''"
+      :class-name="getReviewClassName(reviewBooking)"
+      :session-date="getReviewSessionDate(reviewBooking)"
+      :existing-review="reviewEligibility?.existing_review"
+      @close="showReviewModal = false"
+      @submitted="handleReviewSubmitted"
+      @updated="handleReviewSubmitted"
+      @deleted="handleReviewSubmitted"
+    />
   </div>
 </template>
 

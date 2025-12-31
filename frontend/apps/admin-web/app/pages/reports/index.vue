@@ -3,7 +3,7 @@ import { MESSAGES, PAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
 import type { RevenueReport, MemberGrowthReport, ContractExpiryReport, MemberActivityReport } from '~/composables/useReports'
 import { exportRevenueReport, exportMemberGrowthReport, exportContractExpiryReport, exportMemberActivityReport } from '~/utils/export'
-import GoogleSheetsExport from '~/components/GoogleSheetsExport.vue'
+// GoogleSheetsExport 使用 Lazy 前缀自動懶加載（按需引入）
 
 const { branches, fetchBranches } = useBranches()
 const { getRevenueReport, getMemberGrowthReport, getContractExpiryReport, getMemberActivityReport } = useReports()
@@ -364,7 +364,7 @@ onMounted(async () => {
       <div class="actions-grid">
         <!-- Revenue Export -->
         <div class="export-wrapper">
-          <GoogleSheetsExport
+          <LazyGoogleSheetsExport
             v-if="revenueReport"
             :data="revenueReport.data"
             report-type="revenue"
@@ -375,7 +375,7 @@ onMounted(async () => {
 
         <!-- Member Growth Export -->
         <div class="export-wrapper">
-          <GoogleSheetsExport
+          <LazyGoogleSheetsExport
             v-if="memberGrowthReport"
             :data="memberGrowthReport.data"
             report-type="member-growth"
@@ -386,7 +386,7 @@ onMounted(async () => {
 
         <!-- Contract Expiry Export -->
         <div class="export-wrapper">
-          <GoogleSheetsExport
+          <LazyGoogleSheetsExport
             v-if="contractExpiryReport"
             :data="contractExpiryReport.data"
             report-type="contract-expiry"
@@ -397,7 +397,7 @@ onMounted(async () => {
 
         <!-- Member Activity Export -->
         <div class="export-wrapper">
-          <GoogleSheetsExport
+          <LazyGoogleSheetsExport
             v-if="memberActivityReport"
             :data="memberActivityReport.data"
             report-type="member-activity"

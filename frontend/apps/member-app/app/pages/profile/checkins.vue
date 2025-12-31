@@ -141,9 +141,10 @@ const groupedCheckins = computed(() => {
         <h3 class="date-header">{{ group.date }}</h3>
 
         <div class="checkin-items">
-          <div
+          <NuxtLink
             v-for="checkin in group.items"
             :key="checkin.id"
+            :to="`/profile/checkins/${checkin.id}`"
             class="checkin-card"
           >
             <div class="checkin-icon" :class="checkin.check_type.toLowerCase()">
@@ -177,7 +178,13 @@ const groupedCheckins = computed(() => {
             <div class="checkin-type">
               {{ checkin.check_type === 'ENTRY' ? '入場' : '離場' }}
             </div>
-          </div>
+
+            <div class="checkin-arrow">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </NuxtLink>
         </div>
       </div>
 
@@ -286,6 +293,12 @@ const groupedCheckins = computed(() => {
   background-color: var(--color-surface);
   border-radius: 12px;
   border: 1px solid var(--color-border);
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.checkin-card:active {
+  background-color: var(--color-border);
 }
 
 .checkin-icon {
@@ -359,6 +372,15 @@ const groupedCheckins = computed(() => {
   padding: 4px 10px;
   background-color: var(--color-border);
   border-radius: 6px;
+}
+
+.checkin-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .load-more-btn {

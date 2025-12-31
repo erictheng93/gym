@@ -21,7 +21,7 @@ const {
   reviewMakeup,
   cancelMakeup,
   fetchMakeupApprovalHistory
-} = useHR()
+} = useMakeupRequests()
 
 const activeTab = ref<'my-requests' | 'approve'>('my-requests')
 const selectedStatus = ref('')

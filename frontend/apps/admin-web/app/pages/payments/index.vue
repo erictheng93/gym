@@ -4,7 +4,7 @@
  *
  * 使用 @gym-nexus/ui 組件庫重構
  */
-import { MESSAGES, PAGES, LABELS, PAGINATION } from '~/constants'
+import { MESSAGES, PAGES, LABELS, PAGINATION, TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
@@ -13,6 +13,7 @@ definePageMeta({
 const { payments, totalCount, isLoading, fetchPayments, getPaymentStats } = usePayments()
 const { branches, fetchBranches } = useBranches()
 
+const search = ref('')
 const selectedBranch = ref('')
 const selectedType = ref('')
 const startDate = ref('')
@@ -37,8 +38,19 @@ const loadPayments = async () => {
     branchId: selectedBranch.value || undefined,
     paymentType: selectedType.value || undefined,
     startDate: startDate.value || undefined,
-    endDate: endDate.value || undefined
+    endDate: endDate.value || undefined,
+    search: search.value || undefined
   })
+}
+
+// Debounced search
+let searchTimeout: ReturnType<typeof setTimeout>
+const handleSearch = () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    currentPage.value = 1
+    loadPayments()
+  }, TIMING.DEBOUNCE)
 }
 
 const loadStats = async () => {
@@ -179,17 +191,28 @@ const columns = [
 
     <!-- Filters -->
     <div class="filters-bar glass-card">
-      <div class="date-filters">
-        <div class="date-shortcuts">
-          <button class="shortcut-btn" :class="{ active: !startDate && !endDate }" @click="setDateRange('all')">{{ PAGES.PAYMENTS.DATE_RANGE_ALL }}</button>
-          <button class="shortcut-btn" @click="setDateRange('today')">{{ PAGES.PAYMENTS.DATE_RANGE_TODAY }}</button>
-          <button class="shortcut-btn" @click="setDateRange('week')">{{ PAGES.PAYMENTS.DATE_RANGE_WEEK }}</button>
-          <button class="shortcut-btn" @click="setDateRange('month')">{{ PAGES.PAYMENTS.DATE_RANGE_MONTH }}</button>
+      <div class="filters-row">
+        <div class="search-box">
+          <input
+            v-model="search"
+            type="text"
+            class="input input-search"
+            placeholder="搜尋會員姓名、合約編號..."
+            @input="handleSearch"
+          />
         </div>
-        <div class="date-inputs">
-          <input v-model="startDate" type="date" class="input input-date" />
-          <span class="date-separator">—</span>
-          <input v-model="endDate" type="date" class="input input-date" />
+        <div class="date-filters">
+          <div class="date-shortcuts">
+            <button class="shortcut-btn" :class="{ active: !startDate && !endDate }" @click="setDateRange('all')">{{ PAGES.PAYMENTS.DATE_RANGE_ALL }}</button>
+            <button class="shortcut-btn" @click="setDateRange('today')">{{ PAGES.PAYMENTS.DATE_RANGE_TODAY }}</button>
+            <button class="shortcut-btn" @click="setDateRange('week')">{{ PAGES.PAYMENTS.DATE_RANGE_WEEK }}</button>
+            <button class="shortcut-btn" @click="setDateRange('month')">{{ PAGES.PAYMENTS.DATE_RANGE_MONTH }}</button>
+          </div>
+          <div class="date-inputs">
+            <input v-model="startDate" type="date" class="input input-date" />
+            <span class="date-separator">—</span>
+            <input v-model="endDate" type="date" class="input input-date" />
+          </div>
         </div>
       </div>
 
@@ -355,17 +378,32 @@ const columns = [
 /* Filters */
 .filters-bar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-lg);
+  flex-direction: column;
+  gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
   margin-bottom: var(--space-xl);
+}
+
+.filters-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.search-box {
+  flex: 0 0 280px;
+}
+
+.input-search {
+  width: 100%;
 }
 
 .date-filters {
   display: flex;
   align-items: center;
   gap: var(--space-lg);
+  flex: 1;
 }
 
 .date-shortcuts {
@@ -491,14 +529,23 @@ const columns = [
     grid-template-columns: 1fr;
   }
 
-  .filters-bar {
+  .filters-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .search-box {
+    flex: none;
+    width: 100%;
   }
 
   .date-filters {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .filter-group {
+    flex-direction: column;
   }
 }
 </style>

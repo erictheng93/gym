@@ -16,9 +16,10 @@ export const usePayments = () => {
     paymentType?: string
     startDate?: string
     endDate?: string
+    search?: string
   }) => {
     isLoading.value = true
-    const { page = 1, limit = 20, memberId, contractId, branchId, paymentType, startDate, endDate } = options || {}
+    const { page = 1, limit = 20, memberId, contractId, branchId, paymentType, startDate, endDate, search } = options || {}
 
     try {
       const filter: Record<string, unknown> = {}
@@ -28,6 +29,16 @@ export const usePayments = () => {
       if (paymentType) filter.payment_type = { _eq: paymentType }
       if (startDate) filter.payment_date = { _gte: startDate }
       if (endDate) filter.payment_date = { ...(filter.payment_date as object || {}), _lte: endDate }
+
+      // Add search filter
+      if (search) {
+        filter._or = [
+          { 'member': { 'full_name': { _icontains: search } } },
+          { 'member': { 'member_code': { _icontains: search } } },
+          { 'contract': { 'contract_no': { _icontains: search } } },
+          { notes: { _icontains: search } }
+        ]
+      }
 
       // Fetch payments data
       const data = await directus.request(

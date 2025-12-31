@@ -1,9 +1,38 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
 
+  // Extend from UI package layer (統一架構)
+  extends: ['../../packages/ui'],
+
   modules: ['@vite-pwa/nuxt'],
+
+  // Vite aliases for proper path resolution
+  alias: {
+    '@shared': resolve(__dirname, '../../packages/shared'),
+    '@ui': resolve(__dirname, '../../packages/ui')
+  },
+
+  // Auto-import utilities from shared package
+  imports: {
+    imports: [
+      { from: '@shared/utils/formatters', name: 'formatDate' },
+      { from: '@shared/utils/formatters', name: 'formatCurrency' },
+      { from: '@shared/utils/formatters', name: 'formatNumber' },
+      { from: '@shared/utils/formatters', name: 'formatPhone' },
+      { from: '@shared/utils/formatters', name: 'formatRelativeTime' },
+      { from: '@shared/utils/status-badges', name: 'getMemberStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getContractStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getPaymentStatusBadge' },
+      { from: '@shared/utils/status-badges', name: 'getStatusBadge' }
+    ]
+  },
 
   devServer: {
     host: '0.0.0.0',

@@ -8,6 +8,7 @@ definePageMeta({
 
 const directus = useDirectus()
 const { user } = useAuth()
+const { getRevenueReport } = useReports()
 
 // Stats
 const stats = ref({
@@ -37,6 +38,11 @@ const userName = computed(() => {
 const fetchDashboardData = async () => {
   isLoading.value = true
   try {
+    // Calculate date ranges
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
     const [
       totalMembers,
       activeMembers,
@@ -44,7 +50,9 @@ const fetchDashboardData = async () => {
       activeContracts,
       draftContracts,
       members,
-      contracts
+      contracts,
+      monthlyRevenue,
+      todayRevenue
     ] = await Promise.all([
       directus.request(aggregate('members', { aggregate: { count: '*' } })),
       directus.request(aggregate('members', { aggregate: { count: '*' }, query: { filter: { member_status: { _eq: 'ACTIVE' } } } })),
@@ -52,7 +60,17 @@ const fetchDashboardData = async () => {
       directus.request(aggregate('contracts', { aggregate: { count: '*' }, query: { filter: { contract_status: { _eq: 'ACTIVE' } } } })),
       directus.request(aggregate('contracts', { aggregate: { count: '*' }, query: { filter: { contract_status: { _eq: 'DRAFT' } } } })),
       directus.request(readItems('members', { limit: 5, sort: ['-date_created'], fields: ['id', 'full_name', 'member_code', 'member_status', 'date_created'] })),
-      directus.request(readItems('contracts', { limit: 5, sort: ['-date_created'], fields: ['id', 'contract_no', 'contract_status', 'total_amount', 'date_created', 'member.full_name'] }))
+      directus.request(readItems('contracts', { limit: 5, sort: ['-date_created'], fields: ['id', 'contract_no', 'contract_status', 'total_amount', 'date_created', 'member.full_name'] })),
+      // Fetch monthly revenue from reports API
+      getRevenueReport(
+        startOfMonth.toISOString().split('T')[0],
+        now.toISOString().split('T')[0]
+      ).catch(() => ({ summary: { net_revenue: 0 } })),
+      // Fetch today's revenue from reports API
+      getRevenueReport(
+        startOfToday.toISOString().split('T')[0],
+        now.toISOString().split('T')[0]
+      ).catch(() => ({ summary: { net_revenue: 0 } }))
     ])
 
     stats.value = {
@@ -66,7 +84,10 @@ const fetchDashboardData = async () => {
         draft: Number(draftContracts[0]?.count) || 0,
         expiring: 0
       },
-      revenue: { today: 0, month: 0 }
+      revenue: {
+        today: todayRevenue?.summary?.net_revenue || 0,
+        month: monthlyRevenue?.summary?.net_revenue || 0
+      }
     }
 
     recentMembers.value = members as any[]

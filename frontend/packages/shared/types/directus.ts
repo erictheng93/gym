@@ -311,6 +311,54 @@ export interface MemberCheckin {
   verifier?: Employee
 }
 
+// 課程類別
+export interface ClassCategory {
+  id: string
+  status: 'published' | 'draft' | 'archived'
+  sort: number | null
+  date_created: string
+  date_updated: string | null
+  user_created: string | null
+  user_updated: string | null
+  code: string
+  name: string
+  name_en: string | null
+  parent_id: string | null
+  icon: string | null
+  color: string
+  image_url: string | null
+  description: string | null
+  is_active: boolean
+  requires_equipment: boolean
+  equipment_list: string[]
+  metadata: Record<string, unknown>
+  owner_branch_id: string | null
+  visibility: 'owner_only' | 'shared'
+  // Relations
+  parent?: ClassCategory
+  children?: ClassCategory[]
+  owner_branch?: Branch
+}
+
+// 課程類別-分店關聯
+export interface ClassCategoryBranch {
+  id: string
+  status: 'published' | 'draft' | 'archived'
+  sort: number | null
+  date_created: string
+  date_updated: string | null
+  category_id: string
+  branch_id: string
+  is_featured: boolean
+  is_active: boolean
+  custom_name: string | null
+  custom_description: string | null
+  sort_order: number
+  // Relations
+  category?: ClassCategory
+  branch?: Branch
+}
+
 // 收付款
 export interface Payment extends BaseFields {
   contract_id: string | null
@@ -349,4 +397,6 @@ export interface DirectusSchema {
   makeup_requests: MakeupRequest[]
   makeup_approval_logs: MakeupApprovalLog[]
   employee_shifts: EmployeeShift[]
+  class_categories: ClassCategory[]
+  class_category_branches: ClassCategoryBranch[]
 }

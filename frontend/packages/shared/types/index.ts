@@ -1,1 +1,23 @@
-export * from './directus'
+export type {
+  Branch,
+  JobTitle,
+  Employee,
+  Member,
+  MemberSocialAccount,
+  MembershipPlan,
+  Contract,
+  ContractLog,
+  Attendance,
+  LeaveRequest,
+  LeaveBalance,
+  LeaveApprovalLog,
+  ShiftSchedule,
+  MakeupRequest,
+  MakeupApprovalLog,
+  EmployeeShift,
+  MemberCheckin,
+  ClassCategory,
+  ClassCategoryBranch,
+  Payment,
+  DirectusSchema
+} from './directus'

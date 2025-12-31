@@ -8,6 +8,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'cancel'): void
   (e: 'details'): void
+  (e: 'review'): void
 }>()
 
 const { getStatusLabel, getStatusColor, canCancel, formatBookingDate } = useBookings()
@@ -55,6 +56,23 @@ const showCancel = computed(() => canCancel(props.booking))
 
 const isWaitlisted = computed(() => props.booking.booking_status === 'WAITLISTED')
 const waitlistPosition = computed(() => props.booking.waitlist_position || 0)
+
+// Check if review button should be shown (ATTENDED status, within 7 days)
+const canShowReview = computed(() => {
+  if (props.booking.booking_status !== 'ATTENDED') return false
+
+  const sessionDateValue = sessionDate.value
+  if (!sessionDateValue) return false
+
+  const sessionDateTime = new Date(sessionDateValue)
+  const now = new Date()
+  const diffMs = now.getTime() - sessionDateTime.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  return diffDays >= 0 && diffDays <= 7
+})
+
+const hasReview = computed(() => props.booking.has_review || false)
 </script>
 
 <template>
@@ -106,6 +124,14 @@ const waitlistPosition = computed(() => props.booking.waitlist_position || 0)
         @click.stop="emit('cancel')"
       >
         取消預約
+      </button>
+
+      <button
+        v-if="canShowReview"
+        class="btn-review"
+        @click.stop="emit('review')"
+      >
+        {{ hasReview ? '查看評價' : '評價' }}
       </button>
     </div>
   </div>
@@ -259,5 +285,21 @@ const waitlistPosition = computed(() => props.booking.waitlist_position || 0)
 
 .btn-cancel:active {
   background-color: var(--color-border);
+}
+
+.btn-review {
+  padding: 8px 16px;
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-review:active {
+  background-color: #059669;
 }
 </style>

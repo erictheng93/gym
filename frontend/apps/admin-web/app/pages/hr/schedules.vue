@@ -18,7 +18,7 @@ const {
   assignShiftToEmployee,
   batchAssignShift,
   removeEmployeeShift
-} = useHR()
+} = useShiftSchedules()
 const { branches, fetchBranches } = useBranches()
 
 const selectedBranch = ref('')

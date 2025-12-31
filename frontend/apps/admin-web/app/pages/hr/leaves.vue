@@ -25,7 +25,7 @@ const {
   reviewLeave,
   cancelLeave,
   fetchApprovalHistory
-} = useHR()
+} = useLeaveRequests()
 
 const activeTab = ref<'my-leaves' | 'apply' | 'approve' | 'balance'>('my-leaves')
 const selectedStatus = ref('')

@@ -381,7 +381,8 @@ const handleSubmit = async () => {
               {{ PAGES.CONTRACTS.SIGN_INSTRUCTION }}
             </p>
 
-            <SignaturePad v-model="form.digital_signature" />
+            <!-- 使用 Lazy 前缀按需加載簽名組件 -->
+            <LazySignaturePad v-model="form.digital_signature" />
             <span v-if="errors.digital_signature" class="error-text">{{ errors.digital_signature }}</span>
 
             <!-- Contract Terms -->

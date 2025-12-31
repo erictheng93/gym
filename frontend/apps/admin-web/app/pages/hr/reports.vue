@@ -5,7 +5,7 @@ definePageMeta({
   middleware: 'auth'
 })
 
-const { fetchMonthlyAttendanceStats, fetchEmployeeMonthlyAttendance } = useHR()
+const { fetchMonthlyAttendanceStats, fetchEmployeeMonthlyAttendance } = useAttendance()
 const { branches, fetchBranches } = useBranches()
 
 const selectedBranch = ref('')

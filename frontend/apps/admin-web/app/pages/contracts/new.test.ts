@@ -59,8 +59,14 @@ vi.stubGlobal('useToast', () => ({
 // Mock definePageMeta
 vi.stubGlobal('definePageMeta', vi.fn())
 
-// Mock SignaturePad component
+// Mock SignaturePad component (Nuxt uses LazySignaturePad for lazy loading)
 const SignaturePadStub = {
+  template: '<div class="signature-pad-stub"><canvas></canvas></div>',
+  props: ['modelValue'],
+  emits: ['update:modelValue']
+}
+
+const LazySignaturePadStub = {
   template: '<div class="signature-pad-stub"><canvas></canvas></div>',
   props: ['modelValue'],
   emits: ['update:modelValue']
@@ -122,7 +128,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -135,7 +142,8 @@ describe('contracts/new.vue', () => {
       mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -151,7 +159,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -167,7 +176,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -184,7 +194,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -198,7 +209,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -213,7 +225,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -228,7 +241,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -253,7 +267,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -271,7 +286,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -292,7 +308,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -311,7 +328,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -333,7 +351,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -355,7 +374,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -377,7 +397,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -399,7 +420,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -423,7 +445,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -442,7 +465,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -463,7 +487,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -482,7 +507,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -505,7 +531,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -524,7 +551,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -543,7 +571,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -562,7 +591,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -581,7 +611,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -602,7 +633,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -628,7 +660,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -660,7 +693,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -681,7 +715,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -702,7 +737,8 @@ describe('contracts/new.vue', () => {
         const wrapper = mount(ContractNew, {
           global: {
             stubs: {
-              SignaturePad: SignaturePadStub
+              SignaturePad: SignaturePadStub,
+              LazySignaturePad: LazySignaturePadStub
             }
           }
         })
@@ -723,7 +759,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -742,7 +779,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -786,7 +824,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -812,7 +851,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -846,7 +886,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -875,7 +916,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -907,7 +949,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -922,7 +965,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -937,7 +981,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -951,7 +996,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -969,7 +1015,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -994,7 +1041,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -1011,7 +1059,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -1031,7 +1080,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })
@@ -1046,7 +1096,8 @@ describe('contracts/new.vue', () => {
       const wrapper = mount(ContractNew, {
         global: {
           stubs: {
-            SignaturePad: SignaturePadStub
+            SignaturePad: SignaturePadStub,
+            LazySignaturePad: LazySignaturePadStub
           }
         }
       })

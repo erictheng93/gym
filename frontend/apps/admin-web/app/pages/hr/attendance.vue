@@ -13,14 +13,14 @@ definePageMeta({
 const { currentEmployee, checkAuth } = useAuth()
 const { branches, fetchBranches } = useBranches()
 const {
-  todayAttendance,
+  todayAttendances: todayAttendance,
   recentAttendances,
-  isAttendanceLoading,
-  fetchTodayAttendance,
+  isLoading: isAttendanceLoading,
+  getTodayAttendance: fetchTodayAttendance,
   fetchRecentAttendances,
-  checkIn,
-  checkOut
-} = useHR()
+  performCheckIn: checkIn,
+  performCheckOut: checkOut
+} = useAttendance()
 
 const currentTime = ref(new Date())
 const isProcessing = ref(false)

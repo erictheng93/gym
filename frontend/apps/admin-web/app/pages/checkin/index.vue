@@ -586,10 +586,10 @@ const todayCountLabel = computed(() => {
           </div>
         </div>
 
-        <!-- QR Code Scanner Modal (Member only) -->
+        <!-- QR Code Scanner Modal (Member only) - 使用 Lazy 前缀按需加載 -->
         <div v-if="showQrScanner && activeTab === 'member'" class="qr-scanner-overlay">
           <div class="qr-scanner-modal">
-            <QrScanner
+            <LazyQrScanner
               :auto-start="true"
               @scan="handleQrScan"
               @error="handleQrScanError"
