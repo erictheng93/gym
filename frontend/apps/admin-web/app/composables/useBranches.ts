@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk'
 import type { Branch, Employee } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const useBranches = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const branches = useState<Branch[]>('branches', () => [])
   const isLoading = useState('branches_loading', () => false)
 
@@ -18,45 +20,90 @@ export const useBranches = () => {
       )
       branches.value = data as Branch[]
     } catch (error) {
-      console.error('Failed to fetch branches:', error)
+      handleError(error, {
+        context: 'useBranches.fetchBranches',
+        customMessage: MESSAGES.ERRORS.BRANCH_FETCH_FAILED
+      })
+      branches.value = []
     } finally {
       isLoading.value = false
     }
   }
 
   const fetchBranch = async (id: string) => {
-    const data = await directus.request(
-      readItem('branches', id)
-    )
-    return data as Branch
+    try {
+      const data = await directus.request(
+        readItem('branches', id)
+      )
+      return data as Branch
+    } catch (error) {
+      handleError(error, {
+        context: 'useBranches.fetchBranch',
+        customMessage: MESSAGES.ERRORS.BRANCH_FETCH_FAILED
+      })
+      return null
+    }
   }
 
   const fetchBranchEmployees = async (branchId: string) => {
-    const data = await directus.request(
-      readItems('employees', {
-        filter: { branch_id: { _eq: branchId }, status: { _eq: 'active' } },
-        fields: ['*', 'job_title.*'],
-        sort: ['full_name']
+    try {
+      const data = await directus.request(
+        readItems('employees', {
+          filter: { branch_id: { _eq: branchId }, status: { _eq: 'active' } },
+          fields: ['*', 'job_title.*'],
+          sort: ['full_name']
+        })
+      )
+      return data as Employee[]
+    } catch (error) {
+      handleError(error, {
+        context: 'useBranches.fetchBranchEmployees',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED
       })
-    )
-    return data as Employee[]
+      return []
+    }
   }
 
   const createBranch = async (branch: Partial<Branch>) => {
-    const data = await directus.request(createItem('branches', branch))
-    await fetchBranches()
-    return data
+    try {
+      const data = await directus.request(createItem('branches', branch))
+      await fetchBranches()
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useBranches.createBranch',
+        customMessage: MESSAGES.ERRORS.BRANCH_CREATE_FAILED
+      })
+      return null
+    }
   }
 
   const updateBranch = async (id: string, branch: Partial<Branch>) => {
-    const data = await directus.request(updateItem('branches', id, branch))
-    await fetchBranches()
-    return data
+    try {
+      const data = await directus.request(updateItem('branches', id, branch))
+      await fetchBranches()
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useBranches.updateBranch',
+        customMessage: MESSAGES.ERRORS.BRANCH_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   const deleteBranch = async (id: string) => {
-    await directus.request(deleteItem('branches', id))
-    await fetchBranches()
+    try {
+      await directus.request(deleteItem('branches', id))
+      await fetchBranches()
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'useBranches.deleteBranch',
+        customMessage: MESSAGES.ERRORS.BRANCH_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   return {

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { mockDirectusInstance, mockHandleError } from '@test/setup'
 import { useAuth } from './useAuth'
-import { MESSAGES } from '~/constants'
 
 describe('useAuth', () => {
   beforeEach(() => {
@@ -55,24 +54,24 @@ describe('useAuth', () => {
       })
     })
 
-    it('應該處理登入失敗', async () => {
+    it('應該處理登入失敗並呼叫 handleError', async () => {
       mockDirectusInstance.login.mockRejectedValueOnce(new Error('Invalid credentials'))
 
       const { login } = useAuth()
       const result = await login('test@example.com', 'wrong')
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('Invalid credentials')
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
-    it('應該處理未知錯誤', async () => {
+    it('應該處理未知錯誤並呼叫 handleError', async () => {
       mockDirectusInstance.login.mockRejectedValueOnce('Unknown error')
 
       const { login } = useAuth()
       const result = await login('test@example.com', 'password')
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe(MESSAGES.AUTH.LOGIN_ERROR)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -187,8 +186,7 @@ describe('useAuth', () => {
       expect(currentEmployee.value).toBeNull()
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    it('應該處理取得失敗的情況並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
 
       const { user, fetchCurrentEmployee, currentEmployee } = useAuth()
@@ -196,10 +194,8 @@ describe('useAuth', () => {
 
       await fetchCurrentEmployee()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch current employee:', expect.any(Error))
+      expect(mockHandleError).toHaveBeenCalled()
       expect(currentEmployee.value).toBeNull()
-
-      consoleErrorSpy.mockRestore()
     })
 
     it('應該正確處理員工資料中的 null 值', async () => {

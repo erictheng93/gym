@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mockDirectusInstance, mockHandleError } from '@test/setup'
 import { useContracts } from './useContracts'
 import type { Contract } from '~/types/directus'
 
@@ -110,21 +110,15 @@ describe('useContracts', () => {
     })
 
     it('應該處理取得失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
 
       const { fetchContracts, contracts, isLoading } = useContracts()
 
       await fetchContracts()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to fetch contracts:',
-        expect.any(Error)
-      )
+      expect(mockHandleError).toHaveBeenCalled()
       expect(contracts.value).toEqual([])
       expect(isLoading.value).toBe(false)
-
-      consoleErrorSpy.mockRestore()
     })
 
     it('應該在取得過程中設定 loading 狀態', async () => {
@@ -165,12 +159,15 @@ describe('useContracts', () => {
       expect(result).toEqual(mockContract)
     })
 
-    it('應該在取得失敗時拋出錯誤', async () => {
+    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Not found'))
 
       const { getContract } = useContracts()
 
-      await expect(getContract('invalid-id')).rejects.toThrow('Not found')
+      const result = await getContract('invalid-id')
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -197,12 +194,15 @@ describe('useContracts', () => {
       expect(result).toEqual(createdContract)
     })
 
-    it('應該在創建失敗時拋出錯誤', async () => {
+    it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Creation failed'))
 
       const { createContract } = useContracts()
 
-      await expect(createContract(newContract)).rejects.toThrow('Creation failed')
+      const result = await createContract(newContract)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -226,12 +226,15 @@ describe('useContracts', () => {
       expect(result).toEqual(updatedContract)
     })
 
-    it('應該在更新失敗時拋出錯誤', async () => {
+    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updateContract } = useContracts()
 
-      await expect(updateContract('contract-1', updatedData)).rejects.toThrow('Update failed')
+      const result = await updateContract('contract-1', updatedData)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -306,12 +309,19 @@ describe('useContracts', () => {
       })
     })
 
-    it('應該處理統計失敗的情況', async () => {
+    it('應該處理統計失敗的情況並返回預設值', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Stats failed'))
 
       const { getContractStats } = useContracts()
 
-      await expect(getContractStats()).rejects.toThrow('Stats failed')
+      const result = await getContractStats()
+
+      expect(result).toEqual({
+        active: 0,
+        expired: 0,
+        draft: 0
+      })
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 

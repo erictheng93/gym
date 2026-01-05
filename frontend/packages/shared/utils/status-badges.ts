@@ -94,9 +94,50 @@ export function getLeaveStatusBadge(status: string): StatusConfig {
 }
 
 // ============================================
+// 課程場次狀態
+// ============================================
+export const SESSION_STATUS: Record<string, StatusConfig> = {
+  SCHEDULED: { label: '已排定', variant: 'info' },
+  COMPLETED: { label: '已完成', variant: 'success' },
+  CANCELLED: { label: '已取消', variant: 'error' }
+}
+
+export function getSessionStatusBadge(status: string): StatusConfig {
+  return SESSION_STATUS[status] || { label: status, variant: 'default' }
+}
+
+// ============================================
+// 課程預約狀態
+// ============================================
+export const BOOKING_STATUS: Record<string, StatusConfig> = {
+  CONFIRMED: { label: '已確認', variant: 'success' },
+  WAITLIST: { label: '候補中', variant: 'warning' },
+  CANCELLED: { label: '已取消', variant: 'default' },
+  ATTENDED: { label: '已出席', variant: 'info' },
+  NO_SHOW: { label: '未出席', variant: 'error' }
+}
+
+export function getBookingStatusBadge(status: string): StatusConfig {
+  return BOOKING_STATUS[status] || { label: status, variant: 'default' }
+}
+
+// ============================================
+// 課程難度
+// ============================================
+export const DIFFICULTY_LEVEL: Record<string, StatusConfig> = {
+  BEGINNER: { label: '初級', variant: 'success' },
+  INTERMEDIATE: { label: '中級', variant: 'warning' },
+  ADVANCED: { label: '進階', variant: 'error' }
+}
+
+export function getDifficultyBadge(level: string): StatusConfig {
+  return DIFFICULTY_LEVEL[level] || { label: level, variant: 'default' }
+}
+
+// ============================================
 // 通用狀態取得函數
 // ============================================
-export type StatusType = 'member' | 'contract' | 'payment' | 'employee' | 'employment' | 'leave'
+export type StatusType = 'member' | 'contract' | 'payment' | 'employee' | 'employment' | 'leave' | 'session' | 'booking' | 'difficulty'
 
 const STATUS_GETTERS: Record<StatusType, (status: string) => StatusConfig> = {
   member: getMemberStatusBadge,
@@ -104,7 +145,10 @@ const STATUS_GETTERS: Record<StatusType, (status: string) => StatusConfig> = {
   payment: getPaymentStatusBadge,
   employee: getEmployeeStatusBadge,
   employment: getEmploymentTypeBadge,
-  leave: getLeaveStatusBadge
+  leave: getLeaveStatusBadge,
+  session: getSessionStatusBadge,
+  booking: getBookingStatusBadge,
+  difficulty: getDifficultyBadge
 }
 
 /**

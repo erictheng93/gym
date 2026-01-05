@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
 import type { Employee } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const useEmployees = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const employees = useState<Employee[]>('employees', () => [])
   const isLoading = useState('employees_loading', () => false)
   const totalCount = useState('employees_total', () => 0)
@@ -52,33 +54,71 @@ export const useEmployees = () => {
       employees.value = data as Employee[]
       totalCount.value = Number(countResult[0]?.count) || 0
     } catch (error) {
-      console.error('Failed to fetch employees:', error)
+      handleError(error, {
+        context: 'useEmployees.fetchEmployees',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED
+      })
+      employees.value = []
+      totalCount.value = 0
     } finally {
       isLoading.value = false
     }
   }
 
   const getEmployee = async (id: string) => {
-    const data = await directus.request(
-      readItem('employees', id, {
-        fields: ['*', 'branch_id.*', 'job_title_id.*']
+    try {
+      const data = await directus.request(
+        readItem('employees', id, {
+          fields: ['*', 'branch_id.*', 'job_title_id.*']
+        })
+      )
+      return data as Employee
+    } catch (error) {
+      handleError(error, {
+        context: 'useEmployees.getEmployee',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED
       })
-    )
-    return data as Employee
+      return null
+    }
   }
 
   const createEmployee = async (employee: Partial<Employee>) => {
-    const data = await directus.request(createItem('employees', employee))
-    return data
+    try {
+      const data = await directus.request(createItem('employees', employee))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useEmployees.createEmployee',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_CREATE_FAILED
+      })
+      return null
+    }
   }
 
   const updateEmployee = async (id: string, employee: Partial<Employee>) => {
-    const data = await directus.request(updateItem('employees', id, employee))
-    return data
+    try {
+      const data = await directus.request(updateItem('employees', id, employee))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useEmployees.updateEmployee',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   const deleteEmployee = async (id: string) => {
-    await directus.request(deleteItem('employees', id))
+    try {
+      await directus.request(deleteItem('employees', id))
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'useEmployees.deleteEmployee',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   // 取得所有員工（用於下拉選單）
@@ -94,7 +134,11 @@ export const useEmployees = () => {
       )
       return data as Employee[]
     } catch (error) {
-      console.error('Failed to fetch all employees:', error)
+      handleError(error, {
+        context: 'useEmployees.fetchAllEmployees',
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED,
+        showToast: false
+      })
       return []
     }
   }

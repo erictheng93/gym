@@ -5,6 +5,20 @@
 
 import { vi } from 'vitest'
 import * as Vue from 'vue'
+
+// Mock useErrorHandler module - MUST be before other imports
+export const mockHandleError = vi.fn()
+export const mockErrorHandlerInstance = {
+  handleError: mockHandleError,
+  withErrorHandling: vi.fn(),
+  createErrorBoundary: vi.fn(),
+  parseError: vi.fn()
+}
+
+vi.mock('~/composables/core/useErrorHandler', () => ({
+  useErrorHandler: () => mockErrorHandlerInstance
+}))
+
 import {
   useFormValidation,
   required,
@@ -117,6 +131,16 @@ export const mockAuthInstance = {
   checkAuth: vi.fn()
 }
 
+// Mock useToast (global)
+export const mockToast = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn()
+}
+
+// useErrorHandler is mocked via vi.mock() at the top of this file
+
 // 在全局作用域设置 mocks
 globalThis.useState = mockUseState as any
 globalThis.computed = mockComputed as any
@@ -126,6 +150,8 @@ globalThis.navigateTo = mockNavigateTo as any
 globalThis.defineNuxtRouteMiddleware = mockDefineNuxtRouteMiddleware as any
 globalThis.useDirectus = vi.fn(() => mockDirectusInstance) as any
 globalThis.useAuth = vi.fn(() => mockAuthInstance) as any
+globalThis.useToast = vi.fn(() => mockToast) as any
+globalThis.useErrorHandler = vi.fn(() => mockErrorHandlerInstance) as any
 
 // 清理函数
 export function clearGlobalMocks() {
@@ -140,6 +166,11 @@ export function clearGlobalMocks() {
   mockAuthInstance.logout.mockClear()
   mockAuthInstance.fetchUser.mockClear()
   mockAuthInstance.checkAuth.mockClear()
+  mockToast.success.mockClear()
+  mockToast.error.mockClear()
+  mockToast.warning.mockClear()
+  mockToast.info.mockClear()
+  mockHandleError.mockClear()
   // Reset auth user to default
   mockAuthUser.value = { id: 'user-1' }
 }

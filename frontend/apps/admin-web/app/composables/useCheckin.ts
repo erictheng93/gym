@@ -1,5 +1,6 @@
 import { readItems, createItem, updateItem, aggregate } from '@directus/sdk'
 import type { MemberCheckin, Member, Contract, ContractLog } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export interface CheckinRecord {
   id: string
@@ -34,6 +35,7 @@ export const useCheckin = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.directusUrl
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const todayCheckins = useState<CheckinRecord[]>('today_checkins', () => [])
   const isLoading = useState('checkin_loading', () => false)
   const todayCount = useState('checkin_today_count', () => 0)
@@ -104,7 +106,12 @@ export const useCheckin = () => {
       }))
       todayCount.value = Number(countResult[0]?.count) || 0
     } catch (error) {
-      console.error('Failed to fetch today checkins:', error)
+      handleError(error, {
+        context: 'useCheckin.fetchTodayCheckins',
+        customMessage: '載入今日入場紀錄失敗'
+      })
+      todayCheckins.value = []
+      todayCount.value = 0
     } finally {
       isLoading.value = false
     }
@@ -209,7 +216,10 @@ export const useCheckin = () => {
 
       return checkinRecord
     } catch (error) {
-      console.error('Failed to perform checkin:', error)
+      handleError(error, {
+        context: 'useCheckin.performCheckin',
+        customMessage: MESSAGES.ERRORS.CHECKIN
+      })
       throw error
     }
   }
@@ -244,7 +254,10 @@ export const useCheckin = () => {
 
       return contract || null
     } catch (error) {
-      console.error('Failed to get member active contract:', error)
+      handleError(error, {
+        context: 'useCheckin.getMemberActiveContract',
+        showToast: false
+      })
       return null
     }
   }
@@ -262,7 +275,10 @@ export const useCheckin = () => {
       )
       return data as MemberCheckin[]
     } catch (error) {
-      console.error('Failed to fetch member checkin history:', error)
+      handleError(error, {
+        context: 'useCheckin.fetchMemberCheckinHistory',
+        showToast: false
+      })
       return []
     }
   }
@@ -291,7 +307,10 @@ export const useCheckin = () => {
       )
       return Number(result[0]?.count) > 0
     } catch (error) {
-      console.error('Failed to check if member checked in today:', error)
+      handleError(error, {
+        context: 'useCheckin.hasCheckedInToday',
+        showToast: false
+      })
       return false
     }
   }
@@ -329,7 +348,10 @@ export const useCheckin = () => {
 
       return response
     } catch (error: unknown) {
-      console.error('QR checkin verification failed:', error)
+      handleError(error, {
+        context: 'useCheckin.verifyQrCheckin',
+        showToast: false
+      })
 
       // Handle $fetch error response
       if (typeof error === 'object' && error !== null && 'data' in error) {

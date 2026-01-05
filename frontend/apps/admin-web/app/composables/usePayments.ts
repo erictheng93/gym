@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
 import type { Payment } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const usePayments = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const payments = useState<Payment[]>('payments', () => [])
   const isLoading = useState('payments_loading', () => false)
   const totalCount = useState('payments_total', () => 0)
@@ -66,7 +68,10 @@ export const usePayments = () => {
         totalCount.value = data.length
       }
     } catch (error) {
-      console.error('Failed to fetch payments:', error)
+      handleError(error, {
+        context: 'usePayments.fetchPayments',
+        customMessage: MESSAGES.ERRORS.PAYMENT_FETCH_FAILED
+      })
       payments.value = []
       totalCount.value = 0
     } finally {
@@ -75,26 +80,59 @@ export const usePayments = () => {
   }
 
   const getPayment = async (id: string) => {
-    const data = await directus.request(
-      readItem('payments', id, {
-        fields: ['*', 'member.*', 'contract.*', 'branch.*', 'receiver.*']
+    try {
+      const data = await directus.request(
+        readItem('payments', id, {
+          fields: ['*', 'member.*', 'contract.*', 'branch.*', 'receiver.*']
+        })
+      )
+      return data as Payment
+    } catch (error) {
+      handleError(error, {
+        context: 'usePayments.getPayment',
+        customMessage: MESSAGES.ERRORS.PAYMENT_FETCH_FAILED
       })
-    )
-    return data as Payment
+      return null
+    }
   }
 
   const createPayment = async (payment: Partial<Payment>) => {
-    const data = await directus.request(createItem('payments', payment))
-    return data
+    try {
+      const data = await directus.request(createItem('payments', payment))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'usePayments.createPayment',
+        customMessage: MESSAGES.ERRORS.PAYMENT_CREATE_FAILED
+      })
+      return null
+    }
   }
 
   const updatePayment = async (id: string, payment: Partial<Payment>) => {
-    const data = await directus.request(updateItem('payments', id, payment))
-    return data
+    try {
+      const data = await directus.request(updateItem('payments', id, payment))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'usePayments.updatePayment',
+        customMessage: MESSAGES.ERRORS.PAYMENT_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   const deletePayment = async (id: string) => {
-    await directus.request(deleteItem('payments', id))
+    try {
+      await directus.request(deleteItem('payments', id))
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'usePayments.deletePayment',
+        customMessage: MESSAGES.ERRORS.PAYMENT_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   // 統計資料
@@ -137,7 +175,11 @@ export const usePayments = () => {
         netAmount: incomeAmount - refundAmount
       }
     } catch (error) {
-      console.error('Failed to fetch payment stats:', error)
+      handleError(error, {
+        context: 'usePayments.getPaymentStats',
+        customMessage: MESSAGES.ERRORS.PAYMENT_FETCH_FAILED,
+        showToast: false
+      })
       return defaultStats
     }
   }

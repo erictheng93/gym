@@ -16,6 +16,17 @@ export const mockDirectus = {
 
 export const mockNavigateTo = vi.fn()
 
+// Mock Toast
+export const mockToast = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn()
+}
+
+// Mock Error Handler
+export const mockHandleError = vi.fn()
+
 // Mock useState
 export const mockUseState = vi.fn((key: string, init: () => any) => {
   if (!stateStore.has(key)) {
@@ -38,6 +49,8 @@ export function setupGlobalMocks() {
   vi.stubGlobal('useState', mockUseState)
   vi.stubGlobal('computed', mockComputed)
   vi.stubGlobal('navigateTo', mockNavigateTo)
+  vi.stubGlobal('useToast', () => mockToast)
+  vi.stubGlobal('useErrorHandler', () => ({ handleError: mockHandleError }))
 }
 
 // Clear all mocks and state

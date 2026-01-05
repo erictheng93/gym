@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mockDirectusInstance, mockHandleError } from '@test/setup'
 import { usePayments } from './usePayments'
 import type { Payment } from '~/types/directus'
 
@@ -175,22 +175,16 @@ describe('usePayments', () => {
     })
 
     it('應該處理取得失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
 
       const { fetchPayments, payments, totalCount, isLoading } = usePayments()
 
       await fetchPayments()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to fetch payments:',
-        expect.any(Error)
-      )
+      expect(mockHandleError).toHaveBeenCalled()
       expect(payments.value).toEqual([])
       expect(totalCount.value).toBe(0)
       expect(isLoading.value).toBe(false)
-
-      consoleErrorSpy.mockRestore()
     })
 
     it('應該正確排序支付記錄', async () => {
@@ -228,12 +222,15 @@ describe('usePayments', () => {
       expect(result).toEqual(mockPayment)
     })
 
-    it('應該在取得失敗時拋出錯誤', async () => {
+    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Not found'))
 
       const { getPayment } = usePayments()
 
-      await expect(getPayment('invalid-id')).rejects.toThrow('Not found')
+      const result = await getPayment('invalid-id')
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -259,12 +256,15 @@ describe('usePayments', () => {
       expect(result).toEqual(createdPayment)
     })
 
-    it('應該在創建失敗時拋出錯誤', async () => {
+    it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Creation failed'))
 
       const { createPayment } = usePayments()
 
-      await expect(createPayment(newPayment)).rejects.toThrow('Creation failed')
+      const result = await createPayment(newPayment)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -286,12 +286,15 @@ describe('usePayments', () => {
       expect(result).toEqual(updatedPayment)
     })
 
-    it('應該在更新失敗時拋出錯誤', async () => {
+    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updatePayment } = usePayments()
 
-      await expect(updatePayment('payment-1', updatedData)).rejects.toThrow('Update failed')
+      const result = await updatePayment('payment-1', updatedData)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -306,12 +309,15 @@ describe('usePayments', () => {
       expect(mockDirectusInstance.request).toHaveBeenCalled()
     })
 
-    it('應該在刪除失敗時拋出錯誤', async () => {
+    it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Delete failed'))
 
       const { deletePayment } = usePayments()
 
-      await expect(deletePayment('payment-1')).rejects.toThrow('Delete failed')
+      const result = await deletePayment('payment-1')
+
+      expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -405,25 +411,19 @@ describe('usePayments', () => {
       })
     })
 
-    it('應該處理統計失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    it('應該處理統計失敗的情況並返回預設值', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Stats failed'))
 
       const { getPaymentStats } = usePayments()
 
       const result = await getPaymentStats()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to fetch payment stats:',
-        expect.any(Error)
-      )
+      expect(mockHandleError).toHaveBeenCalled()
       expect(result).toEqual({
         income: { count: 0, amount: 0 },
         refund: { count: 0, amount: 0 },
         netAmount: 0
       })
-
-      consoleErrorSpy.mockRestore()
     })
 
     it('應該正確計算淨金額（收入 - 退款）', async () => {

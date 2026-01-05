@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, aggregate } from '@directus/sdk'
 import type { Contract } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const useContracts = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const contracts = useState<Contract[]>('contracts', () => [])
   const isLoading = useState('contracts_loading', () => false)
 
@@ -41,75 +43,110 @@ export const useContracts = () => {
       )
       contracts.value = data as Contract[]
     } catch (error) {
-      console.error('Failed to fetch contracts:', error)
+      handleError(error, {
+        context: 'useContracts.fetchContracts',
+        customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
+      })
+      contracts.value = []
     } finally {
       isLoading.value = false
     }
   }
 
   const getContract = async (id: string) => {
-    const data = await directus.request(
-      readItem('contracts', id, {
-        fields: [
-          '*',
-          'member_id.*',
-          'plan_id.*',
-          'branch_id.*',
-          'sales_person_id.*',
-          'logs.*',
-          'logs.created_by_employee.id',
-          'logs.created_by_employee.full_name',
-          'logs.branch_id.id',
-          'logs.branch_id.name',
-          'logs.original_member_id.id',
-          'logs.original_member_id.full_name',
-          'logs.target_member_id.id',
-          'logs.target_member_id.full_name',
-          'payments.*'
-        ]
+    try {
+      const data = await directus.request(
+        readItem('contracts', id, {
+          fields: [
+            '*',
+            'member_id.*',
+            'plan_id.*',
+            'branch_id.*',
+            'sales_person_id.*',
+            'logs.*',
+            'logs.created_by_employee.id',
+            'logs.created_by_employee.full_name',
+            'logs.branch_id.id',
+            'logs.branch_id.name',
+            'logs.original_member_id.id',
+            'logs.original_member_id.full_name',
+            'logs.target_member_id.id',
+            'logs.target_member_id.full_name',
+            'payments.*'
+          ]
+        })
+      )
+      return data as Contract
+    } catch (error) {
+      handleError(error, {
+        context: 'useContracts.getContract',
+        customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
       })
-    )
-    return data as Contract
+      return null
+    }
   }
 
   const createContract = async (contract: Partial<Contract>) => {
-    // 自動計算 end_date
-    if (contract.start_date && contract.plan_id) {
-      // 這部分邏輯可以在 Directus Hook 中處理
+    try {
+      const data = await directus.request(createItem('contracts', contract))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useContracts.createContract',
+        customMessage: MESSAGES.ERRORS.CONTRACT_CREATE_FAILED
+      })
+      return null
     }
-    const data = await directus.request(createItem('contracts', contract))
-    return data
   }
 
   const updateContract = async (id: string, contract: Partial<Contract>) => {
-    const data = await directus.request(updateItem('contracts', id, contract))
-    return data
+    try {
+      const data = await directus.request(updateItem('contracts', id, contract))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useContracts.updateContract',
+        customMessage: MESSAGES.ERRORS.CONTRACT_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   // 統計資料
   const getContractStats = async (branchId?: string) => {
-    const filter: Record<string, unknown> = {}
-    if (branchId) filter.branch_id = { _eq: branchId }
+    const defaultStats = { active: 0, expired: 0, draft: 0 }
 
-    const [active, expired, draft] = await Promise.all([
-      directus.request(aggregate('contracts', {
-        aggregate: { count: '*' },
-        query: { filter: { ...filter, contract_status: { _eq: 'ACTIVE' } } }
-      })),
-      directus.request(aggregate('contracts', {
-        aggregate: { count: '*' },
-        query: { filter: { ...filter, contract_status: { _eq: 'EXPIRED' } } }
-      })),
-      directus.request(aggregate('contracts', {
-        aggregate: { count: '*' },
-        query: { filter: { ...filter, contract_status: { _eq: 'DRAFT' } } }
-      }))
-    ])
+    try {
+      const filter: Record<string, unknown> = {}
+      if (branchId) filter.branch_id = { _eq: branchId }
 
-    return {
-      active: Number(active[0]?.count) || 0,
-      expired: Number(expired[0]?.count) || 0,
-      draft: Number(draft[0]?.count) || 0
+      const [active, expired, draft] = await Promise.all([
+        directus.request(aggregate('contracts', {
+          aggregate: { count: '*' },
+          query: { filter: { ...filter, contract_status: { _eq: 'ACTIVE' } } }
+        })),
+        directus.request(aggregate('contracts', {
+          aggregate: { count: '*' },
+          query: { filter: { ...filter, contract_status: { _eq: 'EXPIRED' } } }
+        })),
+        directus.request(aggregate('contracts', {
+          aggregate: { count: '*' },
+          query: { filter: { ...filter, contract_status: { _eq: 'DRAFT' } } }
+        }))
+      ])
+
+      return {
+        active: Number(active[0]?.count) || 0,
+        expired: Number(expired[0]?.count) || 0,
+        draft: Number(draft[0]?.count) || 0
+      }
+    } catch (error) {
+      handleError(error, {
+        context: 'useContracts.getContractStats',
+        customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED,
+        showToast: false
+      })
+      return defaultStats
     }
   }
 

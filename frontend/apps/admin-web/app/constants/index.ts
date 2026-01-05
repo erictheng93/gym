@@ -924,6 +924,143 @@ export const PAGES = {
     ERROR_CODE_REQUIRED: '請輸入類別代碼',
     ERROR_CODE_EXISTS: '此代碼已存在',
   },
+
+  // Classes (課程定義)
+  CLASSES: {
+    TITLE: '課程管理',
+    DESCRIPTION: '管理課程定義與設定',
+    ADD_CLASS: '新增課程',
+    EDIT_CLASS: '編輯課程',
+    NO_CLASSES: '尚無課程',
+    NO_CLASSES_HINT: '建立第一個課程開始使用系統',
+    SEARCH_PLACEHOLDER: '搜尋課程名稱或說明...',
+    // Stats
+    TOTAL_CLASSES: '課程總數',
+    ACTIVE_CLASSES: '啟用課程',
+    // Form Labels
+    CLASS_NAME: '課程名稱',
+    CLASS_NAME_PLACEHOLDER: '請輸入課程名稱',
+    DURATION: '課程時長',
+    DURATION_MINUTES: '分鐘',
+    MAX_CAPACITY: '最大人數',
+    INSTRUCTOR: '授課教練',
+    SELECT_INSTRUCTOR: '選擇教練',
+    CATEGORY: '課程類別',
+    SELECT_CATEGORY: '選擇類別',
+    DIFFICULTY: '難度',
+    DIFFICULTY_BEGINNER: '初級',
+    DIFFICULTY_INTERMEDIATE: '中級',
+    DIFFICULTY_ADVANCED: '進階',
+    IS_ACTIVE: '啟用狀態',
+    REQUIRES_COUNT: '需扣堂數',
+    COUNT_DEDUCTION: '每次扣除堂數',
+    IMAGE_URL: '課程圖片',
+    // Table Headers
+    NAME: '課程名稱',
+    BRANCH: '分店',
+    STATUS: '狀態',
+    ACTIONS: '操作',
+    // Status
+    ENABLED: '啟用',
+    DISABLED: '停用',
+    // Validation
+    ERROR_NAME_REQUIRED: '請輸入課程名稱',
+    ERROR_DURATION_REQUIRED: '請輸入課程時長',
+    ERROR_CAPACITY_REQUIRED: '請輸入最大人數',
+  },
+
+  // Class Schedule (課程排程)
+  CLASS_SCHEDULE: {
+    TITLE: '課程排程',
+    DESCRIPTION: '管理課程場次與時間表',
+    // Views
+    WEEK_VIEW: '週視圖',
+    DAY_VIEW: '日視圖',
+    LIST_VIEW: '列表視圖',
+    // Schedule Management
+    ADD_SCHEDULE: '新增排程',
+    EDIT_SCHEDULE: '編輯排程',
+    NO_SCHEDULES: '尚無排程',
+    NO_SCHEDULES_HINT: '建立課程排程開始安排課程',
+    // Session Management
+    ADD_SESSION: '新增臨時場次',
+    CANCEL_SESSION: '取消場次',
+    GENERATE_SESSIONS: '生成場次',
+    GENERATE_HINT: '依據週排程自動生成未來場次',
+    // Labels
+    DAY_OF_WEEK: '星期',
+    START_TIME: '開始時間',
+    END_TIME: '結束時間',
+    ROOM: '教室',
+    SESSION_DATE: '課程日期',
+    IS_RECURRING: '週循環',
+    VALID_FROM: '有效期開始',
+    VALID_UNTIL: '有效期結束',
+    // Session Status
+    SCHEDULED: '已排定',
+    COMPLETED: '已完成',
+    CANCELLED: '已取消',
+    CANCEL_REASON: '取消原因',
+    // Stats
+    CURRENT_COUNT: '已預約',
+    WAITLIST_COUNT: '候補人數',
+    AVAILABLE_SPOTS: '剩餘名額',
+    // Days
+    SUNDAY: '週日',
+    MONDAY: '週一',
+    TUESDAY: '週二',
+    WEDNESDAY: '週三',
+    THURSDAY: '週四',
+    FRIDAY: '週五',
+    SATURDAY: '週六',
+  },
+
+  // Class Bookings (課程預約)
+  CLASS_BOOKINGS: {
+    TITLE: '預約管理',
+    DESCRIPTION: '管理會員課程預約',
+    // Actions
+    BOOK_CLASS: '預約課程',
+    CANCEL_BOOKING: '取消預約',
+    ATTEND: '簽到',
+    MARK_NO_SHOW: '標記未出席',
+    NO_BOOKINGS: '尚無預約',
+    NO_BOOKINGS_HINT: '會員預約課程後將在此顯示',
+    SEARCH_PLACEHOLDER: '搜尋會員姓名或編號...',
+    // Status
+    CONFIRMED: '已確認',
+    WAITLIST: '候補中',
+    CANCELLED: '已取消',
+    ATTENDED: '已出席',
+    NO_SHOW: '未出席',
+    // Labels
+    BOOKING_TIME: '預約時間',
+    WAITLIST_POSITION: '候補順位',
+    MEMBER: '會員',
+    SESSION: '場次',
+    CONTRACT: '關聯合約',
+    // Stats
+    CONFIRMED_COUNT: '已確認',
+    WAITLIST_COUNT: '候補中',
+    ATTENDED_COUNT: '已出席',
+    NO_SHOW_COUNT: '未出席',
+    // Prompts
+    CANCEL_REASON: '取消原因',
+    CANCEL_REASON_PLACEHOLDER: '請輸入取消原因（選填）...',
+    CONFIRM_CANCEL: '確定取消此預約？',
+    CONFIRM_ATTEND: '確定為此會員簽到？',
+    CONFIRM_NO_SHOW: '確定標記為未出席？',
+    // Success
+    BOOKING_SUCCESS: '預約成功',
+    CANCEL_SUCCESS: '取消預約成功',
+    ATTEND_SUCCESS: '簽到成功',
+    // Errors
+    BOOKING_FAILED: '預約失敗',
+    CANCEL_FAILED: '取消預約失敗',
+    ATTEND_FAILED: '簽到失敗',
+    SESSION_FULL: '此場次已額滿',
+    ALREADY_BOOKED: '已預約此場次',
+  },
 } as const
 
 // ============================================

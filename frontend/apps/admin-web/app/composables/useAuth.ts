@@ -23,6 +23,8 @@ interface CurrentEmployee {
 
 export const useAuth = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
+  const toast = useToast()
   const user = useState<User | null>('auth_user', () => null)
   const currentEmployee = useState<CurrentEmployee | null>('auth_employee', () => null)
   const isAuthenticated = computed(() => !!user.value)
@@ -34,10 +36,16 @@ export const useAuth = () => {
       await directus.login({ email, password })
       await fetchUser()
       await fetchCurrentEmployee()
+      toast.success('登入成功')
       return { success: true }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : MESSAGES.AUTH.LOGIN_ERROR
-      return { success: false, error: message }
+      // 登入錯誤特殊處理：顯示 toast 但不重定向
+      handleError(error, {
+        context: 'useAuth.login',
+        customMessage: MESSAGES.AUTH.LOGIN_ERROR,
+        redirectOnAuth: false
+      })
+      return { success: false }
     } finally {
       isLoading.value = false
     }
@@ -61,7 +69,13 @@ export const useAuth = () => {
         fields: ['id', 'email', 'first_name', 'last_name', 'role']
       }))
       user.value = me as User
-    } catch {
+    } catch (error) {
+      // 靜默處理：不顯示 toast，不重定向（可能是檢查登入狀態）
+      handleError(error, {
+        context: 'useAuth.fetchUser',
+        showToast: false,
+        redirectOnAuth: false
+      })
       user.value = null
     }
   }
@@ -97,7 +111,11 @@ export const useAuth = () => {
         currentEmployee.value = null
       }
     } catch (error) {
-      console.error('Failed to fetch current employee:', error)
+      handleError(error, {
+        context: 'useAuth.fetchCurrentEmployee',
+        showToast: false,
+        redirectOnAuth: false
+      })
       currentEmployee.value = null
     }
   }

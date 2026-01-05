@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  compatibilityDate: '2025-07-15',
+  compatibilityDate: '2024-12-01',
   devtools: { enabled: true },
 
   // Extend from UI package layer

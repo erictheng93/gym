@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { mockDirectusInstance, mockHandleError } from '@test/setup'
 import { useBranches } from './useBranches'
 import type { Branch, Employee } from '~/types/directus'
 
@@ -68,7 +68,6 @@ describe('useBranches', () => {
     })
 
     it('應該處理取得失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Network error'))
 
       const { fetchBranches, branches, isLoading } = useBranches()
@@ -76,9 +75,7 @@ describe('useBranches', () => {
 
       expect(isLoading.value).toBe(false)
       expect(branches.value).toEqual([])
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch branches:', expect.any(Error))
-
-      consoleErrorSpy.mockRestore()
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
     it('應該按名稱排序', async () => {
@@ -113,12 +110,15 @@ describe('useBranches', () => {
       expect(mockDirectusInstance.request).toHaveBeenCalled()
     })
 
-    it('應該在取得失敗時拋出錯誤', async () => {
+    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Branch not found'))
 
       const { fetchBranch } = useBranches()
 
-      await expect(fetchBranch('invalid-id')).rejects.toThrow('Branch not found')
+      const result = await fetchBranch('invalid-id')
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -191,12 +191,15 @@ describe('useBranches', () => {
       expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
     })
 
-    it('應該在創建失敗時拋出錯誤', async () => {
+    it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Create failed'))
 
       const { createBranch } = useBranches()
 
-      await expect(createBranch({ name: 'Test' })).rejects.toThrow('Create failed')
+      const result = await createBranch({ name: 'Test' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -226,12 +229,15 @@ describe('useBranches', () => {
       expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
     })
 
-    it('應該在更新失敗時拋出錯誤', async () => {
+    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updateBranch } = useBranches()
 
-      await expect(updateBranch('branch-1', { name: 'Test' })).rejects.toThrow('Update failed')
+      const result = await updateBranch('branch-1', { name: 'Test' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -247,12 +253,15 @@ describe('useBranches', () => {
       expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
     })
 
-    it('應該在刪除失敗時拋出錯誤', async () => {
+    it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Delete failed'))
 
       const { deleteBranch } = useBranches()
 
-      await expect(deleteBranch('branch-1')).rejects.toThrow('Delete failed')
+      const result = await deleteBranch('branch-1')
+
+      expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 

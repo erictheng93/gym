@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk'
 import type { MembershipPlan } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const usePlans = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const plans = useState<MembershipPlan[]>('plans', () => [])
   const isLoading = useState('plans_loading', () => false)
 
@@ -28,33 +30,70 @@ export const usePlans = () => {
       )
       plans.value = data as MembershipPlan[]
     } catch (error) {
-      console.error('Failed to fetch plans:', error)
+      handleError(error, {
+        context: 'usePlans.fetchPlans',
+        customMessage: MESSAGES.ERRORS.PLAN_FETCH_FAILED
+      })
+      plans.value = []
     } finally {
       isLoading.value = false
     }
   }
 
   const getPlan = async (id: string) => {
-    const data = await directus.request(
-      readItem('membership_plans', id, {
-        fields: ['*']
+    try {
+      const data = await directus.request(
+        readItem('membership_plans', id, {
+          fields: ['*']
+        })
+      )
+      return data as MembershipPlan
+    } catch (error) {
+      handleError(error, {
+        context: 'usePlans.getPlan',
+        customMessage: MESSAGES.ERRORS.PLAN_FETCH_FAILED
       })
-    )
-    return data as MembershipPlan
+      return null
+    }
   }
 
   const createPlan = async (plan: Partial<MembershipPlan>) => {
-    const data = await directus.request(createItem('membership_plans', plan))
-    return data
+    try {
+      const data = await directus.request(createItem('membership_plans', plan))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'usePlans.createPlan',
+        customMessage: MESSAGES.ERRORS.PLAN_CREATE_FAILED
+      })
+      return null
+    }
   }
 
   const updatePlan = async (id: string, plan: Partial<MembershipPlan>) => {
-    const data = await directus.request(updateItem('membership_plans', id, plan))
-    return data
+    try {
+      const data = await directus.request(updateItem('membership_plans', id, plan))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'usePlans.updatePlan',
+        customMessage: MESSAGES.ERRORS.PLAN_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   const deletePlan = async (id: string) => {
-    await directus.request(deleteItem('membership_plans', id))
+    try {
+      await directus.request(deleteItem('membership_plans', id))
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'usePlans.deletePlan',
+        customMessage: MESSAGES.ERRORS.PLAN_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   return {

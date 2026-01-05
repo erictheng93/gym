@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mockDirectusInstance, mockHandleError } from '@test/setup'
 import { useMembers } from './useMembers'
 import type { Member } from '~/types/directus'
 
@@ -185,21 +185,15 @@ describe('useMembers', () => {
     })
 
     it('應該處理取得失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
 
       const { fetchMembers, members, isLoading } = useMembers()
 
       await fetchMembers()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to fetch members:',
-        expect.any(Error)
-      )
+      expect(mockHandleError).toHaveBeenCalled()
       expect(members.value).toEqual([])
       expect(isLoading.value).toBe(false)
-
-      consoleErrorSpy.mockRestore()
     })
 
     it('應該在取得過程中設定 loading 狀態', async () => {
@@ -254,12 +248,15 @@ describe('useMembers', () => {
       expect(result).toEqual(mockMember)
     })
 
-    it('應該在取得失敗時拋出錯誤', async () => {
+    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Not found'))
 
       const { getMember } = useMembers()
 
-      await expect(getMember('invalid-id')).rejects.toThrow('Not found')
+      const result = await getMember('invalid-id')
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -285,12 +282,15 @@ describe('useMembers', () => {
       expect(result).toEqual(createdMember)
     })
 
-    it('應該在創建失敗時拋出錯誤', async () => {
+    it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Creation failed'))
 
       const { createMember } = useMembers()
 
-      await expect(createMember(newMember)).rejects.toThrow('Creation failed')
+      const result = await createMember(newMember)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
     it('應該支援部分欄位創建', async () => {
@@ -328,12 +328,15 @@ describe('useMembers', () => {
       expect(result).toEqual(updatedMember)
     })
 
-    it('應該在更新失敗時拋出錯誤', async () => {
+    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updateMember } = useMembers()
 
-      await expect(updateMember('member-1', updatedData)).rejects.toThrow('Update failed')
+      const result = await updateMember('member-1', updatedData)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
     it('應該支援部分欄位更新', async () => {
@@ -376,20 +379,26 @@ describe('useMembers', () => {
       expect(mockDirectusInstance.request).toHaveBeenCalled()
     })
 
-    it('應該在刪除失敗時拋出錯誤', async () => {
+    it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Delete failed'))
 
       const { deleteMember } = useMembers()
 
-      await expect(deleteMember('member-1')).rejects.toThrow('Delete failed')
+      const result = await deleteMember('member-1')
+
+      expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
-    it('應該能夠刪除不存在的會員並拋出錯誤', async () => {
+    it('應該能夠刪除不存在的會員時返回 false 並呼叫 handleError', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Member not found'))
 
       const { deleteMember } = useMembers()
 
-      await expect(deleteMember('invalid-id')).rejects.toThrow('Member not found')
+      const result = await deleteMember('invalid-id')
+
+      expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 

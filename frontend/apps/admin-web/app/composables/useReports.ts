@@ -3,6 +3,8 @@
  * 提供報表資料查詢功能
  */
 
+import { MESSAGES } from '~/constants'
+
 export interface ReportPeriod {
   start_date: string
   end_date: string
@@ -139,6 +141,7 @@ export interface MemberActivityReport {
 export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.directusUrl || 'http://localhost:8055'
+  const { handleError } = useErrorHandler()
 
   /**
    * 獲取營收報表
@@ -147,14 +150,23 @@ export const useReports = () => {
     startDate?: string,
     endDate?: string,
     branchId?: string
-  ): Promise<RevenueReport> => {
-    const params = new URLSearchParams()
-    if (startDate) params.append('start_date', startDate)
-    if (endDate) params.append('end_date', endDate)
-    if (branchId) params.append('branch_id', branchId)
+  ): Promise<RevenueReport | null> => {
+    try {
+      const params = new URLSearchParams()
+      if (startDate) params.append('start_date', startDate)
+      if (endDate) params.append('end_date', endDate)
+      if (branchId) params.append('branch_id', branchId)
 
-    const response = await fetch(`${baseURL}/gym/reports/revenue?${params}`)
-    return response.json()
+      const response = await fetch(`${baseURL}/gym/reports/revenue?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.getRevenueReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return null
+    }
   }
 
   /**
@@ -164,14 +176,23 @@ export const useReports = () => {
     startDate?: string,
     endDate?: string,
     branchId?: string
-  ): Promise<MemberGrowthReport> => {
-    const params = new URLSearchParams()
-    if (startDate) params.append('start_date', startDate)
-    if (endDate) params.append('end_date', endDate)
-    if (branchId) params.append('branch_id', branchId)
+  ): Promise<MemberGrowthReport | null> => {
+    try {
+      const params = new URLSearchParams()
+      if (startDate) params.append('start_date', startDate)
+      if (endDate) params.append('end_date', endDate)
+      if (branchId) params.append('branch_id', branchId)
 
-    const response = await fetch(`${baseURL}/gym/reports/member-growth?${params}`)
-    return response.json()
+      const response = await fetch(`${baseURL}/gym/reports/member-growth?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.getMemberGrowthReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return null
+    }
   }
 
   /**
@@ -181,14 +202,23 @@ export const useReports = () => {
     daysAhead: number = 30,
     branchId?: string,
     limit: number = 100
-  ): Promise<ContractExpiryReport> => {
-    const params = new URLSearchParams()
-    params.append('days_ahead', daysAhead.toString())
-    if (branchId) params.append('branch_id', branchId)
-    params.append('limit', limit.toString())
+  ): Promise<ContractExpiryReport | null> => {
+    try {
+      const params = new URLSearchParams()
+      params.append('days_ahead', daysAhead.toString())
+      if (branchId) params.append('branch_id', branchId)
+      params.append('limit', limit.toString())
 
-    const response = await fetch(`${baseURL}/gym/reports/contract-expiry?${params}`)
-    return response.json()
+      const response = await fetch(`${baseURL}/gym/reports/contract-expiry?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.getContractExpiryReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return null
+    }
   }
 
   /**
@@ -198,24 +228,42 @@ export const useReports = () => {
     startDate?: string,
     endDate?: string,
     branchId?: string
-  ): Promise<MemberActivityReport> => {
-    const params = new URLSearchParams()
-    if (startDate) params.append('start_date', startDate)
-    if (endDate) params.append('end_date', endDate)
-    if (branchId) params.append('branch_id', branchId)
+  ): Promise<MemberActivityReport | null> => {
+    try {
+      const params = new URLSearchParams()
+      if (startDate) params.append('start_date', startDate)
+      if (endDate) params.append('end_date', endDate)
+      if (branchId) params.append('branch_id', branchId)
 
-    const response = await fetch(`${baseURL}/gym/reports/member-activity?${params}`)
-    return response.json()
+      const response = await fetch(`${baseURL}/gym/reports/member-activity?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.getMemberActivityReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return null
+    }
   }
 
   /**
    * 刷新報表資料
    */
   const refreshReports = async (): Promise<{ success: boolean; message: string }> => {
-    const response = await fetch(`${baseURL}/gym/reports/refresh`, {
-      method: 'POST'
-    })
-    return response.json()
+    try {
+      const response = await fetch(`${baseURL}/gym/reports/refresh`, {
+        method: 'POST'
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.refreshReports',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return { success: false, message: '刷新報表失敗' }
+    }
   }
 
   return {

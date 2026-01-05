@@ -16,12 +16,18 @@ export {
   EMPLOYEE_STATUS,
   EMPLOYMENT_TYPE,
   LEAVE_STATUS,
+  SESSION_STATUS,
+  BOOKING_STATUS,
+  DIFFICULTY_LEVEL,
   getMemberStatusBadge,
   getContractStatusBadge,
   getPaymentStatusBadge,
   getEmployeeStatusBadge,
   getEmploymentTypeBadge,
   getLeaveStatusBadge,
+  getSessionStatusBadge,
+  getBookingStatusBadge,
+  getDifficultyBadge,
   getStatusBadge
 } from './status-badges'
 export type { BadgeVariant, StatusConfig, StatusType } from './status-badges'

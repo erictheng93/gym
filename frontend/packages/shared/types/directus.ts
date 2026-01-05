@@ -359,6 +359,113 @@ export interface ClassCategoryBranch {
   branch?: Branch
 }
 
+// 課程定義
+export interface Class {
+  id: string
+  status: 'active' | 'archived'
+  date_created: string
+  date_updated: string | null
+  user_created: string | null
+  user_updated: string | null
+  name: string
+  description: string | null
+  duration_minutes: number
+  max_capacity: number
+  instructor_id: string | null
+  branch_id: string
+  category: string | null
+  category_id: string | null
+  difficulty_level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
+  image_url: string | null
+  is_active: boolean
+  requires_count: boolean
+  count_deduction: number
+  // Relations
+  instructor?: Employee
+  branch?: Branch
+  class_category?: ClassCategory
+}
+
+// 課程排程（週循環）
+export interface ClassSchedule {
+  id: string
+  status: 'active' | 'archived'
+  date_created: string
+  date_updated: string | null
+  user_created: string | null
+  user_updated: string | null
+  class_id: string
+  branch_id: string
+  instructor_id: string | null
+  day_of_week: number // 0=Sunday, 1=Monday, ..., 6=Saturday
+  start_time: string
+  end_time: string
+  room: string | null
+  max_capacity: number | null
+  is_recurring: boolean
+  valid_from: string | null
+  valid_until: string | null
+  // Relations
+  class?: Class
+  branch?: Branch
+  instructor?: Employee
+}
+
+// 課程場次（實際課程實例）
+export interface ClassSession {
+  id: string
+  status: 'active' | 'archived'
+  date_created: string
+  date_updated: string | null
+  user_created: string | null
+  user_updated: string | null
+  schedule_id: string | null
+  class_id: string
+  branch_id: string
+  instructor_id: string | null
+  session_date: string
+  start_time: string
+  end_time: string
+  room: string | null
+  max_capacity: number
+  current_count: number
+  waitlist_count: number
+  session_status: 'SCHEDULED' | 'CANCELLED' | 'COMPLETED'
+  cancelled_reason: string | null
+  cancelled_at: string | null
+  cancelled_by: string | null
+  // Relations
+  schedule?: ClassSchedule
+  class?: Class
+  branch?: Branch
+  instructor?: Employee
+  bookings?: Booking[]
+}
+
+// 課程預約
+export interface Booking {
+  id: string
+  status: 'active' | 'archived'
+  date_created: string
+  date_updated: string | null
+  user_created: string | null
+  user_updated: string | null
+  session_id: string
+  member_id: string
+  contract_id: string | null
+  booking_status: 'CONFIRMED' | 'WAITLIST' | 'CANCELLED' | 'ATTENDED' | 'NO_SHOW'
+  waitlist_position: number | null
+  booked_at: string
+  cancelled_at: string | null
+  cancel_reason: string | null
+  attended_at: string | null
+  count_deducted: boolean
+  // Relations
+  session?: ClassSession
+  member?: Member
+  contract?: Contract
+}
+
 // 收付款
 export interface Payment extends BaseFields {
   contract_id: string | null
@@ -399,4 +506,8 @@ export interface DirectusSchema {
   employee_shifts: EmployeeShift[]
   class_categories: ClassCategory[]
   class_category_branches: ClassCategoryBranch[]
+  classes: Class[]
+  class_schedules: ClassSchedule[]
+  class_sessions: ClassSession[]
+  bookings: Booking[]
 }

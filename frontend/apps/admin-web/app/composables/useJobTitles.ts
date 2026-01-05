@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk'
 import type { JobTitle } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const useJobTitles = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const jobTitles = useState<JobTitle[]>('job_titles', () => [])
   const isLoading = useState('job_titles_loading', () => false)
 
@@ -19,33 +21,70 @@ export const useJobTitles = () => {
       )
       jobTitles.value = data as JobTitle[]
     } catch (error) {
-      console.error('Failed to fetch job titles:', error)
+      handleError(error, {
+        context: 'useJobTitles.fetchJobTitles',
+        customMessage: MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED
+      })
+      jobTitles.value = []
     } finally {
       isLoading.value = false
     }
   }
 
   const getJobTitle = async (id: string) => {
-    const data = await directus.request(
-      readItem('job_titles', id, {
-        fields: ['*']
+    try {
+      const data = await directus.request(
+        readItem('job_titles', id, {
+          fields: ['*']
+        })
+      )
+      return data as JobTitle
+    } catch (error) {
+      handleError(error, {
+        context: 'useJobTitles.getJobTitle',
+        customMessage: MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED
       })
-    )
-    return data as JobTitle
+      return null
+    }
   }
 
   const createJobTitle = async (jobTitle: Partial<JobTitle>) => {
-    const data = await directus.request(createItem('job_titles', jobTitle))
-    return data
+    try {
+      const data = await directus.request(createItem('job_titles', jobTitle))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useJobTitles.createJobTitle',
+        customMessage: MESSAGES.ERRORS.JOB_TITLE_CREATE_FAILED
+      })
+      return null
+    }
   }
 
   const updateJobTitle = async (id: string, jobTitle: Partial<JobTitle>) => {
-    const data = await directus.request(updateItem('job_titles', id, jobTitle))
-    return data
+    try {
+      const data = await directus.request(updateItem('job_titles', id, jobTitle))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useJobTitles.updateJobTitle',
+        customMessage: MESSAGES.ERRORS.JOB_TITLE_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   const deleteJobTitle = async (id: string) => {
-    await directus.request(deleteItem('job_titles', id))
+    try {
+      await directus.request(deleteItem('job_titles', id))
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'useJobTitles.deleteJobTitle',
+        customMessage: MESSAGES.ERRORS.JOB_TITLE_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   return {

@@ -1,8 +1,12 @@
 import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
 import type { Member } from '~/types/directus'
+import { MESSAGES } from '~/constants'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 export const useMembers = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
+
   const members = useState<Member[]>('members', () => [])
   const isLoading = useState('members_loading', () => false)
   const totalCount = useState('members_total', () => 0)
@@ -51,33 +55,69 @@ export const useMembers = () => {
       members.value = data as Member[]
       totalCount.value = Number(countResult[0]?.count) || 0
     } catch (error) {
-      console.error('Failed to fetch members:', error)
+      handleError(error, {
+        context: 'useMembers.fetchMembers',
+        customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
+      })
     } finally {
       isLoading.value = false
     }
   }
 
-  const getMember = async (id: string) => {
-    const data = await directus.request(
-      readItem('members', id, {
-        fields: ['*', 'branch.*', 'sales_person.*', 'contracts.*']
+  const getMember = async (id: string): Promise<Member | null> => {
+    try {
+      const data = await directus.request(
+        readItem('members', id, {
+          fields: ['*', 'branch.*', 'sales_person.*', 'contracts.*']
+        })
+      )
+      return data as Member
+    } catch (error) {
+      handleError(error, {
+        context: 'useMembers.getMember',
+        customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
       })
-    )
-    return data as Member
+      return null
+    }
   }
 
-  const createMember = async (member: Partial<Member>) => {
-    const data = await directus.request(createItem('members', member))
-    return data
+  const createMember = async (member: Partial<Member>): Promise<Member | null> => {
+    try {
+      const data = await directus.request(createItem('members', member))
+      return data as Member
+    } catch (error) {
+      handleError(error, {
+        context: 'useMembers.createMember',
+        customMessage: MESSAGES.ERRORS.MEMBER_CREATE_FAILED
+      })
+      return null
+    }
   }
 
-  const updateMember = async (id: string, member: Partial<Member>) => {
-    const data = await directus.request(updateItem('members', id, member))
-    return data
+  const updateMember = async (id: string, member: Partial<Member>): Promise<Member | null> => {
+    try {
+      const data = await directus.request(updateItem('members', id, member))
+      return data as Member
+    } catch (error) {
+      handleError(error, {
+        context: 'useMembers.updateMember',
+        customMessage: MESSAGES.ERRORS.MEMBER_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
-  const deleteMember = async (id: string) => {
-    await directus.request(deleteItem('members', id))
+  const deleteMember = async (id: string): Promise<boolean> => {
+    try {
+      await directus.request(deleteItem('members', id))
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'useMembers.deleteMember',
+        customMessage: MESSAGES.ERRORS.MEMBER_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   return {

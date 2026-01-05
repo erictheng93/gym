@@ -1,8 +1,10 @@
 import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
 import type { ClassCategory } from '~/types/directus'
+import { MESSAGES } from '~/constants'
 
 export const useClassCategories = () => {
   const directus = useDirectus()
+  const { handleError } = useErrorHandler()
   const categories = useState<ClassCategory[]>('class_categories', () => [])
   const isLoading = useState('class_categories_loading', () => false)
   const totalCount = useState('class_categories_total', () => 0)
@@ -65,8 +67,12 @@ export const useClassCategories = () => {
       categories.value = data as ClassCategory[]
       totalCount.value = Number(countResult[0]?.count) || 0
     } catch (error) {
-      console.error('Failed to fetch class categories:', error)
-      throw error
+      handleError(error, {
+        context: 'useClassCategories.fetchCategories',
+        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+      })
+      categories.value = []
+      totalCount.value = 0
     } finally {
       isLoading.value = false
     }
@@ -89,8 +95,11 @@ export const useClassCategories = () => {
       )
       return data as ClassCategory[]
     } catch (error) {
-      console.error('Failed to fetch root categories:', error)
-      throw error
+      handleError(error, {
+        context: 'useClassCategories.fetchRootCategories',
+        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+      })
+      return []
     }
   }
 
@@ -129,8 +138,11 @@ export const useClassCategories = () => {
         children: buildTree(item.id)
       }))
     } catch (error) {
-      console.error('Failed to fetch category tree:', error)
-      throw error
+      handleError(error, {
+        context: 'useClassCategories.fetchCategoryTree',
+        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+      })
+      return []
     }
   }
 
@@ -138,35 +150,68 @@ export const useClassCategories = () => {
    * 獲取單一類別
    */
   const getCategory = async (id: string) => {
-    const data = await directus.request(
-      readItem('class_categories', id, {
-        fields: ['*', 'parent.id', 'parent.name', 'parent.code', 'owner_branch.id', 'owner_branch.name']
+    try {
+      const data = await directus.request(
+        readItem('class_categories', id, {
+          fields: ['*', 'parent.id', 'parent.name', 'parent.code', 'owner_branch.id', 'owner_branch.name']
+        })
+      )
+      return data as ClassCategory
+    } catch (error) {
+      handleError(error, {
+        context: 'useClassCategories.getCategory',
+        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
       })
-    )
-    return data as ClassCategory
+      return null
+    }
   }
 
   /**
    * 建立類別
    */
   const createCategory = async (category: Partial<ClassCategory>) => {
-    const data = await directus.request(createItem('class_categories', category))
-    return data
+    try {
+      const data = await directus.request(createItem('class_categories', category))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useClassCategories.createCategory',
+        customMessage: MESSAGES.ERRORS.CATEGORY_CREATE_FAILED
+      })
+      return null
+    }
   }
 
   /**
    * 更新類別
    */
   const updateCategory = async (id: string, category: Partial<ClassCategory>) => {
-    const data = await directus.request(updateItem('class_categories', id, category))
-    return data
+    try {
+      const data = await directus.request(updateItem('class_categories', id, category))
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useClassCategories.updateCategory',
+        customMessage: MESSAGES.ERRORS.CATEGORY_UPDATE_FAILED
+      })
+      return null
+    }
   }
 
   /**
    * 刪除類別
    */
   const deleteCategory = async (id: string) => {
-    await directus.request(deleteItem('class_categories', id))
+    try {
+      await directus.request(deleteItem('class_categories', id))
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'useClassCategories.deleteCategory',
+        customMessage: MESSAGES.ERRORS.CATEGORY_DELETE_FAILED
+      })
+      return false
+    }
   }
 
   /**
@@ -192,7 +237,10 @@ export const useClassCategories = () => {
         root: Number(rootCount[0]?.count) || 0
       }
     } catch (error) {
-      console.error('Failed to fetch category stats:', error)
+      handleError(error, {
+        context: 'useClassCategories.getCategoryStats',
+        showToast: false
+      })
       return { total: 0, active: 0, root: 0 }
     }
   }
