@@ -398,6 +398,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap');
+
 /* ============================================
    DESIGN SYSTEM - Premium Fitness Aesthetic
    ============================================ */
@@ -433,7 +435,6 @@ onUnmounted(() => {
   font-family: 'Clash Display', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
 }
 
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&display=swap');
 
 /* Base Layout */
 .login-page {

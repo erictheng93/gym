@@ -14,6 +14,7 @@ defineProps<{
 }>()
 
 const handleError = () => clearError({ redirect: '/' })
+const isDev = process.dev
 
 // 根據錯誤代碼獲取顯示資訊
 const getErrorInfo = (statusCode: number) => {
@@ -102,7 +103,7 @@ const getErrorInfo = (statusCode: number) => {
 
       <!-- 詳細錯誤訊息（僅開發環境） -->
       <div
-        v-if="error.message && import.meta.dev"
+        v-if="error.message && isDev"
         class="mb-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-left"
       >
         <p class="text-sm font-mono text-gray-700 dark:text-gray-300 break-all">

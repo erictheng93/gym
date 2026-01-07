@@ -225,8 +225,8 @@ definePageMeta({
 })
 
 const { addToast } = useToast()
-const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl
+const runtimeConfig = useRuntimeConfig()
+const apiUrl = runtimeConfig.public.directusUrl
 
 // State
 const isSystemAdmin = ref(false)
