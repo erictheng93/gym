@@ -43,7 +43,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 總經理 - 王大明 (HQ001) - Administrator 角色
 INSERT INTO directus_users (id, email, password, first_name, last_name, status, role, provider) VALUES
-('a1000001-0001-0001-0001-000000000001', 'hq001@gym.com', '$argon2id$v=19$m=65536,t=3,p=4$0FfoYXycrECVtrFrwozQFQ$vaocH9bIO8XOoUTXE4mHqHL3h380+IG4y7+m0R+Hoy0', '大明', '王', 'active', '335bb14c-a84f-4d61-8e88-20adf8259f1e', 'default')
+('a1000001-0001-0001-0001-000000000001', 'hq001@gym.com', '$argon2id$v=19$m=65536,t=3,p=4$0FfoYXycrECVtrFrwozQFQ$vaocH9bIO8XOoUTXE4mHqHL3h380+IG4y7+m0R+Hoy0', '大明', '王', 'active', (SELECT id FROM directus_roles WHERE name = 'Administrator'), 'default')
 ON CONFLICT (id) DO NOTHING;
 
 -- 台北信義店

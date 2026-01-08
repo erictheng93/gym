@@ -19,7 +19,11 @@ export function createTenantContextMiddleware(database) {
     try {
       const userId = req.accountability?.user;
 
+      console.log('[TenantContext] User ID:', userId, 'Type:', typeof userId);
+      console.log('[TenantContext] Accountability:', JSON.stringify(req.accountability));
+
       if (!userId) {
+        console.warn('[TenantContext] No user ID found');
         return res.status(401).json({
           success: false,
           message: '請先登入'
@@ -36,6 +40,7 @@ export function createTenantContextMiddleware(database) {
       }
 
       // 查詢員工的租戶和分店信息
+      console.log('[TenantContext] Querying employee with user_id:', userId);
       const result = await database.raw(`
         SELECT
           e.id AS employee_id,
@@ -53,7 +58,7 @@ export function createTenantContextMiddleware(database) {
         FROM employees e
         INNER JOIN branches b ON e.branch_id = b.id
         INNER JOIN tenants t ON b.tenant_id = t.id
-        WHERE e.user_id = $1::uuid
+        WHERE e.user_id = ?::uuid
           AND e.status = 'active'
         LIMIT 1
       `, [userId]);

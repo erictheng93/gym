@@ -20,6 +20,7 @@ import { initRedis } from './utils/redis.js';
 import { createMemberAuthMiddleware } from './middleware/member-auth.js';
 import { createAdminNotificationMiddleware } from './middleware/admin-auth.js';
 import { createTenantContextMiddleware } from './middleware/tenant-context.js';
+import { createAuthMiddleware } from './middleware/auth.js';
 import { createRateLimiter } from './middleware/rate-limiter.js';
 import { createApiLogger } from './middleware/api-logger.js';
 import { registerAllRoutes } from './routes/index.js';
@@ -33,6 +34,7 @@ export default {
     const { ItemsService, UsersService } = services;
 
     // 初始化中間件
+    const authMiddleware = createAuthMiddleware(env, database);
     const memberAuthMiddleware = createMemberAuthMiddleware(env);
     const adminNotificationMiddleware = createAdminNotificationMiddleware(database);
     const tenantContextMiddleware = createTenantContextMiddleware(database);
@@ -48,6 +50,11 @@ export default {
       }
       next();
     });
+
+    // ============================================
+    // Middleware: Authentication (应用于所有路由，注入accountability)
+    // ============================================
+    router.use(authMiddleware);
 
     // ============================================
     // Middleware: Tenant Context (應用於所有路由)

@@ -49,7 +49,7 @@ async function getTenantQuota(database, accountability) {
       FROM employees e
       INNER JOIN branches b ON e.branch_id = b.id
       INNER JOIN tenants t ON b.tenant_id = t.id
-      WHERE e.user_id = $1::uuid
+      WHERE e.user_id = ?::uuid
         AND e.status = 'active'
       LIMIT 1
     `, [accountability.user]);
@@ -104,7 +104,7 @@ async function checkQuota(database, collection, tenantId, quota) {
     const branchesResult = await database.raw(`
       SELECT id
       FROM branches
-      WHERE tenant_id = $1::uuid
+      WHERE tenant_id = ?::uuid
         AND status = 'active'
     `, [tenantId]);
 
@@ -120,8 +120,8 @@ async function checkQuota(database, collection, tenantId, quota) {
         const result = await database.raw(`
           SELECT COUNT(*) as count
           FROM members
-          WHERE branch_id = ANY($1::uuid[])
-            AND member_status IN ('active', 'inactive', 'frozen')
+          WHERE branch_id = ANY(?::uuid[])
+            AND member_status IN ('ACTIVE', 'INACTIVE', 'FROZEN')
         `, [branchIds]);
         currentCount = parseInt(result.rows[0]?.count || 0);
       }
@@ -130,7 +130,7 @@ async function checkQuota(database, collection, tenantId, quota) {
         const result = await database.raw(`
           SELECT COUNT(*) as count
           FROM employees
-          WHERE branch_id = ANY($1::uuid[])
+          WHERE branch_id = ANY(?::uuid[])
             AND status = 'active'
         `, [branchIds]);
         currentCount = parseInt(result.rows[0]?.count || 0);
@@ -164,8 +164,11 @@ export function registerQuotaCheckHooks({ filter }, context) {
     /**
      * 創建前檢查配額
      */
-    filter(`${collection}.items.create`, async (input, { accountability }) => {
+    filter(`${collection}.items.create`, async (input, meta, context) => {
       try {
+        // 從 context 獲取 accountability (Directus 11)
+        const accountability = context?.accountability;
+
         // 獲取租戶配額信息
         const tenantQuota = await getTenantQuota(database, accountability);
 

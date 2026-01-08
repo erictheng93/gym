@@ -37,7 +37,7 @@ export function registerBillingTasks(schedule, context) {
               (SELECT COUNT(*) FROM branches WHERE tenant_id = $1::uuid AND status = 'active') as branches_count,
               (SELECT COUNT(*) FROM members m
                INNER JOIN branches b ON b.id = m.branch_id
-               WHERE b.tenant_id = $1::uuid AND m.member_status IN ('active', 'inactive', 'frozen')) as members_count,
+               WHERE b.tenant_id = $1::uuid AND m.member_status IN ('ACTIVE', 'INACTIVE', 'FROZEN')) as members_count,
               (SELECT COUNT(*) FROM employees e
                INNER JOIN branches b ON b.id = e.branch_id
                WHERE b.tenant_id = $1::uuid AND e.status = 'active') as employees_count,

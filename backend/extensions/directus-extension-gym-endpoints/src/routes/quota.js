@@ -48,9 +48,9 @@ export function registerQuotaRoutes(router, context) {
           max_employees,
           max_storage_mb,
           trial_ends_at,
-          created_at
+          date_created
         FROM tenants
-        WHERE id = $1::uuid
+        WHERE id = ?::uuid
         LIMIT 1
       `, [targetTenantId]);
 
@@ -65,7 +65,7 @@ export function registerQuotaRoutes(router, context) {
       // 獲取租戶的所有分店 ID
       const branchesResult = await database.raw(`
         SELECT id, status FROM branches
-        WHERE tenant_id = $1::uuid
+        WHERE tenant_id = ?::uuid
       `, [targetTenantId]);
 
       const allBranches = branchesResult.rows || [];
@@ -75,7 +75,7 @@ export function registerQuotaRoutes(router, context) {
       // 獲取租戶相關的所有用戶 ID（員工的 user_id）
       const employeeUsersResult = await database.raw(`
         SELECT user_id FROM employees
-        WHERE branch_id = ANY($1::uuid[])
+        WHERE branch_id = ANY(?::uuid[])
           AND user_id IS NOT NULL
       `, [branchIds.length > 0 ? branchIds : [null]]);
 
@@ -83,19 +83,19 @@ export function registerQuotaRoutes(router, context) {
 
       // 平行計算當前使用量
       const [membersResult, employeesResult, storageResult] = await Promise.all([
-        // 計算會員數（包含 active, inactive, frozen）
+        // 計算會員數（包含 ACTIVE, INACTIVE, FROZEN）
         database.raw(`
           SELECT COUNT(*) as count
           FROM members
-          WHERE branch_id = ANY($1::uuid[])
-            AND member_status IN ('active', 'inactive', 'frozen')
+          WHERE branch_id = ANY(?::uuid[])
+            AND member_status IN ('ACTIVE', 'INACTIVE', 'FROZEN')
         `, [branchIds.length > 0 ? branchIds : [null]]),
 
         // 計算員工數（只計算 active）
         database.raw(`
           SELECT COUNT(*) as count
           FROM employees
-          WHERE branch_id = ANY($1::uuid[])
+          WHERE branch_id = ANY(?::uuid[])
             AND status = 'active'
         `, [branchIds.length > 0 ? branchIds : [null]]),
 
@@ -104,7 +104,7 @@ export function registerQuotaRoutes(router, context) {
           ? database.raw(`
               SELECT COALESCE(SUM(filesize), 0)::bigint / 1024.0 / 1024.0 as storage_mb
               FROM directus_files
-              WHERE uploaded_by = ANY($1::uuid[])
+              WHERE uploaded_by = ANY(?::uuid[])
             `, [userIds])
           : Promise.resolve({ rows: [{ storage_mb: 0 }] })
       ]);
@@ -217,17 +217,17 @@ export function registerQuotaRoutes(router, context) {
           t.id,
           t.name,
           t.plan_type,
-          CASE $1
+          CASE ?
             WHEN 'members' THEN t.max_members
             WHEN 'employees' THEN t.max_employees
             WHEN 'branches' THEN t.max_branches
             ELSE 0
           END as max_quota,
-          CASE $1
+          CASE ?
             WHEN 'members' THEN (
               SELECT COUNT(*)::int FROM members m
               INNER JOIN branches b ON b.id = m.branch_id
-              WHERE b.tenant_id = t.id AND m.member_status IN ('active', 'inactive', 'frozen')
+              WHERE b.tenant_id = t.id AND m.member_status IN ('ACTIVE', 'INACTIVE', 'FROZEN')
             )
             WHEN 'employees' THEN (
               SELECT COUNT(*)::int FROM employees e
@@ -241,9 +241,9 @@ export function registerQuotaRoutes(router, context) {
             ELSE 0
           END as current_count
         FROM tenants t
-        WHERE t.id = $2::uuid
+        WHERE t.id = ?::uuid
         LIMIT 1
-      `, [resource, tenantId]);
+      `, [resource, resource, tenantId]);
 
       const result = checkResult.rows?.[0];
       if (!result) {
