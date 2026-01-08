@@ -152,10 +152,10 @@ const getStatusBadge = (status: string) => {
           <div class="stat-header">
             <div class="stat-icon members">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.TOTAL_MEMBERS }}</span>
@@ -164,8 +164,8 @@ const getStatusBadge = (status: string) => {
           <div class="stat-footer">
             <span class="stat-change positive">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m5 12 7-7 7 7"/>
-                <path d="M12 19V5"/>
+                <path d="m5 12 7-7 7 7" />
+                <path d="M12 19V5" />
               </svg>
               +{{ stats.members.new }}
             </span>
@@ -178,8 +178,8 @@ const getStatusBadge = (status: string) => {
           <div class="stat-header">
             <div class="stat-icon active">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <path d="m9 11 3 3L22 4"/>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <path d="m9 11 3 3L22 4" />
               </svg>
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.ACTIVE_MEMBERS }}</span>
@@ -198,8 +198,8 @@ const getStatusBadge = (status: string) => {
           <div class="stat-header">
             <div class="stat-icon contracts">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+                <path d="M14 2v4a2 2 0 0 0 2 2h4" />
               </svg>
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.ACTIVE_CONTRACTS }}</span>
@@ -215,7 +215,7 @@ const getStatusBadge = (status: string) => {
           <div class="stat-header">
             <div class="stat-icon revenue">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.MONTHLY_REVENUE }}</span>
@@ -226,6 +226,11 @@ const getStatusBadge = (status: string) => {
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- Tenant Quota Section (for admins) -->
+    <section v-if="user?.role?.name === 'Administrator' || user?.role?.name === 'Manager'" class="quota-section">
+      <TenantQuotaCard />
     </section>
 
     <!-- Content Grid -->
@@ -279,8 +284,8 @@ const getStatusBadge = (status: string) => {
               <li v-for="(contract, index) in recentContracts" :key="contract.id" class="contract-item stagger-item" :style="{ animationDelay: `${index * 0.1}s` }">
                 <div class="contract-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-                    <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+                    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
                   </svg>
                 </div>
                 <div class="contract-info">
@@ -307,10 +312,10 @@ const getStatusBadge = (status: string) => {
         <NuxtLink to="/members/new" class="action-card card card-interactive">
           <div class="action-icon add-member">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <line x1="19" x2="19" y1="8" y2="14"/>
-              <line x1="22" x2="16" y1="11" y2="11"/>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <line x1="19" x2="19" y1="8" y2="14" />
+              <line x1="22" x2="16" y1="11" y2="11" />
             </svg>
           </div>
           <span class="action-label">{{ PAGES.DASHBOARD.ADD_MEMBER }}</span>
@@ -319,10 +324,10 @@ const getStatusBadge = (status: string) => {
         <NuxtLink to="/contracts/new" class="action-card card card-interactive">
           <div class="action-icon add-contract">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <path d="M14 2v6h6"/>
-              <line x1="12" y1="18" x2="12" y2="12"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
             </svg>
           </div>
           <span class="action-label">{{ PAGES.DASHBOARD.ADD_CONTRACT }}</span>
@@ -331,8 +336,8 @@ const getStatusBadge = (status: string) => {
         <NuxtLink to="/checkin" class="action-card card card-interactive">
           <div class="action-icon checkin">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <path d="m9 11 3 3L22 4"/>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <path d="m9 11 3 3L22 4" />
             </svg>
           </div>
           <span class="action-label">{{ MESSAGES.NAV.CHECKIN }}</span>
@@ -341,8 +346,8 @@ const getStatusBadge = (status: string) => {
         <NuxtLink to="/reports" class="action-card card card-interactive">
           <div class="action-icon reports">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
-              <path d="m19 9-5 5-4-4-3 3"/>
+              <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+              <path d="m19 9-5 5-4-4-3 3" />
             </svg>
           </div>
           <span class="action-label">{{ MESSAGES.NAV.REPORTS }}</span>
@@ -356,6 +361,20 @@ const getStatusBadge = (status: string) => {
 .dashboard {
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* Quota Section */
+.quota-section {
+  margin-bottom: var(--space-2xl);
+  animation: quotaAppear 0.6s var(--ease-out) backwards;
+  animation-delay: 0.3s;
+}
+
+@keyframes quotaAppear {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
 }
 
 /* Header */

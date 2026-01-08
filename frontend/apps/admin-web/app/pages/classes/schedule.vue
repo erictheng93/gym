@@ -176,15 +176,15 @@ const viewSessionDetail = (session: ClassSession) => {
     <div class="quick-links">
       <NuxtLink to="/classes" class="quick-link">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+          <path d="m12 19-7-7 7-7" /><path d="M19 12H5" />
         </svg>
         回到課程列表
       </NuxtLink>
       <NuxtLink to="/classes/bookings" class="quick-link">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
         {{ PAGES.CLASS_BOOKINGS.TITLE }}
       </NuxtLink>
@@ -211,7 +211,7 @@ const viewSessionDetail = (session: ClassSession) => {
       <div class="controls-left">
         <button type="button" class="btn btn-secondary btn-small" @click="goToPrevWeek">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           上週
         </button>
@@ -221,7 +221,7 @@ const viewSessionDetail = (session: ClassSession) => {
         <button type="button" class="btn btn-secondary btn-small" @click="goToNextWeek">
           下週
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m9 18 6-6-6-6"/>
+            <path d="m9 18 6-6-6-6" />
           </svg>
         </button>
       </div>
@@ -309,7 +309,7 @@ const viewSessionDetail = (session: ClassSession) => {
                 @click.stop="handleCancelSession(session)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                  <path d="M18 6 6 18" /><path d="m6 6 12 12" />
                 </svg>
               </button>
             </div>

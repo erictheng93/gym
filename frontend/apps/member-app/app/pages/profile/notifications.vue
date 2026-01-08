@@ -292,7 +292,6 @@ const getStatusLabel = (status: string) => {
 
     <!-- Settings Tab -->
     <div v-else-if="activeTab === 'settings'" class="tab-content">
-
       <!-- Notification Channels Section -->
       <section class="section">
         <h2 class="section-title">通知管道</h2>
@@ -457,7 +456,7 @@ const getStatusLabel = (status: string) => {
             <div class="toggle-info">
               <div class="toggle-icon moon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                 </svg>
               </div>
               <div>
@@ -484,8 +483,8 @@ const getStatusLabel = (status: string) => {
             <div class="time-picker">
               <label>開始時間</label>
               <input
-                type="time"
                 v-model="preferences.quiet_hours_start"
+                type="time"
                 @change="handleQuietHoursUpdate"
               />
             </div>
@@ -493,8 +492,8 @@ const getStatusLabel = (status: string) => {
             <div class="time-picker">
               <label>結束時間</label>
               <input
-                type="time"
                 v-model="preferences.quiet_hours_end"
+                type="time"
                 @change="handleQuietHoursUpdate"
               />
             </div>
@@ -527,9 +526,9 @@ const getStatusLabel = (status: string) => {
 
         <p class="info-note">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
           </svg>
           簡訊僅用於重要通知（如 OTP 驗證碼、會籍到期提醒），每日發送有上限
         </p>
@@ -538,9 +537,9 @@ const getStatusLabel = (status: string) => {
       <!-- Help Text -->
       <div class="help-text">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
         <p>建議開啟 LINE 通知以獲得最佳體驗。若未綁定 LINE 帳號，可前往「連結帳號」頁面進行綁定。</p>
       </div>
@@ -555,8 +554,8 @@ const getStatusLabel = (status: string) => {
 
       <div v-else-if="history.length === 0" class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         <p>尚無通知紀錄</p>
       </div>

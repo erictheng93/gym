@@ -3,18 +3,23 @@
  * Aggregates all route modules for the gym endpoints extension
  */
 
-export { registerOtpRoutes } from './otp.js';
-export { registerAuthRoutes } from './auth.js';
-export { registerCheckinRoutes } from './checkin.js';
-export { registerClassesRoutes } from './classes.js';
-export { registerBookingsRoutes } from './bookings.js';
-export { registerPushRoutes } from './push.js';
-export { registerMemberRoutes } from './member.js';
-export { registerContractsRoutes } from './contracts.js';
-export { registerReportsRoutes } from './reports.js';
-export { registerNotificationsRoutes } from './notifications.js';
-export { registerAdminRoutes } from './admin.js';
-export { registerReviewsRoutes } from './reviews.js';
+import { registerOtpRoutes } from './otp.js';
+import { registerAuthRoutes } from './auth.js';
+import { registerCheckinRoutes } from './checkin.js';
+import { registerClassesRoutes } from './classes.js';
+import { registerBookingsRoutes } from './bookings.js';
+import { registerPushRoutes } from './push.js';
+import { registerMemberRoutes } from './member.js';
+import { registerContractsRoutes } from './contracts.js';
+import { registerReportsRoutes } from './reports.js';
+import { registerNotificationsRoutes } from './notifications.js';
+import { registerAdminRoutes } from './admin.js';
+import { registerReviewsRoutes } from './reviews.js';
+import { registerQuotaRoutes } from './quota.js';
+import { registerAnalyticsRoutes } from './analytics.js';
+import { registerBillingRoutes } from './billing.js';
+import { registerAuditRoutes } from './audit.js';
+import { registerPaymentRoutes } from './payment.js';
 
 /**
  * Register all routes with the router
@@ -28,8 +33,8 @@ export function registerAllRoutes(router, context, middleware) {
   // OTP routes (no auth required)
   registerOtpRoutes(router, context);
 
-  // Auth routes (no auth required)
-  registerAuthRoutes(router, context);
+  // Auth routes (member auth required for some routes)
+  registerAuthRoutes(router, context, memberAuth);
 
   // Checkin routes (member auth required)
   registerCheckinRoutes(router, context, memberAuth);
@@ -60,6 +65,21 @@ export function registerAllRoutes(router, context, middleware) {
 
   // Review routes (member auth required + public)
   registerReviewsRoutes(router, context, memberAuth);
+
+  // Quota routes (authentication required, checked internally)
+  registerQuotaRoutes(router, context);
+
+  // Analytics routes (authentication required, checked internally)
+  registerAnalyticsRoutes(router, context);
+
+  // Billing routes (authentication required, checked internally)
+  registerBillingRoutes(router, context);
+
+  // Audit routes (authentication required, checked internally)
+  registerAuditRoutes(router, context);
+
+  // Payment routes (authentication required, checked internally)
+  registerPaymentRoutes(router, context);
 }
 
 export default registerAllRoutes;

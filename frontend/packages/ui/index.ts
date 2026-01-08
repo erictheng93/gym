@@ -1,5 +1,4 @@
 // Components
 export * from './components'
 
-// Composables
-export * from './composables'
+// Composables (exported individually via Nuxt auto-imports, no index file)

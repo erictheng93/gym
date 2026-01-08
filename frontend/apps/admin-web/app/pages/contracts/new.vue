@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
-import { required, positive, between, maxLength } from '@gym-nexus/ui/composables'
+// Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
 
 definePageMeta({
   middleware: 'auth'
@@ -165,7 +165,7 @@ const handleSubmit = async () => {
       <header class="page-header">
         <button class="back-btn" @click="router.back()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           {{ MESSAGES.ACTIONS.BACK }}
         </button>
@@ -175,10 +175,10 @@ const handleSubmit = async () => {
       <div class="form-hero">
         <div class="hero-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-            <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-            <path d="M12 18v-6"/>
-            <path d="M9 15h6"/>
+            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+            <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+            <path d="M12 18v-6" />
+            <path d="M9 15h6" />
           </svg>
         </div>
         <h1 class="text-headline">{{ PAGES.CONTRACTS.CREATE_TITLE }}</h1>
@@ -209,7 +209,7 @@ const handleSubmit = async () => {
         <section v-if="currentStep === 1" class="form-step glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>
+              <rect width="20" height="14" x="2" y="5" rx="2" /><path d="M2 10h20" />
             </svg>
             {{ PAGES.CONTRACTS.SELECT_MEMBER_PLAN }}
           </h2>
@@ -297,8 +297,8 @@ const handleSubmit = async () => {
         <section v-if="currentStep === 2" class="form-step glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
             {{ PAGES.CONTRACTS.CONFIRM_CONTRACT_INFO }}
           </h2>
@@ -371,7 +371,7 @@ const handleSubmit = async () => {
         <section v-if="currentStep === 3" class="form-step glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
             {{ PAGES.CONTRACTS.E_SIGNATURE }}
           </h2>
@@ -402,7 +402,7 @@ const handleSubmit = async () => {
         <!-- Error Message -->
         <div v-if="errors.submit" class="submit-error">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+            <circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" />
           </svg>
           {{ errors.submit }}
         </div>
@@ -411,7 +411,7 @@ const handleSubmit = async () => {
         <div class="form-actions">
           <button v-if="currentStep > 1" type="button" class="btn btn-ghost" @click="prevStep">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m15 18-6-6 6-6"/>
+              <path d="m15 18-6-6 6-6" />
             </svg>
             {{ MESSAGES.ACTIONS.PREVIOUS }}
           </button>
@@ -420,12 +420,12 @@ const handleSubmit = async () => {
           <button v-if="currentStep < totalSteps" type="button" class="btn btn-primary btn-large" @click="nextStep">
             {{ MESSAGES.ACTIONS.NEXT }}
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m9 18 6-6-6-6"/>
+              <path d="m9 18 6-6-6-6" />
             </svg>
           </button>
           <button v-else type="submit" class="btn btn-primary btn-large" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
             {{ isSubmitting ? MESSAGES.ACTIONS.CREATING : PAGES.CONTRACTS.COMPLETE_SIGN }}
           </button>

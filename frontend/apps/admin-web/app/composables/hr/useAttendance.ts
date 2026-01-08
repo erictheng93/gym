@@ -93,7 +93,7 @@ export const useAttendance = () => {
               'employee.job_title.name',
               'branch.id',
               'branch.name'
-            ],
+            ] as any,
             sort: ['-check_in'],
             limit: 50
           })
@@ -117,7 +117,7 @@ export const useAttendance = () => {
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: att.early_leave_minutes || 0,
         work_hours: att.work_hours || null,
-        notes: att.notes
+        notes: att.notes || null
       }))
       todayCount.value = Number(countResult[0]?.count) || 0
     } catch (error) {
@@ -144,7 +144,7 @@ export const useAttendance = () => {
             'employee.full_name',
             'employee.employee_code',
             'employee.job_title.name'
-          ],
+          ] as any,
           limit: 1
         })
       )
@@ -157,13 +157,13 @@ export const useAttendance = () => {
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
-        attendance_date: att.attendance_date || today,
+        attendance_date: att.attendance_date || today as string,
         check_type: (att.check_type as any) || 'REGULAR',
         attendance_status: (att.attendance_status as any) || 'PRESENT',
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: att.early_leave_minutes || 0,
         work_hours: att.work_hours || null,
-        notes: att.notes
+        notes: att.notes || null
       }
     } catch (error) {
       console.error('Failed to get today attendance:', error)
@@ -259,7 +259,7 @@ export const useAttendance = () => {
             'employee.full_name',
             'employee.employee_code',
             'employee.job_title.name'
-          ],
+          ] as any,
           limit: 1
         })
       )
@@ -302,7 +302,7 @@ export const useAttendance = () => {
       const attendanceRecords = await directus.request(
         readItems('attendances', {
           filter: { id: { _eq: attendanceId } },
-          fields: ['*', 'employee.id', 'employee.full_name', 'employee.employee_code'],
+          fields: ['*', 'employee.id', 'employee.full_name', 'employee.employee_code'] as any,
           limit: 1
         })
       )
@@ -344,7 +344,7 @@ export const useAttendance = () => {
             'employee.full_name',
             'employee.employee_code',
             'employee.job_title.name'
-          ],
+          ] as any,
           limit: 1
         })
       )
@@ -361,7 +361,7 @@ export const useAttendance = () => {
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: earlyLeaveMinutes,
         work_hours: workHours,
-        notes: att.notes
+        notes: att.notes || null
       }
 
       // Update in today's list
@@ -395,7 +395,7 @@ export const useAttendance = () => {
             employee_id: { _eq: employeeId },
             attendance_date: { _gte: startDate.toISOString().split('T')[0] }
           },
-          fields: ['*', 'branch.name'],
+          fields: ['*', 'branch.name'] as any,
           sort: ['-attendance_date'],
           limit: days
         })
@@ -501,7 +501,7 @@ export const useAttendance = () => {
       const attendances = await directus.request(
         readItems('attendances', {
           filter,
-          fields: ['*', 'employee.id', 'employee.full_name', 'employee.employee_code'],
+          fields: ['*', 'employee.id', 'employee.full_name', 'employee.employee_code'] as any,
           sort: ['employee_id', 'attendance_date']
         })
       ) as Attendance[]
@@ -579,7 +579,7 @@ export const useAttendance = () => {
               _lte: endDate
             }
           },
-          fields: ['*', 'branch.name'],
+          fields: ['*', 'branch.name'] as any,
           sort: ['attendance_date']
         })
       )

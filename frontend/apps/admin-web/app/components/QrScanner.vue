@@ -184,9 +184,9 @@ onUnmounted(() => {
     <!-- Error state -->
     <div v-else-if="errorMessage" class="scanner-error">
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
       <p>{{ errorMessage }}</p>
       <button class="btn-retry" @click="initScanner">重試</button>
@@ -219,7 +219,7 @@ onUnmounted(() => {
       <div class="scanner-controls">
         <button v-if="!isScanning" class="btn-start" @click="startScanning">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3"/>
+            <polygon points="5 3 19 12 5 21 5 3" />
           </svg>
           開始掃描
         </button>
@@ -227,18 +227,18 @@ onUnmounted(() => {
         <template v-else>
           <button class="btn-control" @click="stopScanning">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="6" y="6" width="12" height="12"/>
+              <rect x="6" y="6" width="12" height="12" />
             </svg>
             停止
           </button>
 
           <button v-if="devices.length > 1" class="btn-control" @click="switchCamera">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>
-              <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/>
-              <circle cx="12" cy="12" r="3"/>
-              <path d="m18 22-3-3 3-3"/>
-              <path d="m6 2 3 3-3 3"/>
+              <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+              <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="m18 22-3-3 3-3" />
+              <path d="m6 2 3 3-3 3" />
             </svg>
             切換
           </button>
@@ -246,8 +246,8 @@ onUnmounted(() => {
 
         <button class="btn-close" @click="close">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
           關閉
         </button>

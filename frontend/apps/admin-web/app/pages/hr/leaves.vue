@@ -301,7 +301,7 @@ const getActionLabel = (action: string) => {
       <div class="header-content">
         <NuxtLink to="/hr" class="back-link">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           {{ PAGES.HR.TITLE }}
         </NuxtLink>
@@ -310,8 +310,8 @@ const getActionLabel = (action: string) => {
       </div>
       <button class="btn btn-primary" @click="showApplyModal = true">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" x2="12" y1="5" y2="19"/>
-          <line x1="5" x2="19" y1="12" y2="12"/>
+          <line x1="12" x2="12" y1="5" y2="19" />
+          <line x1="5" x2="19" y1="12" y2="12" />
         </svg>
         {{ PAGES.HR.LEAVES.APPLY_LEAVE }}
       </button>
@@ -441,15 +441,15 @@ const getActionLabel = (action: string) => {
             <div class="leave-meta">
               <span class="meta-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
                 </svg>
                 {{ formatDateTime(leave.submitted_at || leave.date_created) }}
               </span>
               <span v-if="leave.approver" class="meta-item">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
                 </svg>
                 {{ (leave.approver as { full_name: string }).full_name }}
               </span>
@@ -457,22 +457,22 @@ const getActionLabel = (action: string) => {
           </div>
 
           <div class="leave-actions">
-            <button class="action-btn" @click="viewHistory(leave.id)" title="查看歷程">
+            <button class="action-btn" title="查看歷程" @click="viewHistory(leave.id)">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
               </svg>
             </button>
             <button
               v-if="leave.leave_status === 'PENDING'"
               class="action-btn danger"
-              @click="handleCancel(leave.id)"
               title="取消申請"
+              @click="handleCancel(leave.id)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="15" x2="9" y1="9" y2="15"/>
-                <line x1="9" x2="15" y1="9" y2="15"/>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" x2="9" y1="9" y2="15" />
+                <line x1="9" x2="15" y1="9" y2="15" />
               </svg>
             </button>
           </div>
@@ -533,14 +533,14 @@ const getActionLabel = (action: string) => {
           <div class="approval-actions">
             <button class="btn btn-success" @click="openReviewModal(leave, 'APPROVE')">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
+                <polyline points="20 6 9 17 4 12" />
               </svg>
               {{ PAGES.HR.LEAVES.APPROVE }}
             </button>
             <button class="btn btn-error-outline" @click="openReviewModal(leave, 'REJECT')">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" x2="6" y1="6" y2="18"/>
-                <line x1="6" x2="18" y1="6" y2="18"/>
+                <line x1="18" x2="6" y1="6" y2="18" />
+                <line x1="6" x2="18" y1="6" y2="18" />
               </svg>
               {{ PAGES.HR.LEAVES.REJECT }}
             </button>
@@ -604,10 +604,10 @@ const getActionLabel = (action: string) => {
           <div class="summary-card">
             <div class="summary-icon" style="background: rgba(0, 122, 255, 0.1); color: #007aff;">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                <line x1="16" x2="16" y1="2" y2="6"/>
-                <line x1="8" x2="8" y1="2" y2="6"/>
-                <line x1="3" x2="21" y1="10" y2="10"/>
+                <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                <line x1="16" x2="16" y1="2" y2="6" />
+                <line x1="8" x2="8" y1="2" y2="6" />
+                <line x1="3" x2="21" y1="10" y2="10" />
               </svg>
             </div>
             <div class="summary-content">
@@ -619,7 +619,7 @@ const getActionLabel = (action: string) => {
           <div class="summary-card">
             <div class="summary-icon" style="background: rgba(52, 199, 89, 0.1); color: #34c759;">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
+                <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
             <div class="summary-content">
@@ -631,8 +631,8 @@ const getActionLabel = (action: string) => {
           <div class="summary-card">
             <div class="summary-icon" style="background: rgba(255, 149, 0, 0.1); color: #ff9500;">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
               </svg>
             </div>
             <div class="summary-content">
@@ -644,7 +644,7 @@ const getActionLabel = (action: string) => {
           <div class="summary-card">
             <div class="summary-icon" style="background: rgba(88, 86, 214, 0.1); color: #5856d6;">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
               </svg>
             </div>
             <div class="summary-content">
@@ -667,8 +667,8 @@ const getActionLabel = (action: string) => {
               <h3>{{ PAGES.HR.LEAVES.APPLY_LEAVE }}</h3>
               <button class="modal-close" @click="showApplyModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" x2="6" y1="6" y2="18"/>
-                  <line x1="6" x2="18" y1="6" y2="18"/>
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
                 </svg>
               </button>
             </div>
@@ -774,8 +774,8 @@ const getActionLabel = (action: string) => {
               <h3>{{ PAGES.HR.LEAVES.APPROVAL_HISTORY }}</h3>
               <button class="modal-close" @click="showHistoryModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" x2="6" y1="6" y2="18"/>
-                  <line x1="6" x2="18" y1="6" y2="18"/>
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
                 </svg>
               </button>
             </div>
@@ -815,8 +815,8 @@ const getActionLabel = (action: string) => {
               <h3>{{ reviewData.action === 'APPROVE' ? '核准' : '駁回' }}休假申請</h3>
               <button class="modal-close" @click="showReviewModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" x2="6" y1="6" y2="18"/>
-                  <line x1="6" x2="18" y1="6" y2="18"/>
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
                 </svg>
               </button>
             </div>
@@ -828,11 +828,11 @@ const getActionLabel = (action: string) => {
                   :class="reviewData.action === 'APPROVE' ? 'approve' : 'reject'"
                 >
                   <svg v-if="reviewData.action === 'APPROVE'" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
+                    <polyline points="20 6 9 17 4 12" />
                   </svg>
                   <svg v-else xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" x2="6" y1="6" y2="18"/>
-                    <line x1="6" x2="18" y1="6" y2="18"/>
+                    <line x1="18" x2="6" y1="6" y2="18" />
+                    <line x1="6" x2="18" y1="6" y2="18" />
                   </svg>
                 </div>
                 <p class="review-message">

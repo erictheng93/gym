@@ -5,17 +5,8 @@
  * 使用 @gym-nexus/ui 表單組件重構
  */
 import { MESSAGES, PAGES, LABELS } from '~/constants'
-import {
-  required,
-  email,
-  phone,
-  phoneLength,
-  minLength,
-  maxLength,
-  between,
-  dateNotFuture,
-  arrayLength
-} from '@gym-nexus/ui/composables'
+import { useTenant } from '@gym-nexus/shared'
+// Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
 
 definePageMeta({
   middleware: 'auth'
@@ -24,6 +15,9 @@ definePageMeta({
 const router = useRouter()
 const { createMember } = useMembers()
 const { branches, fetchBranches } = useBranches()
+
+// 租戶配額管理
+const { canCreate, fetchTenantInfo, fetchTenantQuota, isQuotaNearLimit, getQuotaUsagePercent } = useTenant()
 
 // Form state
 const isSubmitting = ref(false)
@@ -57,7 +51,12 @@ const branchOptions = computed(() =>
 
 // Initial load
 onMounted(async () => {
-  await fetchBranches()
+  await Promise.all([
+    fetchBranches(),
+    fetchTenantInfo(),
+    fetchTenantQuota()
+  ])
+
   if (branches.value.length > 0 && !form.branch_id) {
     form.branch_id = branches.value[0].id
   }
@@ -66,6 +65,13 @@ onMounted(async () => {
 // Form submission
 const handleSubmit = async () => {
   clearErrors()
+
+  // 檢查配額
+  if (!canCreate('members')) {
+    useToast().error('會員配額已達上限，無法新增會員')
+    setError('submit', '會員配額已達上限，請聯繫管理員升級套餐')
+    return
+  }
 
   const isValid = validate(form, {
     full_name: [
@@ -119,7 +125,7 @@ const handleSubmit = async () => {
     <header class="form-page-header">
       <button class="back-btn" @click="router.back()">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m15 18-6-6 6-6"/>
+          <path d="m15 18-6-6 6-6" />
         </svg>
         {{ MESSAGES.ACTIONS.BACK }}
       </button>
@@ -129,14 +135,24 @@ const handleSubmit = async () => {
     <div class="form-hero">
       <div class="hero-icon hero-icon--blue">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <line x1="19" x2="19" y1="8" y2="14"/>
-          <line x1="22" x2="16" y1="11" y2="11"/>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <line x1="19" x2="19" y1="8" y2="14" />
+          <line x1="22" x2="16" y1="11" y2="11" />
         </svg>
       </div>
       <h1 class="text-headline">{{ PAGES.MEMBERS.ADD_MEMBER }}</h1>
       <p class="text-body text-secondary">{{ PAGES.MEMBERS.FILL_BASIC_INFO }}</p>
+    </div>
+
+    <!-- 配額警告 -->
+    <div v-if="isQuotaNearLimit('members')" class="quota-alert">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+      </svg>
+      <span>會員配額使用率已達 {{ getQuotaUsagePercent('members') }}%，即將達到上限</span>
     </div>
 
     <!-- Form -->
@@ -145,7 +161,7 @@ const handleSubmit = async () => {
       <section class="form-section glass-card">
         <h2 class="section-title">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
           </svg>
           {{ MESSAGES.COMMON.BASIC_INFO }}
         </h2>
@@ -195,7 +211,7 @@ const handleSubmit = async () => {
       <section class="form-section glass-card">
         <h2 class="section-title">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
           </svg>
           {{ MESSAGES.COMMON.CONTACT_INFO }}
         </h2>
@@ -237,7 +253,7 @@ const handleSubmit = async () => {
       <section class="form-section glass-card">
         <h2 class="section-title">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>
+            <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" /><path d="M7 7h.01" />
           </svg>
           {{ MESSAGES.FORM.TAGS }}
         </h2>
@@ -254,7 +270,7 @@ const handleSubmit = async () => {
       <!-- Error Message -->
       <div v-if="errors.submit" class="submit-error">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+          <circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" />
         </svg>
         {{ errors.submit }}
       </div>
@@ -266,7 +282,7 @@ const handleSubmit = async () => {
         </button>
         <button type="submit" class="btn btn-primary btn-large" :disabled="isSubmitting">
           <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
           {{ isSubmitting ? MESSAGES.ACTIONS.CREATING : PAGES.MEMBERS.ADD_MEMBER }}
         </button>
@@ -330,6 +346,26 @@ const handleSubmit = async () => {
   align-items: center;
   justify-content: center;
   margin: 0 auto var(--space-lg);
+}
+
+/* 配額警告 */
+.quota-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(255, 204, 0, 0.1);
+  border: 1.5px solid rgba(255, 204, 0, 0.3);
+  border-radius: var(--radius-lg);
+  color: #ff9500;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: var(--space-xl);
+  animation: fadeUp 0.6s var(--ease-out) 0.2s backwards;
+}
+
+.quota-alert svg {
+  flex-shrink: 0;
 }
 
 .hero-icon--blue {

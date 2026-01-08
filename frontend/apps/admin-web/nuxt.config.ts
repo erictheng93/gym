@@ -6,12 +6,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
   compatibilityDate: '2024-12-01',
-  devtools: { enabled: true },
+  devtools: { enabled: false },
 
   // Extend from UI package layer
   extends: ['../../packages/ui'],
 
-  modules: ['@vite-pwa/nuxt'],
+  modules: ['@vite-pwa/nuxt', '@nuxt/eslint'],
 
   // Vite aliases for proper path resolution
   alias: {
@@ -87,9 +87,10 @@ export default defineNuxtConfig({
     pageTransition: { name: 'page', mode: 'out-in' }
   },
 
-  // PWA 配置
+  // PWA 配置 - 在开发环境禁用以避免 KV 限制问题
   pwa: {
     registerType: 'autoUpdate',
+    disable: process.env.NODE_ENV === 'development', // 开发环境禁用 PWA
     manifest: {
       name: 'Gym Nexus - 智慧健身房管理系統',
       short_name: 'Gym Nexus',

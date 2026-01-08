@@ -1,6 +1,7 @@
 import { readMe, readItems } from '@directus/sdk'
 import type { Employee } from '~/types/directus'
 import { MESSAGES } from '~/constants'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 interface User {
   id: string

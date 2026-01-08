@@ -91,12 +91,12 @@ const triggerShake = () => {
 
     <!-- Theme Toggle -->
     <ClientOnly>
-      <button class="theme-toggle" @click="toggleTheme" :aria-label="MESSAGES.A11Y.TOGGLE_THEME">
+      <button class="theme-toggle" :aria-label="MESSAGES.A11Y.TOGGLE_THEME" @click="toggleTheme">
         <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+          <circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
         </svg>
         <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
         </svg>
       </button>
     </ClientOnly>
@@ -108,12 +108,12 @@ const triggerShake = () => {
         <div class="login-header">
           <div class="logo-mark">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="48" height="48" rx="12" fill="url(#logo-gradient)"/>
-              <path d="M14 24h6v-8h8v8h6v4h-6v8h-8v-8h-6v-4z" fill="white"/>
+              <rect width="48" height="48" rx="12" fill="url(#logo-gradient)" />
+              <path d="M14 24h6v-8h8v8h6v4h-6v8h-8v-8h-6v-4z" fill="white" />
               <defs>
                 <linearGradient id="logo-gradient" x1="0" y1="0" x2="48" y2="48">
-                  <stop stop-color="#0071e3"/>
-                  <stop offset="1" stop-color="#00c7be"/>
+                  <stop stop-color="#0071e3" />
+                  <stop offset="1" stop-color="#00c7be" />
                 </linearGradient>
               </defs>
             </svg>
@@ -126,14 +126,14 @@ const triggerShake = () => {
         <Transition name="fade-scale">
           <div v-if="error" class="error-banner">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>
+              <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />
             </svg>
             <span>{{ error }}</span>
           </div>
         </Transition>
 
         <!-- Form -->
-        <form @submit.prevent="handleSubmit" class="login-form">
+        <form class="login-form" @submit.prevent="handleSubmit">
           <div class="input-group">
             <label for="email" class="input-label">{{ MESSAGES.FORM.EMAIL }}</label>
             <input

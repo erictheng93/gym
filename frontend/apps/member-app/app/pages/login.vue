@@ -154,11 +154,11 @@ onUnmounted(() => {
           <div class="logo-icon">
             <!-- 健身啞鈴圖標 -->
             <svg viewBox="0 0 48 48" fill="none">
-              <rect x="4" y="18" width="8" height="12" rx="2" fill="currentColor"/>
-              <rect x="36" y="18" width="8" height="12" rx="2" fill="currentColor"/>
-              <rect x="10" y="14" width="6" height="20" rx="2" fill="currentColor"/>
-              <rect x="32" y="14" width="6" height="20" rx="2" fill="currentColor"/>
-              <rect x="14" y="21" width="20" height="6" rx="1" fill="currentColor"/>
+              <rect x="4" y="18" width="8" height="12" rx="2" fill="currentColor" />
+              <rect x="36" y="18" width="8" height="12" rx="2" fill="currentColor" />
+              <rect x="10" y="14" width="6" height="20" rx="2" fill="currentColor" />
+              <rect x="32" y="14" width="6" height="20" rx="2" fill="currentColor" />
+              <rect x="14" y="21" width="20" height="6" rx="1" fill="currentColor" />
             </svg>
           </div>
           <div class="logo-text">
@@ -178,8 +178,8 @@ onUnmounted(() => {
             @click="loginMethod = 'email'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="4" width="20" height="16" rx="2"/>
-              <path d="m22 6-10 7L2 6"/>
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="m22 6-10 7L2 6" />
             </svg>
             電子郵件
           </button>
@@ -189,8 +189,8 @@ onUnmounted(() => {
             @click="loginMethod = 'phone'"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="5" y="2" width="14" height="20" rx="2"/>
-              <line x1="12" y1="18" x2="12" y2="18"/>
+              <rect x="5" y="2" width="14" height="20" rx="2" />
+              <line x1="12" y1="18" x2="12" y2="18" />
             </svg>
             手機驗證
           </button>
@@ -209,8 +209,8 @@ onUnmounted(() => {
               <label for="email">電子郵件</label>
               <div class="input-wrapper">
                 <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="4" width="20" height="16" rx="2"/>
-                  <path d="m22 6-10 7L2 6"/>
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m22 6-10 7L2 6" />
                 </svg>
                 <input
                   id="email"
@@ -226,8 +226,8 @@ onUnmounted(() => {
               <label for="password">密碼</label>
               <div class="input-wrapper">
                 <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="11" width="18" height="11" rx="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
                 <input
                   id="password"
@@ -242,12 +242,12 @@ onUnmounted(() => {
                   @click="showPassword = !showPassword"
                 >
                   <svg v-if="!showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
                   </svg>
                   <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
                   </svg>
                 </button>
               </div>
@@ -278,8 +278,8 @@ onUnmounted(() => {
                 <label for="phone">手機號碼</label>
                 <div class="input-wrapper">
                   <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="5" y="2" width="14" height="20" rx="2"/>
-                    <line x1="12" y1="18" x2="12" y2="18"/>
+                    <rect x="5" y="2" width="14" height="20" rx="2" />
+                    <line x1="12" y1="18" x2="12" y2="18" />
                   </svg>
                   <input
                     id="phone"
@@ -304,7 +304,7 @@ onUnmounted(() => {
             <template v-else>
               <button type="button" class="back-btn" @click="goBackToPhone">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M19 12H5M12 19l-7-7 7-7"/>
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
                 返回
               </button>
@@ -348,8 +348,8 @@ onUnmounted(() => {
                 </button>
                 <p v-else class="countdown-text">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12,6 12,12 16,14"/>
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12,6 12,12 16,14" />
                   </svg>
                   {{ countdown }} 秒後可重新發送
                 </p>

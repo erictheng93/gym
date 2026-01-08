@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
-import {
-  required,
-  positive,
-  between,
-  maxLength,
-  dateNotFuture
-} from '@gym-nexus/ui/composables'
+// Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
 
 definePageMeta({
   middleware: 'auth'
@@ -154,7 +148,7 @@ const formatCurrency = (amount: number) => {
       <header class="page-header">
         <button class="back-btn" @click="router.back()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           {{ MESSAGES.ACTIONS.BACK }}
         </button>
@@ -164,7 +158,7 @@ const formatCurrency = (amount: number) => {
       <div class="form-hero">
         <div class="hero-icon" :class="form.payment_type === 'INCOME' ? 'hero-income' : 'hero-refund'">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
         </div>
         <h1 class="text-headline">{{ form.payment_type === 'INCOME' ? PAGES.PAYMENTS.ADD_PAYMENT : PAGES.PAYMENTS.ADD_REFUND }}</h1>
@@ -179,7 +173,7 @@ const formatCurrency = (amount: number) => {
           @click="form.payment_type = 'INCOME'"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
           {{ LABELS.PAYMENT_TYPE.INCOME }}
         </button>
@@ -189,8 +183,8 @@ const formatCurrency = (amount: number) => {
           @click="form.payment_type = 'REFUND'"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 7 9 13 3 19"/>
-            <line x1="21" x2="9" y1="13" y2="13"/>
+            <polyline points="3 7 9 13 3 19" />
+            <line x1="21" x2="9" y1="13" y2="13" />
           </svg>
           {{ LABELS.PAYMENT_TYPE.REFUND }}
         </button>
@@ -202,7 +196,7 @@ const formatCurrency = (amount: number) => {
         <section class="form-section glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
             </svg>
             {{ PAGES.PAYMENTS.MEMBER_CONTRACT }}
           </h2>
@@ -248,8 +242,8 @@ const formatCurrency = (amount: number) => {
         <section class="form-section glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" x2="12" y1="2" y2="22"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              <line x1="12" x2="12" y1="2" y2="22" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
             {{ PAGES.PAYMENTS.AMOUNT_METHOD }}
           </h2>
@@ -290,7 +284,7 @@ const formatCurrency = (amount: number) => {
         <section class="form-section glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>
+              <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
             </svg>
             {{ PAGES.PAYMENTS.OTHER_INFO }}
           </h2>
@@ -333,7 +327,7 @@ const formatCurrency = (amount: number) => {
         <!-- Error Message -->
         <div v-if="errors.submit" class="submit-error">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+            <circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" />
           </svg>
           {{ errors.submit }}
         </div>
@@ -343,7 +337,7 @@ const formatCurrency = (amount: number) => {
           <button type="button" class="btn btn-ghost" @click="router.back()">{{ MESSAGES.FORM.CANCEL }}</button>
           <button type="submit" class="btn btn-large" :class="form.payment_type === 'INCOME' ? 'btn-primary' : 'btn-warning'" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
             {{ isSubmitting ? MESSAGES.ACTIONS.PROCESSING : (form.payment_type === 'INCOME' ? PAGES.PAYMENTS.CONFIRM_INCOME : PAGES.PAYMENTS.CONFIRM_REFUND) }}
           </button>

@@ -3,17 +3,21 @@
  * Aggregates all hook modules for the gym hooks extension
  */
 
-export { registerContractLogsHooks } from './contract-logs.js';
-export { registerContractsHooks } from './contracts.js';
-export { registerEmployeesHooks } from './employees.js';
-export { registerPaymentsHooks } from './payments.js';
-export { registerLeaveRequestsHooks } from './leave-requests.js';
-export { registerAttendanceHooks } from './attendance.js';
-export { registerCheckinHooks } from './checkin.js';
-export { registerAuthHooks } from './auth.js';
-export { registerNotificationsHooks } from './notifications.js';
-export { registerPermissionsHooks } from './permissions.js';
-export { registerScheduledHooks } from './schedules.js';
+import { registerContractLogsHooks } from './contract-logs.js';
+import { registerContractsHooks } from './contracts.js';
+import { registerEmployeesHooks } from './employees.js';
+import { registerPaymentsHooks } from './payments.js';
+import { registerLeaveRequestsHooks } from './leave-requests.js';
+import { registerAttendanceHooks } from './attendance.js';
+import { registerCheckinHooks } from './checkin.js';
+import { registerAuthHooks } from './auth.js';
+import { registerNotificationsHooks } from './notifications.js';
+import { registerPermissionsHooks } from './permissions.js';
+import { registerScheduledHooks } from './schedules.js';
+import { registerQuotaCheckHooks } from './quota-check.js';
+import { registerStorageQuotaCheckHooks } from './storage-quota-check.js';
+import { registerBillingTasks } from '../cron/billing-tasks.js';
+import { registerAnalyticsTasks } from '../cron/analytics-tasks.js';
 
 /**
  * Register all hooks with Directus
@@ -63,6 +67,22 @@ export function registerAllHooks(directusHooks, context, utils) {
     invalidateReportCache,
     recordPerformanceMetric,
   });
+
+  // 12. Quota Check Hooks (tenant quota validation)
+  registerQuotaCheckHooks({ filter }, context);
+
+  // 13. Storage Quota Check Hooks (file upload quota validation)
+  registerStorageQuotaCheckHooks({ filter }, context);
+
+  // 14. Billing Cron Tasks (usage collection, invoice generation)
+  if (typeof schedule === 'function') {
+    registerBillingTasks(schedule, context);
+  }
+
+  // 15. Analytics Cron Tasks (API usage aggregation, log cleanup)
+  if (typeof schedule === 'function') {
+    registerAnalyticsTasks(schedule, context);
+  }
 }
 
 export default registerAllHooks;

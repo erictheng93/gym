@@ -282,7 +282,7 @@ const getAssignedCount = (scheduleId: string) => {
       <div class="header-content">
         <NuxtLink to="/hr" class="back-link">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           人資管理
         </NuxtLink>
@@ -298,7 +298,7 @@ const getAssignedCount = (scheduleId: string) => {
         </select>
         <button class="btn btn-primary" @click="openCreateModal">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14"/><path d="M12 5v14"/>
+            <path d="M5 12h14" /><path d="M12 5v14" />
           </svg>
           新增班表
         </button>
@@ -315,10 +315,10 @@ const getAssignedCount = (scheduleId: string) => {
     <div v-else-if="filteredSchedules.length === 0" class="empty-state card">
       <div class="empty-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
-          <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-          <line x1="16" x2="16" y1="2" y2="6"/>
-          <line x1="8" x2="8" y1="2" y2="6"/>
-          <line x1="3" x2="21" y1="10" y2="10"/>
+          <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+          <line x1="16" x2="16" y1="2" y2="6" />
+          <line x1="8" x2="8" y1="2" y2="6" />
+          <line x1="3" x2="21" y1="10" y2="10" />
         </svg>
       </div>
       <h3>尚無班表</h3>
@@ -341,20 +341,20 @@ const getAssignedCount = (scheduleId: string) => {
           <div class="schedule-actions">
             <button class="action-btn action-btn-primary" title="指派員工" @click="openAssignModal(schedule)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <line x1="19" x2="19" y1="8" y2="14"/>
-                <line x1="22" x2="16" y1="11" y2="11"/>
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <line x1="19" x2="19" y1="8" y2="14" />
+                <line x1="22" x2="16" y1="11" y2="11" />
               </svg>
             </button>
             <button class="action-btn" title="編輯" @click="openEditModal(schedule)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
               </svg>
             </button>
             <button class="action-btn action-btn-danger" title="刪除" @click="confirmDelete(schedule)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
               </svg>
             </button>
           </div>
@@ -377,8 +377,8 @@ const getAssignedCount = (scheduleId: string) => {
             <span class="detail-label">休息時間</span>
             <span class="detail-value">
               {{ schedule.break_start && schedule.break_end
-                 ? `${formatTime(schedule.break_start)} - ${formatTime(schedule.break_end)}`
-                 : '無' }}
+                ? `${formatTime(schedule.break_start)} - ${formatTime(schedule.break_end)}`
+                : '無' }}
             </span>
           </div>
           <div class="detail-row">
@@ -401,7 +401,7 @@ const getAssignedCount = (scheduleId: string) => {
 
         <div v-if="schedule.branch" class="schedule-branch">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
           </svg>
           {{ (schedule.branch as { name: string }).name }}
         </div>
@@ -506,7 +506,7 @@ const getAssignedCount = (scheduleId: string) => {
         <div class="modal-content glass-card modal-small">
           <div class="modal-icon modal-icon-danger">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+              <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
             </svg>
           </div>
           <h3 class="modal-title">確定刪除？</h3>
@@ -534,8 +534,8 @@ const getAssignedCount = (scheduleId: string) => {
             </div>
             <button class="modal-close-btn" @click="showAssignModal = false">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" x2="6" y1="6" y2="18"/>
-                <line x1="6" x2="18" y1="6" y2="18"/>
+                <line x1="18" x2="6" y1="6" y2="18" />
+                <line x1="6" x2="18" y1="6" y2="18" />
               </svg>
             </button>
           </div>
@@ -545,9 +545,9 @@ const getAssignedCount = (scheduleId: string) => {
             <div class="assign-section">
               <h4 class="assign-section-title">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <polyline points="16 11 18 13 22 9"/>
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <polyline points="16 11 18 13 22 9" />
                 </svg>
                 目前已指派 ({{ assignedEmployees.length }})
               </h4>
@@ -574,10 +574,10 @@ const getAssignedCount = (scheduleId: string) => {
                     <span class="employee-code">{{ (es.employee as Employee)?.employee_code }}</span>
                   </div>
                   <span class="effective-date">自 {{ es.effective_date }}</span>
-                  <button class="remove-btn" @click="handleRemoveAssignment(es)" title="移除">
+                  <button class="remove-btn" title="移除" @click="handleRemoveAssignment(es)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="18" x2="6" y1="6" y2="18"/>
-                      <line x1="6" x2="18" y1="6" y2="18"/>
+                      <line x1="18" x2="6" y1="6" y2="18" />
+                      <line x1="6" x2="18" y1="6" y2="18" />
                     </svg>
                   </button>
                 </div>
@@ -588,10 +588,10 @@ const getAssignedCount = (scheduleId: string) => {
             <div class="assign-section">
               <h4 class="assign-section-title">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <line x1="19" x2="19" y1="8" y2="14"/>
-                  <line x1="22" x2="16" y1="11" y2="11"/>
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <line x1="19" x2="19" y1="8" y2="14" />
+                  <line x1="22" x2="16" y1="11" y2="11" />
                 </svg>
                 指派新員工
               </h4>
@@ -615,11 +615,11 @@ const getAssignedCount = (scheduleId: string) => {
                   >
                     <div class="employee-checkbox">
                       <svg v-if="selectedEmployees.includes(emp.id)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"/>
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
                       <svg v-else-if="isEmployeeAssigned(emp.id)" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 16 14"/>
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
                       </svg>
                     </div>
                     <div class="employee-avatar small">
@@ -643,7 +643,7 @@ const getAssignedCount = (scheduleId: string) => {
                     <span v-if="isAssigning" class="btn-spinner"></span>
                     <template v-else>
                       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"/>
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
                       確認指派
                     </template>

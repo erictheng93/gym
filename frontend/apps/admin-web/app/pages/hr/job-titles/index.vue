@@ -82,7 +82,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
       <template #actions>
         <NuxtLink to="/hr/job-titles/new" class="btn btn-primary">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14"/><path d="M12 5v14"/>
+            <path d="M5 12h14" /><path d="M12 5v14" />
           </svg>
           新增職位
         </NuxtLink>
@@ -100,7 +100,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
       <!-- Empty State -->
       <div v-else-if="jobTitles.length === 0" class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+          <rect width="20" height="14" x="2" y="7" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
         </svg>
         <h3>尚無職位</h3>
         <p>建立您的第一個職位以開始管理員工權限</p>
@@ -125,7 +125,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
                 @click="handleEdit(jobTitle)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
                 </svg>
               </button>
               <button
@@ -134,7 +134,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
                 @click="confirmDelete(jobTitle)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                  <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                 </svg>
               </button>
             </div>
@@ -143,7 +143,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
           <div class="card-body">
             <div class="permission-summary">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
               <span>{{ getPermissionCount(jobTitle) }} 個權限</span>
             </div>
@@ -161,7 +161,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
               <h3>刪除職位</h3>
               <button class="modal-close" @click="showDeleteModal = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/>
+                  <line x1="18" x2="6" y1="6" y2="18" /><line x1="6" x2="18" y1="6" y2="18" />
                 </svg>
               </button>
             </div>
@@ -169,7 +169,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
             <div class="modal-body">
               <div class="warning-message">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
                 </svg>
                 <p>確定要刪除職位 <strong>{{ selectedJobTitle?.name }}</strong> 嗎？此操作無法復原。</p>
               </div>
@@ -181,7 +181,7 @@ const getPermissionCount = (jobTitle: JobTitle) => {
               </button>
               <button class="btn btn-danger" :disabled="isDeleting" @click="handleDelete">
                 <svg v-if="isDeleting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                 </svg>
                 {{ isDeleting ? '刪除中...' : '確認刪除' }}
               </button>

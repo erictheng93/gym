@@ -214,8 +214,8 @@ const currentBranchName = computed(() => {
         <div class="success-content">
           <div class="success-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
           </div>
           <p class="success-text">{{ successMessage }}</p>
@@ -228,7 +228,7 @@ const currentBranchName = computed(() => {
       <div class="header-content">
         <NuxtLink to="/hr" class="back-link">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           {{ PAGES.HR.TITLE }}
         </NuxtLink>
@@ -273,9 +273,9 @@ const currentBranchName = computed(() => {
           <div class="time-record">
             <div class="record-icon in">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                <polyline points="10 17 15 12 10 7"/>
-                <line x1="15" x2="3" y1="12" y2="12"/>
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" x2="3" y1="12" y2="12" />
               </svg>
             </div>
             <div class="record-info">
@@ -286,9 +286,9 @@ const currentBranchName = computed(() => {
           <div class="time-record">
             <div class="record-icon out" :class="{ 'pending': !todayAttendance.check_out }">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" x2="9" y1="12" y2="12"/>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" x2="9" y1="12" y2="12" />
               </svg>
             </div>
             <div class="record-info">
@@ -311,9 +311,9 @@ const currentBranchName = computed(() => {
             <span v-if="isProcessing" class="btn-spinner"></span>
             <template v-else>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                <polyline points="10 17 15 12 10 7"/>
-                <line x1="15" x2="3" y1="12" y2="12"/>
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" x2="3" y1="12" y2="12" />
               </svg>
               {{ PAGES.HR.ATTENDANCE.CHECK_IN }}
             </template>
@@ -328,9 +328,9 @@ const currentBranchName = computed(() => {
             <span v-if="isProcessing" class="btn-spinner"></span>
             <template v-else>
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" x2="9" y1="12" y2="12"/>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" x2="9" y1="12" y2="12" />
               </svg>
               {{ PAGES.HR.ATTENDANCE.CHECK_OUT }}
             </template>
@@ -338,8 +338,8 @@ const currentBranchName = computed(() => {
 
           <div v-else class="completed-message">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
             <span>今日打卡已完成</span>
           </div>
@@ -347,11 +347,11 @@ const currentBranchName = computed(() => {
 
         <!-- Location Info -->
         <div v-if="locationInfo.ip || locationInfo.gps" class="location-info">
-          <div class="info-item" v-if="locationInfo.ip">
+          <div v-if="locationInfo.ip" class="info-item">
             <span class="info-label">{{ PAGES.HR.ATTENDANCE.IP_ADDRESS }}</span>
             <span class="info-value">{{ locationInfo.ip }}</span>
           </div>
-          <div class="info-item" v-if="currentBranchName">
+          <div v-if="currentBranchName" class="info-item">
             <span class="info-label">分店</span>
             <span class="info-value">{{ currentBranchName }}</span>
           </div>

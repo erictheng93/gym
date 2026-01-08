@@ -69,7 +69,7 @@ export const useLeaveRequests = () => {
         directus.request(
           readItems('leave_requests', {
             filter,
-            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name'],
+            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name'] as any,
             sort: ['-date_created'],
             limit,
             offset: (page - 1) * limit
@@ -117,7 +117,7 @@ export const useLeaveRequests = () => {
             employee_id: { _in: subordinateIds },
             leave_status: { _eq: 'PENDING' }
           },
-          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name'],
+          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name'] as any,
           sort: ['-submitted_at']
         })
       )
@@ -276,7 +276,7 @@ export const useLeaveRequests = () => {
     const data = await directus.request(
       readItems('leave_approval_logs', {
         filter: { leave_request_id: { _eq: leaveRequestId } },
-        fields: ['*', 'action_by.full_name'],
+        fields: ['*', 'action_by.full_name'] as any,
         sort: ['date_created']
       })
     )

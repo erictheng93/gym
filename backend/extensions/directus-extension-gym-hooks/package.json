@@ -9,7 +9,7 @@
     "host": "^11.0.0"
   },
   "scripts": {
-    "build": "cp src/index.js dist/index.js"
+    "build": "cp -r src/* dist/"
   },
   "dependencies": {
     "ioredis": "^5.4.1",

@@ -38,7 +38,7 @@ import {
   arrayLength,
   taiwanId,
   taxId
-} from './packages/ui/composables'
+} from './packages/ui/composables/useFormValidation'
 
 // Make Vue composition API globally available (for Nuxt auto-imports)
 Object.assign(globalThis, Vue)

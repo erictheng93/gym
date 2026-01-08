@@ -5,11 +5,11 @@
         <h1>通知用量統計</h1>
         <p>追蹤 LINE 和簡訊發送用量及費用</p>
       </div>
-      <button class="btn-export" @click="exportCsv" :disabled="isExporting">
+      <button class="btn-export" :disabled="isExporting" @click="exportCsv">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
         {{ isExporting ? '匯出中...' : '匯出 CSV' }}
       </button>
@@ -17,7 +17,7 @@
 
     <!-- Filters -->
     <div class="filters">
-      <div class="filter-group" v-if="isSystemAdmin">
+      <div v-if="isSystemAdmin" class="filter-group">
         <label>分店</label>
         <select v-model="filters.branchId" @change="loadUsage">
           <option value="">全部分店</option>
@@ -36,13 +36,13 @@
           <option value="custom">自訂</option>
         </select>
       </div>
-      <div class="filter-group" v-if="filters.preset === 'custom'">
+      <div v-if="filters.preset === 'custom'" class="filter-group">
         <label>開始日期</label>
-        <input type="date" v-model="filters.startDate" @change="loadUsage" />
+        <input v-model="filters.startDate" type="date" @change="loadUsage" />
       </div>
-      <div class="filter-group" v-if="filters.preset === 'custom'">
+      <div v-if="filters.preset === 'custom'" class="filter-group">
         <label>結束日期</label>
-        <input type="date" v-model="filters.endDate" @change="loadUsage" />
+        <input v-model="filters.endDate" type="date" @change="loadUsage" />
       </div>
       <div class="filter-group">
         <label>分組</label>
@@ -66,7 +66,7 @@
         <div class="card-header">
           <div class="card-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </div>
           <h3>簡訊</h3>
@@ -99,7 +99,7 @@
         <div class="card-header">
           <div class="card-icon">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 5.94 2 10.7c0 4.18 3.71 7.68 8.72 8.52.34.07.8.22.92.51.11.26.07.66.04.93l-.15.91c-.05.28-.22 1.08.95.59 1.17-.49 6.31-3.72 8.61-6.36C22.61 13.13 22 11.02 22 10.7 22 5.94 17.52 2 12 2z"/>
+              <path d="M12 2C6.48 2 2 5.94 2 10.7c0 4.18 3.71 7.68 8.72 8.52.34.07.8.22.92.51.11.26.07.66.04.93l-.15.91c-.05.28-.22 1.08.95.59 1.17-.49 6.31-3.72 8.61-6.36C22.61 13.13 22 11.02 22 10.7 22 5.94 17.52 2 12 2z" />
             </svg>
           </div>
           <h3>LINE</h3>
@@ -129,7 +129,7 @@
     </div>
 
     <!-- Detailed Table -->
-    <div class="detail-section" v-if="!isLoading">
+    <div v-if="!isLoading" class="detail-section">
       <div class="section-header">
         <h2>詳細記錄</h2>
         <div class="tab-buttons">

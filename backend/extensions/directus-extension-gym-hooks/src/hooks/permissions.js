@@ -47,7 +47,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
   };
 
   /**
-   * 取得員工的有效權限
+   * 取得員工的有效權限（包含租戶資訊）
    */
   async function getEffectivePermissions(userId) {
     try {
@@ -59,10 +59,13 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
       const result = await database.raw(`
         SELECT
           e.id,
+          e.branch_id,
           e.custom_permissions,
-          jt.permissions_config as job_title_permissions
+          jt.permissions_config as job_title_permissions,
+          b.tenant_id
         FROM employees e
         LEFT JOIN job_titles jt ON jt.id = e.job_title_id
+        LEFT JOIN branches b ON b.id = e.branch_id
         WHERE e.user_id = $1
           AND e.status = 'active'
         LIMIT 1
@@ -87,13 +90,21 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
 
       permissionCache.set(userId, {
         permissions,
+        tenantId: employee.tenant_id,
+        branchId: employee.branch_id,
+        employeeId: employee.id,
         timestamp: Date.now(),
       });
 
-      return permissions;
+      return {
+        permissions,
+        tenantId: employee.tenant_id,
+        branchId: employee.branch_id,
+        employeeId: employee.id
+      };
     } catch (error) {
       console.error('[PermissionCheck] Error fetching permissions:', error);
-      return {};
+      return { permissions: {} };
     }
   }
 
@@ -109,10 +120,32 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
   }
 
   /**
+   * 取得租戶的所有分店 ID
+   */
+  async function getTenantBranches(tenantId) {
+    if (!tenantId) {
+      return [];
+    }
+
+    try {
+      const result = await database.raw(`
+        SELECT id FROM branches
+        WHERE tenant_id = $1 AND status = 'active'
+      `, [tenantId]);
+
+      return result.rows?.map(r => r.id) || [];
+    } catch (error) {
+      console.error('[TenantIsolation] Error fetching tenant branches:', error);
+      return [];
+    }
+  }
+
+  /**
    * 檢查使用者是否有執行操作的權限
    */
   async function checkPermission(userId, collection, action) {
-    const permissions = await getEffectivePermissions(userId);
+    const effectivePerms = await getEffectivePermissions(userId);
+    const permissions = effectivePerms.permissions || effectivePerms;
 
     const module = COLLECTION_TO_MODULE[collection];
     if (!module) {
@@ -128,9 +161,10 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
     return hasPermission;
   }
 
-  // 權限檢查 Filter Hook
+  // 權限檢查與租戶隔離 Filter Hook
   ['items.create', 'items.read', 'items.update', 'items.delete'].forEach(operation => {
     filter(operation, async (input, { collection, accountability, schema }) => {
+      // 跳過未認證用戶和管理員
       if (!accountability || !accountability.user) {
         return input;
       }
@@ -139,17 +173,106 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
         return input;
       }
 
+      // 跳過 Directus 系統表
       if (collection.startsWith('directus_')) {
         return input;
       }
 
       try {
         const action = OPERATION_TO_ACTION[operation];
+
+        // 1. 檢查權限
         const hasPermission = await checkPermission(accountability.user, collection, action);
 
         if (!hasPermission) {
           const module = COLLECTION_TO_MODULE[collection];
           throw new Error(`權限不足：您沒有權限${getActionName(action)}${getModuleName(module)}`);
+        }
+
+        // 2. 應用租戶隔離（只對特定集合）
+        const tenantIsolatedCollections = [
+          'branches', 'employees', 'members', 'contracts', 'payments',
+          'membership_plans', 'checkin_logs', 'attendance_records',
+          'leave_requests', 'leave_balances', 'makeup_punch_requests',
+          'schedules', 'job_titles', 'classes', 'class_bookings'
+        ];
+
+        if (tenantIsolatedCollections.includes(collection)) {
+          const effectivePerms = await getEffectivePermissions(accountability.user);
+          const tenantId = effectivePerms.tenantId;
+
+          if (tenantId) {
+            // 獲取租戶的所有分店 ID
+            const tenantBranches = await getTenantBranches(tenantId);
+
+            if (tenantBranches.length > 0) {
+              // 根據集合類型應用不同的過濾規則
+              if (collection === 'branches') {
+                // branches 表直接過濾 tenant_id
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { tenant_id: { _eq: tenantId } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: tenant_id=${tenantId}`);
+              } else if (collection === 'employees') {
+                // employees 通過 branch_id 過濾
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { branch_id: { _in: tenantBranches } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (collection === 'members') {
+                // members 通過 branch_id 過濾
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { branch_id: { _in: tenantBranches } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (collection === 'contracts') {
+                // contracts 通過關聯的 members.branch_id 過濾
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { 'member_id.branch_id': { _in: tenantBranches } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (['payments', 'checkin_logs', 'class_bookings'].includes(collection)) {
+                // 這些表通過關聯的資源過濾
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { 'member_id.branch_id': { _in: tenantBranches } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (['attendance_records', 'leave_requests', 'leave_balances', 'makeup_punch_requests'].includes(collection)) {
+                // HR 相關表通過 employee.branch_id 過濾
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { 'employee_id.branch_id': { _in: tenantBranches } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (['membership_plans', 'classes', 'schedules', 'job_titles'].includes(collection)) {
+                // 這些表有 branch_id 欄位
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { branch_id: { _in: tenantBranches } }
+                  ]
+                };
+                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              }
+            }
+          }
         }
 
         return input;

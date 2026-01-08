@@ -52,7 +52,7 @@ export interface FormValidationResult<T> {
  * @param initialData - 初始表單數據
  * @param options - 驗證選項
  */
-export function useFormValidation<T extends z.ZodType>(
+export function useFormValidation<T extends z.ZodObject<any>>(
   schema: T,
   initialData: z.infer<T>,
   options?: FormValidationOptions
@@ -66,10 +66,18 @@ export function useFormValidation<T extends z.ZodType>(
   } = options || {}
 
   // 表單數據
-  const formData = ref<FormData>({ ...initialData }) as Ref<FormData>
+  const formData = ref<FormData>(
+    typeof initialData === 'object' && initialData !== null
+      ? { ...initialData as object } as FormData
+      : {} as FormData
+  ) as Ref<FormData>
 
   // 初始數據快照（用於重置和比較）
-  const initialSnapshot = ref<FormData>({ ...initialData })
+  const initialSnapshot = ref<FormData>(
+    typeof initialData === 'object' && initialData !== null
+      ? { ...initialData as object } as FormData
+      : {} as FormData
+  )
 
   // 錯誤訊息
   const errors = ref<Record<string, string>>({})
@@ -114,14 +122,14 @@ export function useFormValidation<T extends z.ZodType>(
    */
   const validateField = async (field: keyof FormData): Promise<boolean> => {
     // 嘗試提取單一欄位的 schema
-    const fieldSchema = (schema as z.ZodObject<z.ZodRawShape>).shape?.[field as string]
+    const fieldSchema = schema.shape?.[field as string]
 
     if (!fieldSchema) {
       // 如果無法提取單一欄位，驗證整個表單
       return validate()
     }
 
-    const result = fieldSchema.safeParse((formData.value as Record<string, unknown>)[field as string])
+    const result = fieldSchema.safeParse((formData.value as any)[field as string])
 
     if (result.success) {
       // 清除該欄位的錯誤
@@ -226,6 +234,3 @@ export function useFormValidation<T extends z.ZodType>(
     hasFieldError,
   }
 }
-
-// 導出類型
-export type { FormValidationOptions, FormValidationResult }

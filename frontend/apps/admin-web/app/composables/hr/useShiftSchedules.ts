@@ -34,7 +34,7 @@ export const useShiftSchedules = () => {
       const data = await directus.request(
         readItems('shift_schedules', {
           filter,
-          fields: ['*', 'branch.name'],
+          fields: ['*', 'branch.name'] as any,
           sort: ['start_time']
         })
       )
@@ -305,7 +305,7 @@ export const useShiftSchedules = () => {
           employment_status: { _eq: 'ACTIVE' },
           status: { _eq: 'active' }
         },
-        fields: ['id', 'full_name', 'employee_code', 'job_title.name'],
+        fields: ['id', 'full_name', 'employee_code', 'job_title.name'] as any,
         sort: ['full_name']
       })
     )

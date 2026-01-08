@@ -19,6 +19,9 @@
 import { initRedis } from './utils/redis.js';
 import { createMemberAuthMiddleware } from './middleware/member-auth.js';
 import { createAdminNotificationMiddleware } from './middleware/admin-auth.js';
+import { createTenantContextMiddleware } from './middleware/tenant-context.js';
+import { createRateLimiter } from './middleware/rate-limiter.js';
+import { createApiLogger } from './middleware/api-logger.js';
 import { registerAllRoutes } from './routes/index.js';
 
 // 初始化 Redis 連接（非阻塞）
@@ -32,6 +35,8 @@ export default {
     // 初始化中間件
     const memberAuthMiddleware = createMemberAuthMiddleware(env);
     const adminNotificationMiddleware = createAdminNotificationMiddleware(database);
+    const tenantContextMiddleware = createTenantContextMiddleware(database);
+    const apiLoggerMiddleware = createApiLogger({ database });
 
     // ============================================
     // Middleware: Parse JSON body
@@ -43,6 +48,21 @@ export default {
       }
       next();
     });
+
+    // ============================================
+    // Middleware: Tenant Context (應用於所有路由)
+    // ============================================
+    router.use(tenantContextMiddleware);
+
+    // ============================================
+    // Middleware: API Usage Logger (應用於所有路由)
+    // ============================================
+    router.use(apiLoggerMiddleware);
+
+    // ============================================
+    // Middleware: API Rate Limiter (應用於所有路由)
+    // ============================================
+    router.use(createRateLimiter());
 
     // ============================================
     // 註冊所有路由
@@ -59,10 +79,11 @@ export default {
     const middleware = {
       memberAuth: memberAuthMiddleware,
       adminNotification: adminNotificationMiddleware,
+      tenantContext: tenantContextMiddleware,
     };
 
     registerAllRoutes(router, context, middleware);
 
-    console.log('[GymEndpoint] Gym API endpoints registered');
+    console.log('[GymEndpoint] Gym API endpoints registered with tenant isolation');
   },
 };

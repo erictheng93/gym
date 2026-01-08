@@ -539,44 +539,44 @@ const openRenewModal = () => {
       <header class="page-header">
         <button class="back-btn" @click="router.back()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           {{ MESSAGES.ACTIONS.BACK }}
         </button>
         <div class="header-actions">
           <button v-if="canPause" class="btn btn-secondary" @click="showPauseModal = true">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>
+              <rect x="14" y="4" width="4" height="16" rx="1" /><rect x="6" y="4" width="4" height="16" rx="1" />
             </svg>
             {{ PAGES.CONTRACTS.PAUSE_CONTRACT }}
           </button>
           <button v-if="canResume" class="btn btn-primary" @click="showResumeModal = true">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="6 3 20 12 6 21 6 3"/>
+              <polygon points="6 3 20 12 6 21 6 3" />
             </svg>
             {{ PAGES.CONTRACTS.RESUME_CONTRACT }}
           </button>
           <button v-if="canExtend" class="btn btn-ghost" @click="openExtendModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M16 16h2"/><path d="M16 12h2"/>
+              <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="M16 16h2" /><path d="M16 12h2" />
             </svg>
             {{ PAGES.CONTRACTS.EXTEND_CONTRACT }}
           </button>
           <button v-if="canTransfer" class="btn btn-ghost" @click="openTransferModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/>
+              <path d="M16 3h5v5" /><path d="M8 3H3v5" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /><path d="M16 21h5v-5" /><path d="M8 21H3v-5" />
             </svg>
             {{ PAGES.CONTRACTS.TRANSFER_CONTRACT }}
           </button>
           <button v-if="canRenew" class="btn btn-accent" @click="openRenewModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M12 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z"/><path d="m16 12 5 3-5 3v-6Z"/>
+              <path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3" /><path d="M12 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" /><path d="m16 12 5 3-5 3v-6Z" />
             </svg>
             {{ PAGES.CONTRACTS.RENEW_CONTRACT }}
           </button>
           <button v-if="canTerminate" class="btn btn-danger" @click="openTerminateModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>
+              <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />
             </svg>
             {{ PAGES.CONTRACTS.TERMINATE_CONTRACT }}
           </button>
@@ -588,8 +588,8 @@ const openRenewModal = () => {
         <div class="hero-header">
           <div class="contract-badge-large">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-              <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+              <path d="M14 2v4a2 2 0 0 0 2 2h4" />
             </svg>
           </div>
           <div class="hero-info">
@@ -631,7 +631,7 @@ const openRenewModal = () => {
         <section class="detail-card card">
           <h3 class="card-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
             </svg>
             {{ PAGES.CONTRACTS.MEMBER_INFO }}
           </h3>
@@ -655,7 +655,7 @@ const openRenewModal = () => {
         <section class="detail-card card">
           <h3 class="card-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>
+              <rect width="20" height="14" x="2" y="5" rx="2" /><path d="M2 10h20" />
             </svg>
             {{ PAGES.CONTRACTS.PLAN_INFO }}
           </h3>
@@ -691,7 +691,7 @@ const openRenewModal = () => {
         <section class="detail-card card">
           <h3 class="card-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>
+              <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
             </svg>
             {{ PAGES.CONTRACTS.CONTRACT_DETAILS }}
           </h3>
@@ -723,7 +723,7 @@ const openRenewModal = () => {
         <section v-if="contract.digital_signature" class="detail-card card signature-card">
           <h3 class="card-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
             {{ PAGES.CONTRACTS.E_SIGNATURE }}
           </h3>
@@ -746,7 +746,7 @@ const openRenewModal = () => {
               <div v-if="log.log_type === 'TRANSFER'" class="log-transfer-info">
                 <span class="transfer-from">{{ log.original_member_id?.full_name || '—' }}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                  <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
                 </svg>
                 <span class="transfer-to">{{ log.target_member_id?.full_name || '—' }}</span>
               </div>
@@ -761,13 +761,13 @@ const openRenewModal = () => {
               <div class="log-meta">
                 <span v-if="log.created_by_employee?.full_name" class="log-operator">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
                   </svg>
                   {{ log.created_by_employee.full_name }}
                 </span>
                 <span v-if="log.branch_id?.name" class="log-branch">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
                   {{ log.branch_id.name }}
                 </span>
@@ -786,7 +786,7 @@ const openRenewModal = () => {
           <h2 class="section-title">{{ PAGES.CONTRACTS.PAYMENT_RECORDS }}</h2>
           <NuxtLink :to="`/payments/new?contract=${contract.id}`" class="btn btn-primary btn-small">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14"/><path d="M12 5v14"/>
+              <path d="M5 12h14" /><path d="M12 5v14" />
             </svg>
             {{ PAGES.CONTRACTS.ADD_PAYMENT }}
           </NuxtLink>
@@ -817,7 +817,7 @@ const openRenewModal = () => {
         <div class="modal-content glass-card">
           <div class="modal-icon modal-icon-warning">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>
+              <rect x="14" y="4" width="4" height="16" rx="1" /><rect x="6" y="4" width="4" height="16" rx="1" />
             </svg>
           </div>
           <h3 class="modal-title">{{ PAGES.CONTRACTS.PAUSE_CONTRACT }}</h3>
@@ -854,7 +854,7 @@ const openRenewModal = () => {
         <div class="modal-content glass-card">
           <div class="modal-icon modal-icon-success">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="6 3 20 12 6 21 6 3"/>
+              <polygon points="6 3 20 12 6 21 6 3" />
             </svg>
           </div>
           <h3 class="modal-title">{{ PAGES.CONTRACTS.RESUME_CONTRACT }}</h3>
@@ -876,7 +876,7 @@ const openRenewModal = () => {
         <div class="modal-content glass-card modal-transfer">
           <div class="modal-icon modal-icon-accent">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>
+              <path d="M16 3h5v5" /><path d="M8 3H3v5" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" />
             </svg>
           </div>
           <h3 class="modal-title">{{ PAGES.CONTRACTS.TRANSFER_CONTRACT }}</h3>
@@ -892,9 +892,9 @@ const openRenewModal = () => {
                   <code class="selected-member-code">{{ selectedMember.member_code }}</code>
                 </div>
               </div>
-              <button class="clear-selection-btn" @click="clearSelectedMember" type="button">
+              <button class="clear-selection-btn" type="button" @click="clearSelectedMember">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                  <path d="M18 6 6 18" /><path d="m6 6 12 12" />
                 </svg>
               </button>
             </div>
@@ -907,8 +907,8 @@ const openRenewModal = () => {
                   type="text"
                   class="input"
                   :value="memberSearchQuery"
-                  @input="handleSearchInput"
                   :placeholder="PAGES.CONTRACTS.SEARCH_MEMBER_PLACEHOLDER"
+                  @input="handleSearchInput"
                 />
                 <div v-if="isSearching" class="search-loading">
                   <div class="search-spinner" />
@@ -921,8 +921,8 @@ const openRenewModal = () => {
                   v-for="member in memberSearchResults"
                   :key="member.id"
                   class="search-result-item"
-                  @click="selectMember(member)"
                   type="button"
+                  @click="selectMember(member)"
                 >
                   <div class="result-avatar">{{ member.full_name?.[0] || '?' }}</div>
                   <div class="result-info">
@@ -973,7 +973,7 @@ const openRenewModal = () => {
         <div class="modal-content glass-card">
           <div class="modal-icon modal-icon-error">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>
+              <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />
             </svg>
           </div>
           <h3 class="modal-title">{{ PAGES.CONTRACTS.TERMINATE_CONTRACT }}</h3>
@@ -1021,7 +1021,7 @@ const openRenewModal = () => {
         <div class="modal-content glass-card">
           <div class="modal-icon modal-icon-accent">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M16 16h2"/><path d="M16 12h2"/>
+              <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="M16 16h2" /><path d="M16 12h2" />
             </svg>
           </div>
           <h3 class="modal-title">{{ PAGES.CONTRACTS.EXTEND_CONTRACT }}</h3>
@@ -1080,7 +1080,7 @@ const openRenewModal = () => {
         <div class="modal-content glass-card">
           <div class="modal-icon modal-icon-success">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M12 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z"/><path d="m16 12 5 3-5 3v-6Z"/>
+              <path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3" /><path d="M12 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" /><path d="m16 12 5 3-5 3v-6Z" />
             </svg>
           </div>
           <h3 class="modal-title">{{ PAGES.CONTRACTS.RENEW_CONTRACT }}</h3>

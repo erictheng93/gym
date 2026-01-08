@@ -240,7 +240,7 @@ const handleSubmit = async () => {
       <header class="page-header">
         <button class="back-btn" @click="router.back()">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
           返回
         </button>
@@ -250,8 +250,8 @@ const handleSubmit = async () => {
       <div class="form-hero">
         <div class="hero-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-            <path d="m15 5 4 4"/>
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            <path d="m15 5 4 4" />
           </svg>
         </div>
         <h1 class="text-headline">編輯員工</h1>
@@ -264,7 +264,7 @@ const handleSubmit = async () => {
         <section class="form-section glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
             </svg>
             基本資料
           </h2>
@@ -318,7 +318,7 @@ const handleSubmit = async () => {
         <section class="form-section glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+              <path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />
             </svg>
             組織架構
           </h2>
@@ -361,7 +361,7 @@ const handleSubmit = async () => {
         <section class="form-section glass-card">
           <h2 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+              <rect width="20" height="14" x="2" y="7" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
             </svg>
             任職資訊
           </h2>
@@ -434,15 +434,15 @@ const handleSubmit = async () => {
           <div class="section-header-with-toggle">
             <h2 class="section-title">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
               自訂權限
             </h2>
 
             <label class="toggle-switch">
               <input
-                type="checkbox"
                 v-model="useCustomPermissions"
+                type="checkbox"
                 @change="toggleCustomPermissions"
               />
               <span class="toggle-slider"></span>
@@ -453,7 +453,7 @@ const handleSubmit = async () => {
           <!-- Inherited Permissions Info -->
           <div v-if="!useCustomPermissions" class="info-banner">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+              <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
             </svg>
             <span>此員工使用職位「{{ currentJobTitle.name }}」的預設權限</span>
           </div>
@@ -506,7 +506,7 @@ const handleSubmit = async () => {
                     stroke-linejoin="round"
                     title="已覆寫職位預設權限"
                   >
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
                   </svg>
                 </label>
               </div>
@@ -517,7 +517,7 @@ const handleSubmit = async () => {
         <!-- Error Message -->
         <div v-if="errors.submit" class="submit-error">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+            <circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" />
           </svg>
           {{ errors.submit }}
         </div>
@@ -527,7 +527,7 @@ const handleSubmit = async () => {
           <button type="button" class="btn btn-ghost" @click="router.back()">取消</button>
           <button type="submit" class="btn btn-primary btn-large" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
             {{ isSubmitting ? '更新中...' : '儲存變更' }}
           </button>

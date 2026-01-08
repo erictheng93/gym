@@ -43,7 +43,7 @@ export const useMakeupRequests = () => {
         directus.request(
           readItems('makeup_requests', {
             filter,
-            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name', 'branch.name'],
+            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name', 'branch.name'] as any,
             sort: ['-date_created'],
             limit,
             offset: (page - 1) * limit
@@ -91,7 +91,7 @@ export const useMakeupRequests = () => {
             employee_id: { _in: subordinateIds },
             request_status: { _eq: 'PENDING' }
           },
-          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name', 'branch.name'],
+          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name', 'branch.name'] as any,
           sort: ['-submitted_at']
         })
       )
@@ -276,7 +276,7 @@ export const useMakeupRequests = () => {
     const data = await directus.request(
       readItems('makeup_approval_logs', {
         filter: { makeup_request_id: { _eq: makeupRequestId } },
-        fields: ['*', 'actor.full_name'],
+        fields: ['*', 'actor.full_name'] as any,
         sort: ['date_created']
       })
     )

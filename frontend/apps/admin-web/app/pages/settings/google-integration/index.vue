@@ -12,12 +12,16 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
         </svg>
         <svg v-else-if="configStatus === 'error'" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path
+            stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
         <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path
+            stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
       </div>
       <div class="status-content">
@@ -50,7 +54,8 @@
           <h3>啟用必要的 API</h3>
           <ol>
             <li>在 Google Cloud Console 中，前往「API 和服務」→「程式庫」</li>
-            <li>搜尋並啟用以下 API：
+            <li>
+              搜尋並啟用以下 API：
               <ul>
                 <li>Google Sheets API</li>
                 <li>Google Drive API</li>
@@ -69,10 +74,11 @@
             <li>前往「API 和服務」→「憑證」</li>
             <li>點擊「建立憑證」→「OAuth 用戶端 ID」</li>
             <li>應用程式類型選擇「網頁應用程式」</li>
-            <li>新增已授權的重新導向 URI：
+            <li>
+              新增已授權的重新導向 URI：
               <div class="code-block">
                 <code>{{ redirectUri }}</code>
-                <button @click="copyToClipboard(redirectUri)" class="btn-copy">複製</button>
+                <button class="btn-copy" @click="copyToClipboard(redirectUri)">複製</button>
               </div>
             </li>
             <li>建立後，記下「用戶端 ID」和「用戶端密鑰」</li>
@@ -88,7 +94,7 @@
           <p>在 <code>.env</code> 檔案中加入以下設定：</p>
           <div class="code-block multi-line">
             <pre>{{ envTemplate }}</pre>
-            <button @click="copyToClipboard(envTemplate)" class="btn-copy">複製全部</button>
+            <button class="btn-copy" @click="copyToClipboard(envTemplate)">複製全部</button>
           </div>
         </div>
       </div>
@@ -100,12 +106,12 @@
 
       <div v-if="!isAuthenticated" class="auth-required">
         <p>請先驗證 Google 帳號以使用報表匯出功能</p>
-        <button @click="authenticate" class="btn-google" :disabled="!isConfigured || authLoading">
+        <button class="btn-google" :disabled="!isConfigured || authLoading" @click="authenticate">
           <svg class="google-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
           {{ authLoading ? '驗證中...' : '使用 Google 帳號登入' }}
         </button>
@@ -119,7 +125,7 @@
           <h3>已連接 Google 帳號</h3>
           <p>您可以使用 Google Sheets 匯出功能</p>
         </div>
-        <button @click="logout" class="btn-logout">登出</button>
+        <button class="btn-logout" @click="logout">登出</button>
       </div>
     </div>
 
@@ -129,10 +135,12 @@
       <p>測試 Google Sheets 整合是否正常運作</p>
 
       <div class="test-actions">
-        <button @click="testExport" class="btn-test" :disabled="testLoading">
+        <button class="btn-test" :disabled="testLoading" @click="testExport">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           {{ testLoading ? '測試中...' : '測試匯出' }}
         </button>
@@ -147,8 +155,10 @@
 
         <div v-if="testError" class="test-result error">
           <svg class="error-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path
+              stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           <span>{{ testError }}</span>
         </div>
@@ -161,8 +171,10 @@
       <p>使用 Looker Studio 建立進階報表儀表板</p>
       <a href="/docs/LOOKER_STUDIO_SETUP.md" target="_blank" class="btn-docs">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          <path
+            stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
         </svg>
         查看 Looker Studio 設定指南
       </a>

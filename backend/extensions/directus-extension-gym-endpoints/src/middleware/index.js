@@ -5,3 +5,9 @@
 
 export { createMemberAuthMiddleware } from './member-auth.js';
 export { createAdminNotificationMiddleware } from './admin-auth.js';
+export {
+  createTenantContextMiddleware,
+  createQuotaCheckMiddleware,
+  withTenantScope
+} from './tenant-context.js';
+export { createApiLogger } from './api-logger.js';

@@ -895,7 +895,7 @@ export const PAGES = {
     SELECT_PARENT_PLACEHOLDER: '選擇父類別（留空為主類別）',
     ICON: '圖示',
     COLOR: '主題色',
-    DESCRIPTION: '類別說明',
+    DESCRIPTION_LABEL: '類別說明',
     DESCRIPTION_PLACEHOLDER: '請輸入類別說明（選填）',
     IS_ACTIVE: '啟用狀態',
     REQUIRES_EQUIPMENT: '需要器材',

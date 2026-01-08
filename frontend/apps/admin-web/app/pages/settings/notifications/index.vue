@@ -32,15 +32,15 @@
         <div class="section-header">
           <div class="section-icon line">
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 5.94 2 10.7c0 4.18 3.71 7.68 8.72 8.52.34.07.8.22.92.51.11.26.07.66.04.93l-.15.91c-.05.28-.22 1.08.95.59 1.17-.49 6.31-3.72 8.61-6.36C22.61 13.13 22 11.02 22 10.7 22 5.94 17.52 2 12 2z"/>
+              <path d="M12 2C6.48 2 2 5.94 2 10.7c0 4.18 3.71 7.68 8.72 8.52.34.07.8.22.92.51.11.26.07.66.04.93l-.15.91c-.05.28-.22 1.08.95.59 1.17-.49 6.31-3.72 8.61-6.36C22.61 13.13 22 11.02 22 10.7 22 5.94 17.52 2 12 2z" />
             </svg>
           </div>
           <div>
             <h2>LINE Messaging API</h2>
             <p>用於發送 LINE 通知給已綁定的會員</p>
           </div>
-          <div class="status-badge" :class="config.has_line_config ? 'configured' : 'not-configured'">
-            {{ config.has_line_config ? '已設定' : '未設定' }}
+          <div class="status-badge" :class="notificationConfig.has_line_config ? 'configured' : 'not-configured'">
+            {{ notificationConfig.has_line_config ? '已設定' : '未設定' }}
           </div>
         </div>
 
@@ -48,40 +48,40 @@
           <label>Channel Access Token</label>
           <div class="input-with-action">
             <input
-              :type="showLineToken ? 'text' : 'password'"
               v-model="lineConfig.access_token"
+              :type="showLineToken ? 'text' : 'password'"
               placeholder="輸入 LINE Channel Access Token"
             />
             <button type="button" class="btn-icon" @click="showLineToken = !showLineToken">
               <svg v-if="showLineToken" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                <line x1="1" y1="1" x2="23" y2="23"/>
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                <line x1="1" y1="1" x2="23" y2="23" />
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
               </svg>
             </button>
           </div>
-          <small v-if="config.line_channel_access_token_preview">
-            目前設定: {{ config.line_channel_access_token_preview }}
+          <small v-if="notificationConfig.line_channel_access_token_preview">
+            目前設定: {{ notificationConfig.line_channel_access_token_preview }}
           </small>
         </div>
 
         <div class="form-group">
           <label>Channel Secret (選填)</label>
           <input
-            type="password"
             v-model="lineConfig.channel_secret"
+            type="password"
             placeholder="輸入 LINE Channel Secret"
           />
         </div>
 
         <div class="form-actions">
-          <button class="btn-secondary" @click="testLineConfig" :disabled="isTesting">
+          <button class="btn-secondary" :disabled="isTesting" @click="testLineConfig">
             {{ isTesting ? '測試中...' : '測試連線' }}
           </button>
-          <button class="btn-primary" @click="saveLineConfig" :disabled="isSaving">
+          <button class="btn-primary" :disabled="isSaving" @click="saveLineConfig">
             {{ isSaving ? '儲存中...' : '儲存設定' }}
           </button>
         </div>
@@ -101,15 +101,15 @@
         <div class="section-header">
           <div class="section-icon sms">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </div>
           <div>
             <h2>三竹簡訊 (Mitake)</h2>
             <p>用於發送 OTP 驗證碼和重要通知的備用通道</p>
           </div>
-          <div class="status-badge" :class="config.has_sms_config ? 'configured' : 'not-configured'">
-            {{ config.has_sms_config ? '已設定' : '未設定' }}
+          <div class="status-badge" :class="notificationConfig.has_sms_config ? 'configured' : 'not-configured'">
+            {{ notificationConfig.has_sms_config ? '已設定' : '未設定' }}
           </div>
         </div>
 
@@ -117,17 +117,17 @@
           <div class="form-group">
             <label>帳號</label>
             <input
-              type="text"
               v-model="smsConfig.username"
+              type="text"
               placeholder="三竹簡訊帳號"
             />
-            <small v-if="config.mitake_username">目前設定: {{ config.mitake_username }}</small>
+            <small v-if="notificationConfig.mitake_username">目前設定: {{ notificationConfig.mitake_username }}</small>
           </div>
           <div class="form-group">
             <label>密碼</label>
             <input
-              type="password"
               v-model="smsConfig.password"
+              type="password"
               placeholder="三竹簡訊密碼"
             />
           </div>
@@ -136,8 +136,8 @@
         <div class="form-group">
           <label>發送者名稱 (選填)</label>
           <input
-            type="text"
             v-model="smsConfig.sender_name"
+            type="text"
             placeholder="顯示在簡訊上的發送者名稱"
             maxlength="11"
           />
@@ -145,10 +145,10 @@
         </div>
 
         <div class="form-actions">
-          <button class="btn-secondary" @click="testSmsConfig" :disabled="isTesting">
+          <button class="btn-secondary" :disabled="isTesting" @click="testSmsConfig">
             {{ isTesting ? '測試中...' : '測試連線' }}
           </button>
-          <button class="btn-primary" @click="saveSmsConfig" :disabled="isSaving">
+          <button class="btn-primary" :disabled="isSaving" @click="saveSmsConfig">
             {{ isSaving ? '儲存中...' : '儲存設定' }}
           </button>
         </div>
@@ -170,13 +170,13 @@
           <div class="status-item">
             <span class="status-label">設定啟用</span>
             <label class="toggle">
-              <input type="checkbox" v-model="config.is_active" @change="toggleActive" />
+              <input v-model="notificationConfig.is_active" type="checkbox" @change="toggleActive" />
               <span class="slider"></span>
             </label>
           </div>
           <div class="status-item">
             <span class="status-label">最後更新</span>
-            <span class="status-value">{{ formatDate(config.date_updated) }}</span>
+            <span class="status-value">{{ formatDate(notificationConfig.date_updated) }}</span>
           </div>
         </div>
       </section>
@@ -211,7 +211,7 @@
     <!-- No Branch Selected -->
     <div v-else class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
       </svg>
       <p>請選擇要設定的分店</p>
     </div>
@@ -261,11 +261,8 @@ const smsConfig = ref({
 const lineTestResult = ref<any>(null)
 const smsTestResult = ref<any>(null)
 
-// Computed
-const config_state = computed(() => configData.value)
-
 // Use a getter for template binding
-const config = computed({
+const notificationConfig = computed({
   get: () => configData.value,
   set: (val) => { configData.value = val }
 })

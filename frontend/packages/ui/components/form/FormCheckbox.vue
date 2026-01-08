@@ -72,7 +72,7 @@ const toggle = () => {
         stroke-linejoin="round"
         class="checkbox-icon"
       >
-        <polyline points="20 6 9 17 4 12"/>
+        <polyline points="20 6 9 17 4 12" />
       </svg>
     </div>
     <div v-if="label || description" class="checkbox-content">

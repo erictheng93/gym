@@ -8,12 +8,14 @@
 
       <div v-else-if="error" class="error">
         <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path
+            stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
         </svg>
         <h2>驗證失敗</h2>
         <p>{{ error }}</p>
-        <button @click="closeWindow" class="btn-close">關閉視窗</button>
+        <button class="btn-close" @click="closeWindow">關閉視窗</button>
       </div>
 
       <div v-else class="success">

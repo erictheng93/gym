@@ -8,7 +8,7 @@
           <p class="page-subtitle">Employee Shift Calendar</p>
         </div>
         <div class="header-actions">
-          <button @click="previousMonth" class="btn-nav">
+          <button class="btn-nav" @click="previousMonth">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -16,12 +16,12 @@
           <div class="month-display">
             <span class="month-year">{{ currentMonthYear }}</span>
           </div>
-          <button @click="nextMonth" class="btn-nav">
+          <button class="btn-nav" @click="nextMonth">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
-          <button @click="showAssignModal = true" class="btn-primary">
+          <button class="btn-primary" @click="showAssignModal = true">
             <span class="btn-icon">+</span>
             <span>批量排班</span>
           </button>
@@ -120,8 +120,8 @@
                   <span class="assignment-name">{{ getEmployeeName(assignment.employee_id) }}</span>
                   <span class="assignment-shift">{{ getShiftName(assignment.shift_schedule_id) }}</span>
                   <button
-                    @click.stop="removeAssignment(assignment.id)"
                     class="remove-btn"
+                    @click.stop="removeAssignment(assignment.id)"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="18" y1="6" x2="6" y2="18" />
@@ -137,8 +137,8 @@
         <!-- Selection Info -->
         <div v-if="selectedDates.length > 0" class="selection-info">
           <span class="selection-text">已選擇 {{ selectedDates.length }} 個日期</span>
-          <button @click="clearSelection" class="btn-text">清除選擇</button>
-          <button @click="showBatchAssignModal = true" class="btn-primary-sm">批量指派</button>
+          <button class="btn-text" @click="clearSelection">清除選擇</button>
+          <button class="btn-primary-sm" @click="showBatchAssignModal = true">批量指派</button>
         </div>
       </main>
     </div>
@@ -149,7 +149,7 @@
         <div class="modal-container" @click.stop>
           <div class="modal-header">
             <h2 class="modal-title">批量指派班表</h2>
-            <button @click="showBatchAssignModal = false" class="btn-close">
+            <button class="btn-close" @click="showBatchAssignModal = false">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -157,7 +157,7 @@
             </button>
           </div>
 
-          <form @submit.prevent="batchAssignShifts" class="modal-form">
+          <form class="modal-form" @submit.prevent="batchAssignShifts">
             <div class="form-group">
               <label class="form-label">選擇員工</label>
               <select v-model="batchAssignData.employee_id" class="form-select" required>
@@ -188,7 +188,7 @@
             </div>
 
             <div class="form-actions">
-              <button type="button" @click="showBatchAssignModal = false" class="btn-secondary">取消</button>
+              <button type="button" class="btn-secondary" @click="showBatchAssignModal = false">取消</button>
               <button type="submit" class="btn-primary">確認指派</button>
             </div>
           </form>

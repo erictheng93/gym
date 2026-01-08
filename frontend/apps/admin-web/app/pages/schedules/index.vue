@@ -7,7 +7,7 @@
           <h1 class="page-title">班表管理</h1>
           <p class="page-subtitle">Shift Schedules</p>
         </div>
-        <button @click="openCreateModal" class="btn-primary">
+        <button class="btn-primary" @click="openCreateModal">
           <span class="btn-icon">+</span>
           <span>新增班表</span>
         </button>
@@ -30,13 +30,13 @@
             </span>
           </div>
           <div class="card-actions">
-            <button @click="editShift(shift)" class="btn-icon-ghost" title="編輯">
+            <button class="btn-icon-ghost" title="編輯" @click="editShift(shift)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
             </button>
-            <button @click="deleteShift(shift.id)" class="btn-icon-ghost btn-danger" title="刪除">
+            <button class="btn-icon-ghost btn-danger" title="刪除" @click="deleteShift(shift.id)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -94,7 +94,7 @@
       <div class="empty-icon">📋</div>
       <h3 class="empty-title">尚無班表</h3>
       <p class="empty-description">建立第一個班表以開始管理員工排班</p>
-      <button @click="openCreateModal" class="btn-secondary">新增班表</button>
+      <button class="btn-secondary" @click="openCreateModal">新增班表</button>
     </div>
 
     <!-- Create/Edit Modal -->
@@ -103,7 +103,7 @@
         <div class="modal-container" @click.stop>
           <div class="modal-header">
             <h2 class="modal-title">{{ editingShift ? '編輯班表' : '新增班表' }}</h2>
-            <button @click="closeModal" class="btn-close">
+            <button class="btn-close" @click="closeModal">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -111,7 +111,7 @@
             </button>
           </div>
 
-          <form @submit.prevent="saveShift" class="modal-form">
+          <form class="modal-form" @submit.prevent="saveShift">
             <div class="form-group">
               <label class="form-label">班表名稱</label>
               <input
@@ -199,9 +199,9 @@
                   v-for="day in allDays"
                   :key="day.value"
                   type="button"
-                  @click="toggleDay(day.value)"
                   class="day-selector-btn"
                   :class="{ active: formData.applicable_days.includes(day.value) }"
+                  @click="toggleDay(day.value)"
                 >
                   {{ day.label }}
                 </button>
@@ -217,7 +217,7 @@
             </div>
 
             <div class="form-actions">
-              <button type="button" @click="closeModal" class="btn-secondary">取消</button>
+              <button type="button" class="btn-secondary" @click="closeModal">取消</button>
               <button type="submit" class="btn-primary">
                 {{ editingShift ? '更新' : '新增' }}
               </button>
