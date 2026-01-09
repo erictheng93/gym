@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { computed as vueComputed, nextTick, ref, reactive } from 'vue'
+import { computed as vueComputed, computed, nextTick, ref, reactive } from 'vue'
 import PlansNew from './new.vue'
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
 
@@ -38,7 +38,7 @@ const mockToast = {
 }
 vi.stubGlobal('useToast', () => mockToast)
 
-// Mock useFormValidation
+// Mock useZodFormValidation
 const mockErrors = ref<Record<string, string>>({})
 const mockValidate = vi.fn().mockReturnValue(true)
 const mockSetError = vi.fn().mockImplementation((field: string, message: string) => {
@@ -48,24 +48,63 @@ const mockClearErrors = vi.fn().mockImplementation(() => {
   mockErrors.value = {}
 })
 
-vi.stubGlobal('useFormValidation', () => ({
-  errors: mockErrors,
-  validate: mockValidate,
-  setError: mockSetError,
-  clearErrors: mockClearErrors
+vi.mock('~/composables/core/useZodFormValidation', () => ({
+  useZodFormValidation: (_schema: unknown, initialData: unknown) => ({
+    formData: reactive({ ...(initialData as object) }),
+    errors: mockErrors,
+    isValid: computed(() => true),
+    hasErrors: computed(() => false),
+    validate: mockValidate,
+    validateField: vi.fn(),
+    clearErrors: mockClearErrors,
+    clearFieldError: vi.fn(),
+    setError: mockSetError,
+    reset: vi.fn(),
+    setFormData: vi.fn()
+  })
 }))
 
-// Mock validation rules
-vi.stubGlobal('required', (message: string) => () => message)
-vi.stubGlobal('minLength', (min: number, message: string) => () => message)
-vi.stubGlobal('maxLength', (max: number, message: string) => () => message)
-vi.stubGlobal('positive', (message: string) => () => message)
-vi.stubGlobal('between', (min: number, max: number, message: string) => () => message)
+// Mock useFormSubmit
+const mockIsSubmitting = ref(false)
+const mockSubmit = vi.fn().mockImplementation(async (fn: () => Promise<unknown>, options?: { successMessage?: string; errorMessage?: string; onSuccess?: () => void; onError?: (error: Error) => void }) => {
+  mockIsSubmitting.value = true
+  try {
+    const result = await fn()
+    if (result) {
+      if (options?.successMessage) {
+        mockToast.success(options.successMessage)
+      }
+      if (options?.onSuccess) {
+        options.onSuccess()
+      }
+    }
+    return result
+  } catch (error) {
+    if (options?.errorMessage) {
+      mockToast.error(options.errorMessage)
+    }
+    if (options?.onError) {
+      options.onError(error as Error)
+    }
+    return null
+  } finally {
+    mockIsSubmitting.value = false
+  }
+})
+
+vi.mock('~/composables/useFormSubmit', () => ({
+  useFormSubmit: () => ({
+    isSubmitting: mockIsSubmitting,
+    submitError: ref(null),
+    submit: mockSubmit
+  })
+}))
 
 describe('Plans New Page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockErrors.value = {}
+    mockIsSubmitting.value = false
   })
 
   const mountPage = () => {

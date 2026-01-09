@@ -1,7 +1,13 @@
 <script setup lang="ts">
+/**
+ * 新增會籍方案頁面
+ *
+ * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
+ */
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
-import type { MembershipPlan } from '~/types/directus'
-// Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
+import { createPlanSchema, type CreatePlanInput } from '~/schemas/plan.schema'
+import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
+import { useFormSubmit } from '~/composables/useFormSubmit'
 
 definePageMeta({
   middleware: 'auth'
@@ -10,22 +16,29 @@ definePageMeta({
 const router = useRouter()
 const { createPlan } = usePlans()
 
-const isSubmitting = ref(false)
-
-const form = reactive({
+// Form state with Zod validation
+const initialData: CreatePlanInput = {
   name: '',
-  plan_type: 'TIME_BASED' as 'TIME_BASED' | 'COUNT_BASED',
+  plan_type: 'TIME_BASED',
   price: 0,
   duration_months: 1,
   class_counts: 10,
   allow_transfer: false,
   allow_pause: true,
   description: '',
-  status: 'active' as 'active' | 'archived'
-})
+  status: 'active'
+}
 
-// Form validation - 使用 composable
-const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+const {
+  formData: form,
+  errors,
+  validate,
+  setError,
+  clearErrors
+} = useZodFormValidation(createPlanSchema, initialData)
+
+// Form submission helper
+const { isSubmitting, submit } = useFormSubmit()
 
 const planTypeOptions = [
   { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },
@@ -35,53 +48,36 @@ const planTypeOptions = [
 const handleSubmit = async () => {
   clearErrors()
 
-  // 基本驗證規則
-  const baseRules = {
-    name: [
-      required(PAGES.PLANS.ERROR_NAME_REQUIRED),
-      minLength(2, '方案名稱至少需要 2 個字'),
-      maxLength(50, '方案名稱不能超過 50 個字')
-    ],
-    plan_type: [required(PAGES.PLANS.ERROR_TYPE_REQUIRED)],
-    price: [
-      positive(PAGES.PLANS.ERROR_PRICE_POSITIVE),
-      between(1, 10000000, '價格需介於 1 至 10,000,000 之間')
-    ],
-    description: [maxLength(500, '描述不能超過 500 個字')]
-  }
+  // 使用 Zod schema 驗證
+  if (!validate()) return
 
-  // 根據方案類型添加額外驗證
-  const typeSpecificRules = form.plan_type === 'TIME_BASED'
-    ? { duration_months: [positive(PAGES.PLANS.ERROR_DURATION_POSITIVE), between(1, 120, '月數需介於 1 至 120 之間')] }
-    : { class_counts: [positive(PAGES.PLANS.ERROR_CLASS_COUNTS_POSITIVE), between(1, 9999, '堂數需介於 1 至 9999 之間')] }
+  await submit(
+    async () => {
+      const planData = {
+        name: form.name.trim(),
+        plan_type: form.plan_type,
+        price: form.price,
+        duration_months: form.plan_type === 'TIME_BASED' ? form.duration_months : null,
+        class_counts: form.plan_type === 'COUNT_BASED' ? form.class_counts : null,
+        allow_transfer: form.allow_transfer,
+        allow_pause: form.allow_pause,
+        description: form.description?.trim() || null,
+        status: form.status
+      }
 
-  const isValid = validate(form, { ...baseRules, ...typeSpecificRules })
-  if (!isValid) return
-
-  isSubmitting.value = true
-  try {
-    const planData: Partial<MembershipPlan> = {
-      name: form.name.trim(),
-      plan_type: form.plan_type,
-      price: form.price,
-      duration_months: form.plan_type === 'TIME_BASED' ? form.duration_months : null,
-      class_counts: form.plan_type === 'COUNT_BASED' ? form.class_counts : null,
-      allow_transfer: form.allow_transfer,
-      allow_pause: form.allow_pause,
-      description: form.description.trim() || null,
-      status: form.status
+      const result = await createPlan(planData)
+      if (!result) {
+        throw new Error(MESSAGES.ERRORS.PLAN_CREATE_FAILED)
+      }
+      return result
+    },
+    {
+      successMessage: MESSAGES.SUCCESS.PLAN_CREATED,
+      errorMessage: MESSAGES.ERRORS.PLAN_CREATE_FAILED,
+      onSuccess: () => router.push('/plans'),
+      onError: (error) => setError('submit', PAGES.PLANS.ERROR_CREATE_FAILED)
     }
-
-    await createPlan(planData)
-    useToast().success(MESSAGES.SUCCESS.PLAN_CREATED)
-    router.push('/plans')
-  } catch (error) {
-    console.error('Failed to create plan:', error)
-    useToast().error(MESSAGES.ERRORS.PLAN_CREATE_FAILED)
-    setError('submit', PAGES.PLANS.ERROR_CREATE_FAILED)
-  } finally {
-    isSubmitting.value = false
-  }
+  )
 }
 
 const formatPrice = (value: number) => {

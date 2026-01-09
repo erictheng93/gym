@@ -9,7 +9,7 @@ import { VALIDATION } from '~/constants'
 export const PlanTypeEnum = z.enum(['TIME_BASED', 'COUNT_BASED'])
 
 // 方案狀態枚舉
-export const PlanStatusEnum = z.enum(['enabled', 'archived'])
+export const PlanStatusEnum = z.enum(['active', 'archived'])
 
 /**
  * 方案基本資料 Schema
@@ -41,9 +41,9 @@ export const planBaseSchema = z.object({
     .nullable()
     .optional(),
 
-  is_transferable: z.boolean().default(false),
+  allow_transfer: z.boolean().default(false),
 
-  is_pausable: z.boolean().default(false),
+  allow_pause: z.boolean().default(true),
 
   description: z
     .string()
@@ -51,7 +51,7 @@ export const planBaseSchema = z.object({
     .nullable()
     .optional(),
 
-  status: PlanStatusEnum.default('enabled'),
+  status: PlanStatusEnum.default('active'),
 })
 
 /**

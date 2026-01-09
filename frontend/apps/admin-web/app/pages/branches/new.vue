@@ -2,9 +2,12 @@
 /**
  * 新增分店頁面
  *
- * 使用 @gym-nexus/ui 表單組件重構
+ * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+import { createBranchSchema, type CreateBranchInput } from '~/schemas/branch.schema'
+import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
+import { useFormSubmit } from '~/composables/useFormSubmit'
 
 definePageMeta({
   middleware: 'auth'
@@ -13,19 +16,26 @@ definePageMeta({
 const router = useRouter()
 const { createBranch } = useBranches()
 
-// Form state
-const isSubmitting = ref(false)
-const form = reactive({
+// Form state with Zod validation
+const initialData: CreateBranchInput = {
   name: '',
-  type: 'BRANCH' as 'HEADQUARTER' | 'BRANCH',
+  type: 'BRANCH',
   address: '',
   phone: '',
   tax_id: '',
-  status: 'active' as 'active' | 'archived'
-})
+  status: 'active'
+}
 
-// Form validation
-const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+const {
+  formData: form,
+  errors,
+  validate,
+  setError,
+  clearErrors
+} = useZodFormValidation(createBranchSchema, initialData)
+
+// Form submission helper
+const { isSubmitting, submit } = useFormSubmit()
 
 // Options
 const branchTypeOptions = [
@@ -42,34 +52,33 @@ const statusOptions = [
 const handleSubmit = async () => {
   clearErrors()
 
-  const isValid = validate(form, {
-    name: [required(PAGES.BRANCHES.ERROR_NAME_REQUIRED)],
-    type: [required(PAGES.BRANCHES.ERROR_TYPE_REQUIRED)]
-  })
+  // 使用 Zod schema 驗證
+  if (!validate()) return
 
-  if (!isValid) return
+  await submit(
+    async () => {
+      const branchData = {
+        name: form.name.trim(),
+        type: form.type,
+        address: form.address?.trim() || null,
+        phone: form.phone?.trim() || null,
+        tax_id: form.tax_id?.trim() || null,
+        status: form.status
+      }
 
-  isSubmitting.value = true
-  try {
-    const branchData = {
-      name: form.name.trim(),
-      type: form.type,
-      address: form.address.trim() || null,
-      phone: form.phone.trim() || null,
-      tax_id: form.tax_id.trim() || null,
-      status: form.status
+      const result = await createBranch(branchData)
+      if (!result) {
+        throw new Error(MESSAGES.ERRORS.BRANCH_CREATE_FAILED)
+      }
+      return result
+    },
+    {
+      successMessage: MESSAGES.SUCCESS.BRANCH_CREATED,
+      errorMessage: MESSAGES.ERRORS.BRANCH_CREATE_FAILED,
+      onSuccess: () => router.push('/branches'),
+      onError: (error) => setError('submit', PAGES.BRANCHES.ERROR_CREATE_FAILED)
     }
-
-    await createBranch(branchData)
-    useToast().success(MESSAGES.SUCCESS.BRANCH_CREATED)
-    router.push('/branches')
-  } catch (error) {
-    console.error('Failed to create branch:', error)
-    useToast().error(MESSAGES.ERRORS.BRANCH_CREATE_FAILED)
-    setError('submit', PAGES.BRANCHES.ERROR_CREATE_FAILED)
-  } finally {
-    isSubmitting.value = false
-  }
+  )
 }
 </script>
 

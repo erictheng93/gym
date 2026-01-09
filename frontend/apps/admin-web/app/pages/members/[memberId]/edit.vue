@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { MESSAGES, PAGES, LABELS } from '~/constants'
-// Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
+import { updateMemberSchema, type UpdateMemberInput } from '~/schemas/member.schema'
+import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
+import { useFormSubmit } from '~/composables/useFormSubmit'
 
 definePageMeta({
   middleware: 'auth',
@@ -14,26 +16,35 @@ const { getMember, updateMember } = useMembers()
 const { branches, fetchBranches } = useBranches()
 
 const isLoading = ref(true)
-const isSubmitting = ref(false)
 
 const memberId = computed(() => route.params.memberId as string)
 
-const form = reactive({
+// Form state with Zod validation
+const initialData: UpdateMemberInput = {
   full_name: '',
   phone: '',
   email: '',
-  gender: '' as 'M' | 'F' | 'O' | '',
+  gender: null,
   birthday: '',
-  height: null as number | null,
+  height: null,
   branch_id: '',
   emergency_contact: '',
   emergency_phone: '',
-  tags: [] as string[],
-  member_status: 'ACTIVE' as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'
-})
+  tags: [],
+  member_status: 'ACTIVE'
+}
 
-// Form validation - 使用 composable
-const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+const {
+  formData: form,
+  errors,
+  validate,
+  setError,
+  clearErrors,
+  setFormData
+} = useZodFormValidation(updateMemberSchema, initialData)
+
+// Form submission helper
+const { isSubmitting, submit } = useFormSubmit()
 
 const genderOptions = [
   { value: 'M', label: '男' },
@@ -59,17 +70,19 @@ const loadMember = async () => {
   isLoading.value = true
   try {
     const member = await getMember(memberId.value)
-    form.full_name = member.full_name
-    form.phone = member.phone || ''
-    form.email = member.email || ''
-    form.gender = member.gender || ''
-    form.birthday = member.birthday || ''
-    form.height = member.height
-    form.branch_id = member.branch_id || ''
-    form.emergency_contact = member.emergency_contact || ''
-    form.emergency_phone = member.emergency_phone || ''
-    form.tags = member.tags || []
-    form.member_status = member.member_status
+    setFormData({
+      full_name: member.full_name,
+      phone: member.phone || '',
+      email: member.email || '',
+      gender: member.gender || null,
+      birthday: member.birthday || '',
+      height: member.height,
+      branch_id: member.branch_id || '',
+      emergency_contact: member.emergency_contact || '',
+      emergency_phone: member.emergency_phone || '',
+      tags: member.tags || [],
+      member_status: member.member_status
+    })
   } catch (error) {
     console.error('Failed to load member:', error)
     useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
@@ -85,48 +98,32 @@ onMounted(async () => {
 const handleSubmit = async () => {
   clearErrors()
 
-  const isValid = validate(form, {
-    full_name: [
-      required('請輸入會員姓名'),
-      minLength(2, '姓名至少需要 2 個字'),
-      maxLength(50, '姓名不能超過 50 個字')
-    ],
-    email: [email('Email 格式不正確')],
-    phone: [
-      phone('電話格式不正確'),
-      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
-    ],
-    emergency_phone: [
-      phone('緊急聯絡電話格式不正確'),
-      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
-    ],
-    birthday: [dateNotFuture('生日不能是未來日期')],
-    height: [between(50, 300, '身高需介於 50-300 公分')],
-    tags: [arrayLength(10, '最多只能有 10 個標籤')]
-  })
+  // 使用 Zod schema 驗證
+  if (!validate()) return
 
-  if (!isValid) return
+  await submit(
+    async () => {
+      const memberData = {
+        ...form,
+        gender: form.gender || null,
+        birthday: form.birthday || null,
+        height: form.height || null,
+        branch_id: form.branch_id || null
+      }
 
-  isSubmitting.value = true
-  try {
-    const memberData = {
-      ...form,
-      gender: form.gender || null,
-      birthday: form.birthday || null,
-      height: form.height || null,
-      branch_id: form.branch_id || null
+      const result = await updateMember(memberId.value, memberData)
+      if (!result) {
+        throw new Error(MESSAGES.ERRORS.MEMBER_UPDATE_FAILED)
+      }
+      return result
+    },
+    {
+      successMessage: MESSAGES.SUCCESS.MEMBER_UPDATED,
+      errorMessage: MESSAGES.ERRORS.MEMBER_UPDATE_FAILED,
+      onSuccess: () => router.push(`/members/${memberId.value}`),
+      onError: (error) => setError('submit', error.message)
     }
-
-    await updateMember(memberId.value, memberData)
-    useToast().success(MESSAGES.SUCCESS.MEMBER_UPDATED)
-    router.push(`/members/${memberId.value}`)
-  } catch (error) {
-    console.error('Failed to update member:', error)
-    useToast().error(MESSAGES.ERRORS.MEMBER_UPDATE_FAILED)
-    setError('submit', '更新會員失敗，請稍後再試')
-  } finally {
-    isSubmitting.value = false
-  }
+  )
 }
 </script>
 
