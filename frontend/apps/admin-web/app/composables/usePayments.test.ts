@@ -162,18 +162,6 @@ describe('usePayments', () => {
       expect(totalCount.value).toBe(1)
     })
 
-    it('應該在計數失敗時使用資料長度作為總數', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockPayments)
-        .mockRejectedValueOnce(new Error('Count failed'))
-
-      const { fetchPayments, totalCount } = usePayments()
-
-      await fetchPayments()
-
-      expect(totalCount.value).toBe(mockPayments.length)
-    })
-
     it('應該處理取得失敗的情況', async () => {
       mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
 
