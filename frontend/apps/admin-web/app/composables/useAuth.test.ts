@@ -249,7 +249,11 @@ describe('useAuth', () => {
         job_title: { name: '經理' }
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce([mockEmployee])
+      // First mock: readMe for session verification
+      // Second mock: fetchCurrentEmployee
+      mockDirectusInstance.request
+        .mockResolvedValueOnce({ id: 'user-1' }) // readMe response
+        .mockResolvedValueOnce([mockEmployee]) // fetchCurrentEmployee response
 
       const { user, currentEmployee, checkAuth } = useAuth()
       user.value = { id: 'user-1', email: 'test@example.com' } as any
@@ -262,6 +266,9 @@ describe('useAuth', () => {
     })
 
     it('應該在用戶和員工都存在時返回 true', async () => {
+      // Mock readMe for session verification (always called)
+      mockDirectusInstance.request.mockResolvedValueOnce({ id: 'user-1' })
+
       const { user, currentEmployee, checkAuth } = useAuth()
       user.value = { id: 'user-1', email: 'test@example.com' } as any
       currentEmployee.value = { id: 'emp-1', full_name: 'Test User' } as any
@@ -269,7 +276,8 @@ describe('useAuth', () => {
       const result = await checkAuth()
 
       expect(result).toBe(true)
-      expect(mockDirectusInstance.request).not.toHaveBeenCalled()
+      // readMe is called once for session verification
+      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
     })
 
     it('應該在沒有用戶時嘗試取得用戶資訊', async () => {

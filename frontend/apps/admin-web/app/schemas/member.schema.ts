@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod'
+import { VALIDATION } from '~/constants'
 
 // 電話驗證正則表達式
 const phoneRegex = /^[0-9]{8,15}$/
@@ -18,19 +19,19 @@ export const GenderEnum = z.enum(['M', 'F', 'O'])
  */
 export const memberBaseSchema = z.object({
   full_name: z
-    .string({ required_error: '請輸入會員姓名' })
-    .min(2, '姓名至少需要 2 個字')
-    .max(50, '姓名不能超過 50 個字'),
+    .string({ required_error: VALIDATION.REQUIRED })
+    .min(2, VALIDATION.NAME_MIN)
+    .max(50, VALIDATION.NAME_MAX),
 
   phone: z
     .string()
-    .regex(phoneRegex, '請輸入有效的電話號碼（8-15 位數字）')
+    .regex(phoneRegex, VALIDATION.PHONE_INVALID)
     .nullable()
     .optional(),
 
   email: z
     .string()
-    .email('請輸入有效的電子郵件')
+    .email(VALIDATION.EMAIL_INVALID)
     .nullable()
     .optional()
     .or(z.literal('')),
@@ -45,33 +46,33 @@ export const memberBaseSchema = z.object({
         const date = new Date(val)
         return date <= new Date()
       },
-      { message: '生日不能是未來日期' }
+      { message: VALIDATION.DATE_NOT_FUTURE }
     )
     .nullable()
     .optional(),
 
   height: z
     .number()
-    .min(50, '身高至少 50 公分')
-    .max(300, '身高不能超過 300 公分')
+    .min(50, VALIDATION.HEIGHT_MIN)
+    .max(300, VALIDATION.HEIGHT_MAX)
     .nullable()
     .optional(),
 
   branch_id: z
     .string()
-    .uuid('請選擇有效的分店')
+    .uuid(VALIDATION.BRANCH_INVALID)
     .nullable()
     .optional(),
 
   emergency_contact: z
     .string()
-    .max(50, '緊急聯絡人姓名不能超過 50 個字')
+    .max(50, VALIDATION.EMERGENCY_CONTACT_MAX)
     .nullable()
     .optional(),
 
   emergency_phone: z
     .string()
-    .regex(phoneRegex, '請輸入有效的緊急聯絡電話')
+    .regex(phoneRegex, VALIDATION.PHONE_INVALID)
     .nullable()
     .optional()
     .or(z.literal('')),
@@ -83,7 +84,7 @@ export const memberBaseSchema = z.object({
 
   sales_person_id: z
     .string()
-    .uuid('請選擇有效的業務人員')
+    .uuid(VALIDATION.UUID_INVALID)
     .nullable()
     .optional(),
 })
@@ -93,8 +94,8 @@ export const memberBaseSchema = z.object({
  */
 export const createMemberSchema = memberBaseSchema.extend({
   branch_id: z
-    .string({ required_error: '請選擇分店' })
-    .uuid('請選擇有效的分店'),
+    .string({ required_error: VALIDATION.BRANCH_REQUIRED })
+    .uuid(VALIDATION.BRANCH_INVALID),
 })
 
 /**

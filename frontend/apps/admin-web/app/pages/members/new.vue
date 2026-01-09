@@ -2,11 +2,13 @@
 /**
  * 新增會員頁面
  *
- * 使用 @gym-nexus/ui 表單組件重構
+ * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
 import { MESSAGES, PAGES, LABELS } from '~/constants'
 import { useTenant } from '@gym-nexus/shared'
-// Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
+import { createMemberSchema, type CreateMemberInput } from '~/schemas/member.schema'
+import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
+import { useFormSubmit } from '~/composables/useFormSubmit'
 
 definePageMeta({
   middleware: 'auth'
@@ -19,24 +21,30 @@ const { branches, fetchBranches } = useBranches()
 // 租戶配額管理
 const { canCreate, fetchTenantInfo, fetchTenantQuota, isQuotaNearLimit, getQuotaUsagePercent } = useTenant()
 
-// Form state
-const isSubmitting = ref(false)
-const form = reactive({
+// Form state with Zod validation
+const initialData: CreateMemberInput = {
   full_name: '',
   phone: '',
   email: '',
-  gender: '' as 'M' | 'F' | 'O' | '',
+  gender: null,
   birthday: '',
-  height: null as number | null,
+  height: null,
   branch_id: '',
   emergency_contact: '',
   emergency_phone: '',
-  tags: [] as string[],
-  member_status: 'ACTIVE' as const
-})
+  tags: []
+}
 
-// Form validation
-const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
+const {
+  formData: form,
+  errors,
+  validate,
+  setError,
+  clearErrors
+} = useZodFormValidation(createMemberSchema, initialData)
+
+// Form submission helper
+const { isSubmitting, submit } = useFormSubmit()
 
 // Options
 const genderOptions = [
@@ -73,49 +81,33 @@ const handleSubmit = async () => {
     return
   }
 
-  const isValid = validate(form, {
-    full_name: [
-      required('請輸入會員姓名'),
-      minLength(2, '姓名至少需要 2 個字'),
-      maxLength(50, '姓名不能超過 50 個字')
-    ],
-    email: [email('Email 格式不正確')],
-    phone: [
-      phone('電話格式不正確'),
-      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
-    ],
-    emergency_phone: [
-      phone('緊急聯絡電話格式不正確'),
-      phoneLength(8, 15, '電話號碼需為 8-15 位數字')
-    ],
-    birthday: [dateNotFuture('生日不能是未來日期')],
-    height: [between(50, 300, '身高需介於 50-300 公分')],
-    tags: [arrayLength(10, '最多只能有 10 個標籤')]
-  })
+  // 使用 Zod schema 驗證
+  if (!validate()) return
 
-  if (!isValid) return
+  await submit(
+    async () => {
+      const memberData = {
+        ...form,
+        gender: form.gender || null,
+        birthday: form.birthday || null,
+        height: form.height || null,
+        branch_id: form.branch_id || null,
+        join_date: new Date().toISOString().split('T')[0]
+      }
 
-  isSubmitting.value = true
-  try {
-    const memberData = {
-      ...form,
-      gender: form.gender || null,
-      birthday: form.birthday || null,
-      height: form.height || null,
-      branch_id: form.branch_id || null,
-      join_date: new Date().toISOString().split('T')[0]
+      const result = await createMember(memberData)
+      if (!result) {
+        throw new Error(MESSAGES.ERRORS.MEMBER_CREATE_FAILED)
+      }
+      return result
+    },
+    {
+      successMessage: MESSAGES.SUCCESS.MEMBER_CREATED,
+      errorMessage: MESSAGES.ERRORS.MEMBER_CREATE_FAILED,
+      onSuccess: () => router.push('/members'),
+      onError: (error) => setError('submit', error.message)
     }
-
-    await createMember(memberData)
-    useToast().success(MESSAGES.SUCCESS.MEMBER_CREATED)
-    router.push('/members')
-  } catch (error) {
-    console.error('Failed to create member:', error)
-    useToast().error(MESSAGES.ERRORS.MEMBER_CREATE_FAILED)
-    setError('submit', '建立會員失敗，請稍後再試')
-  } finally {
-    isSubmitting.value = false
-  }
+  )
 }
 </script>
 

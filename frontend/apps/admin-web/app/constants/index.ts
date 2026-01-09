@@ -1107,6 +1107,73 @@ export const TABLE = {
 } as const
 
 // ============================================
+// Form Validation Messages
+// ============================================
+export const VALIDATION = {
+  // Required
+  REQUIRED: '此欄位為必填',
+
+  // Name
+  NAME_MIN: '姓名至少需要 2 個字',
+  NAME_MAX: '姓名不能超過 50 個字',
+
+  // Email
+  EMAIL_INVALID: '請輸入有效的電子郵件',
+
+  // Phone
+  PHONE_INVALID: '請輸入有效的電話號碼（8-15 位數字）',
+  PHONE_FORMAT: '電話格式不正確',
+
+  // Date
+  DATE_NOT_FUTURE: '日期不能是未來日期',
+  DATE_NOT_PAST: '日期不能是過去日期',
+  DATE_RANGE_INVALID: '結束日期必須晚於或等於開始日期',
+
+  // Amount/Number
+  AMOUNT_POSITIVE: '金額必須大於 0',
+  AMOUNT_RANGE: '金額需介於 1 至 10,000,000 之間',
+  NUMBER_POSITIVE: '數值必須大於 0',
+  NUMBER_NON_NEGATIVE: '數值不能為負數',
+
+  // Height
+  HEIGHT_MIN: '身高至少 50 公分',
+  HEIGHT_MAX: '身高不能超過 300 公分',
+
+  // UUID
+  UUID_INVALID: '無效的 ID 格式',
+
+  // Branch
+  BRANCH_REQUIRED: '請選擇分店',
+  BRANCH_INVALID: '請選擇有效的分店',
+
+  // Plan
+  PLAN_REQUIRED: '請選擇方案',
+  PLAN_PARAM_REQUIRED: '請填寫對應的方案參數',
+  DURATION_POSITIVE: '期限必須大於 0',
+  DURATION_MAX: '期限不能超過 120 個月',
+  CLASS_COUNTS_POSITIVE: '堂數必須大於 0',
+  CLASS_COUNTS_MAX: '堂數不能超過 9999',
+
+  // Member
+  MEMBER_REQUIRED: '請選擇會員',
+  EMERGENCY_CONTACT_MAX: '緊急聯絡人姓名不能超過 50 個字',
+
+  // Description
+  DESCRIPTION_MAX: '說明不能超過 500 個字',
+  NOTES_MAX: '備註不能超過 500 個字',
+
+  // Tags
+  TAGS_MAX: '最多只能有 10 個標籤',
+
+  // Tax ID
+  TAX_ID_INVALID: '統一編號格式不正確',
+  TAX_ID_LENGTH: '統一編號需為 8 位數字',
+
+  // Signature
+  SIGNATURE_REQUIRED: '請簽名確認',
+} as const
+
+// ============================================
 // API Endpoints (relative paths)
 // ============================================
 export const API = {

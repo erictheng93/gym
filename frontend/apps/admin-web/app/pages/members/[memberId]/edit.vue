@@ -32,8 +32,6 @@ const form = reactive({
   member_status: 'ACTIVE' as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'
 })
 
-const newTag = ref('')
-
 // Form validation - 使用 composable
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
 
@@ -44,11 +42,18 @@ const genderOptions = [
 ]
 
 const statusOptions = [
-  { value: 'ACTIVE', label: '有效', class: 'status-active' },
-  { value: 'EXPIRED', label: '過期', class: 'status-expired' },
-  { value: 'SUSPENDED', label: '暫停', class: 'status-suspended' },
-  { value: 'BANNED', label: '停權', class: 'status-banned' }
+  { value: 'ACTIVE', label: '有效' },
+  { value: 'EXPIRED', label: '過期' },
+  { value: 'SUSPENDED', label: '暫停' },
+  { value: 'BANNED', label: '停權' }
 ]
+
+const branchOptions = computed(() =>
+  branches.value.map(branch => ({
+    value: branch.id,
+    label: branch.name
+  }))
+)
 
 const loadMember = async () => {
   isLoading.value = true
@@ -76,18 +81,6 @@ const loadMember = async () => {
 onMounted(async () => {
   await Promise.all([loadMember(), fetchBranches()])
 })
-
-const addTag = () => {
-  const tag = newTag.value.trim()
-  if (tag && !form.tags.includes(tag)) {
-    form.tags.push(tag)
-    newTag.value = ''
-  }
-}
-
-const removeTag = (tag: string) => {
-  form.tags = form.tags.filter(t => t !== tag)
-}
 
 const handleSubmit = async () => {
   clearErrors()
@@ -180,81 +173,48 @@ const handleSubmit = async () => {
           </h2>
 
           <div class="form-grid">
-            <div class="input-group required">
-              <label class="input-label">姓名</label>
-              <input
-                v-model="form.full_name"
-                type="text"
-                class="input"
-                :class="{ 'input-error': errors.full_name }"
-                placeholder="請輸入會員姓名"
-              />
-              <span v-if="errors.full_name" class="error-text">{{ errors.full_name }}</span>
-            </div>
+            <FormInput
+              v-model="form.full_name"
+              label="姓名"
+              placeholder="請輸入會員姓名"
+              :required="true"
+              :error="errors.full_name"
+            />
 
-            <div class="input-group">
-              <label class="input-label">會員狀態</label>
-              <select v-model="form.member_status" class="input">
-                <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-            </div>
+            <FormSelect
+              v-model="form.member_status"
+              label="會員狀態"
+              :options="statusOptions"
+            />
 
-            <div class="input-group">
-              <label class="input-label">性別</label>
-              <div class="radio-group">
-                <label
-                  v-for="opt in genderOptions"
-                  :key="opt.value"
-                  class="radio-option"
-                  :class="{ active: form.gender === opt.value }"
-                >
-                  <input
-                    v-model="form.gender"
-                    type="radio"
-                    :value="opt.value"
-                    class="radio-input"
-                  />
-                  {{ opt.label }}
-                </label>
-              </div>
-            </div>
+            <FormRadioGroup
+              v-model="form.gender"
+              label="性別"
+              :options="genderOptions"
+            />
 
-            <div class="input-group">
-              <label class="input-label">生日</label>
-              <input
-                v-model="form.birthday"
-                type="date"
-                class="input"
-                :class="{ 'input-error': errors.birthday }"
-              />
-              <span v-if="errors.birthday" class="error-text">{{ errors.birthday }}</span>
-            </div>
+            <FormDatePicker
+              v-model="form.birthday"
+              label="生日"
+              :error="errors.birthday"
+            />
 
-            <div class="input-group">
-              <label class="input-label">身高 (cm)</label>
-              <input
-                v-model.number="form.height"
-                type="number"
-                class="input"
-                :class="{ 'input-error': errors.height }"
-                placeholder="例：175"
-                min="50"
-                max="300"
-              />
-              <span v-if="errors.height" class="error-text">{{ errors.height }}</span>
-            </div>
+            <FormInput
+              v-model="form.height"
+              label="身高 (cm)"
+              type="number"
+              placeholder="例：175"
+              :min="50"
+              :max="300"
+              :error="errors.height"
+            />
 
-            <div class="input-group">
-              <label class="input-label">所屬分店</label>
-              <select v-model="form.branch_id" class="input">
-                <option value="">請選擇分店</option>
-                <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                  {{ branch.name }}
-                </option>
-              </select>
-            </div>
+            <FormSelect
+              v-model="form.branch_id"
+              label="所屬分店"
+              placeholder="請選擇分店"
+              :options="branchOptions"
+            />
           </div>
         </section>
 
@@ -268,51 +228,35 @@ const handleSubmit = async () => {
           </h2>
 
           <div class="form-grid">
-            <div class="input-group">
-              <label class="input-label">電話</label>
-              <input
-                v-model="form.phone"
-                type="tel"
-                class="input"
-                :class="{ 'input-error': errors.phone }"
-                placeholder="0912-345-678"
-              />
-              <span v-if="errors.phone" class="error-text">{{ errors.phone }}</span>
-            </div>
+            <FormInput
+              v-model="form.phone"
+              label="電話"
+              type="tel"
+              placeholder="0912-345-678"
+              :error="errors.phone"
+            />
 
-            <div class="input-group">
-              <label class="input-label">Email</label>
-              <input
-                v-model="form.email"
-                type="email"
-                class="input"
-                :class="{ 'input-error': errors.email }"
-                placeholder="email@example.com"
-              />
-              <span v-if="errors.email" class="error-text">{{ errors.email }}</span>
-            </div>
+            <FormInput
+              v-model="form.email"
+              label="Email"
+              type="email"
+              placeholder="email@example.com"
+              :error="errors.email"
+            />
 
-            <div class="input-group">
-              <label class="input-label">緊急聯絡人</label>
-              <input
-                v-model="form.emergency_contact"
-                type="text"
-                class="input"
-                placeholder="請輸入緊急聯絡人姓名"
-              />
-            </div>
+            <FormInput
+              v-model="form.emergency_contact"
+              label="緊急聯絡人"
+              placeholder="請輸入緊急聯絡人姓名"
+            />
 
-            <div class="input-group">
-              <label class="input-label">緊急聯絡電話</label>
-              <input
-                v-model="form.emergency_phone"
-                type="tel"
-                class="input"
-                :class="{ 'input-error': errors.emergency_phone }"
-                placeholder="0912-345-678"
-              />
-              <span v-if="errors.emergency_phone" class="error-text">{{ errors.emergency_phone }}</span>
-            </div>
+            <FormInput
+              v-model="form.emergency_phone"
+              label="緊急聯絡電話"
+              type="tel"
+              placeholder="0912-345-678"
+              :error="errors.emergency_phone"
+            />
           </div>
         </section>
 
@@ -325,31 +269,12 @@ const handleSubmit = async () => {
             會員標籤
           </h2>
 
-          <div class="tags-input-wrapper">
-            <div v-if="form.tags.length > 0" class="tags-list">
-              <span v-for="tag in form.tags" :key="tag" class="tag">
-                {{ tag }}
-                <button type="button" class="tag-remove" @click="removeTag(tag)">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </span>
-            </div>
-            <div class="tag-input-row">
-              <input
-                v-model="newTag"
-                type="text"
-                class="input"
-                placeholder="輸入標籤..."
-                :disabled="form.tags.length >= 10"
-                @keydown.enter.prevent="addTag"
-              />
-              <button type="button" class="btn btn-secondary btn-small" :disabled="form.tags.length >= 10" @click="addTag">新增</button>
-            </div>
-            <span v-if="errors.tags" class="error-text">{{ errors.tags }}</span>
-            <span v-else-if="form.tags.length >= 10" class="hint-text">已達標籤上限（10 個）</span>
-          </div>
+          <FormTagInput
+            v-model="form.tags"
+            placeholder="輸入標籤..."
+            :max-tags="10"
+            :error="errors.tags"
+          />
         </section>
 
         <!-- Error Message -->
@@ -488,119 +413,6 @@ const handleSubmit = async () => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-lg);
-}
-
-/* Input Group */
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.input-group.required .input-label::after {
-  content: ' *';
-  color: var(--color-error);
-}
-
-.input-error {
-  border-color: var(--color-error) !important;
-}
-
-.input-error:focus {
-  box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.15) !important;
-}
-
-.error-text {
-  font-size: 13px;
-  color: var(--color-error);
-}
-
-.hint-text {
-  font-size: 13px;
-  color: var(--color-text-tertiary);
-}
-
-/* Radio Group */
-.radio-group {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.radio-option {
-  display: flex;
-  align-items: center;
-  padding: 10px 18px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  font-size: 15px;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.radio-option:hover {
-  border-color: var(--color-accent);
-}
-
-.radio-option.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: white;
-}
-
-.radio-input {
-  display: none;
-}
-
-/* Tags */
-.tags-input-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.tags-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
-.tag {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 6px 12px;
-  background: var(--color-accent-light);
-  color: var(--color-accent);
-  border-radius: var(--radius-full);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.tag-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: none;
-  background: transparent;
-  color: currentColor;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.tag-remove:hover {
-  opacity: 1;
-}
-
-.tag-input-row {
-  display: flex;
-  gap: var(--space-md);
-}
-
-.tag-input-row .input {
-  flex: 1;
 }
 
 /* Submit Error */
