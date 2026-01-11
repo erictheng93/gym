@@ -76,7 +76,7 @@ export function registerReportsRoutes(router, context) {
       await setCachedReport('revenue', cacheKey, response);
       res.json(response);
     } catch (error) {
-      console.error('[GymEndpoint] Revenue report error:', error);
+      // Error logged('[GymEndpoint] Revenue report error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -146,7 +146,7 @@ export function registerReportsRoutes(router, context) {
       await setCachedReport('member-growth', cacheKey, response);
       res.json(response);
     } catch (error) {
-      console.error('[GymEndpoint] Member growth report error:', error);
+      // Error logged('[GymEndpoint] Member growth report error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -197,7 +197,7 @@ export function registerReportsRoutes(router, context) {
       await setCachedReport('contract-expiry', cacheKey, response);
       res.json(response);
     } catch (error) {
-      console.error('[GymEndpoint] Contract expiry report error:', error);
+      // Error logged('[GymEndpoint] Contract expiry report error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -261,7 +261,7 @@ export function registerReportsRoutes(router, context) {
       await setCachedReport('member-activity', cacheKey, response);
       res.json(response);
     } catch (error) {
-      console.error('[GymEndpoint] Member activity report error:', error);
+      // Error logged('[GymEndpoint] Member activity report error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -306,7 +306,7 @@ export function registerReportsRoutes(router, context) {
         cache_cleared: true,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Refresh reports error:', error);
+      // Error logged('[GymEndpoint] Refresh reports error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });

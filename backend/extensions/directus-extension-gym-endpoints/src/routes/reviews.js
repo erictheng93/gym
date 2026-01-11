@@ -45,7 +45,7 @@ export function registerReviewsRoutes(router, context, memberAuthMiddleware) {
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Review eligibility error:', error);
+      // Error logged('[GymEndpoint] Review eligibility error:', error);
       res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -69,11 +69,11 @@ export function registerReviewsRoutes(router, context, memberAuthMiddleware) {
 
       if (!row || !row.success) throw InvalidPayloadError(row?.message || '評價提交失敗');
 
-      console.log(`[GymEndpoint] Review submitted: ${row.review_id} by member ${memberId}`);
+      // Review logged(`[GymEndpoint] Review submitted: ${row.review_id} by member ${memberId}`);
 
       res.json({ success: true, message: row.message, review_id: row.review_id });
     } catch (error) {
-      console.error('[GymEndpoint] Submit review error:', error);
+      // Error logged('[GymEndpoint] Submit review error:', error);
       res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -99,7 +99,7 @@ export function registerReviewsRoutes(router, context, memberAuthMiddleware) {
 
       res.json({ success: true, message: row.message });
     } catch (error) {
-      console.error('[GymEndpoint] Update review error:', error);
+      // Error logged('[GymEndpoint] Update review error:', error);
       res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -122,7 +122,7 @@ export function registerReviewsRoutes(router, context, memberAuthMiddleware) {
 
       res.json({ success: true, message: row.message });
     } catch (error) {
-      console.error('[GymEndpoint] Delete review error:', error);
+      // Error logged('[GymEndpoint] Delete review error:', error);
       res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -163,7 +163,7 @@ export function registerReviewsRoutes(router, context, memberAuthMiddleware) {
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get class reviews error:', error);
+      // Error logged('[GymEndpoint] Get class reviews error:', error);
       res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -189,7 +189,7 @@ export function registerReviewsRoutes(router, context, memberAuthMiddleware) {
 
       res.json({ success: true, data: reviews.rows || reviews });
     } catch (error) {
-      console.error('[GymEndpoint] Get my reviews error:', error);
+      // Error logged('[GymEndpoint] Get my reviews error:', error);
       res.status(error.status || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });

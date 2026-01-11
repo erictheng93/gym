@@ -43,7 +43,12 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500'
+      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500',
+      // Sentry error monitoring
+      sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
+      sentryDebug: process.env.NUXT_PUBLIC_SENTRY_DEBUG === 'true',
+      environment: process.env.NODE_ENV || 'development',
+      appVersion: process.env.APP_VERSION || '1.0.0',
     }
   },
 
@@ -158,5 +163,33 @@ export default defineNuxtConfig({
 
   typescript: {
     strict: true
+  },
+
+  // Security headers
+  routeRules: {
+    '/**': {
+      headers: {
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff',
+        'X-XSS-Protection': '1; mode=block',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      }
+    }
+  },
+
+  nitro: {
+    // Additional security headers for Nitro server
+    routeRules: {
+      '/**': {
+        headers: {
+          'X-Frame-Options': 'DENY',
+          'X-Content-Type-Options': 'nosniff',
+          'X-XSS-Protection': '1; mode=block',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        }
+      }
+    }
   }
 })

@@ -36,7 +36,6 @@ const handleSubmit = async () => {
     success.value = true
     if (result.resetUrl) {
       devResetUrl.value = result.resetUrl
-      console.log('[DEV] Reset URL:', result.resetUrl)
     }
   } else {
     error.value = result.message || '發送失敗，請稍後再試'

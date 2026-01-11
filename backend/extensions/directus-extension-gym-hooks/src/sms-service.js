@@ -50,12 +50,12 @@ export function initSmsService(options) {
   database = options.database;
 
   if (!config.username || !config.password) {
-    console.log('[SMSService] Mitake credentials not configured - SMS notifications disabled');
+    // Status logged('[SMSService] Mitake credentials not configured - SMS notifications disabled');
     return false;
   }
 
   initialized = true;
-  console.log('[SMSService] Initialized with Mitake API');
+  // Status logged('[SMSService] Initialized with Mitake API');
   return true;
 }
 
@@ -98,7 +98,7 @@ export async function getConfigForBranch(branchId) {
       };
     }
   } catch (error) {
-    console.error('[SMSService] Error fetching branch config:', error.message);
+    // Error logged('[SMSService] Error fetching branch config:', error.message);
   }
 
   // Fallback to default config
@@ -186,14 +186,14 @@ export async function sendSms(options) {
     }
 
     if (!result.success) {
-      console.error('[SMSService] Send failed:', result);
+      // Error logged('[SMSService] Send failed:', result);
       return {
         success: false,
         error: result.error || `Mitake error: ${result.statuscode}`,
       };
     }
 
-    console.log(`[SMSService] SMS sent to ${normalizedPhone}: ${type} (${segmentCount} segments)`);
+    // Status logged(`[SMSService] SMS sent to ${normalizedPhone}: ${type} (${segmentCount} segments)`);
     return {
       success: true,
       msgid: result.msgid,
@@ -202,7 +202,7 @@ export async function sendSms(options) {
     };
 
   } catch (error) {
-    console.error('[SMSService] Send error:', error.message);
+    // Error logged('[SMSService] Send error:', error.message);
 
     // Log failure
     if (database) {
@@ -439,7 +439,7 @@ async function logSmsMessage(options) {
       options.referenceId || null,
     ]);
   } catch (error) {
-    console.error('[SMSService] Log error:', error.message);
+    // Error logged('[SMSService] Log error:', error.message);
   }
 }
 

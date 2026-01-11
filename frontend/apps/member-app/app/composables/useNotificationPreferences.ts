@@ -139,7 +139,6 @@ export const useNotificationPreferences = () => {
       return false
     } catch (err) {
       error.value = err instanceof Error ? err.message : '載入設定失敗'
-      console.error('[useNotificationPreferences] Fetch error:', err)
       return false
     } finally {
       isLoading.value = false
@@ -177,7 +176,6 @@ export const useNotificationPreferences = () => {
       return false
     } catch (err) {
       error.value = err instanceof Error ? err.message : '更新設定失敗'
-      console.error('[useNotificationPreferences] Update error:', err)
       return false
     }
   }
@@ -208,8 +206,7 @@ export const useNotificationPreferences = () => {
         return true
       }
       return false
-    } catch (err) {
-      console.error('[useNotificationPreferences] Fetch channels error:', err)
+    } catch {
       return false
     }
   }
@@ -241,8 +238,7 @@ export const useNotificationPreferences = () => {
         return true
       }
       return false
-    } catch (err) {
-      console.error('[useNotificationPreferences] Fetch history error:', err)
+    } catch {
       return false
     }
   }

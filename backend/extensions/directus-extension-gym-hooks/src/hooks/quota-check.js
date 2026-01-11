@@ -71,7 +71,7 @@ async function getTenantQuota(database, accountability) {
       }
     };
   } catch (error) {
-    console.error('[QuotaCheck] Error fetching tenant quota:', error);
+    // Error logged('[QuotaCheck] Error fetching tenant quota:', error);
     return null;
   }
 }
@@ -139,13 +139,13 @@ async function checkQuota(database, collection, tenantId, quota) {
 
     // 檢查是否超限
     if (currentCount >= maxLimit) {
-      console.log(`[QuotaCheck] Quota exceeded for ${collection}: ${currentCount}/${maxLimit}`);
+      // Status logged(`[QuotaCheck] Quota exceeded for ${collection}: ${currentCount}/${maxLimit}`);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error('[QuotaCheck] Error checking quota:', error);
+    // Error logged('[QuotaCheck] Error checking quota:', error);
     // 出錯時允許創建（避免阻塞正常操作）
     return true;
   }
@@ -205,13 +205,13 @@ export function registerQuotaCheckHooks({ filter }, context) {
         }
 
         // 其他錯誤記錄但不阻塞
-        console.error(`[QuotaCheck] Error in ${collection}.items.create:`, error);
+        // Error logged(`[QuotaCheck] Error in ${collection}.items.create:`, error);
         return input;
       }
     });
   });
 
-  console.log('[QuotaCheckHooks] Quota check hooks registered for members, employees, branches');
+  // Status logged('[QuotaCheckHooks] Quota check hooks registered for members, employees, branches');
 }
 
 export default registerQuotaCheckHooks;

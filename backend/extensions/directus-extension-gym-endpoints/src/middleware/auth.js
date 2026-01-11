@@ -21,10 +21,10 @@ export function createAuthMiddleware(env, database) {
       // 从 Authorization header 获取令牌
       const authHeader = req.headers.authorization;
 
-      console.log('[AuthMiddleware] Processing request');
-      console.log('[AuthMiddleware] Auth header:', authHeader);
-      console.log('[AuthMiddleware] Has auth header:', !!authHeader);
-      console.log('[AuthMiddleware] Starts with Bearer:', authHeader?.startsWith('Bearer '));
+      // Auth logged('[AuthMiddleware] Processing request');
+      // Auth logged('[AuthMiddleware] Auth header:', authHeader);
+      // Auth logged('[AuthMiddleware] Has auth header:', !!authHeader);
+      // Auth logged('[AuthMiddleware] Starts with Bearer:', authHeader?.startsWith('Bearer '));
 
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         // 没有令牌，设置为未认证状态
@@ -37,7 +37,7 @@ export function createAuthMiddleware(env, database) {
           ip: req.ip,
           userAgent: req.headers['user-agent']
         };
-        console.log('[AuthMiddleware] No valid token found, set as anonymous');
+        // Auth logged('[AuthMiddleware] No valid token found, set as anonymous');
         return next();
       }
 
@@ -47,9 +47,9 @@ export function createAuthMiddleware(env, database) {
       let payload;
       try {
         payload = jwt.verify(token, SECRET);
-        console.log('[AuthMiddleware] Token verified, user ID:', payload.id);
+        // Auth logged('[AuthMiddleware] Token verified, user ID:', payload.id);
       } catch (jwtError) {
-        console.error('[AuthMiddleware] JWT verification failed:', jwtError.message);
+        // Error logged('[AuthMiddleware] JWT verification failed:', jwtError.message);
         req.accountability = {
           role: null,
           user: null,
@@ -68,7 +68,7 @@ export function createAuthMiddleware(env, database) {
         .first();
 
       if (!userResult) {
-        console.warn('[AuthMiddleware] User not found:', payload.id);
+        // Warning logged('[AuthMiddleware] User not found:', payload.id);
         req.accountability = {
           role: null,
           user: null,
@@ -92,10 +92,10 @@ export function createAuthMiddleware(env, database) {
         userAgent: req.headers['user-agent']
       };
 
-      console.log('[AuthMiddleware] User authenticated:', userResult.id, 'Role:', userResult.role);
+      // Auth logged('[AuthMiddleware] User authenticated:', userResult.id, 'Role:', userResult.role);
       next();
     } catch (error) {
-      console.error('[AuthMiddleware] Error:', error.message, error.stack);
+      // Error logged('[AuthMiddleware] Error:', error.message, error.stack);
       // 令牌无效或过期，设置为未认证状态
       req.accountability = {
         role: null,

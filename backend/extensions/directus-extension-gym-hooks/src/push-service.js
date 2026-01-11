@@ -23,8 +23,8 @@ export function initPushService(env) {
   initialized = true;
 
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
-    console.warn('[PushService] VAPID keys not configured. Push notifications disabled.');
-    console.warn('[PushService] Generate keys with: npx web-push generate-vapid-keys');
+    // Warning logged('[PushService] VAPID keys not configured. Push notifications disabled.');
+    // Warning logged('[PushService] Generate keys with: npx web-push generate-vapid-keys');
     return false;
   }
 
@@ -36,10 +36,10 @@ export function initPushService(env) {
     );
 
     vapidConfigured = true;
-    console.log('[PushService] Initialized successfully');
+    // Status logged('[PushService] Initialized successfully');
     return true;
   } catch (error) {
-    console.error('[PushService] Failed to initialize:', error.message);
+    // Error logged('[PushService] Failed to initialize:', error.message);
     return false;
   }
 }
@@ -93,7 +93,7 @@ export async function sendNotification(subscription, payload) {
 
     return { success: true };
   } catch (error) {
-    console.error('[PushService] Send error:', error.message);
+    // Error logged('[PushService] Send error:', error.message);
 
     // Handle specific error cases
     if (error.statusCode === 410 || error.statusCode === 404) {

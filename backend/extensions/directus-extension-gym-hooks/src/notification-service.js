@@ -45,7 +45,7 @@ export function initNotificationService(config) {
   const { services: directusServices, schema, env, database: db } = config;
   database = db;
 
-  console.log('[NotificationService] Initializing...');
+  // Status logged('[NotificationService] Initializing...');
 
   // Initialize LINE service
   if (env.LINE_CHANNEL_ACCESS_TOKEN) {
@@ -92,7 +92,7 @@ export function initNotificationService(config) {
   initialized = true;
 
   const enabledChannels = Object.keys(services).filter(k => services[k] !== null);
-  console.log(`[NotificationService] Initialized with channels: ${enabledChannels.join(', ') || 'none'}`);
+  // Status logged(`[NotificationService] Initialized with channels: ${enabledChannels.join(', ') || 'none'}`);
 
   return true;
 }
@@ -154,7 +154,7 @@ export async function sendNotification(options) {
 
     // Check quiet hours
     if (await isInQuietHours(memberId)) {
-      console.log(`[NotificationService] Skipping notification (quiet hours): ${memberId}`);
+      // Status logged(`[NotificationService] Skipping notification (quiet hours): ${memberId}`);
       return { success: false, error: 'Quiet hours active' };
     }
 
@@ -225,7 +225,7 @@ export async function sendNotification(options) {
     };
 
   } catch (error) {
-    console.error('[NotificationService] Error:', error.message);
+    // Error logged('[NotificationService] Error:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -350,7 +350,7 @@ async function getMemberData(memberId) {
 
     return result.rows?.[0] || null;
   } catch (error) {
-    console.error('[NotificationService] getMemberData error:', error.message);
+    // Error logged('[NotificationService] getMemberData error:', error.message);
     return null;
   }
 }
@@ -374,7 +374,7 @@ async function getMemberChannels(memberId, notificationType) {
     // Filter to only channels that are actually enabled
     return channels.filter(c => services[c] !== null);
   } catch (error) {
-    console.error('[NotificationService] getMemberChannels error:', error.message);
+    // Error logged('[NotificationService] getMemberChannels error:', error.message);
     // Fallback to all enabled channels
     return CHANNEL_PRIORITY.filter(c => services[c] !== null);
   }
@@ -580,7 +580,7 @@ async function logNotificationAttempt(options) {
       referenceId || null,
     ]);
   } catch (error) {
-    console.error('[NotificationService] Log error:', error.message);
+    // Error logged('[NotificationService] Log error:', error.message);
   }
 }
 

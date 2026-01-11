@@ -10,6 +10,7 @@ import {
   NotFoundError,
 } from '../utils/errors.js';
 import { jwt } from '../utils/jwt.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * 註冊認證路由
@@ -86,8 +87,6 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         { expiresIn: '7d' }
       );
 
-      console.log(`[GymEndpoint] Member ${member.member_code} authenticated via email/password`);
-
       res.json({
         success: true,
         message: '登入成功',
@@ -103,7 +102,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         expires_in: 86400,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Email login error:', error);
+      logger.error('Email login error', { error: error.message });
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -139,7 +138,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       });
 
       if (members.length === 0) {
-        console.log(`[GymEndpoint] Password reset requested for unknown email: ${email}`);
+        // Return same response for security (prevent email enumeration)
         res.json({
           success: true,
           message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
@@ -150,7 +149,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       const member = members[0];
 
       if (!member.user_id) {
-        console.log(`[GymEndpoint] Password reset requested for member without user account: ${email}`);
+        // Return same response for security (prevent account enumeration)
         res.json({
           success: true,
           message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
@@ -180,7 +179,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
               used_at = NULL
         `, [member.id, crypto.createHash('sha256').update(resetToken).digest('hex')]);
       } catch (dbError) {
-        console.log('[GymEndpoint] Creating password_reset_tokens table...');
+        // Create table if not exists
         await database.raw(`
           CREATE TABLE IF NOT EXISTS password_reset_tokens (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -213,13 +212,10 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
             subject: emailContent.subject,
             html: emailContent.html,
           });
-          console.log(`[GymEndpoint] Password reset email sent to ${email}`);
-        } else {
-          console.log(`[GymEndpoint] Email not configured. Reset URL: ${resetUrl}`);
         }
-      } catch (emailError) {
-        console.log(`[GymEndpoint] Email service error:`, emailError.message);
-        console.log(`[GymEndpoint] Reset URL (for testing): ${resetUrl}`);
+        // Reset URL only returned to client in development mode (see response below)
+      } catch {
+        // Email service error - URL only available via development mode response
       }
 
       res.json({
@@ -228,7 +224,6 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         ...(process.env.NODE_ENV === 'development' && { resetUrl }),
       });
     } catch (error) {
-      console.error('[GymEndpoint] Forgot password error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -293,14 +288,11 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         WHERE member_id = ?
       `, [decoded.id]);
 
-      console.log(`[GymEndpoint] Password reset successful for member ${decoded.id}`);
-
       res.json({
         success: true,
         message: '密碼重置成功，請使用新密碼登入',
       });
     } catch (error) {
-      console.error('[GymEndpoint] Reset password error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -364,14 +356,11 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         password: new_password,
       });
 
-      console.log(`[GymEndpoint] Password changed for member ${memberId}`);
-
       res.json({
         success: true,
         message: '密碼修改成功',
       });
     } catch (error) {
-      console.error('[GymEndpoint] Change password error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

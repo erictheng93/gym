@@ -25,9 +25,9 @@ export function registerEmployeesHooks({ action }, { services, database }) {
         branch_id: branchId,
       });
 
-      console.log(`[GymHook] User ${userId} branch_id synced to ${branchId}`);
+      // Status logged(`[GymHook] User ${userId} branch_id synced to ${branchId}`);
     } catch (error) {
-      console.error('[GymHook] Error syncing user branch_id:', error);
+      // Error logged('[GymHook] Error syncing user branch_id:', error);
     }
   }
 
@@ -58,7 +58,7 @@ export function registerEmployeesHooks({ action }, { services, database }) {
         }
       }
     } catch (error) {
-      console.error('[GymHook] Error syncing user branch_id on employee update:', error);
+      // Error logged('[GymHook] Error syncing user branch_id on employee update:', error);
     }
   });
 }

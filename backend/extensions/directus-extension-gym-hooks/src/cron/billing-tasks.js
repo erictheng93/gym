@@ -16,7 +16,7 @@ export function registerBillingTasks(schedule, context) {
    * 每天 23:59 执行
    */
   schedule('59 23 * * *', async () => {
-    console.log('[BillingCron] Starting daily usage collection...');
+    // Status logged('[BillingCron] Starting daily usage collection...');
 
     try {
       // 获取所有活跃租户
@@ -92,14 +92,14 @@ export function registerBillingTasks(schedule, context) {
 
           successCount++;
         } catch (error) {
-          console.error(`[BillingCron] Error collecting usage for tenant ${tenant.id}:`, error);
+          // Error logged(`[BillingCron] Error collecting usage for tenant ${tenant.id}:`, error);
           errorCount++;
         }
       }
 
-      console.log(`[BillingCron] Daily usage collection completed: ${successCount} succeeded, ${errorCount} failed`);
+      // Status logged(`[BillingCron] Daily usage collection completed: ${successCount} succeeded, ${errorCount} failed`);
     } catch (error) {
-      console.error('[BillingCron] Error in daily usage collection:', error);
+      // Error logged('[BillingCron] Error in daily usage collection:', error);
     }
   });
 
@@ -108,7 +108,7 @@ export function registerBillingTasks(schedule, context) {
    * 每月1号 00:30 执行
    */
   schedule('30 0 1 * *', async () => {
-    console.log('[BillingCron] Starting monthly invoice generation...');
+    // Status logged('[BillingCron] Starting monthly invoice generation...');
 
     try {
       // 获取所有活跃订阅
@@ -216,17 +216,17 @@ export function registerBillingTasks(schedule, context) {
             subscription.id
           ]);
 
-          console.log(`[BillingCron] Generated invoice ${invoiceNumber} for tenant ${subscription.tenant_name}`);
+          // Status logged(`[BillingCron] Generated invoice ${invoiceNumber} for tenant ${subscription.tenant_name}`);
           successCount++;
         } catch (error) {
-          console.error(`[BillingCron] Error generating invoice for subscription ${subscription.id}:`, error);
+          // Error logged(`[BillingCron] Error generating invoice for subscription ${subscription.id}:`, error);
           errorCount++;
         }
       }
 
-      console.log(`[BillingCron] Monthly invoice generation completed: ${successCount} succeeded, ${errorCount} failed`);
+      // Status logged(`[BillingCron] Monthly invoice generation completed: ${successCount} succeeded, ${errorCount} failed`);
     } catch (error) {
-      console.error('[BillingCron] Error in monthly invoice generation:', error);
+      // Error logged('[BillingCron] Error in monthly invoice generation:', error);
     }
   });
 
@@ -235,7 +235,7 @@ export function registerBillingTasks(schedule, context) {
    * 每天 09:00 执行
    */
   schedule('0 9 * * *', async () => {
-    console.log('[BillingCron] Starting overdue invoice reminder...');
+    // Status logged('[BillingCron] Starting overdue invoice reminder...');
 
     try {
       // 获取逾期未付账单
@@ -258,7 +258,7 @@ export function registerBillingTasks(schedule, context) {
       for (const invoice of overdueInvoices) {
         try {
           // TODO: 发送提醒邮件
-          console.log(`[BillingCron] Reminder for overdue invoice ${invoice.invoice_number} to ${invoice.tenant_email}`);
+          // Status logged(`[BillingCron] Reminder for overdue invoice ${invoice.invoice_number} to ${invoice.tenant_email}`);
 
           // 更新提醒时间
           await database.raw(`
@@ -273,13 +273,13 @@ export function registerBillingTasks(schedule, context) {
 
           successCount++;
         } catch (error) {
-          console.error(`[BillingCron] Error sending reminder for invoice ${invoice.id}:`, error);
+          // Error logged(`[BillingCron] Error sending reminder for invoice ${invoice.id}:`, error);
         }
       }
 
-      console.log(`[BillingCron] Overdue invoice reminder completed: ${successCount} reminders sent`);
+      // Status logged(`[BillingCron] Overdue invoice reminder completed: ${successCount} reminders sent`);
     } catch (error) {
-      console.error('[BillingCron] Error in overdue invoice reminder:', error);
+      // Error logged('[BillingCron] Error in overdue invoice reminder:', error);
     }
   });
 
@@ -288,7 +288,7 @@ export function registerBillingTasks(schedule, context) {
    * 每天 00:00 执行
    */
   schedule('0 0 * * *', async () => {
-    console.log('[BillingCron] Starting trial expiration check...');
+    // Status logged('[BillingCron] Starting trial expiration check...');
 
     try {
       // 获取试用期即将到期的租户（提前3天提醒）
@@ -304,7 +304,7 @@ export function registerBillingTasks(schedule, context) {
 
       for (const tenant of expiringTenants) {
         // TODO: 发送试用期到期提醒邮件
-        console.log(`[BillingCron] Trial expiring soon for tenant ${tenant.name} (${tenant.email})`);
+        // Status logged(`[BillingCron] Trial expiring soon for tenant ${tenant.name} (${tenant.email})`);
       }
 
       // 暂停已过期试用租户
@@ -319,17 +319,17 @@ export function registerBillingTasks(schedule, context) {
       const expiredTenants = expiredResult.rows || [];
 
       for (const tenant of expiredTenants) {
-        console.log(`[BillingCron] Suspended expired trial tenant: ${tenant.name}`);
+        // Status logged(`[BillingCron] Suspended expired trial tenant: ${tenant.name}`);
         // TODO: 发送试用期已过期邮件
       }
 
-      console.log(`[BillingCron] Trial expiration check completed: ${expiringTenants.length} expiring, ${expiredTenants.length} suspended`);
+      // Status logged(`[BillingCron] Trial expiration check completed: ${expiringTenants.length} expiring, ${expiredTenants.length} suspended`);
     } catch (error) {
-      console.error('[BillingCron] Error in trial expiration check:', error);
+      // Error logged('[BillingCron] Error in trial expiration check:', error);
     }
   });
 
-  console.log('[BillingCron] Billing cron tasks registered');
+  // Status logged('[BillingCron] Billing cron tasks registered');
 }
 
 export default registerBillingTasks;

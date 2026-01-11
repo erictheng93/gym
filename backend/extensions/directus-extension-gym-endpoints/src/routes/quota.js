@@ -163,9 +163,9 @@ export function registerQuotaRoutes(router, context) {
         },
       });
 
-      console.log(`[QuotaEndpoint] Status fetched for tenant: ${tenant.name} (${tenant.id})`);
+      // Status logged(`[QuotaEndpoint] Status fetched for tenant: ${tenant.name} (${tenant.id})`);
     } catch (error) {
-      console.error('[QuotaEndpoint] Error fetching quota status:', error);
+      // Error logged('[QuotaEndpoint] Error fetching quota status:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -276,7 +276,7 @@ export function registerQuotaRoutes(router, context) {
         upgrade_url: canCreate ? null : '/admin/settings/billing'
       });
     } catch (error) {
-      console.error('[QuotaEndpoint] Error checking quota:', error);
+      // Error logged('[QuotaEndpoint] Error checking quota:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

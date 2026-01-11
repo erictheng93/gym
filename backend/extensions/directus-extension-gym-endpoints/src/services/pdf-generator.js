@@ -9,6 +9,8 @@
  * npm install html-pdf-node
  */
 
+import { logger } from '../utils/logger.js';
+
 /**
  * 发票 HTML 模板
  */
@@ -443,10 +445,10 @@ class PDFGenerator {
       // return pdfBuffer;
 
       // 占位符：返回 HTML（在实际部署时替换为上述方法之一）
-      console.warn('[PDFGenerator] PDF generation library not installed. Returning HTML instead.');
+      logger.warn('PDF generation library not installed, returning HTML instead');
       return Buffer.from(html, 'utf-8');
     } catch (error) {
-      console.error('[PDFGenerator] Error generating PDF:', error);
+      logger.error('Error generating PDF', { error: error.message });
       // 降级方案：返回 HTML
       return Buffer.from(html, 'utf-8');
     }

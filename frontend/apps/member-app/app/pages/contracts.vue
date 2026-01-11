@@ -43,8 +43,8 @@ const fetchContracts = async () => {
       })
     )
     contracts.value = result as typeof contracts.value
-  } catch (error) {
-    console.error('Failed to fetch contracts:', error)
+  } catch {
+    // Failed to fetch contracts
   } finally {
     isLoading.value = false
   }
@@ -125,7 +125,6 @@ const submitPause = async () => {
       errorMessage.value = response.message || '操作失敗'
     }
   } catch (error: unknown) {
-    console.error('Pause error:', error)
     if (typeof error === 'object' && error !== null && 'data' in error) {
       const fetchError = error as { data?: { message?: string } }
       errorMessage.value = fetchError.data?.message || '操作失敗，請稍後再試'
@@ -173,7 +172,6 @@ const resumeContract = async (contract: Contract) => {
       errorMessage.value = response.message || '操作失敗'
     }
   } catch (error: unknown) {
-    console.error('Resume error:', error)
     if (typeof error === 'object' && error !== null && 'data' in error) {
       const fetchError = error as { data?: { message?: string } }
       errorMessage.value = fetchError.data?.message || '操作失敗，請稍後再試'

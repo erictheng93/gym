@@ -39,13 +39,13 @@ export function registerScheduledHooks({ init, schedule }, { services, database,
         fields: ['id', 'contract_no', 'member_id', 'end_date'],
       });
 
-      console.log(`[GymHook] Found ${expiredContracts.length} contracts to expire`);
+      // Status logged(`[GymHook] Found ${expiredContracts.length} contracts to expire`);
 
       for (const contract of expiredContracts) {
         await contractsService.updateOne(contract.id, {
           contract_status: 'EXPIRED',
         });
-        console.log(`[GymHook] Contract ${contract.contract_no} (${contract.id}) expired (end_date: ${contract.end_date})`);
+        // Status logged(`[GymHook] Contract ${contract.contract_no} (${contract.id}) expired (end_date: ${contract.end_date})`);
 
         if (contract.member_id) {
           const memberContracts = await contractsService.readByQuery({
@@ -64,7 +64,7 @@ export function registerScheduledHooks({ init, schedule }, { services, database,
 
       return expiredContracts.length;
     } catch (error) {
-      console.error('[GymHook] Error checking expired contracts:', error);
+      // Error logged('[GymHook] Error checking expired contracts:', error);
       return 0;
     }
   }
@@ -96,7 +96,7 @@ export function registerScheduledHooks({ init, schedule }, { services, database,
           knex: database,
         });
       } catch (e) {
-        console.log('[GymHook] Notifications table not found, skipping notification creation');
+        // Status logged('[GymHook] Notifications table not found, skipping notification creation');
         return;
       }
 
@@ -142,7 +142,7 @@ export function registerScheduledHooks({ init, schedule }, { services, database,
               is_read: false,
               status: 'active',
             });
-            console.log(`[GymHook] Created ${days}-day expiration notification for contract ${contract.contract_no}`);
+            // Status logged(`[GymHook] Created ${days}-day expiration notification for contract ${contract.contract_no}`);
 
             // 發送 Email 通知
             if (emailServiceLoaded && emailService && emailService.isEmailEnabled()) {
@@ -179,66 +179,66 @@ export function registerScheduledHooks({ init, schedule }, { services, database,
                   });
 
                   if (result.success) {
-                    console.log(`[GymHook] Sent ${days}-day expiration email to ${member.email}`);
+                    // Status logged(`[GymHook] Sent ${days}-day expiration email to ${member.email}`);
                   }
                 }
               } catch (emailError) {
-                console.error(`[GymHook] Failed to send expiration email:`, emailError.message);
+                // Error logged(`[GymHook] Failed to send expiration email:`, emailError.message);
               }
             }
           }
         }
       }
     } catch (error) {
-      console.error('[GymHook] Error creating expiration notifications:', error);
+      // Error logged('[GymHook] Error creating expiration notifications:', error);
     }
   }
 
   // 每天凌晨 1:00 執行到期檢查和通知
   if (typeof schedule === 'function') {
     schedule('0 1 * * *', async () => {
-      console.log('[GymHook] Running scheduled contract expiration check...');
+      // Status logged('[GymHook] Running scheduled contract expiration check...');
       const schema = await getSchema();
       await checkAndUpdateExpiredContracts(schema);
       await createExpirationNotifications(schema);
     });
-    console.log('[GymHook] Scheduled daily contract expiration check at 1:00 AM');
+    // Status logged('[GymHook] Scheduled daily contract expiration check at 1:00 AM');
 
     // 報表物化視圖自動刷新 (每天凌晨 4:00 和下午 4:00)
     schedule('0 4,16 * * *', async () => {
       const startTime = Date.now();
-      console.log('[GymHook] Starting scheduled report views refresh...');
+      // Status logged('[GymHook] Starting scheduled report views refresh...');
 
       try {
         await database.raw('SELECT refresh_report_views()');
 
         const duration = Date.now() - startTime;
-        console.log(`[GymHook] Report views refreshed successfully in ${duration}ms`);
+        // Status logged(`[GymHook] Report views refreshed successfully in ${duration}ms`);
 
         if (cacheEnabled) {
           await recordPerformanceMetric('report_views_refresh', duration);
           await invalidateReportCache();
-          console.log('[GymHook] Report cache invalidated after views refresh');
+          // Status logged('[GymHook] Report cache invalidated after views refresh');
         }
       } catch (error) {
-        console.error('[GymHook] Failed to refresh report views:', error.message);
+        // Error logged('[GymHook] Failed to refresh report views:', error.message);
       }
     });
 
-    console.log('[GymHook] Scheduled report views refresh: 04:00 and 16:00 daily');
+    // Status logged('[GymHook] Scheduled report views refresh: 04:00 and 16:00 daily');
   }
 
   // 系統啟動時執行一次過期檢查
   if (typeof init === 'function') {
     init('app.after', async () => {
-      console.log('[GymHook] Running initial contract expiration check...');
+      // Status logged('[GymHook] Running initial contract expiration check...');
       try {
         const schema = await getSchema();
         const expiredCount = await checkAndUpdateExpiredContracts(schema);
         await createExpirationNotifications(schema);
-        console.log(`[GymHook] Initial check completed. ${expiredCount} contracts expired.`);
+        // Status logged(`[GymHook] Initial check completed. ${expiredCount} contracts expired.`);
       } catch (error) {
-        console.error('[GymHook] Error in initial expiration check:', error);
+        // Error logged('[GymHook] Error in initial expiration check:', error);
       }
     });
   }

@@ -60,8 +60,8 @@ const fetchCheckins = async (loadMore = false) => {
     }
 
     hasMore.value = items.length === pageSize
-  } catch (error) {
-    console.error('Failed to fetch checkins:', error)
+  } catch {
+    // Failed to fetch checkins
   } finally {
     isLoading.value = false
   }

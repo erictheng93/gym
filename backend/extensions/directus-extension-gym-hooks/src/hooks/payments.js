@@ -25,15 +25,15 @@ export function registerPaymentsHooks({ action, filter }, { services, database, 
 
       if (row?.success) {
         if (row.old_status !== row.new_status) {
-          console.log(`[GymHook] Contract ${contractId} payment_status updated: ${row.old_status} -> ${row.new_status} (paid: ${row.paid_amount}/${row.total_amount}) [atomic]`);
+          // Status logged(`[GymHook] Contract ${contractId} payment_status updated: ${row.old_status} -> ${row.new_status} (paid: ${row.paid_amount}/${row.total_amount}) [atomic]`);
         }
       }
     } catch (error) {
       if (error.message?.includes('recalculate_payment_status')) {
-        console.log('[GymHook] Atomic payment function not available, using fallback');
+        // Status logged('[GymHook] Atomic payment function not available, using fallback');
         await fallbackUpdatePaymentStatus(contractId, schema);
       } else {
-        console.error('[GymHook] Error updating contract payment status:', error);
+        // Error logged('[GymHook] Error updating contract payment status:', error);
       }
     }
   }
@@ -86,10 +86,10 @@ export function registerPaymentsHooks({ action, filter }, { services, database, 
         await contractsService.updateOne(contractId, {
           payment_status: newPaymentStatus,
         });
-        console.log(`[GymHook] Contract ${contractId} payment_status updated to ${newPaymentStatus} (fallback)`);
+        // Status logged(`[GymHook] Contract ${contractId} payment_status updated to ${newPaymentStatus} (fallback)`);
       }
     } catch (error) {
-      console.error('[GymHook] Fallback payment status error:', error);
+      // Error logged('[GymHook] Fallback payment status error:', error);
     }
   }
 
@@ -115,7 +115,7 @@ export function registerPaymentsHooks({ action, filter }, { services, database, 
           await updateContractPaymentStatus(payment.contract_id, schema);
         }
       } catch (error) {
-        console.error('[GymHook] Error fetching payment for status update:', error);
+        // Error logged('[GymHook] Error fetching payment for status update:', error);
       }
     }
   });
@@ -140,7 +140,7 @@ export function registerPaymentsHooks({ action, filter }, { services, database, 
           }, 100);
         }
       } catch (error) {
-        console.error('[GymHook] Error handling payment delete:', error);
+        // Error logged('[GymHook] Error handling payment delete:', error);
       }
     }
     return keys;

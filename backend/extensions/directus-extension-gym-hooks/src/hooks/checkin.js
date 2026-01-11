@@ -35,13 +35,13 @@ export function registerCheckinHooks({ action, filter }, { services, database },
           await contractsService.updateOne(contractId, {
             contract_status: 'EXPIRED',
           });
-          console.log(`[GymHook] Contract ${contractId} expired (fallback)`);
+          // Status logged(`[GymHook] Contract ${contractId} expired (fallback)`);
         }
 
-        console.log(`[GymHook] Member checkin: contract ${contractId} remaining ${newCount} (fallback)`);
+        // Status logged(`[GymHook] Member checkin: contract ${contractId} remaining ${newCount} (fallback)`);
       }
     } catch (error) {
-      console.error('[GymHook] Fallback deduct count error:', error);
+      // Error logged('[GymHook] Fallback deduct count error:', error);
     }
   }
 
@@ -81,7 +81,7 @@ export function registerCheckinHooks({ action, filter }, { services, database },
           member = cachedData.member;
           validContract = cachedData.contract;
           cacheHit = true;
-          console.log(`[GymHook] Check-in cache HIT for member ${payload.member_id}`);
+          // Status logged(`[GymHook] Check-in cache HIT for member ${payload.member_id}`);
         }
       }
 
@@ -151,7 +151,7 @@ export function registerCheckinHooks({ action, filter }, { services, database },
 
       return payload;
     } catch (error) {
-      console.error('[GymHook] Member checkin validation error:', error);
+      // Error logged('[GymHook] Member checkin validation error:', error);
       throw error;
     }
   });
@@ -169,10 +169,10 @@ export function registerCheckinHooks({ action, filter }, { services, database },
 
       if (row) {
         if (row.success) {
-          console.log(`[GymHook] Member checkin: contract ${payload.contract_id} remaining ${row.remaining} (atomic) - ${row.message}`);
+          // Status logged(`[GymHook] Member checkin: contract ${payload.contract_id} remaining ${row.remaining} (atomic) - ${row.message}`);
 
           if (row.contract_status === 'EXPIRED') {
-            console.log(`[GymHook] Contract ${payload.contract_id} expired (no remaining counts)`);
+            // Status logged(`[GymHook] Contract ${payload.contract_id} expired (no remaining counts)`);
 
             const contractsService = new ItemsService('contracts', {
               schema: schema,
@@ -187,15 +187,15 @@ export function registerCheckinHooks({ action, filter }, { services, database },
             }
           }
         } else {
-          console.warn(`[GymHook] Failed to deduct contract count: ${row.message}`);
+          // Warning logged(`[GymHook] Failed to deduct contract count: ${row.message}`);
         }
       }
     } catch (error) {
       if (error.message?.includes('deduct_contract_count')) {
-        console.log('[GymHook] Atomic function not available, using fallback logic');
+        // Status logged('[GymHook] Atomic function not available, using fallback logic');
         await fallbackDeductCount(payload.contract_id, schema);
       } else {
-        console.error('[GymHook] Error processing member checkin:', error);
+        // Error logged('[GymHook] Error processing member checkin:', error);
       }
     }
   });

@@ -73,7 +73,7 @@ export function registerClassesRoutes(router, context) {
         data: filteredSessions,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get classes error:', error);
+      // Error logged('[GymEndpoint] Get classes error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -123,7 +123,7 @@ export function registerClassesRoutes(router, context) {
         data: schedules,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get schedule error:', error);
+      // Error logged('[GymEndpoint] Get schedule error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -204,7 +204,7 @@ export function registerClassesRoutes(router, context) {
         data: transformedSessions,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get sessions error:', error);
+      // Error logged('[GymEndpoint] Get sessions error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -269,7 +269,7 @@ export function registerClassesRoutes(router, context) {
         data: transformed,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get session error:', error);
+      // Error logged('[GymEndpoint] Get session error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

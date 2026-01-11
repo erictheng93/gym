@@ -3,6 +3,8 @@
  * Handles class review CRUD operations
  */
 
+import { extractErrorMessage } from '../utils/apiHelpers'
+
 export interface Review {
   id: string
   booking_id: string
@@ -74,8 +76,7 @@ export const useReviews = () => {
         { headers: getAuthHeader() }
       )
       return response.data
-    } catch (error) {
-      console.error('Failed to check review eligibility:', error)
+    } catch {
       return {
         can_review: false,
         reason: '無法確認評價資格',
@@ -97,15 +98,10 @@ export const useReviews = () => {
       })
       return response
     } catch (error: unknown) {
-      console.error('Failed to submit review:', error)
-      if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { message?: string } }
-        return {
-          success: false,
-          message: fetchError.data?.message || '評價提交失敗',
-        }
+      return {
+        success: false,
+        message: extractErrorMessage(error, '評價提交失敗'),
       }
-      return { success: false, message: '評價提交失敗' }
     } finally {
       isLoading.value = false
     }
@@ -128,15 +124,10 @@ export const useReviews = () => {
       })
       return response
     } catch (error: unknown) {
-      console.error('Failed to update review:', error)
-      if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { message?: string } }
-        return {
-          success: false,
-          message: fetchError.data?.message || '更新評價失敗',
-        }
+      return {
+        success: false,
+        message: extractErrorMessage(error, '更新評價失敗'),
       }
-      return { success: false, message: '更新評價失敗' }
     } finally {
       isLoading.value = false
     }
@@ -160,15 +151,10 @@ export const useReviews = () => {
 
       return response
     } catch (error: unknown) {
-      console.error('Failed to delete review:', error)
-      if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { message?: string } }
-        return {
-          success: false,
-          message: fetchError.data?.message || '刪除評價失敗',
-        }
+      return {
+        success: false,
+        message: extractErrorMessage(error, '刪除評價失敗'),
       }
-      return { success: false, message: '刪除評價失敗' }
     } finally {
       isLoading.value = false
     }
@@ -192,8 +178,7 @@ export const useReviews = () => {
       const response = await $fetch<ClassReviewsResponse>(url)
 
       return response.success ? response.data : null
-    } catch (error) {
-      console.error('Failed to fetch class reviews:', error)
+    } catch {
       return null
     }
   }
@@ -220,8 +205,7 @@ export const useReviews = () => {
         myReviews.value = response.data
       }
       return response.data
-    } catch (error) {
-      console.error('Failed to fetch my reviews:', error)
+    } catch {
       return []
     } finally {
       isLoading.value = false

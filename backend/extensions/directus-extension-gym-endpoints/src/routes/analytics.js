@@ -13,7 +13,7 @@ const redis = new Redis({
 });
 
 redis.on('error', (err) => {
-  console.error('[Analytics] Redis error:', err.message);
+  // Error logged('[Analytics] Redis error:', err.message);
 });
 
 /**
@@ -117,7 +117,7 @@ export function registerAnalyticsRoutes(router, context) {
         const rlKey = `rl:logs:${targetTenantId}`;
         rateLimitHits = await redis.llen(rlKey);
       } catch (redisError) {
-        console.warn('[AnalyticsEndpoint] Failed to get rate limit hits from Redis:', redisError.message);
+        // Warning logged('[AnalyticsEndpoint] Failed to get rate limit hits from Redis:', redisError.message);
       }
 
       const stats = {
@@ -138,9 +138,9 @@ export function registerAnalyticsRoutes(router, context) {
         data: stats
       });
 
-      console.log(`[AnalyticsEndpoint] API stats fetched for range: ${timeRange}, total requests: ${stats.totalRequests}`);
+      // Stats logged(`[AnalyticsEndpoint] API stats fetched for range: ${timeRange}, total requests: ${stats.totalRequests}`);
     } catch (error) {
-      console.error('[AnalyticsEndpoint] Error fetching API stats:', error);
+      // Error logged('[AnalyticsEndpoint] Error fetching API stats:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -193,7 +193,7 @@ export function registerAnalyticsRoutes(router, context) {
         // 獲取總日誌數
         const totalLogs = await redis.llen(listKey);
 
-        console.log(`[AnalyticsEndpoint] Retrieved ${logs.length} rate limit logs from Redis`);
+        // Stats logged(`[AnalyticsEndpoint] Retrieved ${logs.length} rate limit logs from Redis`);
 
         res.json({
           success: true,
@@ -207,7 +207,7 @@ export function registerAnalyticsRoutes(router, context) {
           }
         });
       } catch (redisError) {
-        console.error('[AnalyticsEndpoint] Redis error, returning mock data:', redisError);
+        // Error logged('[AnalyticsEndpoint] Redis error, returning mock data:', redisError);
 
         // Redis 錯誤時返回模擬數據
         logs = Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
@@ -234,7 +234,7 @@ export function registerAnalyticsRoutes(router, context) {
       }
 
     } catch (error) {
-      console.error('[AnalyticsEndpoint] Error fetching rate limit logs:', error);
+      // Error logged('[AnalyticsEndpoint] Error fetching rate limit logs:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -300,9 +300,9 @@ export function registerAnalyticsRoutes(router, context) {
         }
       });
 
-      console.log(`[AnalyticsEndpoint] Quota history fetched for ${resource} (${days} days)`);
+      // Stats logged(`[AnalyticsEndpoint] Quota history fetched for ${resource} (${days} days)`);
     } catch (error) {
-      console.error('[AnalyticsEndpoint] Error fetching quota history:', error);
+      // Error logged('[AnalyticsEndpoint] Error fetching quota history:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

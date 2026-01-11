@@ -53,10 +53,10 @@ export function registerContractsHooks({ action }, { services, database }, cache
           member_status: memberStatus,
         });
 
-        console.log(`[GymHook] Member ${contract.member_id} status updated to ${memberStatus}`);
+        // Status logged(`[GymHook] Member ${contract.member_id} status updated to ${memberStatus}`);
       }
     } catch (error) {
-      console.error('[GymHook] Error updating member status:', error);
+      // Error logged('[GymHook] Error updating member status:', error);
     }
   });
 
@@ -89,9 +89,9 @@ export function registerContractsHooks({ action }, { services, database }, cache
         member_status: memberStatus,
       });
 
-      console.log(`[GymHook] Member ${payload.member_id} status updated to ${memberStatus} after new contract`);
+      // Status logged(`[GymHook] Member ${payload.member_id} status updated to ${memberStatus} after new contract`);
     } catch (error) {
-      console.error('[GymHook] Error updating member status on contract create:', error);
+      // Error logged('[GymHook] Error updating member status on contract create:', error);
     }
   });
 }

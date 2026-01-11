@@ -5,6 +5,32 @@
 
 import { useErrorHandler, type AppError } from './useErrorHandler'
 
+// ============================================
+// Cache Key Constants
+// ============================================
+/**
+ * 預定義的緩存鍵前綴
+ * 用於 clearCache 和 invalidateCache
+ */
+export const CACHE_KEYS = {
+  MEMBERS: 'members',
+  CONTRACTS: 'contracts',
+  PAYMENTS: 'payments',
+  BRANCHES: 'branches',
+  PLANS: 'plans',
+  EMPLOYEES: 'employees',
+  JOB_TITLES: 'job_titles',
+  CLASSES: 'classes',
+  CLASS_CATEGORIES: 'class_categories',
+  CLASS_SESSIONS: 'class_sessions',
+  CLASS_BOOKINGS: 'class_bookings',
+  ATTENDANCE: 'attendance',
+  LEAVE_REQUESTS: 'leave_requests',
+  REPORTS: 'reports',
+} as const
+
+export type CacheKeyType = typeof CACHE_KEYS[keyof typeof CACHE_KEYS]
+
 // 請求配置選項
 export interface ApiRequestOptions {
   /** 請求上下文，用於錯誤處理和日誌 */
@@ -260,12 +286,65 @@ export function useApi() {
     pendingRequests.delete(key)
   }
 
+  /**
+   * 失效多個緩存鍵
+   * @param keys - 緩存鍵陣列（支援 CACHE_KEYS 常量）
+   *
+   * @example
+   * // 失效會員相關緩存
+   * invalidateCache([CACHE_KEYS.MEMBERS])
+   *
+   * // 失效多個相關緩存
+   * invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.PAYMENTS])
+   */
+  const invalidateCache = (keys: (CacheKeyType | string)[]): void => {
+    for (const key of keys) {
+      // 使用通配符模式清除所有相關緩存
+      clearCache(`${key}*`)
+    }
+  }
+
+  /**
+   * 執行變更操作（create/update/delete）並自動失效相關緩存
+   * @param fn - 要執行的異步函數
+   * @param invalidateKeys - 成功後要失效的緩存鍵
+   * @param options - 請求配置選項
+   *
+   * @example
+   * // 創建會員並失效會員列表緩存
+   * const result = await mutate(
+   *   () => directus.request(createItem('members', data)),
+   *   [CACHE_KEYS.MEMBERS],
+   *   { context: 'createMember' }
+   * )
+   */
+  const mutate = async <T>(
+    fn: () => Promise<T>,
+    invalidateKeys: (CacheKeyType | string)[],
+    options?: ApiRequestOptions
+  ): Promise<ApiResult<T>> => {
+    const result = await request(fn, {
+      ...options,
+      dedupe: false, // 變更操作不應去重
+      cacheTTL: 0    // 變更操作不應緩存
+    })
+
+    // 成功後失效相關緩存
+    if (result.data !== null) {
+      invalidateCache(invalidateKeys)
+    }
+
+    return result
+  }
+
   return {
     request,
     batchRequest,
     createDebouncedRequest,
     clearCache,
-    cancelPending
+    cancelPending,
+    invalidateCache,
+    mutate
   }
 }
 

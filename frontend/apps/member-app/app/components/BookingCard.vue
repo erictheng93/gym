@@ -76,12 +76,17 @@ const hasReview = computed(() => props.booking.has_review || false)
 </script>
 
 <template>
-  <div
+  <article
     class="booking-card"
     :class="getStatusColor(booking.booking_status)"
+    role="button"
+    tabindex="0"
+    :aria-label="`${className}，${formattedDate} ${startTime} 至 ${endTime}，狀態：${getStatusLabel(booking.booking_status)}`"
     @click="emit('details')"
+    @keydown.enter="emit('details')"
+    @keydown.space.prevent="emit('details')"
   >
-    <div class="booking-date">
+    <div class="booking-date" aria-hidden="true">
       <span class="date-text">{{ formattedDate }}</span>
       <span class="time-text">{{ startTime }} - {{ endTime }}</span>
     </div>
@@ -91,18 +96,40 @@ const hasReview = computed(() => props.booking.has_review || false)
 
       <div class="booking-meta">
         <span v-if="instructor" class="meta-item">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
           </svg>
-          {{ instructor }}
+          <span class="sr-only">教練：</span>{{ instructor }}
         </span>
         <span v-if="room" class="meta-item">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
             <polyline points="9 22 9 12 15 12 15 22" />
           </svg>
-          {{ room }}
+          <span class="sr-only">教室：</span>{{ room }}
         </span>
       </div>
     </div>
@@ -111,6 +138,7 @@ const hasReview = computed(() => props.booking.has_review || false)
       <span
         class="status-badge"
         :class="getStatusColor(booking.booking_status)"
+        role="status"
       >
         {{ getStatusLabel(booking.booking_status) }}
         <template v-if="isWaitlisted && waitlistPosition">
@@ -120,24 +148,43 @@ const hasReview = computed(() => props.booking.has_review || false)
 
       <button
         v-if="showCancel"
+        type="button"
         class="btn-cancel"
+        :aria-label="`取消 ${className} 預約`"
         @click.stop="emit('cancel')"
+        @keydown.enter.stop="emit('cancel')"
       >
         取消預約
       </button>
 
       <button
         v-if="canShowReview"
+        type="button"
         class="btn-review"
+        :aria-label="`${hasReview ? '查看' : '撰寫'} ${className} 評價`"
         @click.stop="emit('review')"
+        @keydown.enter.stop="emit('review')"
       >
         {{ hasReview ? '查看評價' : '評價' }}
       </button>
     </div>
-  </div>
+  </article>
 </template>
 
 <style scoped>
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .booking-card {
   display: flex;
   align-items: stretch;
@@ -152,6 +199,11 @@ const hasReview = computed(() => props.booking.has_review || false)
 
 .booking-card:active {
   transform: scale(0.98);
+}
+
+.booking-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .booking-card.success {
@@ -301,5 +353,12 @@ const hasReview = computed(() => props.booking.has_review || false)
 
 .btn-review:active {
   background-color: #059669;
+}
+
+/* Focus visible for all buttons */
+.btn-cancel:focus-visible,
+.btn-review:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 </style>

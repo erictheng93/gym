@@ -4,6 +4,7 @@
  * 提供當前使用者權限檢查功能
  */
 import type { PermissionAction } from '~/constants/permissions'
+import { getDefaultReadOnlyPermissions } from '~/utils/default-permissions'
 
 interface EffectivePermissions {
   [module: string]: {
@@ -11,16 +12,21 @@ interface EffectivePermissions {
   }
 }
 
+// Employee status types for better UX feedback
+export type EmployeeStatus = 'unknown' | 'loading' | 'active' | 'no_employee' | 'inactive'
+
 interface PermissionState {
   permissions: EffectivePermissions | null
   isLoading: boolean
   error: Error | null
+  employeeStatus: EmployeeStatus
 }
 
 const state = reactive<PermissionState>({
   permissions: null,
   isLoading: false,
   error: null,
+  employeeStatus: 'unknown',
 })
 
 export const usePermissions = () => {
@@ -34,10 +40,12 @@ export const usePermissions = () => {
     if (!user.value?.id) {
       console.warn('[usePermissions] No user logged in')
       state.permissions = null
+      state.employeeStatus = 'unknown'
       return
     }
 
     state.isLoading = true
+    state.employeeStatus = 'loading'
     state.error = null
 
     try {
@@ -46,10 +54,10 @@ export const usePermissions = () => {
         readItems('employees', {
           filter: {
             user_id: { _eq: user.value.id },
-            status: { _eq: 'active' }
           },
           fields: [
             'id',
+            'status',
             'custom_permissions',
             'job_title_id',
             { job_title_id: ['id', 'name', 'permissions_config'] }
@@ -59,12 +67,24 @@ export const usePermissions = () => {
       )
 
       if (employees.length === 0) {
-        console.warn('[usePermissions] No active employee record found for user')
-        state.permissions = {}
+        // No employee record found - apply default read-only permissions
+        console.warn('[usePermissions] No employee record found for user - using read-only mode')
+        state.employeeStatus = 'no_employee'
+        state.permissions = getDefaultReadOnlyPermissions()
         return
       }
 
       const employee = employees[0]
+
+      // Check employee status
+      if (employee.status !== 'active') {
+        console.warn('[usePermissions] Employee record is not active:', employee.status)
+        state.employeeStatus = 'inactive'
+        state.permissions = getDefaultReadOnlyPermissions()
+        return
+      }
+
+      state.employeeStatus = 'active'
 
       // 決定使用哪一個權限配置
       let permissions: EffectivePermissions = {}
@@ -87,6 +107,7 @@ export const usePermissions = () => {
       console.error('[usePermissions] Failed to fetch permissions:', error)
       state.error = error as Error
       state.permissions = {}
+      state.employeeStatus = 'unknown'
     } finally {
       state.isLoading = false
     }
@@ -130,6 +151,7 @@ export const usePermissions = () => {
   const clearPermissions = () => {
     state.permissions = null
     state.error = null
+    state.employeeStatus = 'unknown'
   }
 
   // 自動載入權限（如果還沒載入且有使用者登入）
@@ -153,6 +175,12 @@ export const usePermissions = () => {
     permissions: computed(() => state.permissions),
     isLoading: computed(() => state.isLoading),
     error: computed(() => state.error),
+    employeeStatus: computed(() => state.employeeStatus),
+
+    // Convenience computed for checking employee issues
+    hasEmployeeIssue: computed(() =>
+      state.employeeStatus === 'no_employee' || state.employeeStatus === 'inactive'
+    ),
 
     // Methods
     fetchPermissions,

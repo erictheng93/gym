@@ -35,8 +35,8 @@ const generateQRCode = async () => {
         light: '#ffffff'
       }
     })
-  } catch (err) {
-    console.error('Failed to generate QR code:', err)
+  } catch {
+    // Failed to generate QR code
   }
 }
 
@@ -100,62 +100,112 @@ const contractStatusText = computed(() => {
     <PushPermissionBanner />
 
     <!-- QR Code Card -->
-    <div class="qr-card">
+    <section
+      class="qr-card"
+      aria-labelledby="qr-section-title"
+      aria-describedby="qr-section-desc"
+    >
+      <h2 id="qr-section-title" class="sr-only">入場 QR Code</h2>
+      <p id="qr-section-desc" class="sr-only">
+        掃描此 QR Code 進入健身房，每 {{ timeRemaining }} 秒自動刷新
+      </p>
+
       <div class="qr-container">
         <img
           v-if="qrCodeDataUrl"
           :src="qrCodeDataUrl"
-          alt="入場 QR Code"
+          alt="入場 QR Code，會員編號 {{ member?.member_code }}"
           class="qr-image"
         />
-        <div v-else class="qr-loading">
+        <div
+          v-else
+          class="qr-loading"
+          role="status"
+          aria-live="polite"
+        >
           載入中...
         </div>
       </div>
 
       <div class="qr-info">
-        <p class="member-code">{{ member?.member_code }}</p>
-        <p class="expiry-text">
-          <span class="countdown" :class="{ warning: timeRemaining <= 10 }">
+        <p class="member-code" aria-label="會員編號">{{ member?.member_code }}</p>
+        <p class="expiry-text" aria-live="polite">
+          <span
+            class="countdown"
+            :class="{ warning: timeRemaining <= 10 }"
+            :aria-label="`剩餘 ${timeRemaining} 秒`"
+          >
             {{ timeRemaining }}
           </span>
           秒後自動刷新
         </p>
       </div>
 
-      <button class="refresh-btn" @click="generateQRCode">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <button
+        class="refresh-btn"
+        type="button"
+        aria-label="立即刷新 QR Code"
+        @click="generateQRCode"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
           <path d="M23 4v6h-6M1 20v-6h6" />
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </svg>
         立即刷新
       </button>
-    </div>
+    </section>
 
     <!-- Contract Status -->
-    <div class="status-card">
-      <div class="status-row">
-        <span class="status-label">會籍狀態</span>
-        <span
-          class="status-value"
-          :class="{
-            'status-active': member?.member_status === 'ACTIVE',
-            'status-expired': member?.member_status === 'EXPIRED'
-          }"
-        >
-          {{ member?.member_status === 'ACTIVE' ? '有效' : '已到期' }}
-        </span>
-      </div>
-      <div class="status-row">
-        <span class="status-label">合約資訊</span>
-        <span class="status-value">{{ contractStatusText }}</span>
-      </div>
-    </div>
+    <section
+      class="status-card"
+      aria-labelledby="status-section-title"
+    >
+      <h2 id="status-section-title" class="sr-only">會籍資訊</h2>
+
+      <dl class="status-list">
+        <div class="status-row">
+          <dt class="status-label">會籍狀態</dt>
+          <dd
+            class="status-value"
+            :class="{
+              'status-active': member?.member_status === 'ACTIVE',
+              'status-expired': member?.member_status === 'EXPIRED'
+            }"
+          >
+            {{ member?.member_status === 'ACTIVE' ? '有效' : '已到期' }}
+          </dd>
+        </div>
+        <div class="status-row">
+          <dt class="status-label">合約資訊</dt>
+          <dd class="status-value">{{ contractStatusText }}</dd>
+        </div>
+      </dl>
+    </section>
 
     <!-- Quick Actions -->
-    <div class="quick-actions">
-      <NuxtLink to="/bookings" class="action-card">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <nav class="quick-actions" aria-label="快速操作">
+      <NuxtLink
+        to="/bookings"
+        class="action-card"
+        aria-label="預約課程"
+      >
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true"
+        >
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -163,20 +213,49 @@ const contractStatusText = computed(() => {
         </svg>
         <span>預約課程</span>
       </NuxtLink>
-      <NuxtLink to="/contracts" class="action-card">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <NuxtLink
+        to="/contracts"
+        class="action-card"
+        aria-label="查看我的合約"
+      >
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          aria-hidden="true"
+        >
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <polyline points="14 2 14 8 20 8" />
         </svg>
         <span>我的合約</span>
       </NuxtLink>
-    </div>
+    </nav>
   </div>
 </template>
 
 <style scoped>
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .entry-page {
   padding: 24px 16px;
+}
+
+.status-list {
+  margin: 0;
 }
 
 .header {

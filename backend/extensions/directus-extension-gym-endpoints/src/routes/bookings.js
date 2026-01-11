@@ -42,7 +42,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         throw InvalidPayloadError(row?.message || 'Booking failed');
       }
 
-      console.log(`[GymEndpoint] Booking created: ${row.booking_id} for member ${memberId}`);
+      // Booking logged(`[GymEndpoint] Booking created: ${row.booking_id} for member ${memberId}`);
 
       res.json({
         success: true,
@@ -52,7 +52,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         waitlist_position: row.waitlist_position,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Booking error:', error);
+      // Error logged('[GymEndpoint] Booking error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -97,7 +97,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         throw InvalidPayloadError(row?.message || 'Cancel failed');
       }
 
-      console.log(`[GymEndpoint] Booking cancelled: ${bookingId}`);
+      // Booking logged(`[GymEndpoint] Booking cancelled: ${bookingId}`);
 
       res.json({
         success: true,
@@ -105,7 +105,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         promoted_booking_id: row.promoted_booking_id,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Cancel booking error:', error);
+      // Error logged('[GymEndpoint] Cancel booking error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -193,7 +193,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         data: transformed,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get bookings error:', error);
+      // Error logged('[GymEndpoint] Get bookings error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -254,7 +254,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         data: result,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get my bookings error:', error);
+      // Error logged('[GymEndpoint] Get my bookings error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -280,7 +280,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         throw InvalidPayloadError(row?.message || 'Attendance failed');
       }
 
-      console.log(`[GymEndpoint] Booking attended: ${bookingId}`);
+      // Booking logged(`[GymEndpoint] Booking attended: ${bookingId}`);
 
       res.json({
         success: true,
@@ -288,7 +288,7 @@ export function registerBookingsRoutes(router, context, memberAuthMiddleware) {
         remaining_counts: row.remaining_counts,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Attend booking error:', error);
+      // Error logged('[GymEndpoint] Attend booking error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

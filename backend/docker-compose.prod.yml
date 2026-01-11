@@ -1,0 +1,144 @@
+# Docker Compose Production Override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file contains production-specific overrides for the base docker-compose.yml
+# All sensitive values should be set via environment variables or .env file
+
+services:
+  # ============================================
+  # Redis Production Configuration
+  # ============================================
+  redis:
+    restart: always
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "512mb"                           # Increased memory for production
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--appendonly"
+      - "yes"
+      - "--tcp-keepalive"
+      - "60"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-}"             # Optional password for production
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 768M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ============================================
+  # PostgreSQL Production Configuration
+  # ============================================
+  database:
+    restart: always
+    environment:
+      POSTGRES_USER: "${DB_USER:-directus}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"   # Required in production
+      POSTGRES_DB: "${DB_DATABASE:-gym_nexus}"
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=500"               # Increased for production
+      - "-c"
+      - "shared_buffers=512MB"              # Increased shared buffers
+      - "-c"
+      - "effective_cache_size=2GB"          # Increased cache size
+      - "-c"
+      - "work_mem=32MB"                     # Increased work memory
+      - "-c"
+      - "maintenance_work_mem=256MB"        # Increased maintenance memory
+      - "-c"
+      - "random_page_cost=1.1"              # SSD optimization
+      - "-c"
+      - "effective_io_concurrency=200"      # SSD parallel IO
+      - "-c"
+      - "idle_in_transaction_session_timeout=30000"
+      - "-c"
+      - "statement_timeout=120000"          # 2 min timeout in production
+      - "-c"
+      - "lock_timeout=10000"
+      - "-c"
+      - "log_min_duration_statement=1000"   # Log slow queries (>1s)
+      - "-c"
+      - "log_checkpoints=on"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ============================================
+  # Directus Production Configuration
+  # ============================================
+  directus:
+    # Build from production Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      # Security - REQUIRED in production
+      SECRET: "${SECRET}"                    # Must be set
+
+      # Database connection
+      DB_USER: "${DB_USER:-directus}"
+      DB_PASSWORD: "${DB_PASSWORD}"          # Must be set
+      DB_POOL__MIN: "5"                      # Higher minimum pool
+      DB_POOL__MAX: "100"                    # Higher maximum pool
+
+      # Redis with optional password
+      CACHE_REDIS: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+
+      # Production logging
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_STYLE: "raw"                       # JSON logging for production
+
+      # Rate limiting - enabled in production
+      RATE_LIMITER_ENABLED: "true"
+      RATE_LIMITER_STORE: "redis"
+      RATE_LIMITER_REDIS: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+      RATE_LIMITER_POINTS: "100"
+      RATE_LIMITER_DURATION: "60"
+
+      # Disable admin account creation
+      ADMIN_EMAIL: ""
+      ADMIN_PASSWORD: ""
+
+      # Security headers
+      CONTENT_SECURITY_POLICY_DIRECTIVES__FRAME_ANCESTORS: "array:'self'"
+
+      # Production performance
+      CACHE_TTL: "10m"                       # Longer cache in production
+
+      # CORS - Must be explicitly configured
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: "${CORS_ORIGIN}"          # Required - no default
+      CORS_CREDENTIALS: "true"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # Production health check with longer intervals
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8055/gym/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s

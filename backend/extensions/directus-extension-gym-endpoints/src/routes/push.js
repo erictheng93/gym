@@ -71,14 +71,14 @@ export function registerPushRoutes(router, context, memberAuthMiddleware) {
 
       const row = result.rows?.[0] || result[0];
 
-      console.log(`[GymEndpoint] Push subscription created for member ${memberId}`);
+      // Subscription logged(`[GymEndpoint] Push subscription created for member ${memberId}`);
 
       res.json({
         success: true,
         subscription_id: row?.subscription_id,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Push subscribe error:', error);
+      // Error logged('[GymEndpoint] Push subscribe error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -104,13 +104,13 @@ export function registerPushRoutes(router, context, memberAuthMiddleware) {
 
       const row = result.rows?.[0] || result[0];
 
-      console.log(`[GymEndpoint] Push unsubscribed: ${endpoint}`);
+      // Unsubscribed logged(`[GymEndpoint] Push unsubscribed: ${endpoint}`);
 
       res.json({
         success: row?.success || false,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Push unsubscribe error:', error);
+      // Error logged('[GymEndpoint] Push unsubscribe error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -155,13 +155,13 @@ export function registerPushRoutes(router, context, memberAuthMiddleware) {
         notify_promotions: preferences.notify_promotions ?? subs[0].notify_promotions,
       });
 
-      console.log(`[GymEndpoint] Push preferences updated for member ${req.member.id}`);
+      // Preferences logged(`[GymEndpoint] Push preferences updated for member ${req.member.id}`);
 
       res.json({
         success: true,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Update preferences error:', error);
+      // Error logged('[GymEndpoint] Update preferences error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

@@ -3,6 +3,7 @@
  * 統一處理應用程式中的各種錯誤類型
  */
 
+import * as Sentry from '@sentry/vue'
 import { MESSAGES } from '~/constants'
 
 // 錯誤類型定義
@@ -168,6 +169,26 @@ export function useErrorHandler() {
       console.error('Retryable:', appError.retryable)
       console.error('Details:', appError.details)
       console.groupEnd()
+    }
+
+    // Report to Sentry (skip auth errors which are expected during session checks)
+    if (!import.meta.dev && appError.type !== 'auth') {
+      try {
+        Sentry.captureException(error, {
+          tags: {
+            errorType: appError.type,
+            context: context || 'unknown',
+            retryable: String(appError.retryable),
+          },
+          extra: {
+            appError,
+            customMessage,
+          },
+          level: appError.type === 'network' ? 'warning' : 'error',
+        })
+      } catch {
+        // Sentry not initialized or failed - silently ignore
+      }
     }
 
     // 處理認證錯誤 - 重定向到登入頁

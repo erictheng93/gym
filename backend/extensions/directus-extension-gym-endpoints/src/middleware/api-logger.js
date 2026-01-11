@@ -4,6 +4,7 @@
  */
 
 import { performance } from 'perf_hooks';
+import { logger } from '../utils/logger.js';
 
 /**
  * Create API logging middleware
@@ -113,10 +114,15 @@ export function createApiLogger(context) {
           ]);
 
           if (process.env.DEBUG_API_LOGGER === 'true') {
-            console.log(`[ApiLogger] Logged: ${req.method} ${req.path} ${res.statusCode} ${responseTimeMs}ms`);
+            logger.debug('API request logged', {
+              method: req.method,
+              path: req.path,
+              statusCode: res.statusCode,
+              responseTimeMs
+            });
           }
         } catch (error) {
-          console.error('[ApiLogger] Failed to log API usage:', error.message);
+          logger.error('Failed to log API usage', { error: error.message });
         }
       });
 

@@ -52,7 +52,6 @@ onMounted(async () => {
   catch (err) {
     status.value = 'error'
     errorMessage.value = err instanceof Error ? err.message : '登入失敗，請重試'
-    console.error('OAuth callback error:', err)
   }
 })
 

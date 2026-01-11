@@ -96,7 +96,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         tenants
       });
     } catch (error) {
-      console.error('[AdminEndpoint] Error fetching tenants:', error);
+      // Error logged('[AdminEndpoint] Error fetching tenants:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Internal server error'
@@ -190,7 +190,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         tenant_id: tenantId
       });
     } catch (error) {
-      console.error('[AdminEndpoint] Error creating tenant:', error);
+      // Error logged('[AdminEndpoint] Error creating tenant:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Internal server error'
@@ -302,7 +302,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         }
       });
     } catch (error) {
-      console.error('[AdminEndpoint] Error fetching tenant details:', error);
+      // Error logged('[AdminEndpoint] Error fetching tenant details:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Internal server error'
@@ -396,7 +396,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         message: '租戶信息已更新'
       });
     } catch (error) {
-      console.error('[AdminEndpoint] Error updating tenant:', error);
+      // Error logged('[AdminEndpoint] Error updating tenant:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Internal server error'
@@ -443,7 +443,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         message: '租戶狀態已更新'
       });
     } catch (error) {
-      console.error('[AdminEndpoint] Error changing tenant status:', error);
+      // Error logged('[AdminEndpoint] Error changing tenant status:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Internal server error'
@@ -496,7 +496,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get notification config error:', error);
+      // Error logged('[GymEndpoint] Get notification config error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -559,7 +559,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
 
       res.json({ success: true, message: '通知設定已更新' });
     } catch (error) {
-      console.error('[GymEndpoint] Update notification config error:', error);
+      // Error logged('[GymEndpoint] Update notification config error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -626,7 +626,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         });
       }
     } catch (error) {
-      console.error('[GymEndpoint] Test notification config error:', error);
+      // Error logged('[GymEndpoint] Test notification config error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -670,7 +670,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         sms_usage: smsResult.rows || [],
       });
     } catch (error) {
-      console.error('[GymEndpoint] Notification usage error:', error);
+      // Error logged('[GymEndpoint] Notification usage error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -725,7 +725,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         res.json({ success: true, data: rows });
       }
     } catch (error) {
-      console.error('[GymEndpoint] Export notification usage error:', error);
+      // Error logged('[GymEndpoint] Export notification usage error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -755,7 +755,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         data: result.rows
       });
     } catch (error) {
-      console.error('[Admin] Error fetching member status distribution:', error);
+      // Error logged('[Admin] Error fetching member status distribution:', error);
       res.status(500).json({ success: false, message: error.message });
     }
   });
@@ -787,7 +787,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         data: result.rows
       });
     } catch (error) {
-      console.error('[Admin] Error fetching contract distribution:', error);
+      // Error logged('[Admin] Error fetching contract distribution:', error);
       res.status(500).json({ success: false, message: error.message });
     }
   });
@@ -835,7 +835,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         data: result.rows
       });
     } catch (error) {
-      console.error('[Admin] Error fetching age distribution:', error);
+      // Error logged('[Admin] Error fetching age distribution:', error);
       res.status(500).json({ success: false, message: error.message });
     }
   });
@@ -884,7 +884,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         data: result.rows
       });
     } catch (error) {
-      console.error('[Admin] Error fetching top plans:', error);
+      // Error logged('[Admin] Error fetching top plans:', error);
       res.status(500).json({ success: false, message: error.message });
     }
   });
@@ -917,7 +917,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         data: result.rows[0] || { churned_count: 0, churn_rate: 0 }
       });
     } catch (error) {
-      console.error('[Admin] Error fetching churn data:', error);
+      // Error logged('[Admin] Error fetching churn data:', error);
       res.status(500).json({ success: false, message: error.message });
     }
   });
@@ -982,7 +982,7 @@ export function registerAdminRoutes(router, context, adminNotificationMiddleware
         });
       }
     } catch (error) {
-      console.error('[Admin] Error exporting member analytics:', error);
+      // Error logged('[Admin] Error exporting member analytics:', error);
       res.status(500).json({ success: false, message: error.message });
     }
   });

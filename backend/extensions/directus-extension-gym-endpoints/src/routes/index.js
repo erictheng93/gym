@@ -20,6 +20,7 @@ import { registerAnalyticsRoutes } from './analytics.js';
 import { registerBillingRoutes } from './billing.js';
 import { registerAuditRoutes } from './audit.js';
 import { registerPaymentRoutes } from './payment.js';
+import { registerHealthRoutes } from './health.js';
 
 /**
  * Register all routes with the router
@@ -29,6 +30,9 @@ import { registerPaymentRoutes } from './payment.js';
  */
 export function registerAllRoutes(router, context, middleware) {
   const { memberAuth, adminNotification } = middleware;
+
+  // Health check routes (no auth required, registered first)
+  registerHealthRoutes(router, context);
 
   // OTP routes (no auth required)
   registerOtpRoutes(router, context);

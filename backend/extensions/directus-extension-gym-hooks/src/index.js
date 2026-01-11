@@ -49,54 +49,54 @@ let notificationServiceLoaded = false;
 import('./cache.js').then((module) => {
   cacheModule = module;
   cacheEnabled = true;
-  console.log('[GymHook] Redis cache module loaded successfully');
+  // Status logged('[GymHook] Redis cache module loaded successfully');
 }).catch(() => {
-  console.log('[GymHook] Redis cache module not available, running without cache');
+  // Status logged('[GymHook] Redis cache module not available, running without cache');
 });
 
 // 載入 Email 服務模組
 import('./email-service.js').then((module) => {
   emailService = module;
   emailServiceLoaded = true;
-  console.log('[GymHook] Email service module loaded');
+  // Status logged('[GymHook] Email service module loaded');
 }).catch(() => {
-  console.log('[GymHook] Email service module not available');
+  // Status logged('[GymHook] Email service module not available');
 });
 
 // 載入 LINE 服務模組
 import('./line-service.js').then((module) => {
   lineService = module;
   lineServiceLoaded = true;
-  console.log('[GymHook] LINE service module loaded');
+  // Status logged('[GymHook] LINE service module loaded');
 }).catch(() => {
-  console.log('[GymHook] LINE service module not available');
+  // Status logged('[GymHook] LINE service module not available');
 });
 
 // 載入 SMS 服務模組
 import('./sms-service.js').then((module) => {
   smsService = module;
   smsServiceLoaded = true;
-  console.log('[GymHook] SMS service module loaded');
+  // Status logged('[GymHook] SMS service module loaded');
 }).catch(() => {
-  console.log('[GymHook] SMS service module not available');
+  // Status logged('[GymHook] SMS service module not available');
 });
 
 // 載入統一通知服務模組
 import('./notification-service.js').then((module) => {
   notificationService = module;
   notificationServiceLoaded = true;
-  console.log('[GymHook] NotificationService module loaded');
+  // Status logged('[GymHook] NotificationService module loaded');
 }).catch(() => {
-  console.log('[GymHook] NotificationService module not available');
+  // Status logged('[GymHook] NotificationService module not available');
 });
 
 // 載入推播服務模組
 import('./push-service.js').then((module) => {
   pushService = module;
   pushEnabled = true;
-  console.log('[GymHook] Push notification module loaded');
+  // Status logged('[GymHook] Push notification module loaded');
 }).catch(() => {
-  console.log('[GymHook] Push notification module not available');
+  // Status logged('[GymHook] Push notification module not available');
 });
 
 // ============================================
@@ -175,9 +175,9 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
 
           pushEnabled = pushService.initPushService(env);
           if (pushEnabled) {
-            console.log('[GymHook] Push notifications enabled');
+            // Status logged('[GymHook] Push notifications enabled');
           } else {
-            console.log('[GymHook] Push notifications disabled (VAPID keys not configured)');
+            // Status logged('[GymHook] Push notifications disabled (VAPID keys not configured)');
           }
         }
 
@@ -186,7 +186,7 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
           const schema = await getSchema();
           const emailEnabled = emailService.initEmailService(services, schema);
           if (emailEnabled) {
-            console.log('[GymHook] Email notifications enabled');
+            // Status logged('[GymHook] Email notifications enabled');
           }
         }
 
@@ -214,13 +214,13 @@ export default ({ filter, action, init, schedule }, { services, database, getSch
             database,
           });
 
-          console.log('[GymHook] NotificationService initialized with channels:', notificationService.getEnabledChannels().join(', ') || 'none');
+          // Status logged('[GymHook] NotificationService initialized with channels:', notificationService.getEnabledChannels().join(', ') || 'none');
         }
       } catch (error) {
-        console.error('[GymHook] Notification services init error:', error);
+        // Error logged('[GymHook] Notification services init error:', error);
       }
     });
   }
 
-  console.log('[GymHook] Gym business logic hooks registered (modular architecture)');
+  // Status logged('[GymHook] Gym business logic hooks registered (modular architecture)');
 };

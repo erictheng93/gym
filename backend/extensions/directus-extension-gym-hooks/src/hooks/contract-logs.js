@@ -55,9 +55,9 @@ export function registerContractLogsHooks({ action }, { services, database }) {
         status: 'active',
       });
 
-      console.log(`[GymHook] Contract ${payload.contract_id} extended by ${payload.days_affected} days due to PAUSE`);
+      // Status logged(`[GymHook] Contract ${payload.contract_id} extended by ${payload.days_affected} days due to PAUSE`);
     } catch (error) {
-      console.error('[GymHook] Error extending contract:', error);
+      // Error logged('[GymHook] Error extending contract:', error);
     }
   });
 
@@ -76,9 +76,9 @@ export function registerContractLogsHooks({ action }, { services, database }) {
         contract_status: 'ACTIVE',
       });
 
-      console.log(`[GymHook] Contract ${payload.contract_id} resumed to ACTIVE`);
+      // Status logged(`[GymHook] Contract ${payload.contract_id} resumed to ACTIVE`);
     } catch (error) {
-      console.error('[GymHook] Error resuming contract:', error);
+      // Error logged('[GymHook] Error resuming contract:', error);
     }
   });
 
@@ -104,17 +104,17 @@ export function registerContractLogsHooks({ action }, { services, database }) {
           remaining_counts: newCount,
         });
 
-        console.log(`[GymHook] Class used: contract ${payload.contract_id} remaining ${newCount}`);
+        // Status logged(`[GymHook] Class used: contract ${payload.contract_id} remaining ${newCount}`);
 
         if (newCount === 0) {
           await contractsService.updateOne(payload.contract_id, {
             contract_status: 'EXPIRED',
           });
-          console.log(`[GymHook] Contract ${payload.contract_id} expired (all classes used)`);
+          // Status logged(`[GymHook] Contract ${payload.contract_id} expired (all classes used)`);
         }
       }
     } catch (error) {
-      console.error('[GymHook] Error deducting class count:', error);
+      // Error logged('[GymHook] Error deducting class count:', error);
     }
   });
 
@@ -147,7 +147,7 @@ export function registerContractLogsHooks({ action }, { services, database }) {
         member_id: payload.target_member_id,
       });
 
-      console.log(`[GymHook] Contract ${payload.contract_id} transferred from member ${originalMemberId} to ${payload.target_member_id}`);
+      // Status logged(`[GymHook] Contract ${payload.contract_id} transferred from member ${originalMemberId} to ${payload.target_member_id}`);
 
       // 更新原會員狀態
       if (originalMemberId) {
@@ -162,7 +162,7 @@ export function registerContractLogsHooks({ action }, { services, database }) {
         await membersService.updateOne(originalMemberId, {
           member_status: originalMemberStatus,
         });
-        console.log(`[GymHook] Original member ${originalMemberId} status updated to ${originalMemberStatus}`);
+        // Status logged(`[GymHook] Original member ${originalMemberId} status updated to ${originalMemberStatus}`);
       }
 
       // 更新新會員狀態
@@ -177,9 +177,9 @@ export function registerContractLogsHooks({ action }, { services, database }) {
       await membersService.updateOne(payload.target_member_id, {
         member_status: targetMemberStatus,
       });
-      console.log(`[GymHook] Target member ${payload.target_member_id} status updated to ${targetMemberStatus}`);
+      // Status logged(`[GymHook] Target member ${payload.target_member_id} status updated to ${targetMemberStatus}`);
     } catch (error) {
-      console.error('[GymHook] Error transferring contract:', error);
+      // Error logged('[GymHook] Error transferring contract:', error);
     }
   });
 }

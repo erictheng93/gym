@@ -101,7 +101,7 @@ export function registerAuditRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[AuditEndpoint] Error fetching logs:', error);
+      // Error logged('[AuditEndpoint] Error fetching logs:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -146,7 +146,7 @@ export function registerAuditRoutes(router, context) {
         data: log
       });
     } catch (error) {
-      console.error('[AuditEndpoint] Error fetching log detail:', error);
+      // Error logged('[AuditEndpoint] Error fetching log detail:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -235,7 +235,7 @@ export function registerAuditRoutes(router, context) {
         audit_id: auditId
       });
     } catch (error) {
-      console.error('[AuditEndpoint] Error creating log:', error);
+      // Error logged('[AuditEndpoint] Error creating log:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -341,7 +341,7 @@ export function registerAuditRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[AuditEndpoint] Error fetching stats:', error);
+      // Error logged('[AuditEndpoint] Error fetching stats:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -439,7 +439,7 @@ export function registerAuditRoutes(router, context) {
         });
       }
     } catch (error) {
-      console.error('[AuditEndpoint] Error exporting logs:', error);
+      // Error logged('[AuditEndpoint] Error exporting logs:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -476,7 +476,7 @@ export function registerAuditRoutes(router, context) {
         deleted_count: deletedCount
       });
     } catch (error) {
-      console.error('[AuditEndpoint] Error cleaning up logs:', error);
+      // Error logged('[AuditEndpoint] Error cleaning up logs:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

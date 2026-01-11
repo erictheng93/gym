@@ -17,13 +17,18 @@
 // 模組化導入
 // ============================================
 import { initRedis } from './utils/redis.js';
+import { logger } from './utils/logger.js';
 import { createMemberAuthMiddleware } from './middleware/member-auth.js';
 import { createAdminNotificationMiddleware } from './middleware/admin-auth.js';
 import { createTenantContextMiddleware } from './middleware/tenant-context.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { createRateLimiter } from './middleware/rate-limiter.js';
 import { createApiLogger } from './middleware/api-logger.js';
+import { createErrorHandler, setupProcessErrorHandlers } from './middleware/error-handler.js';
 import { registerAllRoutes } from './routes/index.js';
+
+// 設置進程級錯誤處理
+setupProcessErrorHandlers();
 
 // 初始化 Redis 連接（非阻塞）
 initRedis();
@@ -91,6 +96,9 @@ export default {
 
     registerAllRoutes(router, context, middleware);
 
-    console.log('[GymEndpoint] Gym API endpoints registered with tenant isolation');
+    // 全局錯誤處理（必須在所有路由之後）
+    router.use(createErrorHandler());
+
+    logger.info('Gym API endpoints registered with tenant isolation');
   },
 };

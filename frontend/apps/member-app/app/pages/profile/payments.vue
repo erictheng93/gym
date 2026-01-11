@@ -64,8 +64,8 @@ const fetchPayments = async (loadMore = false) => {
     }
 
     hasMore.value = items.length === pageSize
-  } catch (error) {
-    console.error('Failed to fetch payments:', error)
+  } catch {
+    // Failed to fetch payments
   } finally {
     isLoading.value = false
   }

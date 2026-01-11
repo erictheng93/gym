@@ -44,7 +44,7 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
 
       return false;
     } catch (error) {
-      console.error('[GymHook] Error checking supervisor relationship:', error);
+      // Error logged('[GymHook] Error checking supervisor relationship:', error);
       return false;
     }
   }
@@ -84,7 +84,7 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
           notes: '提交休假申請',
         });
       } catch (e) {
-        console.log('[GymHook] leave_approval_logs table not available');
+        // Status logged('[GymHook] leave_approval_logs table not available');
       }
 
       // 更新休假餘額中的 pending_days (使用原子操作)
@@ -97,13 +97,13 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
 
         const row = result.rows?.[0] || result[0];
         if (row?.success) {
-          console.log(`[GymHook] Leave balance updated: pending=${row.new_pending} [atomic]`);
+          // Status logged(`[GymHook] Leave balance updated: pending=${row.new_pending} [atomic]`);
         } else if (row) {
-          console.warn(`[GymHook] Leave balance update warning: ${row.message}`);
+          // Warning logged(`[GymHook] Leave balance update warning: ${row.message}`);
         }
       } catch (e) {
         if (e.message?.includes('update_leave_balance')) {
-          console.log('[GymHook] Atomic leave function not available, using fallback');
+          // Status logged('[GymHook] Atomic leave function not available, using fallback');
           try {
             const balancesService = new ItemsService('leave_balances', {
               schema: schema,
@@ -127,16 +127,16 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
               });
             }
           } catch (fallbackError) {
-            console.log('[GymHook] leave_balances table not available');
+            // Status logged('[GymHook] leave_balances table not available');
           }
         } else {
-          console.log('[GymHook] leave_balances table not available');
+          // Status logged('[GymHook] leave_balances table not available');
         }
       }
 
-      console.log(`[GymHook] Leave request ${key} submitted: ${daysRequested} days`);
+      // Status logged(`[GymHook] Leave request ${key} submitted: ${daysRequested} days`);
     } catch (error) {
-      console.error('[GymHook] Error processing leave request submission:', error);
+      // Error logged('[GymHook] Error processing leave request submission:', error);
     }
   });
 
@@ -221,7 +221,7 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
 
       return payload;
     } catch (error) {
-      console.error('[GymHook] Leave approval validation error:', error);
+      // Error logged('[GymHook] Leave approval validation error:', error);
       throw error;
     }
   });
@@ -265,7 +265,7 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
             notes: payload.approval_notes || null,
           });
         } catch (e) {
-          console.log('[GymHook] Could not create approval log');
+          // Status logged('[GymHook] Could not create approval log');
         }
 
         // 更新休假餘額
@@ -289,20 +289,20 @@ export function registerLeaveRequestsHooks({ action, filter }, { services, datab
 
           const row = result.rows?.[0] || result[0];
           if (row?.success) {
-            console.log(`[GymHook] Leave balance updated: pending=${row.new_pending}, used=${row.new_used} [atomic]`);
+            // Status logged(`[GymHook] Leave balance updated: pending=${row.new_pending}, used=${row.new_used} [atomic]`);
           }
         } catch (e) {
           if (e.message?.includes('update_leave_balance')) {
-            console.log('[GymHook] Atomic leave function not available, using fallback');
+            // Status logged('[GymHook] Atomic leave function not available, using fallback');
             // Fallback logic here if needed
           }
-          console.log('[GymHook] Could not update leave balance');
+          // Status logged('[GymHook] Could not update leave balance');
         }
 
-        console.log(`[GymHook] Leave request ${requestId} ${payload.leave_status}`);
+        // Status logged(`[GymHook] Leave request ${requestId} ${payload.leave_status}`);
       }
     } catch (error) {
-      console.error('[GymHook] Error processing leave approval:', error);
+      // Error logged('[GymHook] Error processing leave approval:', error);
     }
   });
 }

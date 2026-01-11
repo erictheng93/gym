@@ -74,7 +74,7 @@ export function registerNotificationsRoutes(router, context, memberAuthMiddlewar
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get notification preferences error:', error);
+      // Error logged('[GymEndpoint] Get notification preferences error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -124,7 +124,7 @@ export function registerNotificationsRoutes(router, context, memberAuthMiddlewar
 
       res.json({ success: true, message: '通知設定已更新', preferences: result.rows?.[0] });
     } catch (error) {
-      console.error('[GymEndpoint] Update notification preferences error:', error);
+      // Error logged('[GymEndpoint] Update notification preferences error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -154,7 +154,7 @@ export function registerNotificationsRoutes(router, context, memberAuthMiddlewar
         pagination: { limit, offset, total: parseInt(countResult.rows?.[0]?.total || 0) },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get notification history error:', error);
+      // Error logged('[GymEndpoint] Get notification history error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -188,7 +188,7 @@ export function registerNotificationsRoutes(router, context, memberAuthMiddlewar
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get notification channels error:', error);
+      // Error logged('[GymEndpoint] Get notification channels error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });
@@ -225,7 +225,7 @@ export function registerNotificationsRoutes(router, context, memberAuthMiddlewar
 
       res.json({ success: result.success, channel: result.channel, attempts: result.attempts, error: result.error });
     } catch (error) {
-      console.error('[GymEndpoint] Test notification error:', error);
+      // Error logged('[GymEndpoint] Test notification error:', error);
       res.status(500).json({ success: false, message: error.message || 'Internal server error' });
     }
   });

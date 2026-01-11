@@ -78,8 +78,7 @@ const fetchCheckin = async () => {
     }
 
     checkin.value = result as CheckinDetail
-  } catch (err) {
-    console.error('Failed to fetch checkin:', err)
+  } catch {
     error.value = '無法載入入場記錄'
   } finally {
     isLoading.value = false

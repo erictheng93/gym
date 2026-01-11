@@ -41,7 +41,7 @@ function getRedisClient() {
     port,
     retryStrategy: (times) => {
       if (times > 3) {
-        console.log('[GymCache] Redis connection failed, disabling cache');
+        // Cache logged('[GymCache] Redis connection failed, disabling cache');
         return null; // 停止重試
       }
       return Math.min(times * 100, 2000);
@@ -52,22 +52,22 @@ function getRedisClient() {
 
   redisClient.on('connect', () => {
     isConnected = true;
-    console.log('[GymCache] Redis connected');
+    // Cache logged('[GymCache] Redis connected');
   });
 
   redisClient.on('error', (err) => {
     isConnected = false;
-    console.log('[GymCache] Redis error:', err.message);
+    // Cache logged('[GymCache] Redis error:', err.message);
   });
 
   redisClient.on('close', () => {
     isConnected = false;
-    console.log('[GymCache] Redis connection closed');
+    // Cache logged('[GymCache] Redis connection closed');
   });
 
   // 嘗試連接
   redisClient.connect().catch(() => {
-    console.log('[GymCache] Redis initial connection failed, will retry on demand');
+    // Cache logged('[GymCache] Redis initial connection failed, will retry on demand');
   });
 
   return redisClient;
@@ -105,14 +105,14 @@ export async function getCachedMemberContract(memberId) {
     const data = await client.get(key);
 
     if (data) {
-      console.log(`[GymCache] HIT member_contract:${memberId}`);
+      // Cache logged(`[GymCache] HIT member_contract:${memberId}`);
       return JSON.parse(data);
     }
 
-    console.log(`[GymCache] MISS member_contract:${memberId}`);
+    // Cache logged(`[GymCache] MISS member_contract:${memberId}`);
     return null;
   } catch (error) {
-    console.log('[GymCache] Error getting member contract:', error.message);
+    // Cache logged('[GymCache] Error getting member contract:', error.message);
     return null;
   }
 }
@@ -129,9 +129,9 @@ export async function setCachedMemberContract(memberId, contract) {
 
     const key = cacheKey('member_contract', memberId);
     await client.setex(key, CACHE_CONFIG.TTL.MEMBER_CONTRACT, JSON.stringify(contract));
-    console.log(`[GymCache] SET member_contract:${memberId}`);
+    // Cache logged(`[GymCache] SET member_contract:${memberId}`);
   } catch (error) {
-    console.log('[GymCache] Error setting member contract:', error.message);
+    // Cache logged('[GymCache] Error setting member contract:', error.message);
   }
 }
 
@@ -150,9 +150,9 @@ export async function invalidateMemberContract(memberId) {
     ];
 
     await client.del(...keys);
-    console.log(`[GymCache] DEL member cache:${memberId}`);
+    // Cache logged(`[GymCache] DEL member cache:${memberId}`);
   } catch (error) {
-    console.log('[GymCache] Error invalidating member contract:', error.message);
+    // Cache logged('[GymCache] Error invalidating member contract:', error.message);
   }
 }
 
@@ -356,9 +356,9 @@ export async function invalidateMembersBatch(memberIds) {
     ]);
 
     await client.del(...keys);
-    console.log(`[GymCache] Batch DEL ${memberIds.length} members`);
+    // Cache logged(`[GymCache] Batch DEL ${memberIds.length} members`);
   } catch (error) {
-    console.log('[GymCache] Error batch invalidating:', error.message);
+    // Cache logged('[GymCache] Error batch invalidating:', error.message);
   }
 }
 
@@ -402,14 +402,14 @@ export async function getCachedReportData(reportType, queryKey) {
     const data = await client.get(key);
 
     if (data) {
-      console.log(`[GymCache] HIT report:${reportType}:${queryKey.substring(0, 20)}`);
+      // Cache logged(`[GymCache] HIT report:${reportType}:${queryKey.substring(0, 20)}`);
       return JSON.parse(data);
     }
 
-    console.log(`[GymCache] MISS report:${reportType}:${queryKey.substring(0, 20)}`);
+    // Cache logged(`[GymCache] MISS report:${reportType}:${queryKey.substring(0, 20)}`);
     return null;
   } catch (error) {
-    console.log('[GymCache] Error getting report data:', error.message);
+    // Cache logged('[GymCache] Error getting report data:', error.message);
     return null;
   }
 }
@@ -429,9 +429,9 @@ export async function setCachedReportData(reportType, queryKey, data, ttl = null
     const key = cacheKey('report', reportType, queryKey);
     const cacheTtl = ttl || CACHE_CONFIG.TTL.REPORT_DATA;
     await client.setex(key, cacheTtl, JSON.stringify(data));
-    console.log(`[GymCache] SET report:${reportType}:${queryKey.substring(0, 20)} (TTL: ${cacheTtl}s)`);
+    // Cache logged(`[GymCache] SET report:${reportType}:${queryKey.substring(0, 20)} (TTL: ${cacheTtl}s)`);
   } catch (error) {
-    console.log('[GymCache] Error setting report data:', error.message);
+    // Cache logged('[GymCache] Error setting report data:', error.message);
   }
 }
 
@@ -451,10 +451,10 @@ export async function invalidateReportCache(reportType = null) {
     const keys = await client.keys(pattern);
     if (keys.length > 0) {
       await client.del(...keys);
-      console.log(`[GymCache] Invalidated ${keys.length} report cache entries (type: ${reportType || 'all'})`);
+      // Cache logged(`[GymCache] Invalidated ${keys.length} report cache entries (type: ${reportType || 'all'})`);
     }
   } catch (error) {
-    console.log('[GymCache] Error invalidating report cache:', error.message);
+    // Cache logged('[GymCache] Error invalidating report cache:', error.message);
   }
 }
 
@@ -487,7 +487,7 @@ export async function recordPerformanceMetric(operation, durationMs) {
         duration: durationMs,
       }));
       await client.ltrim(slowKey, 0, 99); // 只保留 100 筆
-      console.log(`[GymCache] SLOW ${operation}: ${durationMs}ms`);
+      // Cache logged(`[GymCache] SLOW ${operation}: ${durationMs}ms`);
     }
   } catch (error) {
     // 忽略監控錯誤

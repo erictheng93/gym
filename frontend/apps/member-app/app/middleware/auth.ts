@@ -11,15 +11,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return
   }
 
-  console.log('[Middleware] Running auth check on client...')
-  const { checkAuth, accessToken } = useMemberAuth()
-  console.log('[Middleware] Access token value:', accessToken.value ? 'exists' : 'null')
+  const { checkAuth } = useMemberAuth()
   const isAuthenticated = await checkAuth()
-  console.log('[Middleware] isAuthenticated:', isAuthenticated)
 
   if (!isAuthenticated) {
-    console.log('[Middleware] Redirecting to login...')
     return navigateTo('/login')
   }
-  console.log('[Middleware] Auth passed, continuing...')
 })

@@ -47,8 +47,7 @@ export const usePushNotifications = () => {
         `${apiUrl}/gym/push/vapid-public-key`
       )
       return response.success ? response.publicKey : null
-    } catch (error) {
-      console.error('Failed to get VAPID key:', error)
+    } catch {
       return null
     }
   }
@@ -65,8 +64,7 @@ export const usePushNotifications = () => {
       const result = await Notification.requestPermission()
       permission.value = result
       return result
-    } catch (error) {
-      console.error('Failed to request permission:', error)
+    } catch {
       return 'denied'
     }
   }
@@ -93,7 +91,6 @@ export const usePushNotifications = () => {
       // Get VAPID key
       const vapidKey = await getVapidKey()
       if (!vapidKey) {
-        console.error('VAPID key not available')
         return false
       }
 
@@ -134,8 +131,7 @@ export const usePushNotifications = () => {
       }
 
       return false
-    } catch (error) {
-      console.error('Failed to subscribe:', error)
+    } catch {
       return false
     } finally {
       isLoading.value = false
@@ -167,8 +163,7 @@ export const usePushNotifications = () => {
       subscription.value = null
       isSubscribed.value = false
       return true
-    } catch (error) {
-      console.error('Failed to unsubscribe:', error)
+    } catch {
       return false
     } finally {
       isLoading.value = false
@@ -204,8 +199,7 @@ export const usePushNotifications = () => {
       }
 
       return false
-    } catch (error) {
-      console.error('Failed to update preferences:', error)
+    } catch {
       return false
     }
   }
@@ -227,8 +221,8 @@ export const usePushNotifications = () => {
         subscription.value = null
         isSubscribed.value = false
       }
-    } catch (error) {
-      console.error('Failed to check subscription:', error)
+    } catch {
+      // Subscription check failed
     }
   }
 

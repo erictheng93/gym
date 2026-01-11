@@ -123,10 +123,7 @@ const sendOtp = async () => {
       currentStep.value = 'verify'
       toast.success('驗證碼已發送')
 
-      // 開發模式顯示 OTP
-      if (response.otp) {
-        console.log('[DEV] OTP:', response.otp)
-      }
+      // OTP is shown in devOtp.value in development mode
 
       // 啟動冷卻計時
       startCooldown()

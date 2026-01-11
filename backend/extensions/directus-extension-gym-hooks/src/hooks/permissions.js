@@ -21,6 +21,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
   const COLLECTION_TO_MODULE = {
     members: 'members',
     contracts: 'contracts',
+    contract_logs: 'contracts',
     payments: 'payments',
     membership_plans: 'plans',
     employees: 'employees',
@@ -34,6 +35,11 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
     reports: 'reports',
     job_titles: 'settings',
     system_settings: 'settings',
+    // Class management
+    classes: 'classes',
+    class_sessions: 'classes',
+    class_categories: 'classes',
+    class_bookings: 'classes',
   };
 
   /**
@@ -73,19 +79,19 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
 
       const employee = result.rows?.[0];
       if (!employee) {
-        console.log(`[PermissionCheck] No active employee found for user ${userId}`);
+        // Perms logged(`[PermissionCheck] No active employee found for user ${userId}`);
         return {};
       }
 
       let permissions = {};
       if (employee.custom_permissions && typeof employee.custom_permissions === 'object') {
         permissions = employee.custom_permissions;
-        console.log(`[PermissionCheck] Using custom permissions for employee ${employee.id}`);
+        // Perms logged(`[PermissionCheck] Using custom permissions for employee ${employee.id}`);
       } else if (employee.job_title_permissions && typeof employee.job_title_permissions === 'object') {
         permissions = employee.job_title_permissions;
-        console.log(`[PermissionCheck] Using job title permissions for employee ${employee.id}`);
+        // Perms logged(`[PermissionCheck] Using job title permissions for employee ${employee.id}`);
       } else {
-        console.log(`[PermissionCheck] No permissions configured for employee ${employee.id}`);
+        // Perms logged(`[PermissionCheck] No permissions configured for employee ${employee.id}`);
       }
 
       permissionCache.set(userId, {
@@ -103,7 +109,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
         employeeId: employee.id
       };
     } catch (error) {
-      console.error('[PermissionCheck] Error fetching permissions:', error);
+      // Error logged('[PermissionCheck] Error fetching permissions:', error);
       return { permissions: {} };
     }
   }
@@ -135,7 +141,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
 
       return result.rows?.map(r => r.id) || [];
     } catch (error) {
-      console.error('[TenantIsolation] Error fetching tenant branches:', error);
+      // Error logged('[TenantIsolation] Error fetching tenant branches:', error);
       return [];
     }
   }
@@ -155,7 +161,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
     const hasPermission = permissions[module]?.[action] === true;
 
     if (!hasPermission) {
-      console.log(`[PermissionCheck] Permission denied: user=${userId}, collection=${collection}, action=${action}, module=${module}`);
+      // Perms logged(`[PermissionCheck] Permission denied: user=${userId}, collection=${collection}, action=${action}, module=${module}`);
     }
 
     return hasPermission;
@@ -191,10 +197,10 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
 
         // 2. 應用租戶隔離（只對特定集合）
         const tenantIsolatedCollections = [
-          'branches', 'employees', 'members', 'contracts', 'payments',
+          'branches', 'employees', 'members', 'contracts', 'contract_logs', 'payments',
           'membership_plans', 'checkin_logs', 'attendance_records',
           'leave_requests', 'leave_balances', 'makeup_punch_requests',
-          'schedules', 'job_titles', 'classes', 'class_bookings'
+          'schedules', 'job_titles', 'classes', 'class_sessions', 'class_categories', 'class_bookings'
         ];
 
         if (tenantIsolatedCollections.includes(collection)) {
@@ -215,7 +221,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { tenant_id: { _eq: tenantId } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: tenant_id=${tenantId}`);
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: tenant_id=${tenantId}`);
               } else if (collection === 'employees') {
                 // employees 通過 branch_id 過濾
                 input.filter = {
@@ -224,7 +230,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { branch_id: { _in: tenantBranches } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
               } else if (collection === 'members') {
                 // members 通過 branch_id 過濾
                 input.filter = {
@@ -233,7 +239,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { branch_id: { _in: tenantBranches } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
               } else if (collection === 'contracts') {
                 // contracts 通過關聯的 members.branch_id 過濾
                 input.filter = {
@@ -242,7 +248,16 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { 'member_id.branch_id': { _in: tenantBranches } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (collection === 'contract_logs') {
+                // contract_logs 通過關聯的 contract.member_id.branch_id 過濾
+                input.filter = {
+                  _and: [
+                    input.filter || {},
+                    { 'contract_id.member_id.branch_id': { _in: tenantBranches } }
+                  ]
+                };
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
               } else if (['payments', 'checkin_logs', 'class_bookings'].includes(collection)) {
                 // 這些表通過關聯的資源過濾
                 input.filter = {
@@ -251,7 +266,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { 'member_id.branch_id': { _in: tenantBranches } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
               } else if (['attendance_records', 'leave_requests', 'leave_balances', 'makeup_punch_requests'].includes(collection)) {
                 // HR 相關表通過 employee.branch_id 過濾
                 input.filter = {
@@ -260,8 +275,8 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { 'employee_id.branch_id': { _in: tenantBranches } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
-              } else if (['membership_plans', 'classes', 'schedules', 'job_titles'].includes(collection)) {
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+              } else if (['membership_plans', 'classes', 'class_sessions', 'class_categories', 'schedules', 'job_titles'].includes(collection)) {
                 // 這些表有 branch_id 欄位
                 input.filter = {
                   _and: [
@@ -269,7 +284,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
                     { branch_id: { _in: tenantBranches } }
                   ]
                 };
-                console.log(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
+                // Perms logged(`[TenantIsolation] Applied tenant filter for ${collection}: ${tenantBranches.length} branches`);
               }
             }
           }
@@ -280,7 +295,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
         if (error.message && error.message.includes('權限不足')) {
           throw error;
         }
-        console.error('[PermissionCheck] Error in permission check:', error);
+        // Error logged('[PermissionCheck] Error in permission check:', error);
         return input;
       }
     });
@@ -296,9 +311,9 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
       const userIds = result.rows?.map(r => r.user_id).filter(Boolean) || [];
       userIds.forEach(userId => invalidatePermissionCache(userId));
 
-      console.log(`[PermissionCheck] Invalidated permission cache for ${userIds.length} users`);
+      // Perms logged(`[PermissionCheck] Invalidated permission cache for ${userIds.length} users`);
     } catch (error) {
-      console.error('[PermissionCheck] Error invalidating cache:', error);
+      // Error logged('[PermissionCheck] Error invalidating cache:', error);
     }
   });
 
@@ -306,9 +321,9 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
   action('job_titles.items.update', async ({ keys }) => {
     try {
       invalidatePermissionCache();
-      console.log('[PermissionCheck] Cleared all permission cache due to job title update');
+      // Perms logged('[PermissionCheck] Cleared all permission cache due to job title update');
     } catch (error) {
-      console.error('[PermissionCheck] Error invalidating cache:', error);
+      // Error logged('[PermissionCheck] Error invalidating cache:', error);
     }
   });
 
@@ -326,7 +341,7 @@ export function registerPermissionsHooks({ action, filter, schedule }, { databas
       }
 
       if (cleanedCount > 0) {
-        console.log(`[PermissionCheck] Cleaned ${cleanedCount} expired permission cache entries`);
+        // Perms logged(`[PermissionCheck] Cleaned ${cleanedCount} expired permission cache entries`);
       }
     });
   }

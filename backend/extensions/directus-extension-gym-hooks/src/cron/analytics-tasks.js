@@ -17,7 +17,7 @@ export function registerAnalyticsTasks(schedule, context) {
    */
   schedule('5 * * * *', async () => {
     try {
-      console.log('[AnalyticsTasks] Starting hourly API usage aggregation...');
+      // Status logged('[AnalyticsTasks] Starting hourly API usage aggregation...');
 
       const startTime = new Date();
       startTime.setHours(startTime.getHours() - 1, 0, 0, 0);
@@ -29,9 +29,9 @@ export function registerAnalyticsTasks(schedule, context) {
         SELECT aggregate_api_usage_stats($1::timestamp, $2::timestamp)
       `, [startTime.toISOString(), endTime.toISOString()]);
 
-      console.log(`[AnalyticsTasks] Aggregated API usage from ${startTime.toISOString()} to ${endTime.toISOString()}`);
+      // Status logged(`[AnalyticsTasks] Aggregated API usage from ${startTime.toISOString()} to ${endTime.toISOString()}`);
     } catch (error) {
-      console.error('[AnalyticsTasks] Error aggregating API usage:', error);
+      // Error logged('[AnalyticsTasks] Error aggregating API usage:', error);
     }
   });
 
@@ -41,7 +41,7 @@ export function registerAnalyticsTasks(schedule, context) {
    */
   schedule('0 2 * * *', async () => {
     try {
-      console.log('[AnalyticsTasks] Starting cleanup of old API usage logs...');
+      // Status logged('[AnalyticsTasks] Starting cleanup of old API usage logs...');
 
       const result = await database.raw(`
         DELETE FROM api_usage_logs
@@ -49,9 +49,9 @@ export function registerAnalyticsTasks(schedule, context) {
       `);
 
       const deletedCount = result.rowCount || 0;
-      console.log(`[AnalyticsTasks] Deleted ${deletedCount} old API usage log entries`);
+      // Status logged(`[AnalyticsTasks] Deleted ${deletedCount} old API usage log entries`);
     } catch (error) {
-      console.error('[AnalyticsTasks] Error cleaning up old logs:', error);
+      // Error logged('[AnalyticsTasks] Error cleaning up old logs:', error);
     }
   });
 
@@ -61,7 +61,7 @@ export function registerAnalyticsTasks(schedule, context) {
    */
   schedule('30 2 * * *', async () => {
     try {
-      console.log('[AnalyticsTasks] Starting cleanup of old API usage stats...');
+      // Status logged('[AnalyticsTasks] Starting cleanup of old API usage stats...');
 
       const result = await database.raw(`
         DELETE FROM api_usage_stats
@@ -69,9 +69,9 @@ export function registerAnalyticsTasks(schedule, context) {
       `);
 
       const deletedCount = result.rowCount || 0;
-      console.log(`[AnalyticsTasks] Deleted ${deletedCount} old API usage stat entries`);
+      // Status logged(`[AnalyticsTasks] Deleted ${deletedCount} old API usage stat entries`);
     } catch (error) {
-      console.error('[AnalyticsTasks] Error cleaning up old stats:', error);
+      // Error logged('[AnalyticsTasks] Error cleaning up old stats:', error);
     }
   });
 
@@ -81,7 +81,7 @@ export function registerAnalyticsTasks(schedule, context) {
    */
   schedule('0 1 * * *', async () => {
     try {
-      console.log('[AnalyticsTasks] Generating daily API usage summary...');
+      // Status logged('[AnalyticsTasks] Generating daily API usage summary...');
 
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
@@ -106,22 +106,22 @@ export function registerAnalyticsTasks(schedule, context) {
         GROUP BY tenant_id
       `, [yesterday.toISOString(), today.toISOString()]);
 
-      console.log(`[AnalyticsTasks] Generated summary for ${summaryResult.rows.length} tenants:`);
+      // Status logged(`[AnalyticsTasks] Generated summary for ${summaryResult.rows.length} tenants:`);
 
       summaryResult.rows.forEach(row => {
         const errorRate = row.total_requests > 0
           ? ((row.failed_requests / row.total_requests) * 100).toFixed(2)
           : '0.00';
 
-        console.log(`  - Tenant ${row.tenant_id}: ${row.total_requests} requests, ${errorRate}% error rate, ${row.avg_response_time}ms avg response time`);
+        // Status logged(`  - Tenant ${row.tenant_id}: ${row.total_requests} requests, ${errorRate}% error rate, ${row.avg_response_time}ms avg response time`);
       });
 
     } catch (error) {
-      console.error('[AnalyticsTasks] Error generating daily summary:', error);
+      // Error logged('[AnalyticsTasks] Error generating daily summary:', error);
     }
   });
 
-  console.log('[AnalyticsTasks] All analytics cron tasks registered successfully');
+  // Status logged('[AnalyticsTasks] All analytics cron tasks registered successfully');
 }
 
 export default registerAnalyticsTasks;

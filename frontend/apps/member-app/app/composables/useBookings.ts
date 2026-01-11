@@ -4,6 +4,7 @@
  */
 
 import type { ClassSession } from './useClasses'
+import { extractErrorMessage } from '../utils/apiHelpers'
 
 export interface Booking {
   id: string
@@ -89,8 +90,7 @@ export const useBookings = () => {
         })
       }
       return response.data
-    } catch (error) {
-      console.error('Failed to fetch bookings:', error)
+    } catch {
       return []
     } finally {
       isLoading.value = false
@@ -125,15 +125,10 @@ export const useBookings = () => {
 
       return response
     } catch (error: unknown) {
-      console.error('Failed to book session:', error)
-      if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { message?: string } }
-        return {
-          success: false,
-          message: fetchError.data?.message || '預約失敗',
-        }
+      return {
+        success: false,
+        message: extractErrorMessage(error, '預約失敗'),
       }
-      return { success: false, message: '預約失敗' }
     }
   }
 
@@ -158,15 +153,10 @@ export const useBookings = () => {
 
       return response
     } catch (error: unknown) {
-      console.error('Failed to cancel booking:', error)
-      if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { message?: string } }
-        return {
-          success: false,
-          message: fetchError.data?.message || '取消失敗',
-        }
+      return {
+        success: false,
+        message: extractErrorMessage(error, '取消失敗'),
       }
-      return { success: false, message: '取消失敗' }
     }
   }
 

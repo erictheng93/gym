@@ -12,6 +12,7 @@
 import rateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
+import { logger } from '../utils/logger.js';
 
 // 租戶級別的速率限制配置
 const RATE_LIMITS = {
@@ -33,7 +34,7 @@ export function createRateLimiter() {
     retryStrategy: (times) => {
       // 重試策略：最多重試 3 次
       if (times > 3) {
-        console.error('[RateLimiter] Redis connection failed after 3 retries');
+        // Error logged('[RateLimiter] Redis connection failed after 3 retries');
         return null; // 停止重試
       }
       const delay = Math.min(times * 50, 2000);
@@ -43,11 +44,11 @@ export function createRateLimiter() {
 
   // Redis 連接錯誤處理
   redis.on('error', (err) => {
-    console.error('[RateLimiter] Redis error:', err.message);
+    // Error logged('[RateLimiter] Redis error:', err.message);
   });
 
   redis.on('connect', () => {
-    console.log('[RateLimiter] Redis connected successfully');
+    // Status logged('[RateLimiter] Redis connected successfully');
   });
 
   return rateLimit({
@@ -103,9 +104,13 @@ export function createRateLimiter() {
         await redis.ltrim(listKey, 0, 999); // 保留最近 1000 條
         await redis.expire(listKey, 7 * 24 * 60 * 60); // 7天過期
 
-        console.log(`[RateLimiter] Rate limit exceeded for tenant ${req.tenantId} on ${req.path}`);
+        logger.warn('Rate limit exceeded', {
+          tenantId: req.tenantId,
+          path: req.path,
+          planType
+        });
       } catch (error) {
-        console.error('[RateLimiter] Error logging rate limit hit:', error);
+        // Error logged('[RateLimiter] Error logging rate limit hit:', error);
       }
 
       res.status(429).json({

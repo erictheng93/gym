@@ -3,12 +3,20 @@
  * 會員登入頁面
  * 支援：Email/密碼登入、手機 OTP 登入、社群登入 (LINE, Google, Apple)
  */
+import { loginSchema, otpRequestSchema, otpVerifySchema } from '../schemas/auth.schema'
+import { useFormValidation } from '../composables/useFormValidation'
+
 definePageMeta({
   layout: false
 })
 
 const { sendOtp: sendOtpApi, verifyOtp, login, isLoading, otpLoading } = useMemberAuth()
 const { availableProviders, loadingProvider, loginWithProvider } = useSocialAuth()
+
+// Form validation
+const emailForm = useFormValidation(loginSchema)
+const phoneForm = useFormValidation(otpRequestSchema)
+const otpForm = useFormValidation(otpVerifySchema)
 
 // 登入方式切換
 type LoginMethod = 'email' | 'phone'
@@ -32,10 +40,19 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const error = ref('')
 
+// Get validation error for a field
+const getError = (form: typeof emailForm, field: string) => {
+  return form.errors.value[field as keyof typeof form.errors.value]
+}
+
 // Email 登入處理
 const handleEmailLogin = async () => {
-  if (!email.value || !password.value) {
-    error.value = '請輸入電子郵件和密碼'
+  const result = emailForm.validate({ email: email.value, password: password.value })
+
+  if (!result.success) {
+    // Show first validation error
+    const firstError = Object.values(emailForm.errors.value)[0]
+    error.value = firstError || '請檢查輸入資料'
     return
   }
 
@@ -43,12 +60,12 @@ const handleEmailLogin = async () => {
   emailLoading.value = true
 
   try {
-    const result = await login(email.value, password.value)
+    const loginResult = await login(result.data.email, result.data.password)
 
-    if (result.success) {
+    if (loginResult.success) {
       await navigateTo('/')
     } else {
-      error.value = result.message || '登入失敗，請檢查帳號密碼'
+      error.value = loginResult.message || '登入失敗，請檢查帳號密碼'
     }
   } catch (e) {
     error.value = '登入發生錯誤，請稍後再試'
@@ -59,21 +76,23 @@ const handleEmailLogin = async () => {
 
 // Phone OTP 發送
 const sendOtp = async () => {
-  if (!phone.value || phone.value.length < 10) {
-    error.value = '請輸入有效的手機號碼'
+  const result = phoneForm.validate({ phone: phone.value })
+
+  if (!result.success) {
+    const firstError = Object.values(phoneForm.errors.value)[0]
+    error.value = firstError || '請輸入有效的手機號碼'
     return
   }
 
   error.value = ''
-  const result = await sendOtpApi(phone.value)
+  const sendResult = await sendOtpApi(result.data.phone)
 
-  if (result.success) {
+  if (sendResult.success) {
     otpSent.value = true
     otpStep.value = 'otp'
 
-    if (result.otp) {
-      devOtp.value = result.otp
-      console.log(`[DEV] OTP: ${result.otp}`)
+    if (sendResult.otp) {
+      devOtp.value = sendResult.otp
     }
 
     countdown.value = 60
@@ -85,24 +104,27 @@ const sendOtp = async () => {
       }
     }, 1000)
   } else {
-    error.value = result.message || '發送驗證碼失敗'
+    error.value = sendResult.message || '發送驗證碼失敗'
   }
 }
 
 // Phone OTP 驗證
 const handleOtpLogin = async () => {
-  if (!otp.value || otp.value.length < 4) {
-    error.value = '請輸入驗證碼'
+  const result = otpForm.validate({ phone: phone.value, code: otp.value })
+
+  if (!result.success) {
+    const firstError = Object.values(otpForm.errors.value)[0]
+    error.value = firstError || '請輸入驗證碼'
     return
   }
 
   error.value = ''
-  const result = await verifyOtp(phone.value, otp.value)
+  const verifyResult = await verifyOtp(result.data.phone, result.data.code)
 
-  if (result.success) {
+  if (verifyResult.success) {
     await navigateTo('/')
   } else {
-    error.value = result.message || '驗證碼錯誤'
+    error.value = verifyResult.message || '驗證碼錯誤'
   }
 }
 
@@ -116,6 +138,9 @@ const goBackToPhone = () => {
 // 切換登入方式時清除錯誤
 watch(loginMethod, () => {
   error.value = ''
+  emailForm.clearErrors()
+  phoneForm.clearErrors()
+  otpForm.clearErrors()
 })
 
 // 社群登入

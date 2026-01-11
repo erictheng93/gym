@@ -16,7 +16,7 @@ async function getTenantStorageQuota(database, accountability) {
   }
 
   if (!accountability?.user) {
-    console.warn('[StorageQuotaCheck] No user in accountability');
+    // Warning logged('[StorageQuotaCheck] No user in accountability');
     return null;
   }
 
@@ -32,7 +32,7 @@ async function getTenantStorageQuota(database, accountability) {
 
     const employee = employeeResult.rows?.[0];
     if (!employee?.tenant_id) {
-      console.warn('[StorageQuotaCheck] No tenant found for user:', accountability.user);
+      // Warning logged('[StorageQuotaCheck] No tenant found for user:', accountability.user);
       return null;
     }
 
@@ -46,7 +46,7 @@ async function getTenantStorageQuota(database, accountability) {
 
     const tenant = tenantResult.rows?.[0];
     if (!tenant) {
-      console.warn('[StorageQuotaCheck] Tenant not found:', employee.tenant_id);
+      // Warning logged('[StorageQuotaCheck] Tenant not found:', employee.tenant_id);
       return null;
     }
 
@@ -55,7 +55,7 @@ async function getTenantStorageQuota(database, accountability) {
       maxStorageMb: tenant.max_storage_mb
     };
   } catch (error) {
-    console.error('[StorageQuotaCheck] Error fetching tenant quota:', error);
+    // Error logged('[StorageQuotaCheck] Error fetching tenant quota:', error);
     return null;
   }
 }
@@ -100,7 +100,7 @@ async function getCurrentStorageUsage(database, tenantId) {
 
     return parseFloat(storageResult.rows?.[0]?.storage_mb || 0);
   } catch (error) {
-    console.error('[StorageQuotaCheck] Error calculating storage usage:', error);
+    // Error logged('[StorageQuotaCheck] Error calculating storage usage:', error);
     return 0;
   }
 }
@@ -150,12 +150,7 @@ export function registerStorageQuotaCheckHooks({ filter }, context) {
         );
       }
 
-      console.log(
-        `[StorageQuotaCheck] File upload allowed. ` +
-        `Current: ${currentUsageMb.toFixed(2)} MB, ` +
-        `New file: ${newFileSizeMb.toFixed(2)} MB, ` +
-        `Total: ${totalUsageMb.toFixed(2)} MB / ${tenantQuota.maxStorageMb} MB`
-      );
+      // Status logged: File upload allowed with current/new/total MB usage
 
       return input;
     } catch (error) {
@@ -165,12 +160,12 @@ export function registerStorageQuotaCheckHooks({ filter }, context) {
       }
 
       // 其他錯誤記錄但不阻止上傳（避免影響系統功能）
-      console.error('[StorageQuotaCheck] Error in files.create hook:', error);
+      // Error logged('[StorageQuotaCheck] Error in files.create hook:', error);
       return input;
     }
   });
 
-  console.log('[StorageQuotaCheck] Storage quota check hook registered for file uploads');
+  // Status logged('[StorageQuotaCheck] Storage quota check hook registered for file uploads');
 }
 
 export default registerStorageQuotaCheckHooks;

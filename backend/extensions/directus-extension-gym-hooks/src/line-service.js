@@ -33,12 +33,12 @@ export function initLineService(options) {
   database = options.database;
 
   if (!config.channelAccessToken) {
-    console.log('[LINEService] Channel access token not configured - LINE notifications disabled');
+    // Status logged('[LINEService] Channel access token not configured - LINE notifications disabled');
     return false;
   }
 
   initialized = true;
-  console.log('[LINEService] Initialized successfully');
+  // Status logged('[LINEService] Initialized successfully');
   return true;
 }
 
@@ -77,7 +77,7 @@ export async function getConfigForBranch(branchId) {
       };
     }
   } catch (error) {
-    console.error('[LINEService] Error fetching branch config:', error.message);
+    // Error logged('[LINEService] Error fetching branch config:', error.message);
   }
 
   // Fallback to default config
@@ -153,7 +153,7 @@ export async function sendLineMessage(options) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('[LINEService] Send failed:', response.status, errorData);
+      // Error logged('[LINEService] Send failed:', response.status, errorData);
       return {
         success: false,
         error: errorData.message || `HTTP ${response.status}`,
@@ -161,11 +161,11 @@ export async function sendLineMessage(options) {
       };
     }
 
-    console.log(`[LINEService] Message sent to ${userId}: ${type}`);
+    // Status logged(`[LINEService] Message sent to ${userId}: ${type}`);
     return { success: true, requestId };
 
   } catch (error) {
-    console.error('[LINEService] Send error:', error.message);
+    // Error logged('[LINEService] Send error:', error.message);
 
     // Log failure
     if (database && memberId) {
@@ -238,11 +238,11 @@ export async function sendMulticast(options) {
       };
     }
 
-    console.log(`[LINEService] Multicast sent to ${userIds.length} users: ${type}`);
+    // Status logged(`[LINEService] Multicast sent to ${userIds.length} users: ${type}`);
     return { success: true, requestId, recipientCount: userIds.length };
 
   } catch (error) {
-    console.error('[LINEService] Multicast error:', error.message);
+    // Error logged('[LINEService] Multicast error:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -899,7 +899,7 @@ async function logLineMessage(options) {
       options.referenceId || null,
     ]);
   } catch (error) {
-    console.error('[LINEService] Log error:', error.message);
+    // Error logged('[LINEService] Log error:', error.message);
   }
 }
 

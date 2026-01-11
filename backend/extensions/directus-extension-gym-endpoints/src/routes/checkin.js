@@ -153,7 +153,7 @@ export function registerCheckinRoutes(router, context) {
 
       const checkinId = await checkinsService.createOne(checkinData);
 
-      console.log(`[GymEndpoint] QR check-in: member ${member.member_code} at branch ${branch_id || member.branch_id}`);
+      // Checkin logged(`[GymEndpoint] QR check-in: member ${member.member_code} at branch ${branch_id || member.branch_id}`);
 
       res.json({
         success: true,
@@ -174,7 +174,7 @@ export function registerCheckinRoutes(router, context) {
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] QR check-in error:', error);
+      // Error logged('[GymEndpoint] QR check-in error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -321,7 +321,7 @@ export function registerCheckinRoutes(router, context) {
       }
 
       const duration = Date.now() - startTime;
-      console.log(`[GymEndpoint] Batch check-in: ${successIds.length}/${member_ids.length} success in ${duration}ms`);
+      // Checkin logged(`[GymEndpoint] Batch check-in: ${successIds.length}/${member_ids.length} success in ${duration}ms`);
 
       res.json({
         success: true,
@@ -335,7 +335,7 @@ export function registerCheckinRoutes(router, context) {
         results,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Batch check-in error:', error);
+      // Error logged('[GymEndpoint] Batch check-in error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -370,7 +370,7 @@ export function registerCheckinRoutes(router, context) {
         cache: cacheStats,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Cache stats error:', error);
+      // Error logged('[GymEndpoint] Cache stats error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

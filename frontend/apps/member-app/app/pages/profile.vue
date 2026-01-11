@@ -3,6 +3,9 @@
  * 個人資料頁面
  * 顯示會員資料、編輯功能、更多選項
  */
+import { updateProfileSchema } from '../schemas/profile.schema'
+import { useFormValidation } from '../composables/useFormValidation'
+
 definePageMeta({
   middleware: 'auth'
 })
@@ -12,6 +15,7 @@ const apiUrl = config.public.directusUrl
 const { member, logout, fetchMember, getAuthHeader } = useMemberAuth()
 const toast = useToast()
 const { handleError } = useApiError()
+const profileForm = useFormValidation(updateProfileSchema)
 
 // 編輯模式
 const isEditing = ref(false)
@@ -68,8 +72,8 @@ const loadMemberDetail = async () => {
         created_at: response.data[0].date_created,
       } as MemberDetail
     }
-  } catch (error) {
-    console.error('Failed to load member detail:', error)
+  } catch {
+    // Failed to load member detail
   } finally {
     isLoadingDetail.value = false
   }
@@ -90,6 +94,7 @@ const startEdit = () => {
 // 取消編輯
 const cancelEdit = () => {
   isEditing.value = false
+  profileForm.clearErrors()
 }
 
 // 儲存編輯
@@ -97,8 +102,17 @@ const saveEdit = async () => {
   if (!member.value || !memberDetail.value) return
 
   // 驗證
-  if (!editForm.full_name.trim()) {
-    toast.error('請輸入姓名')
+  const result = profileForm.validate({
+    full_name: editForm.full_name.trim() || undefined,
+    phone: editForm.phone.trim() || undefined,
+    email: editForm.email.trim() || undefined,
+    emergency_contact: editForm.emergency_contact.trim() || undefined,
+    emergency_phone: editForm.emergency_phone.trim() || undefined,
+  })
+
+  if (!result.success) {
+    const firstError = Object.values(profileForm.errors.value)[0]
+    toast.error(firstError || '請檢查輸入資料')
     return
   }
 
@@ -108,16 +122,17 @@ const saveEdit = async () => {
       method: 'PATCH',
       headers: getAuthHeader(),
       body: {
-        full_name: editForm.full_name.trim(),
-        phone: editForm.phone.trim() || null,
-        email: editForm.email.trim() || null,
-        emergency_contact: editForm.emergency_contact.trim() || null,
-        emergency_phone: editForm.emergency_phone.trim() || null,
+        full_name: result.data.full_name || null,
+        phone: result.data.phone || null,
+        email: result.data.email || null,
+        emergency_contact: result.data.emergency_contact || null,
+        emergency_phone: result.data.emergency_phone || null,
       },
     })
 
     toast.success('資料已更新')
     isEditing.value = false
+    profileForm.clearErrors()
 
     // 重新載入資料
     await Promise.all([fetchMember(), loadMemberDetail()])

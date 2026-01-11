@@ -74,7 +74,7 @@ export function registerContractsRoutes(router, context, memberAuthMiddleware) {
         contract_status: 'PAUSED',
       });
 
-      console.log(`[GymEndpoint] Contract ${contract.contract_no} paused by member ${memberId}`);
+      // Contract logged(`[GymEndpoint] Contract ${contract.contract_no} paused by member ${memberId}`);
 
       res.json({
         success: true,
@@ -82,7 +82,7 @@ export function registerContractsRoutes(router, context, memberAuthMiddleware) {
         contract_no: contract.contract_no,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Contract pause error:', error);
+      // Error logged('[GymEndpoint] Contract pause error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -165,7 +165,7 @@ export function registerContractsRoutes(router, context, memberAuthMiddleware) {
         end_date: newEndDate,
       });
 
-      console.log(`[GymEndpoint] Contract ${contract.contract_no} resumed by member ${memberId}, extended by ${daysAffected} days`);
+      // Contract logged(`[GymEndpoint] Contract ${contract.contract_no} resumed by member ${memberId}, extended by ${daysAffected} days`);
 
       res.json({
         success: true,
@@ -175,7 +175,7 @@ export function registerContractsRoutes(router, context, memberAuthMiddleware) {
         days_extended: daysAffected,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Contract resume error:', error);
+      // Error logged('[GymEndpoint] Contract resume error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

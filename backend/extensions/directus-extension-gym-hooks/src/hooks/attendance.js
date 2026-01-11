@@ -47,10 +47,10 @@ export function registerAttendanceHooks({ action }, { services, database }) {
           attendance_status: attendanceStatus,
         });
 
-        console.log(`[GymHook] Attendance ${attendanceId} calculated: ${workHours}h work, ${overtimeHours}h overtime`);
+        // Status logged(`[GymHook] Attendance ${attendanceId} calculated: ${workHours}h work, ${overtimeHours}h overtime`);
       }
     } catch (error) {
-      console.error('[GymHook] Error calculating attendance:', error);
+      // Error logged('[GymHook] Error calculating attendance:', error);
     }
   });
 
@@ -110,9 +110,9 @@ export function registerAttendanceHooks({ action }, { services, database }) {
         attendance_status: attendanceStatus,
       });
 
-      console.log(`[GymHook] Attendance ${key} created: date=${attendanceDate}, late=${lateMinutes}min`);
+      // Status logged(`[GymHook] Attendance ${key} created: date=${attendanceDate}, late=${lateMinutes}min`);
     } catch (error) {
-      console.error('[GymHook] Error processing attendance check-in:', error);
+      // Error logged('[GymHook] Error processing attendance check-in:', error);
     }
   });
 }

@@ -10,6 +10,7 @@ import {
   TooManyRequestsError,
 } from '../utils/errors.js';
 import { jwt } from '../utils/jwt.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * 註冊 OTP 路由
@@ -52,7 +53,7 @@ export function registerOtpRoutes(router, context) {
         throw InvalidPayloadError(row?.message || 'Failed to generate OTP');
       }
 
-      console.log(`[GymEndpoint] OTP for ${identifier}: ${row.otp_code}`);
+      // OTP code only returned to client in development mode (see below)
 
       res.json({
         success: true,
@@ -61,7 +62,6 @@ export function registerOtpRoutes(router, context) {
         ...(process.env.NODE_ENV === 'development' && { otp: row.otp_code }),
       });
     } catch (error) {
-      console.error('[GymEndpoint] OTP send error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -132,8 +132,6 @@ export function registerOtpRoutes(router, context) {
         { expiresIn: '7d' }
       );
 
-      console.log(`[GymEndpoint] Member ${member.member_code} authenticated via OTP`);
-
       res.json({
         success: true,
         message: row.message,
@@ -149,7 +147,6 @@ export function registerOtpRoutes(router, context) {
         expires_in: 86400,
       });
     } catch (error) {
-      console.error('[GymEndpoint] OTP verify error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -223,7 +220,7 @@ export function registerOtpRoutes(router, context) {
         expires_in: 86400,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Token refresh error:', error);
+      logger.error('Token refresh error', { error: error.message });
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

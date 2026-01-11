@@ -19,23 +19,23 @@ export function initEmailService(services, schema) {
     const { MailService } = services;
 
     if (!MailService) {
-      console.warn('[EmailService] MailService not available');
+      // Warning logged('[EmailService] MailService not available');
       return false;
     }
 
     // Check if SMTP is configured
     if (!process.env.EMAIL_SMTP_HOST) {
-      console.warn('[EmailService] SMTP not configured. Email notifications disabled.');
-      console.warn('[EmailService] Set EMAIL_SMTP_HOST in environment to enable.');
+      // Warning logged('[EmailService] SMTP not configured. Email notifications disabled.');
+      // Warning logged('[EmailService] Set EMAIL_SMTP_HOST in environment to enable.');
       return false;
     }
 
     mailService = new MailService({ schema });
     emailEnabled = true;
-    console.log('[EmailService] Initialized successfully');
+    // Status logged('[EmailService] Initialized successfully');
     return true;
   } catch (error) {
-    console.error('[EmailService] Failed to initialize:', error.message);
+    // Error logged('[EmailService] Failed to initialize:', error.message);
     return false;
   }
 }
@@ -70,10 +70,10 @@ export async function sendEmail({ to, subject, html, text }) {
       text: text || stripHtml(html),
     });
 
-    console.log(`[EmailService] Email sent to ${to}: ${subject}`);
+    // Status logged(`[EmailService] Email sent to ${to}: ${subject}`);
     return { success: true };
   } catch (error) {
-    console.error('[EmailService] Send error:', error.message);
+    // Error logged('[EmailService] Send error:', error.message);
     return { success: false, error: error.message };
   }
 }

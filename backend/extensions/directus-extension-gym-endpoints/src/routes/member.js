@@ -75,7 +75,7 @@ export function registerMemberRoutes(router, context, memberAuthMiddleware) {
         },
       });
     } catch (error) {
-      console.error('[GymEndpoint] Get member profile error:', error);
+      // Error logged('[GymEndpoint] Get member profile error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -123,7 +123,7 @@ export function registerMemberRoutes(router, context, memberAuthMiddleware) {
               userId = sessionResult.user;
             }
           } catch (e) {
-            console.error('[GymEndpoint] Session lookup error:', e);
+            // Error logged('[GymEndpoint] Session lookup error:', e);
           }
         }
       }
@@ -190,7 +190,7 @@ export function registerMemberRoutes(router, context, memberAuthMiddleware) {
         member: updatedMember,
       });
     } catch (error) {
-      console.error('[GymEndpoint] Complete profile error:', error);
+      // Error logged('[GymEndpoint] Complete profile error:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

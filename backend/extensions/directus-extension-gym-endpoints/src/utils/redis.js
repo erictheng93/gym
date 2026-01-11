@@ -3,6 +3,8 @@
  * 用於報表查詢結果的緩存
  */
 
+import { logger } from './logger.js';
+
 let redisClient = null;
 let redisAvailable = false;
 
@@ -28,7 +30,7 @@ export async function initRedis() {
 
     redisClient.on('connect', () => {
       redisAvailable = true;
-      console.log('[GymEndpoint] Redis connected for report caching');
+      logger.info('Redis connected for report caching');
     });
 
     redisClient.on('error', () => {
@@ -37,7 +39,7 @@ export async function initRedis() {
 
     await redisClient.connect();
   } catch (error) {
-    console.log('[GymEndpoint] Redis not available, reports will not be cached');
+    logger.info('Redis not available, reports will not be cached');
   }
 }
 
@@ -53,10 +55,10 @@ export async function getCachedReport(reportType, queryKey) {
     const key = `${CACHE_PREFIX}${reportType}:${queryKey}`;
     const data = await redisClient.get(key);
     if (data) {
-      console.log(`[GymEndpoint] Cache HIT: ${reportType}`);
+      logger.debug('Cache HIT', { reportType });
       return JSON.parse(data);
     }
-    console.log(`[GymEndpoint] Cache MISS: ${reportType}`);
+    logger.debug('Cache MISS', { reportType });
     return null;
   } catch (error) {
     return null;
@@ -74,7 +76,7 @@ export async function setCachedReport(reportType, queryKey, data) {
   try {
     const key = `${CACHE_PREFIX}${reportType}:${queryKey}`;
     await redisClient.setex(key, REPORT_CACHE_TTL, JSON.stringify(data));
-    console.log(`[GymEndpoint] Cache SET: ${reportType}`);
+    logger.debug('Cache SET', { reportType });
   } catch (error) {
     // 忽略緩存錯誤
   }
@@ -89,10 +91,10 @@ export async function invalidateReportCache() {
     const keys = await redisClient.keys(`${CACHE_PREFIX}*`);
     if (keys.length > 0) {
       await redisClient.del(...keys);
-      console.log(`[GymEndpoint] Invalidated ${keys.length} report cache entries`);
+      logger.info('Invalidated report cache entries', { count: keys.length });
     }
   } catch (error) {
-    console.log('[GymEndpoint] Error invalidating cache:', error.message);
+    logger.warn('Error invalidating cache', { error: error.message });
   }
 }
 

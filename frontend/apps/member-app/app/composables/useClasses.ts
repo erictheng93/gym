@@ -3,6 +3,8 @@
  * Handles fetching and managing gym classes and schedules
  */
 
+import { deduplicateRequest } from '../utils/debounce'
+
 export interface GymClass {
   id: string
   name: string
@@ -85,53 +87,59 @@ export const useClasses = () => {
   const isLoading = useState('classes_loading', () => false)
 
   /**
-   * Fetch all active classes
+   * Fetch all active classes (with request deduplication)
    */
   const fetchClasses = async (branchId?: string) => {
-    isLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      if (branchId) params.append('branch_id', branchId)
+    const cacheKey = `classes-${branchId || 'all'}`
 
-      const response = await $fetch<ClassesResponse>(`${apiUrl}/gym/classes?${params}`, {
-        headers: getAuthHeader(),
-      })
+    return deduplicateRequest(cacheKey, async () => {
+      isLoading.value = true
+      try {
+        const params = new URLSearchParams()
+        if (branchId) params.append('branch_id', branchId)
 
-      if (response.success) {
-        classes.value = response.data
+        const response = await $fetch<ClassesResponse>(`${apiUrl}/gym/classes?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          classes.value = response.data
+        }
+        return response.data
+      } catch {
+        return []
+      } finally {
+        isLoading.value = false
       }
-      return response.data
-    } catch (error) {
-      console.error('Failed to fetch classes:', error)
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
-   * Fetch weekly schedule
+   * Fetch weekly schedule (with request deduplication)
    */
   const fetchWeeklySchedule = async (branchId?: string) => {
-    isLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      if (branchId) params.append('branch_id', branchId)
+    const cacheKey = `schedule-${branchId || 'all'}`
 
-      const response = await $fetch<SchedulesResponse>(`${apiUrl}/gym/classes/schedule?${params}`, {
-        headers: getAuthHeader(),
-      })
+    return deduplicateRequest(cacheKey, async () => {
+      isLoading.value = true
+      try {
+        const params = new URLSearchParams()
+        if (branchId) params.append('branch_id', branchId)
 
-      if (response.success) {
-        schedules.value = response.data
+        const response = await $fetch<SchedulesResponse>(`${apiUrl}/gym/classes/schedule?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          schedules.value = response.data
+        }
+        return response.data
+      } catch {
+        return []
+      } finally {
+        isLoading.value = false
       }
-      return response.data
-    } catch (error) {
-      console.error('Failed to fetch schedules:', error)
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -159,8 +167,7 @@ export const useClasses = () => {
         upcomingSessions.value = response.data
       }
       return response.data
-    } catch (error) {
-      console.error('Failed to fetch sessions:', error)
+    } catch {
       return []
     } finally {
       isLoading.value = false
@@ -177,8 +184,7 @@ export const useClasses = () => {
         { headers: getAuthHeader() }
       )
       return response.success ? response.data : null
-    } catch (error) {
-      console.error('Failed to fetch session:', error)
+    } catch {
       return null
     }
   }

@@ -3,6 +3,8 @@
  * 管理員通知設定權限驗證中間件
  */
 
+import { logger } from '../utils/logger.js';
+
 /**
  * 創建管理員通知設定中間件
  * Requires Directus admin or branch manager with notification_config permission
@@ -51,7 +53,7 @@ export function createAdminNotificationMiddleware(database) {
       req.employeeId = emp.id;
       next();
     } catch (error) {
-      console.error('[GymEndpoint] Admin auth error:', error);
+      logger.error('Admin auth error', { error: error.message });
       res.status(500).json({ success: false, message: 'Internal server error' });
     }
   };

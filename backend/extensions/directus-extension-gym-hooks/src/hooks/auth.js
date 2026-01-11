@@ -20,7 +20,7 @@ export function registerAuthHooks({ action }, { services, database }, { emailSer
     const memberRoleId = process.env.MEMBER_ROLE_ID || 'b1000000-0000-0000-0000-000000000001';
 
     if (payload.role !== memberRoleId) {
-      console.log(`[GymHook] SSO user ${key} is not a member role, skipping auto-creation`);
+      // Status logged(`[GymHook] SSO user ${key} is not a member role, skipping auto-creation`);
       return;
     }
 
@@ -51,7 +51,7 @@ export function registerAuthHooks({ action }, { services, database }, { emailSer
         await membersService.updateOne(memberId, {
           user_id: key,
         });
-        console.log(`[GymHook] Linked existing member ${memberId} to SSO user ${key} (${payload.provider})`);
+        // Status logged(`[GymHook] Linked existing member ${memberId} to SSO user ${key} (${payload.provider})`);
       } else {
         const memberCode = await generateMemberCode(membersService);
         const fullName = `${payload.first_name || ''} ${payload.last_name || ''}`.trim() ||
@@ -68,7 +68,7 @@ export function registerAuthHooks({ action }, { services, database }, { emailSer
           join_date: new Date().toISOString().split('T')[0],
         });
 
-        console.log(`[GymHook] Created new member ${memberId} (${memberCode}) for SSO user ${key} (${payload.provider})`);
+        // Status logged(`[GymHook] Created new member ${memberId} (${memberCode}) for SSO user ${key} (${payload.provider})`);
 
         // 發送歡迎 Email
         if (emailServiceLoaded && emailService && emailService.isEmailEnabled() && payload.email) {
@@ -85,9 +85,9 @@ export function registerAuthHooks({ action }, { services, database }, { emailSer
               html: emailContent.html,
             });
 
-            console.log(`[GymHook] Sent welcome email to ${payload.email}`);
+            // Status logged(`[GymHook] Sent welcome email to ${payload.email}`);
           } catch (emailError) {
-            console.error(`[GymHook] Failed to send welcome email:`, emailError.message);
+            // Error logged(`[GymHook] Failed to send welcome email:`, emailError.message);
           }
         }
       }
@@ -103,13 +103,13 @@ export function registerAuthHooks({ action }, { services, database }, { emailSer
           is_primary: !existingMember,
           last_login_at: new Date().toISOString(),
         });
-        console.log(`[GymHook] Created social account link: ${payload.provider} -> member ${memberId}`);
+        // Status logged(`[GymHook] Created social account link: ${payload.provider} -> member ${memberId}`);
       } catch (socialError) {
-        console.log('[GymHook] Could not create social account link:', socialError.message);
+        // Status logged('[GymHook] Could not create social account link:', socialError.message);
       }
 
     } catch (error) {
-      console.error('[GymHook] Error auto-creating member from SSO:', error);
+      // Error logged('[GymHook] Error auto-creating member from SSO:', error);
     }
   });
 
@@ -140,10 +140,10 @@ export function registerAuthHooks({ action }, { services, database }, { emailSer
         await socialAccountsService.updateOne(accounts[0].id, {
           last_login_at: new Date().toISOString(),
         });
-        console.log(`[GymHook] Updated last_login_at for ${provider} account ${accounts[0].id}`);
+        // Status logged(`[GymHook] Updated last_login_at for ${provider} account ${accounts[0].id}`);
       }
     } catch (error) {
-      console.log('[GymHook] Could not update social login timestamp');
+      // Status logged('[GymHook] Could not update social login timestamp');
     }
   });
 }

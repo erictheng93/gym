@@ -88,7 +88,7 @@ export function registerPaymentRoutes(router, context) {
         data: payment
       });
     } catch (error) {
-      console.error('[PaymentEndpoint] Error creating payment:', error);
+      // Error logged('[PaymentEndpoint] Error creating payment:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -104,12 +104,12 @@ export function registerPaymentRoutes(router, context) {
     try {
       const { gateway } = req.params;
 
-      console.log(`[PaymentWebhook] Received ${gateway} callback:`, req.body);
+      // Webhook logged(`[PaymentWebhook] Received ${gateway} callback:`, req.body);
 
       // 处理回调
       const result = await paymentService.handleCallback(gateway, req.body);
 
-      console.log(`[PaymentWebhook] Callback processed:`, result);
+      // Webhook logged(`[PaymentWebhook] Callback processed:`, result);
 
       // 返回成功响应（各网关要求不同）
       if (gateway === 'ecpay') {
@@ -118,7 +118,7 @@ export function registerPaymentRoutes(router, context) {
         res.json({ success: true });
       }
     } catch (error) {
-      console.error('[PaymentWebhook] Error handling callback:', error);
+      // Error logged('[PaymentWebhook] Error handling callback:', error);
 
       // 返回失败响应
       if (req.params.gateway === 'ecpay') {
@@ -172,7 +172,7 @@ export function registerPaymentRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[PaymentEndpoint] Error getting payment status:', error);
+      // Error logged('[PaymentEndpoint] Error getting payment status:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -246,7 +246,7 @@ export function registerPaymentRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[PaymentEndpoint] Error getting gateways:', error);
+      // Error logged('[PaymentEndpoint] Error getting gateways:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -317,7 +317,7 @@ export function registerPaymentRoutes(router, context) {
         message: '支付已确认'
       });
     } catch (error) {
-      console.error('[PaymentEndpoint] Error confirming manual payment:', error);
+      // Error logged('[PaymentEndpoint] Error confirming manual payment:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

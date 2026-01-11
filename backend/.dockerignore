@@ -1,0 +1,64 @@
+# Docker ignore file for Gym Nexus Backend
+
+# Data directories (mounted as volumes in production)
+data/
+uploads/
+
+# Development files
+*.md
+*.example
+.env
+.env.*
+!.env.example
+
+# Node modules (installed during build)
+**/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Test files
+test-*.js
+test-*.sh
+*.test.js
+*.spec.js
+
+# Build artifacts
+**/dist/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+nul
+
+# Schema and migration files (applied separately)
+schema/
+migrations/
+
+# Documentation
+docs/
+
+# Local development scripts
+setup-*.js
+verify-*.js
+fix-*.js
+import-*.js
+create-schema.js
+seed*.sql

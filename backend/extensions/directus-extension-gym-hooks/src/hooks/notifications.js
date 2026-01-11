@@ -40,7 +40,7 @@ export function registerNotificationsHooks({ action, schedule }, { services, dat
       const notifications = result.rows || [];
       if (notifications.length === 0) return;
 
-      console.log(`[GymHook] Processing ${notifications.length} push notifications`);
+      // Status logged(`[GymHook] Processing ${notifications.length} push notifications`);
 
       for (const notif of notifications) {
         try {
@@ -81,7 +81,7 @@ export function registerNotificationsHooks({ action, schedule }, { services, dat
           `, [notif.subscription_id, notif.notification_type, sendResult.success]);
 
         } catch (error) {
-          console.error(`[GymHook] Failed to send notification ${notif.queue_id}:`, error.message);
+          // Error logged(`[GymHook] Failed to send notification ${notif.queue_id}:`, error.message);
 
           await database.raw(`
             UPDATE notification_queue
@@ -91,7 +91,7 @@ export function registerNotificationsHooks({ action, schedule }, { services, dat
         }
       }
     } catch (error) {
-      console.error('[GymHook] Error processing notification queue:', error);
+      // Error logged('[GymHook] Error processing notification queue:', error);
     }
   }
 
@@ -102,19 +102,19 @@ export function registerNotificationsHooks({ action, schedule }, { services, dat
       const schema = await getSchema();
       await processNotificationQueue(schema);
     });
-    console.log('[GymHook] Scheduled notification queue processing every minute');
+    // Status logged('[GymHook] Scheduled notification queue processing every minute');
 
     // 每天早上 8:00 排程合約到期提醒
     schedule('0 8 * * *', async () => {
       if (!pushEnabled) return;
       try {
         await database.raw('SELECT queue_contract_expiry_reminders()');
-        console.log('[GymHook] Queued contract expiry reminders');
+        // Status logged('[GymHook] Queued contract expiry reminders');
       } catch (error) {
-        console.error('[GymHook] Failed to queue contract expiry reminders:', error);
+        // Error logged('[GymHook] Failed to queue contract expiry reminders:', error);
       }
     });
-    console.log('[GymHook] Scheduled daily contract expiry reminders at 8:00 AM');
+    // Status logged('[GymHook] Scheduled daily contract expiry reminders at 8:00 AM');
   }
 
   // 課程預約成功時 - 排程提醒
@@ -126,9 +126,9 @@ export function registerNotificationsHooks({ action, schedule }, { services, dat
       await database.raw(`
         SELECT queue_booking_reminders($1::uuid)
       `, [payload.session_id]);
-      console.log(`[GymHook] Queued booking reminders for session ${payload.session_id}`);
+      // Status logged(`[GymHook] Queued booking reminders for session ${payload.session_id}`);
     } catch (error) {
-      console.error('[GymHook] Failed to queue booking reminders:', error);
+      // Error logged('[GymHook] Failed to queue booking reminders:', error);
     }
   });
 
@@ -181,9 +181,9 @@ export function registerNotificationsHooks({ action, schedule }, { services, dat
         `, [subs[0].id, JSON.stringify(notifPayload), `cancel_${sessionId}_${booking.member_id}`]);
       }
 
-      console.log(`[GymHook] Queued cancellation notifications for ${bookings.length} bookings`);
+      // Status logged(`[GymHook] Queued cancellation notifications for ${bookings.length} bookings`);
     } catch (error) {
-      console.error('[GymHook] Failed to queue cancellation notifications:', error);
+      // Error logged('[GymHook] Failed to queue cancellation notifications:', error);
     }
   });
 }

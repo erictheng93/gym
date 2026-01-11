@@ -52,7 +52,7 @@ export function registerBillingRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error fetching subscriptions:', error);
+      // Error logged('[BillingEndpoint] Error fetching subscriptions:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -137,7 +137,7 @@ export function registerBillingRoutes(router, context) {
         subscription_id: subscriptionId
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error creating subscription:', error);
+      // Error logged('[BillingEndpoint] Error creating subscription:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -211,7 +211,7 @@ export function registerBillingRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error fetching invoices:', error);
+      // Error logged('[BillingEndpoint] Error fetching invoices:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -300,7 +300,7 @@ export function registerBillingRoutes(router, context) {
         invoice_number: invoiceNumber
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error creating invoice:', error);
+      // Error logged('[BillingEndpoint] Error creating invoice:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -341,7 +341,7 @@ export function registerBillingRoutes(router, context) {
         message: '账单已标记为已付款'
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error marking invoice as paid:', error);
+      // Error logged('[BillingEndpoint] Error marking invoice as paid:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -396,7 +396,7 @@ export function registerBillingRoutes(router, context) {
         }
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error fetching usage records:', error);
+      // Error logged('[BillingEndpoint] Error fetching usage records:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -482,7 +482,7 @@ export function registerBillingRoutes(router, context) {
         collected_count: collected
       });
     } catch (error) {
-      console.error('[BillingEndpoint] Error collecting usage records:', error);
+      // Error logged('[BillingEndpoint] Error collecting usage records:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',
@@ -554,7 +554,7 @@ export function registerBillingRoutes(router, context) {
 
       res.send(pdfBuffer);
     } catch (error) {
-      console.error('[BillingEndpoint] Error generating invoice PDF:', error);
+      // Error logged('[BillingEndpoint] Error generating invoice PDF:', error);
       res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

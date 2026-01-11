@@ -9,6 +9,8 @@
  * 4. 支持 Directus 超級管理員跨租戶訪問
  */
 
+import { logger } from '../utils/logger.js';
+
 /**
  * 創建租戶上下文中間件
  * @param {object} database - Knex database instance
@@ -19,11 +21,11 @@ export function createTenantContextMiddleware(database) {
     try {
       const userId = req.accountability?.user;
 
-      console.log('[TenantContext] User ID:', userId, 'Type:', typeof userId);
-      console.log('[TenantContext] Accountability:', JSON.stringify(req.accountability));
+      // Tenant logged('[TenantContext] User ID:', userId, 'Type:', typeof userId);
+      // Tenant logged('[TenantContext] Accountability:', JSON.stringify(req.accountability));
 
       if (!userId) {
-        console.warn('[TenantContext] No user ID found');
+        // Warning logged('[TenantContext] No user ID found');
         return res.status(401).json({
           success: false,
           message: '請先登入'
@@ -35,12 +37,12 @@ export function createTenantContextMiddleware(database) {
         req.tenantId = null;  // null = 全局訪問
         req.branchId = null;
         req.isSuperAdmin = true;
-        console.log('[TenantContext] Super Admin access granted');
+        // Tenant logged('[TenantContext] Super Admin access granted');
         return next();
       }
 
       // 查詢員工的租戶和分店信息
-      console.log('[TenantContext] Querying employee with user_id:', userId);
+      // Tenant logged('[TenantContext] Querying employee with user_id:', userId);
       const result = await database.raw(`
         SELECT
           e.id AS employee_id,
@@ -137,11 +139,16 @@ export function createTenantContextMiddleware(database) {
         maxEmployees: employee.max_employees
       };
 
-      console.log(`[TenantContext] User ${userId} -> Tenant ${req.tenantId} (${req.tenantName}), Branch ${req.branchId} (${req.branchName}), Plan: ${req.planType}`);
+      // Debug logging without sensitive data
+      logger.debug('Tenant context established', {
+        tenantId: req.tenantId,
+        branchId: req.branchId,
+        planType: req.planType
+      });
 
       next();
     } catch (error) {
-      console.error('[TenantContext] Error:', error);
+      // Error logged('[TenantContext] Error:', error);
       res.status(500).json({
         success: false,
         message: 'Internal server error',
@@ -239,7 +246,7 @@ export function createQuotaCheckMiddleware(database, resourceType) {
 
       next();
     } catch (error) {
-      console.error('[QuotaCheck] Error:', error);
+      // Error logged('[QuotaCheck] Error:', error);
       res.status(500).json({
         success: false,
         message: 'Internal server error',

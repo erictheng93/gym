@@ -1,7 +1,9 @@
 import { readMe, readItems } from '@directus/sdk'
+import * as Sentry from '@sentry/vue'
 import type { Employee } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
+import { saveSession, loadSession, clearSession } from '~/utils/session-storage'
 
 interface User {
   id: string
@@ -37,6 +39,23 @@ export const useAuth = () => {
       await directus.login({ email, password })
       await fetchUser()
       await fetchCurrentEmployee()
+
+      // Save session to localStorage for persistence across page refresh
+      if (user.value) {
+        saveSession(user.value, currentEmployee.value)
+
+        // Set Sentry user context for error tracking
+        try {
+          Sentry.setUser({
+            id: user.value.id,
+            email: user.value.email,
+            username: `${user.value.first_name || ''} ${user.value.last_name || ''}`.trim() || user.value.email,
+          })
+        } catch {
+          // Sentry not initialized - ignore
+        }
+      }
+
       toast.success('登入成功')
       return { success: true }
     } catch (error: unknown) {
@@ -58,6 +77,16 @@ export const useAuth = () => {
     } catch {
       // Ignore logout errors
     } finally {
+      // Clear localStorage session
+      clearSession()
+
+      // Clear Sentry user context
+      try {
+        Sentry.setUser(null)
+      } catch {
+        // Sentry not initialized - ignore
+      }
+
       user.value = null
       currentEmployee.value = null
       await navigateTo('/login')
@@ -122,13 +151,59 @@ export const useAuth = () => {
   }
 
   const checkAuth = async () => {
-    if (!user.value) {
+    // Step 1: If we already have user state, verify it's still valid
+    if (user.value) {
+      try {
+        // Verify the session is still valid with the server
+        await directus.request(readMe({ fields: ['id'] }))
+        if (!currentEmployee.value) {
+          await fetchCurrentEmployee()
+        }
+        // Update session timestamp
+        saveSession(user.value, currentEmployee.value)
+        return true
+      } catch {
+        // Server auth failed, clear state and try recovery
+        user.value = null
+        currentEmployee.value = null
+      }
+    }
+
+    // Step 2: Try server-side auth (cookies may still be valid)
+    try {
       await fetchUser()
+      if (user.value) {
+        await fetchCurrentEmployee()
+        saveSession(user.value, currentEmployee.value)
+        return true
+      }
+    } catch {
+      // Server auth failed, continue to localStorage recovery
     }
-    if (user.value && !currentEmployee.value) {
-      await fetchCurrentEmployee()
+
+    // Step 3: Try localStorage session recovery
+    const cachedSession = loadSession()
+    if (cachedSession) {
+      try {
+        // Attempt to refresh the Directus session
+        await directus.refresh()
+
+        // Re-fetch user data to verify session is valid
+        await fetchUser()
+        if (user.value) {
+          await fetchCurrentEmployee()
+          saveSession(user.value, currentEmployee.value)
+          return true
+        }
+      } catch {
+        // Token refresh failed, clear everything
+        console.log('[useAuth] Session refresh failed, clearing session')
+        clearSession()
+      }
     }
-    return isAuthenticated.value
+
+    // All recovery attempts failed
+    return false
   }
 
   return {
