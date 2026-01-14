@@ -19,6 +19,9 @@ const navItems = [
       <slot />
     </main>
 
+    <!-- Offline Sync Indicator -->
+    <OfflineSyncIndicator />
+
     <!-- Bottom Navigation (只在登入後顯示) -->
     <nav v-if="isAuthenticated" class="bottom-nav">
       <NuxtLink

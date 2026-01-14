@@ -1,10 +1,15 @@
 /**
  * useBookings composable
  * Handles booking, canceling, and managing class reservations
+ * Supports offline caching and queued operations
  */
 
 import type { ClassSession } from './useClasses'
 import { extractErrorMessage } from '../utils/apiHelpers'
+
+// Cache keys
+const CACHE_KEY_MY_BOOKINGS = 'member:bookings'
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 export interface Booking {
   id: string
@@ -47,15 +52,32 @@ interface BookingsResponse {
 export const useBookings = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.directusUrl
-  const { getAuthHeader, member } = useMemberAuth()
+  const { getAuthHeader, member, accessToken } = useMemberAuth()
+  const { isOnline, getCache, setCache, queueCancelBooking } = useOfflineSync()
 
   const myBookings = useState<Booking[]>('my_bookings', () => [])
   const upcomingBookings = useState<Booking[]>('upcoming_bookings', () => [])
   const pastBookings = useState<Booking[]>('past_bookings', () => [])
   const isLoading = useState('bookings_loading', () => false)
+  const isOfflineData = useState('bookings_is_offline', () => false)
 
   /**
-   * Fetch member's bookings
+   * Split bookings into upcoming and past
+   */
+  const splitBookings = (bookings: Booking[]) => {
+    const now = new Date()
+    upcomingBookings.value = bookings.filter(b => {
+      const sessionDate = new Date(b.session_date || b.session?.session_date || '')
+      return sessionDate >= now && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
+    })
+    pastBookings.value = bookings.filter(b => {
+      const sessionDate = new Date(b.session_date || b.session?.session_date || '')
+      return sessionDate < now || ['CANCELLED', 'NO_SHOW', 'ATTENDED'].includes(b.booking_status)
+    })
+  }
+
+  /**
+   * Fetch member's bookings with offline support
    */
   const fetchMyBookings = async (options?: {
     status?: string
@@ -65,7 +87,25 @@ export const useBookings = () => {
     if (!member.value) return []
 
     isLoading.value = true
+    isOfflineData.value = false
+
+    // Build cache key based on options
+    const cacheKey = `${CACHE_KEY_MY_BOOKINGS}:${member.value.id}:${JSON.stringify(options || {})}`
+
     try {
+      // If offline, try to use cached data
+      if (!isOnline.value) {
+        const cached = await getCache<Booking[]>(cacheKey)
+        if (cached) {
+          myBookings.value = cached
+          splitBookings(cached)
+          isOfflineData.value = true
+          return cached
+        }
+        // No cached data available
+        return []
+      }
+
       const params = new URLSearchParams()
       if (options?.status) params.append('status', options.status)
       if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
@@ -77,20 +117,21 @@ export const useBookings = () => {
 
       if (response.success) {
         myBookings.value = response.data
+        splitBookings(response.data)
 
-        // Split into upcoming and past
-        const now = new Date()
-        upcomingBookings.value = response.data.filter(b => {
-          const sessionDate = new Date(b.session_date || b.session?.session_date || '')
-          return sessionDate >= now && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
-        })
-        pastBookings.value = response.data.filter(b => {
-          const sessionDate = new Date(b.session_date || b.session?.session_date || '')
-          return sessionDate < now || ['CANCELLED', 'NO_SHOW', 'ATTENDED'].includes(b.booking_status)
-        })
+        // Cache the response for offline use
+        await setCache(cacheKey, response.data, CACHE_TTL)
       }
       return response.data
     } catch {
+      // On network error, try to use cached data
+      const cached = await getCache<Booking[]>(cacheKey)
+      if (cached) {
+        myBookings.value = cached
+        splitBookings(cached)
+        isOfflineData.value = true
+        return cached
+      }
       return []
     } finally {
       isLoading.value = false
@@ -133,9 +174,40 @@ export const useBookings = () => {
   }
 
   /**
-   * Cancel a booking
+   * Cancel a booking with offline queue support
    */
   const cancelBooking = async (bookingId: string): Promise<BookingResult> => {
+    // Optimistically update local state
+    const updateLocalState = () => {
+      const index = myBookings.value.findIndex(b => b.id === bookingId)
+      if (index !== -1) {
+        myBookings.value[index].booking_status = 'CANCELLED'
+      }
+      upcomingBookings.value = upcomingBookings.value.filter(b => b.id !== bookingId)
+    }
+
+    // If offline, queue the cancellation
+    if (!isOnline.value) {
+      try {
+        await queueCancelBooking(
+          bookingId,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        // Optimistically update local state
+        updateLocalState()
+        return {
+          success: true,
+          message: '取消預約已排入待同步清單，將在連線後自動處理',
+        }
+      } catch (error: unknown) {
+        return {
+          success: false,
+          message: extractErrorMessage(error, '無法排入待同步清單'),
+        }
+      }
+    }
+
     try {
       const response = await $fetch<BookingResult>(`${apiUrl}/gym/bookings/${bookingId}`, {
         method: 'DELETE',
@@ -143,19 +215,29 @@ export const useBookings = () => {
       })
 
       if (response.success) {
-        // Update local state
-        const index = myBookings.value.findIndex(b => b.id === bookingId)
-        if (index !== -1) {
-          myBookings.value[index].booking_status = 'CANCELLED'
-        }
-        upcomingBookings.value = upcomingBookings.value.filter(b => b.id !== bookingId)
+        updateLocalState()
       }
 
       return response
     } catch (error: unknown) {
-      return {
-        success: false,
-        message: extractErrorMessage(error, '取消失敗'),
+      // On network error, queue the cancellation
+      try {
+        await queueCancelBooking(
+          bookingId,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        // Optimistically update local state
+        updateLocalState()
+        return {
+          success: true,
+          message: '網路異常，取消預約已排入待同步清單',
+        }
+      } catch {
+        return {
+          success: false,
+          message: extractErrorMessage(error, '取消失敗'),
+        }
       }
     }
   }
@@ -252,6 +334,8 @@ export const useBookings = () => {
     upcomingBookings,
     pastBookings,
     isLoading,
+    isOfflineData,
+    isOnline,
     upcomingCount,
     hasUpcomingBookings,
     fetchMyBookings,

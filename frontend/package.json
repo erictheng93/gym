@@ -42,6 +42,7 @@
     "dotenv": "^17.2.3",
     "eslint": "^9.39.2",
     "eslint-plugin-vue": "^10.6.2",
+    "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.0.11",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",

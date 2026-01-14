@@ -72,8 +72,8 @@ const loadMemberDetail = async () => {
         created_at: response.data[0].date_created,
       } as MemberDetail
     }
-  } catch {
-    // Failed to load member detail
+  } catch (error) {
+    handleError(error, { fallbackMessage: '無法載入會員資料' })
   } finally {
     isLoadingDetail.value = false
   }

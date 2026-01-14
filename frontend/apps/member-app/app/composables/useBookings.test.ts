@@ -47,6 +47,16 @@ vi.stubGlobal('useRuntimeConfig', () => ({
   },
 }))
 
+// Mock useOfflineSync
+const mockOfflineSync = {
+  isOnline: { value: true },
+  getCache: vi.fn().mockResolvedValue(null),
+  setCache: vi.fn().mockResolvedValue(undefined),
+  queueCancelBooking: vi.fn().mockResolvedValue('queue-id'),
+}
+
+vi.stubGlobal('useOfflineSync', () => mockOfflineSync)
+
 // Mock $fetch
 const mockFetch = vi.fn()
 vi.stubGlobal('$fetch', mockFetch)
@@ -67,6 +77,11 @@ describe('useBookings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     stateStore.clear()
+    // Reset mockOfflineSync
+    mockOfflineSync.isOnline.value = true
+    mockOfflineSync.getCache.mockResolvedValue(null)
+    mockOfflineSync.setCache.mockResolvedValue(undefined)
+    mockOfflineSync.queueCancelBooking.mockResolvedValue('queue-id')
   })
 
   describe('fetchMyBookings', () => {

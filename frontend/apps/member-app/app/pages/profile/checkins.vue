@@ -6,6 +6,8 @@ definePageMeta({
   middleware: 'auth'
 })
 
+const { handleError } = useApiError()
+
 interface Checkin {
   id: string
   check_time: string
@@ -60,8 +62,8 @@ const fetchCheckins = async (loadMore = false) => {
     }
 
     hasMore.value = items.length === pageSize
-  } catch {
-    // Failed to fetch checkins
+  } catch (error) {
+    handleError(error, { fallbackMessage: '無法載入入場紀錄' })
   } finally {
     isLoading.value = false
   }

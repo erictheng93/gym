@@ -6,6 +6,7 @@ definePageMeta({
 })
 
 const { member } = useMemberAuth()
+const toast = useToast()
 
 const qrCodeDataUrl = ref('')
 const qrExpiry = ref<Date | null>(null)
@@ -35,8 +36,9 @@ const generateQRCode = async () => {
         light: '#ffffff'
       }
     })
-  } catch {
-    // Failed to generate QR code
+  } catch (error) {
+    console.error('QR Code generation failed:', error)
+    toast.error('無法產生入場 QR Code')
   }
 }
 

@@ -12,6 +12,7 @@ const apiUrl = config.public.directusUrl
 
 const directus = useDirectus()
 const { member, accessToken } = useMemberAuth()
+const { handleError } = useApiError()
 
 const contracts = ref<Array<Contract & { plan?: { name: string, plan_type: string } }>>([])
 const isLoading = ref(true)
@@ -43,8 +44,8 @@ const fetchContracts = async () => {
       })
     )
     contracts.value = result as typeof contracts.value
-  } catch {
-    // Failed to fetch contracts
+  } catch (error) {
+    handleError(error, { fallbackMessage: '無法載入合約資料' })
   } finally {
     isLoading.value = false
   }

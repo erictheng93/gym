@@ -6,6 +6,8 @@ definePageMeta({
   middleware: 'auth'
 })
 
+const { handleError } = useApiError()
+
 interface Payment {
   id: string
   amount: number
@@ -64,8 +66,8 @@ const fetchPayments = async (loadMore = false) => {
     }
 
     hasMore.value = items.length === pageSize
-  } catch {
-    // Failed to fetch payments
+  } catch (error) {
+    handleError(error, { fallbackMessage: '無法載入付款紀錄' })
   } finally {
     isLoading.value = false
   }
