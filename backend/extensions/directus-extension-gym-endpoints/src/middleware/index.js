@@ -11,3 +11,5 @@ export {
   withTenantScope
 } from './tenant-context.js';
 export { createApiLogger } from './api-logger.js';
+export { createSecurityHeadersMiddleware } from './security-headers.js';
+export { createCsrfMiddleware, generateCsrfToken, validateCsrfToken } from './csrf.js';

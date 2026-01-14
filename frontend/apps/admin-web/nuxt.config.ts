@@ -59,6 +59,33 @@ export default defineNuxtConfig({
     }
   },
 
+  // Security headers for production
+  routeRules: {
+    '/**': {
+      headers: {
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff',
+        'X-XSS-Protection': '1; mode=block',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        // CSP - Allow Directus API, Google APIs, Sentry
+        'Content-Security-Policy': [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://*.sentry.io",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com data:",
+          "img-src 'self' data: blob: https:",
+          "connect-src 'self' https://*.directus.io https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com ws://localhost:* wss://localhost:*",
+          "frame-src 'self' https://accounts.google.com",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'"
+        ].join('; ')
+      }
+    }
+  },
+
+
   app: {
     head: {
       title: 'Gym Nexus',

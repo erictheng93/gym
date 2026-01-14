@@ -170,7 +170,9 @@ describe('FormTagInput', () => {
         modelValue: ['標籤一', '標籤二', '標籤三']
       })
 
-      await wrapper.findAll('.tag-remove')[1].trigger('click')
+      const removeButtons = wrapper.findAll('.tag-remove')
+      expect(removeButtons.length).toBeGreaterThan(1)
+      await removeButtons[1]!.trigger('click')
 
       expect(wrapper.emitted('update:modelValue')).toBeTruthy()
       expect(wrapper.emitted('update:modelValue')![0]).toEqual([['標籤一', '標籤三']])

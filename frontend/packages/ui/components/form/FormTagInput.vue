@@ -80,7 +80,10 @@ const handleKeydown = (e: KeyboardEvent) => {
     addTag()
   } else if (e.key === 'Backspace' && !newTag.value && tags.value.length > 0) {
     // 當輸入為空時，按 Backspace 刪除最後一個標籤
-    removeTag(tags.value[tags.value.length - 1])
+    const lastTag = tags.value[tags.value.length - 1]
+    if (lastTag) {
+      removeTag(lastTag)
+    }
   }
 }
 </script>

@@ -21,6 +21,7 @@ import { registerBillingRoutes } from './billing.js';
 import { registerAuditRoutes } from './audit.js';
 import { registerPaymentRoutes } from './payment.js';
 import { registerHealthRoutes } from './health.js';
+import { registerCsrfRoutes } from './csrf.js';
 
 /**
  * Register all routes with the router

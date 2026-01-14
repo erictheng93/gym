@@ -25,6 +25,8 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { createRateLimiter } from './middleware/rate-limiter.js';
 import { createApiLogger } from './middleware/api-logger.js';
 import { createErrorHandler, setupProcessErrorHandlers } from './middleware/error-handler.js';
+import { createSecurityHeadersMiddleware } from './middleware/security-headers.js';
+import { createCsrfMiddleware } from './middleware/csrf.js';
 import { registerAllRoutes } from './routes/index.js';
 
 // 設置進程級錯誤處理
@@ -55,6 +57,11 @@ export default {
       }
       next();
     });
+
+    // ============================================
+    // Middleware: Security Headers
+    // ============================================
+    router.use(createSecurityHeadersMiddleware());
 
     // ============================================
     // Middleware: Authentication (应用于所有路由，注入accountability)
@@ -95,6 +102,9 @@ export default {
     };
 
     registerAllRoutes(router, context, middleware);
+
+    // CSRF 保護（默認禁用，可根據需要啟用）
+    // router.use(createCsrfMiddleware({ enabled: true }));
 
     // 全局錯誤處理（必須在所有路由之後）
     router.use(createErrorHandler());
