@@ -5,19 +5,8 @@
  * Handles fetching member data from the API.
  */
 
-import type { Member, Contract } from '@gym-nexus/shared/types'
-
-export interface CurrentMember {
-  id: string
-  member_code: string
-  full_name: string
-  phone: string | null
-  email: string | null
-  branch_id: string | null
-  branch_name: string | null
-  member_status: Member['member_status']
-  activeContract: Contract | null
-}
+import type { Contract } from '@gym-nexus/shared/types'
+import type { CurrentMember } from '../types/auth'
 
 interface MemberProfileResponse {
   success: boolean

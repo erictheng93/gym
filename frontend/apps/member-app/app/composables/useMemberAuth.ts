@@ -20,11 +20,6 @@
  * console.log(member.value?.full_name)
  */
 
-// Re-export types
-export type { CurrentMember } from './useAuthSession'
-export type { AuthResult, OtpSendResult, OAuthResult } from './useAuthMethods'
-export type { TokenState } from './useAuthTokens'
-
 export const useMemberAuth = () => {
   // Get instances of specialized composables
   const tokens = useAuthTokens()

@@ -5,10 +5,7 @@
  * Uses cookies for secure token storage.
  */
 
-export interface TokenState {
-  accessToken: string | null
-  refreshToken: string | null
-}
+import type { TokenState } from '../types/auth'
 
 export const useAuthTokens = () => {
   const config = useRuntimeConfig()

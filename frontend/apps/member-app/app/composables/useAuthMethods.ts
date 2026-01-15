@@ -7,7 +7,7 @@
 
 import type { Contract } from '@gym-nexus/shared/types'
 import { extractErrorMessage } from '../utils/apiHelpers'
-import type { CurrentMember } from './useAuthSession'
+import type { CurrentMember, AuthResult, OtpSendResult, OAuthResult } from '../types/auth'
 
 interface MemberUser {
   id: string
@@ -40,21 +40,6 @@ interface EmailLoginResponse {
   access_token: string
   refresh_token: string
   expires_in: number
-}
-
-export interface AuthResult {
-  success: boolean
-  message: string
-}
-
-export interface OtpSendResult extends AuthResult {
-  otp?: string // Only in development
-}
-
-export interface OAuthResult {
-  success: boolean
-  error?: string
-  needsRegistration?: boolean
 }
 
 export const useAuthMethods = () => {

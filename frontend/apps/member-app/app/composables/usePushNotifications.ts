@@ -3,12 +3,7 @@
  * Handles Web Push notification subscription and management
  */
 
-export interface NotificationPreferences {
-  notify_booking_reminder: boolean
-  notify_contract_expiry: boolean
-  notify_class_cancelled: boolean
-  notify_promotions: boolean
-}
+import type { PushNotificationPreferences } from '../types/notification'
 
 export const usePushNotifications = () => {
   const config = useRuntimeConfig()
@@ -19,7 +14,7 @@ export const usePushNotifications = () => {
   const isSubscribed = useState('push_subscribed', () => false)
   const permission = useState<NotificationPermission>('push_permission', () => 'default')
   const subscription = useState<PushSubscription | null>('push_subscription', () => null)
-  const preferences = useState<NotificationPreferences>('push_preferences', () => ({
+  const preferences = useState<PushNotificationPreferences>('push_preferences', () => ({
     notify_booking_reminder: true,
     notify_contract_expiry: true,
     notify_class_cancelled: true,
@@ -173,7 +168,7 @@ export const usePushNotifications = () => {
   /**
    * Update notification preferences
    */
-  const updatePreferences = async (newPreferences: Partial<NotificationPreferences>): Promise<boolean> => {
+  const updatePreferences = async (newPreferences: Partial<PushNotificationPreferences>): Promise<boolean> => {
     if (!subscription.value) {
       // Just update local state
       preferences.value = { ...preferences.value, ...newPreferences }

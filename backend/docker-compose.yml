@@ -30,7 +30,7 @@ services:
     image: postgis/postgis:17-3.4
     restart: unless-stopped
     ports:
-      - 5444:5432
+      - 15432:5432
     volumes:
       - ./data/database:/var/lib/postgresql
     environment:

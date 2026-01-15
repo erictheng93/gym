@@ -9,6 +9,7 @@ Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
 - **Database:** PostgreSQL
 - **Frontend:** Nuxt 3 (monorepo with member-app and admin-web)
 - **Infrastructure:** Cloudflare (Pages, Workers, R2) + VPS (Coolify)
+- **Package Manager:** pnpm (必須使用 pnpm，不要使用 npm 或 yarn)
 
 ## Development Commands
 
@@ -22,8 +23,8 @@ docker-compose up -d
 ### Frontend (Nuxt 3)
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 # Dev server at http://localhost:3000
 ```
 
