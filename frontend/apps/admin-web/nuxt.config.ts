@@ -75,7 +75,7 @@ export default defineNuxtConfig({
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: blob: https:",
-          "connect-src 'self' https://*.directus.io https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com ws://localhost:* wss://localhost:*",
+          "connect-src 'self' http://localhost:* https://*.directus.io https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com ws://localhost:* wss://localhost:*",
           "frame-src 'self' https://accounts.google.com",
           "object-src 'none'",
           "base-uri 'self'",
@@ -244,5 +244,32 @@ export default defineNuxtConfig({
 
   typescript: {
     strict: true
+  },
+
+  // Vite configuration to fix Windows path issues with non-ASCII characters
+  vite: {
+    server: {
+      fs: {
+        strict: false,
+        allow: ['..']
+      }
+    },
+    plugins: [
+      {
+        name: 'fix-windows-nuxt-paths',
+        configureServer(server) {
+          // Add middleware to redirect /_nuxt/C:/ to /_nuxt/@fs/C:/
+          server.middlewares.use((req, res, next) => {
+            if (req.url && req.url.startsWith('/_nuxt/') && /^\/_nuxt\/[A-Za-z](%3A|:)/.test(req.url)) {
+              const newUrl = req.url.replace('/_nuxt/', '/_nuxt/@fs/')
+              res.writeHead(302, { Location: newUrl })
+              res.end()
+              return
+            }
+            next()
+          })
+        }
+      }
+    ]
   }
 })

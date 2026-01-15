@@ -24,8 +24,8 @@ export type {
 } from './types'
 
 // Composables
-export { useDirectus } from './composables'
-export type { DirectusInstance } from './composables'
+export { useDirectus, useTenant } from './composables'
+export type { DirectusInstance, TenantInfo, TenantQuota } from './composables'
 
 // Utils - Formatters
 export {

@@ -4,6 +4,7 @@
  */
 
 import { MESSAGES } from '~/constants'
+import { useErrorHandler } from '~/composables/core'
 
 export interface ReportPeriod {
   start_date: string
