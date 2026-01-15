@@ -1,74 +1,127 @@
-# GEMINI.md
-
-This file serves as the primary context and instruction manual for the Gemini AI agent working on the **Gym Nexus** project.
+# Gym Nexus Project Context for Gemini
 
 ## 1. Project Overview
+Gym Nexus is a comprehensive Gym Management System designed to be SaaS-capable and multi-tenant. It utilizes a modern full-stack architecture with a headless CMS backend and a Nuxt-based frontend monorepo.
 
-**Gym Nexus** is a comprehensive gym management system (CRM/ERP) designed for multi-branch operations. It features a Headless CMS backend and a modern Nuxt 3 frontend.
+### Core Objectives
+- **Member Management:** Contracts, Check-ins, profiles.
+- **Admin Dashboard:** Staff management, reporting, configuration.
+- **Member App:** Class booking, payments, QR code access.
+- **Scalability:** Dockerized services, Redis caching, Postgres optimizations.
 
-*   **Goal:** Manage memberships, contracts, HR (attendance/leave), and financial reporting across multiple gym branches.
-*   **Architecture:**
-    *   **Backend:** Directus (Headless CMS) running on Node.js with PostgreSQL.
-    *   **Frontend:** Nuxt 3 Monorepo (managed via `pnpm`) containing:
-        *   `apps/admin-web`: Staff/Admin dashboard.
-        *   `apps/member-app`: Member-facing PWA.
-        *   `packages/`: Shared logic and UI components.
-    *   **Infrastructure:** Docker (local dev), Cloudflare (Pages/R2), VPS (Backend).
+## 2. Tech Stack & Architecture
 
-## 2. Key Files & Documentation
+### Backend (Dockerized)
+Located in `backend/`
+- **CMS/API:** [Directus 11](https://directus.io/) (Headless CMS, Node.js)
+- **Database:** PostgreSQL 17 + PostGIS 3.4 (Geospatial support)
+- **Cache:** Redis 7 (Session, API caching)
+- **Infrastructure:** Docker Compose
 
-*   **`README.md`**: Project entry point, setup guide, and tech stack overview.
-*   **`CLAUDE.md`**: Contains useful development commands and architecture summaries (highly relevant).
-*   **`PRD.md`**: Product Requirement Document - detailed feature specs.
-*   **`健身房系統架構設計.md`**: Technical architecture, database schema, and permission models.
-*   **`frontend/package.json`**: Root scripts for the frontend monorepo.
+### Frontend (Monorepo)
+Located in `frontend/` (Managed via `pnpm` workspaces)
+- **Framework:** [Nuxt 4](https://nuxt.com/) (Vue 3, Vite)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS (Inferred)
+- **State/Validation:** Zod, Pinia (Inferred)
+- **Testing:** Vitest (Unit), Playwright (E2E)
 
-## 3. Development Workflow & Commands
+#### Applications
+- **Admin Web:** `apps/admin-web` (Port 3001) - For staff and managers.
+- **Member App:** `apps/member-app` (Port 3002) - PWA for gym members.
+- **Shared Packages:** `packages/shared`, `packages/ui`
 
-### Backend (Directus + Postgres)
-*   **Location:** `backend/`
-*   **Start:** `docker-compose up -d` (Runs Directus at `http://localhost:8055`)
-*   **Extensions:** Located in `backend/extensions/`.
-*   **Database:** PostgreSQL entities include `branches`, `employees`, `members`, `contracts`, `payments`.
+## 3. Quick Start Guide
 
-### Frontend (Nuxt 3 Monorepo)
-*   **Location:** `frontend/`
-*   **Package Manager:** `pnpm`
-*   **Install Dependencies:** `pnpm install`
-*   **Start Admin App:** `pnpm dev:admin`
-*   **Start Member App:** `pnpm dev:member`
-*   **Build:** `pnpm build` (or specific app: `pnpm build:admin`)
+### Prerequisites
+- Node.js & pnpm (for frontend)
+- Docker & Docker Compose (for backend)
+
+### Backend Setup
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Start services:
+   ```bash
+   docker-compose up -d
+   ```
+   - Directus Console: `http://localhost:8500`
+   - Database: Port 5444
+   - Redis: Port 6333
+
+### Frontend Setup
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies:
+   ```bash
+   pnpm install
+   ```
+3. Start Development Servers:
+   - **Admin Web:**
+     ```bash
+     pnpm dev:admin
+     ```
+   - **Member App:**
+     ```bash
+     pnpm dev:member
+     ```
+
+## 4. Key Commands Reference
+
+| Category | Command | Description | Directory |
+|----------|---------|-------------|-----------|
+| **Backend** | `docker-compose up -d` | Start backend services | `backend/` |
+| | `docker-compose down` | Stop backend services | `backend/` |
+| | `docker-compose logs -f` | View logs | `backend/` |
+| **Frontend** | `pnpm install` | Install dependencies | `frontend/` |
+| | `pnpm dev:admin` | Start Admin App (Port 3001) | `frontend/` |
+| | `pnpm dev:member` | Start Member App (Port 3002) | `frontend/` |
+| | `pnpm build` | Build all apps | `frontend/` |
+| | `pnpm typecheck` | Run type checking | `frontend/` |
+| | `pnpm lint` | Run ESLint | `frontend/` |
+| **Testing** | `pnpm test` | Run Unit Tests (Vitest) | `frontend/` |
+| | `pnpm test:e2e` | Run E2E Tests (Playwright) | `frontend/` |
+| | `pnpm test:e2e:ui` | E2E Tests with UI Mode | `frontend/` |
+
+## 5. Directory Structure Overview
+
+```
+.
+├── backend/                # Backend Infrastructure & Config
+│   ├── docker-compose.yml  # Service definitions
+│   ├── migrations/         # SQL Migrations
+│   ├── extensions/         # Custom Directus extensions
+│   └── uploads/            # Local file storage
+├── frontend/               # Frontend Monorepo Root
+│   ├── apps/
+│   │   ├── admin-web/      # Admin Dashboard (Nuxt)
+│   │   └── member-app/     # Member PWA (Nuxt)
+│   ├── packages/           # Shared code
+│   ├── e2e/                # Playwright E2E tests
+│   └── package.json        # Workspace scripts
+├── docs/                   # Project Documentation
+└── .github/                # CI/CD Workflows
+```
+
+## 6. Development Standards & AI Guidelines
+
+### Code Style
+- **Vue/Nuxt:** Use Composition API (`<script setup lang="ts">`).
+- **TypeScript:** Strict typing preferred. Use Zod for runtime validation.
+- **Naming:** PascalCase for components, camelCase for functions/vars.
 
 ### Testing
-*   **Unit Tests (Vitest):** `pnpm test` (Runs in `frontend/`)
-*   **E2E Tests (Playwright):** `pnpm test:e2e` (Runs in `frontend/`)
-    *   UI Mode: `pnpm test:e2e:ui`
-    *   Debug: `pnpm test:e2e:debug`
+- **Unit:** Write Vitest tests for utility functions and complex components.
+- **E2E:** Critical flows (Auth, Payments, Booking) must be covered by Playwright.
+- **Run Tests:** Always run `pnpm typecheck` and `pnpm lint` before committing.
 
-## 4. Coding Conventions
+### Git Workflow
+- **Commits:** Follow Conventional Commits (e.g., `feat:`, `fix:`, `chore:`).
+- **Branches:** Feature branches preferred.
 
-*   **Language:**
-    *   **Code/Comments:** English.
-    *   **UI/Documentation:** Traditional Chinese (繁體中文).
-*   **Naming:**
-    *   Database: `snake_case` (e.g., `member_code`, `branch_id`).
-    *   TS/JS/Vue: `camelCase` (e.g., `memberCode`, `branchId`).
-    *   Vue Components: `PascalCase` (e.g., `MemberCard.vue`).
-*   **Frameworks:**
-    *   **Vue 3** with Composition API (`<script setup>`).
-    *   **Tailwind CSS** for styling.
-    *   **Pinia** for state management.
-
-## 5. Architecture Highlights
-
-*   **Multi-Tenancy:** Data is isolated by `branch_id`.
-*   **Permissions:** controlled by `job_titles` and `employees.custom_permissions`.
-*   **Contracts:** Logic for `TIME_BASED` and `COUNT_BASED` memberships.
-    *   **Pause Logic:** Pausing a contract *must* extend the `end_date` automatically.
-
-## 6. Gemini Agent Instructions
-
-*   **Context First:** Always check `PRD.md` or schema docs if business logic is unclear.
-*   **Test-Driven:** When adding features, verify with `vitest` or `playwright`.
-*   **Safety:** Explain any filesystem changes before execution.
-*   **Monorepo Awareness:** Be mindful of which app (`admin-web` vs `member-app`) you are modifying.
+### Important Notes
+- **Directus:** The backend logic is heavily data-driven via Directus. Schema changes often require migrations (`backend/migrations`).
+- **Environment:** Check `.env.example` files in respective directories for required variables.
