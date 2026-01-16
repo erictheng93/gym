@@ -1,0 +1,16 @@
+{
+  "name": "@gym-nexus/scripts",
+  "version": "1.0.0",
+  "description": "Cross-platform testing and utility scripts for Gym Nexus",
+  "type": "module",
+  "scripts": {
+    "test:api": "tsx test-directus-api.ts",
+    "test:hooks": "tsx test-hooks-api.ts",
+    "test:hooks:db": "tsx test-hooks-functionality.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0"
+  }
+}
