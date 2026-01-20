@@ -10,7 +10,8 @@ export default defineNuxtPlugin(() => {
   setupListeners()
 
   // Register service worker for background sync if available
-  if ('serviceWorker' in navigator && 'sync' in window.registration) {
+  const registration = (window as any).registration
+  if ('serviceWorker' in navigator && registration && 'sync' in registration) {
     // Use Background Sync API when available
     navigator.serviceWorker.ready.then(registration => {
       // Register periodic background sync

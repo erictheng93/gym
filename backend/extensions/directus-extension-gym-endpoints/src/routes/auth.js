@@ -54,9 +54,9 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       const members = await membersService.readByQuery({
         filter: {
           email: { _eq: email },
-          status: { _eq: 'active' },
+          status: { _eq: 'ACTIVE' },
         },
-        fields: ['id', 'member_code', 'full_name', 'phone', 'email', 'branch_id', 'member_status'],
+        fields: ['id', 'member_code', 'full_name', 'phone', 'email', 'branch_id', 'status'],
         limit: 1,
       });
 
@@ -94,7 +94,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
           id: member.id,
           member_code: member.member_code,
           full_name: member.full_name,
-          member_status: member.member_status,
+          status: member.status,
           branch_id: member.branch_id,
         },
         access_token: accessToken,
@@ -131,7 +131,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       const members = await membersService.readByQuery({
         filter: {
           email: { _eq: email },
-          status: { _eq: 'active' },
+          status: { _eq: 'ACTIVE' },
         },
         fields: ['id', 'member_code', 'full_name', 'email', 'user_id'],
         limit: 1,

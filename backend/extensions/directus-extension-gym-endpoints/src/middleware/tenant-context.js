@@ -17,8 +17,39 @@ import { logger } from '../utils/logger.js';
  * @returns {Function} Express 中間件
  */
 export function createTenantContextMiddleware(database) {
+  // Public routes that don't require tenant context
+  // These include auth routes and member routes (which use separate member JWT auth)
+  const publicPaths = [
+    '/auth/login',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/auth/otp/send',
+    '/auth/otp/verify',
+    '/otp/send',
+    '/otp/verify',
+    '/otp/refresh',
+    '/member/me',
+    '/member/complete-profile',
+    '/vapid-public-key',
+    '/push/',
+    '/bookings/',
+    '/classes/',
+    '/contracts/',
+    '/notifications/',
+    '/reviews/',
+  ];
+
   return async (req, res, next) => {
     try {
+      // Skip tenant context for public routes
+      const requestPath = req.path || req.url;
+      if (publicPaths.some(path => requestPath.startsWith(path) || requestPath.endsWith(path))) {
+        req.tenantId = null;
+        req.branchId = null;
+        req.isSuperAdmin = false;
+        return next();
+      }
+
       const userId = req.accountability?.user;
 
       // Tenant logged('[TenantContext] User ID:', userId, 'Type:', typeof userId);

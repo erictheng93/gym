@@ -37,7 +37,7 @@ export function registerMemberRoutes(router, context, memberAuthMiddleware) {
         fields: [
           'id', 'member_code', 'full_name', 'phone', 'email',
           'gender', 'birthday', 'address',
-          'member_status', 'join_date',
+          'status', 'join_date',
           'branch_id.id', 'branch_id.name',
         ],
       });
@@ -55,14 +55,13 @@ export function registerMemberRoutes(router, context, memberAuthMiddleware) {
         filter: {
           _and: [
             { member_id: { _eq: memberId } },
-            { contract_status: { _in: ['ACTIVE', 'PAUSED'] } },
-            { status: { _eq: 'active' } },
+            { status: { _in: ['ACTIVE', 'PAUSED'] } },
           ],
         },
         fields: [
-          'id', 'contract_no', 'contract_status', 'start_date', 'end_date',
+          'id', 'contract_no', 'status', 'start_date', 'end_date',
           'remaining_counts', 'payment_status',
-          'plan_id.id', 'plan_id.name', 'plan_id.plan_type',
+          'plan_id.id', 'plan_id.name', 'plan_id.type',
         ],
         sort: ['-start_date'],
       });
@@ -179,7 +178,7 @@ export function registerMemberRoutes(router, context, memberAuthMiddleware) {
         fields: [
           'id', 'member_code', 'full_name', 'phone', 'email',
           'gender', 'birthday', 'address',
-          'member_status', 'join_date',
+          'status', 'join_date',
           'branch_id.id', 'branch_id.name',
         ],
       });
