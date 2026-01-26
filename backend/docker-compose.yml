@@ -37,6 +37,10 @@ services:
       POSTGRES_USER: directus
       POSTGRES_PASSWORD: directus
       POSTGRES_DB: gym_nexus
+      # UTF-8 編碼設定 (防止中文亂碼)
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+      LANG: "en_US.UTF-8"
+      LC_ALL: "en_US.UTF-8"
     # 生產環境連接池優化參數
     command:
       - "postgres"
@@ -87,6 +91,8 @@ services:
       DB_DATABASE: gym_nexus
       DB_USER: directus
       DB_PASSWORD: directus
+      # UTF-8 客戶端編碼 (防止中文亂碼)
+      DB_CHARSET: "utf8"
       # 連接池優化配置 (Directus 11 支援的選項)
       DB_POOL__MIN: "2"                   # 最小連接數
       DB_POOL__MAX: "50"                  # 最大連接數

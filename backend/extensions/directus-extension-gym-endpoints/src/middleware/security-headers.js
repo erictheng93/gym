@@ -26,6 +26,9 @@ export function createSecurityHeadersMiddleware() {
     // 禁用不必要的瀏覽器功能
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
+    // 確保 JSON 回應使用 UTF-8 編碼 (防止中文亂碼)
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
     // Cache-Control for API responses
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
