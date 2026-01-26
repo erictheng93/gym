@@ -1,6 +1,9 @@
 /**
  * Authentication Routes
  * /gym/auth/*
+ *
+ * 使用獨立的 member_credentials 表進行認證
+ * 不依賴 directus_users（除非使用 OAuth）
  */
 
 import crypto from 'crypto';
@@ -11,6 +14,7 @@ import {
 } from '../utils/errors.js';
 import { jwt } from '../utils/jwt.js';
 import { logger } from '../utils/logger.js';
+import { hashPassword, verifyPassword, validatePassword } from '../utils/password.js';
 
 /**
  * 註冊認證路由
@@ -20,52 +24,88 @@ import { logger } from '../utils/logger.js';
  */
 export function registerAuthRoutes(router, context, memberAuthMiddleware) {
   const { services, database, getSchema, env } = context;
-  const { ItemsService, UsersService } = services;
+  const { ItemsService } = services;
 
   /**
    * POST /gym/auth/login
    * Email/Password login for members
+   * 使用 member_credentials 表驗證密碼
    */
   router.post('/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body || {};
 
       if (!email || !password) {
-        throw InvalidPayloadError('email and password are required');
+        throw InvalidPayloadError('請輸入電子郵件和密碼');
       }
 
-      const authResponse = await fetch(`http://localhost:8055/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      // 1. 查找會員
+      const memberResult = await database.raw(`
+        SELECT m.id, m.member_code, m.full_name, m.phone, m.email, m.branch_id, m.status,
+               mc.password_hash, mc.failed_login_attempts, mc.locked_until
+        FROM members m
+        LEFT JOIN member_credentials mc ON mc.member_id = m.id
+        WHERE LOWER(m.email) = LOWER(?) AND m.status = 'ACTIVE'
+        LIMIT 1
+      `, [email]);
 
-      if (!authResponse.ok) {
-        const errorData = await authResponse.json().catch(() => ({}));
-        throw UnauthorizedError(errorData?.errors?.[0]?.message || '帳號或密碼錯誤');
+      const member = memberResult.rows?.[0] || memberResult[0];
+
+      if (!member) {
+        throw UnauthorizedError('帳號或密碼錯誤');
       }
 
-      const schema = await getSchema();
-      const membersService = new ItemsService('members', {
-        schema,
-        knex: database,
-      });
-
-      const members = await membersService.readByQuery({
-        filter: {
-          email: { _eq: email },
-          status: { _eq: 'ACTIVE' },
-        },
-        fields: ['id', 'member_code', 'full_name', 'phone', 'email', 'branch_id', 'status'],
-        limit: 1,
-      });
-
-      if (members.length === 0) {
-        throw NotFoundError('此帳號沒有關聯的會員資料');
+      // 2. 檢查帳號是否被鎖定
+      if (member.locked_until && new Date(member.locked_until) > new Date()) {
+        const remainingMinutes = Math.ceil((new Date(member.locked_until) - new Date()) / 60000);
+        throw UnauthorizedError(`帳號已被暫時鎖定，請 ${remainingMinutes} 分鐘後再試`);
       }
 
-      const member = members[0];
+      // 3. 檢查是否有設定密碼
+      if (!member.password_hash) {
+        throw UnauthorizedError('此帳號尚未設定密碼，請使用手機驗證碼登入或設定密碼');
+      }
 
+      // 4. 驗證密碼
+      const isValidPassword = await verifyPassword(member.password_hash, password);
+
+      if (!isValidPassword) {
+        // 記錄失敗嘗試
+        const newAttempts = (member.failed_login_attempts || 0) + 1;
+        const lockUntil = newAttempts >= 5 ? "NOW() + INTERVAL '30 minutes'" : 'NULL';
+
+        await database.raw(`
+          UPDATE member_credentials
+          SET failed_login_attempts = ?,
+              last_failed_login_at = NOW(),
+              locked_until = ${lockUntil},
+              updated_at = NOW()
+          WHERE member_id = ?
+        `, [newAttempts, member.id]);
+
+        if (newAttempts >= 5) {
+          throw UnauthorizedError('登入失敗次數過多，帳號已被鎖定 30 分鐘');
+        }
+
+        throw UnauthorizedError('帳號或密碼錯誤');
+      }
+
+      // 5. 登入成功，重置失敗計數並更新登入記錄
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null;
+      const userAgent = req.headers['user-agent'] || null;
+
+      await database.raw(`
+        UPDATE member_credentials
+        SET failed_login_attempts = 0,
+            locked_until = NULL,
+            last_login_at = NOW(),
+            last_login_ip = ?,
+            last_login_user_agent = ?,
+            updated_at = NOW()
+        WHERE member_id = ?
+      `, [clientIp, userAgent, member.id]);
+
+      // 6. 產生 JWT tokens
       const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
       const accessToken = jwt.sign(
         {
@@ -86,6 +126,8 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         jwtSecret,
         { expiresIn: '7d' }
       );
+
+      logger.info('Member login successful', { memberId: member.id, email: member.email });
 
       res.json({
         success: true,
@@ -111,6 +153,62 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
   });
 
   /**
+   * POST /gym/auth/set-password
+   * Set password for a member (after OTP verification)
+   * 用於首次設定密碼或 OTP 登入後設定密碼
+   */
+  router.post('/auth/set-password', memberAuthMiddleware, async (req, res) => {
+    try {
+      const { new_password } = req.body || {};
+      const memberId = req.member.id;
+
+      if (!new_password) {
+        throw InvalidPayloadError('請輸入新密碼');
+      }
+
+      // 驗證密碼強度
+      const validation = validatePassword(new_password);
+      if (!validation.valid) {
+        throw InvalidPayloadError(validation.message);
+      }
+
+      // 檢查是否已有密碼
+      const credResult = await database.raw(`
+        SELECT password_hash FROM member_credentials WHERE member_id = ?
+      `, [memberId]);
+
+      const cred = credResult.rows?.[0] || credResult[0];
+
+      if (cred?.password_hash) {
+        throw InvalidPayloadError('密碼已設定，請使用「修改密碼」功能');
+      }
+
+      // 雜湊並儲存密碼
+      const passwordHash = await hashPassword(new_password);
+
+      await database.raw(`
+        UPDATE member_credentials
+        SET password_hash = ?,
+            password_updated_at = NOW(),
+            updated_at = NOW()
+        WHERE member_id = ?
+      `, [passwordHash, memberId]);
+
+      logger.info('Member password set', { memberId });
+
+      res.json({
+        success: true,
+        message: '密碼設定成功',
+      });
+    } catch (error) {
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Internal server error',
+      });
+    }
+  });
+
+  /**
    * POST /gym/auth/forgot-password
    * Send password reset email to member
    */
@@ -119,83 +217,54 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       const { email } = req.body || {};
 
       if (!email) {
-        throw InvalidPayloadError('email is required');
+        throw InvalidPayloadError('請輸入電子郵件');
       }
 
-      const schema = await getSchema();
-      const membersService = new ItemsService('members', {
-        schema,
-        knex: database,
-      });
+      // 查找會員
+      const memberResult = await database.raw(`
+        SELECT m.id, m.member_code, m.full_name, m.email
+        FROM members m
+        WHERE LOWER(m.email) = LOWER(?) AND m.status = 'ACTIVE'
+        LIMIT 1
+      `, [email]);
 
-      const members = await membersService.readByQuery({
-        filter: {
-          email: { _eq: email },
-          status: { _eq: 'ACTIVE' },
-        },
-        fields: ['id', 'member_code', 'full_name', 'email', 'user_id'],
-        limit: 1,
-      });
+      const member = memberResult.rows?.[0] || memberResult[0];
 
-      if (members.length === 0) {
-        // Return same response for security (prevent email enumeration)
-        res.json({
-          success: true,
-          message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
-        });
+      // 統一回應（防止帳號枚舉攻擊）
+      const successResponse = {
+        success: true,
+        message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
+      };
+
+      if (!member) {
+        res.json(successResponse);
         return;
       }
 
-      const member = members[0];
-
-      if (!member.user_id) {
-        // Return same response for security (prevent account enumeration)
-        res.json({
-          success: true,
-          message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
-        });
-        return;
-      }
-
+      // 產生重置 token
       const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
       const resetToken = jwt.sign(
         {
           id: member.id,
-          user_id: member.user_id,
           email: member.email,
           type: 'password_reset',
         },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: '1h' }
       );
 
-      try {
-        await database.raw(`
-          INSERT INTO password_reset_tokens (id, member_id, token_hash, expires_at, created_at)
-          VALUES (gen_random_uuid(), ?, ?, NOW() + INTERVAL '24 hours', NOW())
-          ON CONFLICT (member_id) DO UPDATE
-          SET token_hash = EXCLUDED.token_hash,
-              expires_at = EXCLUDED.expires_at,
-              used_at = NULL
-        `, [member.id, crypto.createHash('sha256').update(resetToken).digest('hex')]);
-      } catch (dbError) {
-        // Create table if not exists
-        await database.raw(`
-          CREATE TABLE IF NOT EXISTS password_reset_tokens (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            member_id UUID NOT NULL UNIQUE REFERENCES members(id) ON DELETE CASCADE,
-            token_hash VARCHAR(255) NOT NULL,
-            expires_at TIMESTAMPTZ NOT NULL,
-            used_at TIMESTAMPTZ,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-          )
-        `);
-        await database.raw(`
-          INSERT INTO password_reset_tokens (id, member_id, token_hash, expires_at, created_at)
-          VALUES (gen_random_uuid(), ?, ?, NOW() + INTERVAL '24 hours', NOW())
-        `, [member.id, crypto.createHash('sha256').update(resetToken).digest('hex')]);
-      }
+      const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
 
+      // 儲存 token hash 到 member_credentials
+      await database.raw(`
+        UPDATE member_credentials
+        SET password_reset_token_hash = ?,
+            password_reset_expires_at = NOW() + INTERVAL '1 hour',
+            updated_at = NOW()
+        WHERE member_id = ?
+      `, [tokenHash, member.id]);
+
+      // 發送重置郵件
       const frontendUrl = process.env.MEMBER_APP_URL || 'http://localhost:3002';
       const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
 
@@ -205,7 +274,7 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
           const emailContent = emailService.buildPasswordResetEmail({
             memberName: member.full_name,
             resetUrl: resetUrl,
-            expiresIn: '24 小時',
+            expiresIn: '1 小時',
           });
           await emailService.sendEmail({
             to: member.email,
@@ -213,14 +282,12 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
             html: emailContent.html,
           });
         }
-        // Reset URL only returned to client in development mode (see response below)
-      } catch {
-        // Email service error - URL only available via development mode response
+      } catch (emailError) {
+        logger.error('Failed to send password reset email', { error: emailError.message });
       }
 
       res.json({
-        success: true,
-        message: '如果此郵箱有註冊帳號，您將收到密碼重置郵件',
+        ...successResponse,
         ...(process.env.NODE_ENV === 'development' && { resetUrl }),
       });
     } catch (error) {
@@ -240,16 +307,16 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       const { token, new_password } = req.body || {};
 
       if (!token || !new_password) {
-        throw InvalidPayloadError('token and new_password are required');
+        throw InvalidPayloadError('缺少必要參數');
       }
 
-      if (new_password.length < 8) {
-        throw InvalidPayloadError('密碼至少需要 8 個字元');
-      }
-      if (!/\d/.test(new_password)) {
-        throw InvalidPayloadError('密碼需要包含至少一個數字');
+      // 驗證密碼強度
+      const validation = validatePassword(new_password);
+      if (!validation.valid) {
+        throw InvalidPayloadError(validation.message);
       }
 
+      // 驗證 token
       const jwtSecret = env.SECRET || env.JWT_SECRET || 'default-secret-change-me';
       let decoded;
       try {
@@ -262,31 +329,37 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
         throw UnauthorizedError('無效的重置連結');
       }
 
+      // 驗證 token hash
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      const tokenResult = await database.raw(`
-        SELECT * FROM password_reset_tokens
-        WHERE member_id = ? AND token_hash = ? AND used_at IS NULL AND expires_at > NOW()
+      const credResult = await database.raw(`
+        SELECT member_id, password_reset_expires_at
+        FROM member_credentials
+        WHERE member_id = ?
+          AND password_reset_token_hash = ?
+          AND password_reset_expires_at > NOW()
       `, [decoded.id, tokenHash]);
 
-      const tokenRecord = tokenResult.rows?.[0] || tokenResult[0];
-      if (!tokenRecord) {
+      const cred = credResult.rows?.[0] || credResult[0];
+      if (!cred) {
         throw UnauthorizedError('重置連結已使用或過期，請重新申請');
       }
 
-      const usersService = new UsersService({
-        schema: await getSchema(),
-        knex: database,
-      });
-
-      await usersService.updateOne(decoded.user_id, {
-        password: new_password,
-      });
+      // 雜湊並更新密碼
+      const passwordHash = await hashPassword(new_password);
 
       await database.raw(`
-        UPDATE password_reset_tokens
-        SET used_at = NOW()
+        UPDATE member_credentials
+        SET password_hash = ?,
+            password_updated_at = NOW(),
+            password_reset_token_hash = NULL,
+            password_reset_expires_at = NULL,
+            failed_login_attempts = 0,
+            locked_until = NULL,
+            updated_at = NOW()
         WHERE member_id = ?
-      `, [decoded.id]);
+      `, [passwordHash, decoded.id]);
+
+      logger.info('Member password reset successful', { memberId: decoded.id });
 
       res.json({
         success: true,
@@ -310,55 +383,80 @@ export function registerAuthRoutes(router, context, memberAuthMiddleware) {
       const memberId = req.member.id;
 
       if (!current_password || !new_password) {
-        throw InvalidPayloadError('current_password and new_password are required');
+        throw InvalidPayloadError('請輸入當前密碼和新密碼');
       }
 
-      if (new_password.length < 8) {
-        throw InvalidPayloadError('新密碼至少需要 8 個字元');
+      // 驗證新密碼強度
+      const validation = validatePassword(new_password);
+      if (!validation.valid) {
+        throw InvalidPayloadError(validation.message);
       }
-      if (!/\d/.test(new_password)) {
-        throw InvalidPayloadError('新密碼需要包含至少一個數字');
-      }
+
       if (current_password === new_password) {
         throw InvalidPayloadError('新密碼不能與當前密碼相同');
       }
 
-      const schema = await getSchema();
-      const membersService = new ItemsService('members', {
-        schema,
-        knex: database,
-      });
+      // 取得當前密碼 hash
+      const credResult = await database.raw(`
+        SELECT password_hash FROM member_credentials WHERE member_id = ?
+      `, [memberId]);
 
-      const member = await membersService.readOne(memberId, {
-        fields: ['id', 'email', 'user_id'],
-      });
+      const cred = credResult.rows?.[0] || credResult[0];
 
-      if (!member || !member.user_id) {
-        throw InvalidPayloadError('此帳號無法使用密碼修改功能');
+      if (!cred?.password_hash) {
+        throw InvalidPayloadError('此帳號尚未設定密碼，請使用「設定密碼」功能');
       }
 
-      const authResponse = await fetch(`http://localhost:8055/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: member.email, password: current_password }),
-      });
-
-      if (!authResponse.ok) {
+      // 驗證當前密碼
+      const isValidPassword = await verifyPassword(cred.password_hash, current_password);
+      if (!isValidPassword) {
         throw UnauthorizedError('當前密碼錯誤');
       }
 
-      const usersService = new UsersService({
-        schema,
-        knex: database,
-      });
+      // 雜湊並更新新密碼
+      const passwordHash = await hashPassword(new_password);
 
-      await usersService.updateOne(member.user_id, {
-        password: new_password,
-      });
+      await database.raw(`
+        UPDATE member_credentials
+        SET password_hash = ?,
+            password_updated_at = NOW(),
+            updated_at = NOW()
+        WHERE member_id = ?
+      `, [passwordHash, memberId]);
+
+      logger.info('Member password changed', { memberId });
 
       res.json({
         success: true,
         message: '密碼修改成功',
+      });
+    } catch (error) {
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /gym/auth/has-password
+   * Check if authenticated member has a password set
+   */
+  router.get('/auth/has-password', memberAuthMiddleware, async (req, res) => {
+    try {
+      const memberId = req.member.id;
+
+      const credResult = await database.raw(`
+        SELECT password_hash IS NOT NULL as has_password
+        FROM member_credentials
+        WHERE member_id = ?
+      `, [memberId]);
+
+      const cred = credResult.rows?.[0] || credResult[0];
+
+      res.json({
+        success: true,
+        has_password: cred?.has_password || false,
       });
     } catch (error) {
       res.status(error.status || 500).json({

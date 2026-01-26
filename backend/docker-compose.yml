@@ -71,7 +71,10 @@ services:
       retries: 5
 
   directus:
-    image: directus/directus:11
+    build:
+      context: .
+      dockerfile: Dockerfile.directus
+    image: gym-directus:11
     restart: unless-stopped
     ports:
       - "8500:8055"
