@@ -143,6 +143,23 @@ export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.directusUrl || 'http://localhost:8055'
   const { handleError } = useErrorHandler()
+  const { $directus } = useNuxtApp()
+
+  /**
+   * 帶認證的 fetch 請求
+   */
+  const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const token = await $directus.getToken()
+
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...options.headers
+      }
+    })
+  }
 
   /**
    * 獲取營收報表
@@ -158,7 +175,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await fetch(`${baseURL}/gym/reports/revenue?${params}`)
+      const response = await authFetch(`${baseURL}/gym/reports/revenue?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -184,7 +201,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await fetch(`${baseURL}/gym/reports/member-growth?${params}`)
+      const response = await authFetch(`${baseURL}/gym/reports/member-growth?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -210,7 +227,7 @@ export const useReports = () => {
       if (branchId) params.append('branch_id', branchId)
       params.append('limit', limit.toString())
 
-      const response = await fetch(`${baseURL}/gym/reports/contract-expiry?${params}`)
+      const response = await authFetch(`${baseURL}/gym/reports/contract-expiry?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -236,7 +253,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await fetch(`${baseURL}/gym/reports/member-activity?${params}`)
+      const response = await authFetch(`${baseURL}/gym/reports/member-activity?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -253,7 +270,7 @@ export const useReports = () => {
    */
   const refreshReports = async (): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch(`${baseURL}/gym/reports/refresh`, {
+      const response = await authFetch(`${baseURL}/gym/reports/refresh`, {
         method: 'POST'
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
