@@ -1,30 +1,4 @@
 services:
-  # ============================================
-  # Redis 緩存服務 (第二階段優化)
-  # ============================================
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6333:6379"
-    volumes:
-      - ./data/redis:/data
-    command:
-      - "redis-server"
-      - "--maxmemory"
-      - "256mb"
-      - "--maxmemory-policy"
-      - "allkeys-lru"           # LRU 淘汰策略
-      - "--appendonly"
-      - "yes"                   # 持久化
-      - "--tcp-keepalive"
-      - "60"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   database:
     # 使用 PostGIS 映像以支援地理空間查詢 (PostgreSQL 17 + PostGIS 3.4)
     image: postgis/postgis:17-3.4
@@ -32,7 +6,11 @@ services:
     ports:
       - 15432:5432
     volumes:
-      - ./data/database:/var/lib/postgresql
+      - ./data/database:/var/lib/postgresql/data
+      # 初始化腳本 - 首次啟動時自動創建業務表
+      - ./schema/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # 注意: register_all_collections.sql 需要在 Directus 啟動後手動執行
+      # cat migrations/register_all_collections.sql | docker exec -i backend-database-1 psql -U directus -d gym_nexus
     environment:
       POSTGRES_USER: directus
       POSTGRES_PASSWORD: directus
@@ -77,14 +55,12 @@ services:
     image: gym-directus:11
     restart: unless-stopped
     ports:
-      - "8500:8055"
+      - "8055:8055"
     volumes:
       - ./uploads:/directus/uploads
       - ./extensions:/directus/extensions
     depends_on:
       database:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     environment:
       SECRET: "replace-with-secure-random-string"
@@ -100,17 +76,12 @@ services:
       DB_POOL__MIN: "2"                   # 最小連接數
       DB_POOL__MAX: "50"                  # 最大連接數
       # ============================================
-      # Redis 緩存配置 (第二階段優化)
+      # 內存緩存配置
       # ============================================
       CACHE_ENABLED: "true"
-      CACHE_STORE: "redis"                # 使用 Redis 作為緩存存儲
-      CACHE_REDIS: "redis://redis:6379"   # Redis 連接字串
+      CACHE_STORE: "memory"               # 使用內存緩存（單實例足夠）
       CACHE_TTL: "5m"                     # 預設緩存 5 分鐘
       CACHE_AUTO_PURGE: "true"            # 自動清除過期緩存
-      CACHE_NAMESPACE: "gym"              # 緩存命名空間
-      # Redis 環境變數 (供 Hooks 使用)
-      REDIS_HOST: "redis"
-      REDIS_PORT: "6379"
       # 效能優化
       RATE_LIMITER_ENABLED: "false"       # 開發環境關閉限流
       # 基礎配置

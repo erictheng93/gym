@@ -16,8 +16,8 @@ Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
 ### Backend (Directus + PostgreSQL)
 ```bash
 cd backend
-docker-compose up -d
-# Directus runs at http://localhost:8500
+docker-compose up -d          # 開發環境：只啟動核心服務
+# Directus runs at http://localhost:8055
 ```
 
 ### Frontend (Nuxt 3)
@@ -27,6 +27,31 @@ pnpm install
 pnpm dev
 # Dev server at http://localhost:3000
 ```
+
+## Docker Architecture
+
+### 檔案結構
+```
+backend/
+├── docker-compose.yml              # 核心服務（開發+生產都用）
+├── docker-compose.monitoring.yml   # 監控服務（僅生產環境）
+├── PRODUCTION.md                   # 生產環境部署指南
+└── scripts/
+    ├── backup-to-r2.sh            # R2 自動備份腳本
+    ├── restore-from-r2.sh         # 備份恢復腳本
+    └── setup-rclone.sh            # R2 設定精靈
+```
+
+### 開發環境 vs 生產環境
+| 環境 | 啟動命令 | 服務 |
+|-----|---------|------|
+| 開發 | `docker-compose up -d` | Directus + PostgreSQL |
+| 生產 | `docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d` | + Uptime Kuma + Netdata |
+
+### 設計原則
+- **不過度設計**: 開發階段不啟動 Redis、監控等非必要服務
+- **資料持久化**: PostgreSQL 資料掛載到 `./data/database`
+- **環境分離**: 監控服務透過獨立 compose 檔案管理，不影響開發環境
 
 ## Architecture
 
@@ -73,7 +98,7 @@ gym-nexus/
 
 ### Reports API
 - **Endpoints:** `/gym/reports/revenue`, `/gym/reports/member-growth`, `/gym/reports/contract-expiry`, `/gym/reports/member-activity`
-- **Caching:** Optional Redis caching for report queries (10-minute TTL)
+- **Caching:** 開發環境使用內存緩存，生產環境可選用 Redis（需在 docker-compose.yml 中啟用）
 - **Documentation:** See `backend/REPORTS_API.md` for detailed API docs
 
 ### Database Performance
@@ -82,10 +107,20 @@ gym-nexus/
 - **Performance**: 40-50x improvement on multi-tenant queries
 - **Details**: See `backend/DATABASE_INDEXES.md` for comprehensive documentation
 
-### Port Configuration (避免 Windows 冲突)
-- **Directus**: http://localhost:8500
-- **PostgreSQL**: localhost:5444
-- **Redis**: localhost:6333
+### Port Configuration (避免 Windows 衝突)
+| 服務 | 開發環境 | 生產環境 | 說明 |
+|-----|---------|---------|------|
+| Directus | localhost:8055 | :8055 | API 服務 |
+| PostgreSQL | localhost:15432 | :15432 | 資料庫（不對外開放） |
+| Uptime Kuma | - | :3001 | 存活監控（僅生產） |
+| Netdata | - | :19999 | 系統監控（僅生產） |
+
+### 備份策略（生產環境）
+- **備份目標**: Cloudflare R2
+- **Daily**: 每天 03:00，保留 7 天
+- **Weekly**: 每週日 04:00，保留 30 天
+- **腳本位置**: `backend/scripts/backup-to-r2.sh`
+- **詳細文檔**: `backend/PRODUCTION.md`
 
 ## Language
 

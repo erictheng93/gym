@@ -1,0 +1,83 @@
+# ============================================
+# Gym Nexus - 監控服務 (僅生產環境使用)
+# ============================================
+# 使用方式:
+#   生產環境: docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#   開發環境: docker-compose up -d (不包含監控)
+#
+# 服務說明:
+#   - Uptime Kuma: 網站/API 存活監控 + 告警
+#   - Netdata: 系統資源即時監控
+
+services:
+  # ============================================
+  # Uptime Kuma - 存活監控
+  # ============================================
+  # 功能: HTTP/TCP/Ping 監控、告警通知、狀態頁面
+  # 文件: https://github.com/louislam/uptime-kuma
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    environment:
+      # 時區設定
+      TZ: "Asia/Taipei"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # Netdata - 系統資源監控
+  # ============================================
+  # 功能: CPU/RAM/磁碟/網路即時監控、Docker 容器監控
+  # 文件: https://learn.netdata.cloud/
+  netdata:
+    image: netdata/netdata:stable
+    container_name: netdata
+    restart: unless-stopped
+    hostname: gym-nexus-server
+    ports:
+      - "19999:19999"
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      # 系統監控所需掛載
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # 持久化配置和資料
+      - netdata-config:/etc/netdata
+      - netdata-lib:/var/lib/netdata
+      - netdata-cache:/var/cache/netdata
+    environment:
+      # 基本設定
+      TZ: "Asia/Taipei"
+      # Docker 容器監控
+      DOCKER_HOST: "/var/run/docker.sock"
+      # 資源限制 (避免監控工具本身佔用太多資源)
+      NETDATA_MEMORY_MODE: "dbengine"
+      NETDATA_DBENGINE_MULTIHOST_DISK_SPACE: "256"  # MB
+
+# ============================================
+# Named Volumes (監控服務專用)
+# ============================================
+volumes:
+  uptime-kuma-data:
+    driver: local
+  netdata-config:
+    driver: local
+  netdata-lib:
+    driver: local
+  netdata-cache:
+    driver: local
