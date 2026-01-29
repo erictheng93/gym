@@ -194,9 +194,11 @@ const membershipDuration = computed(() => {
 })
 
 const menuItems = [
+  { icon: 'activity', label: '健身追蹤', description: '目標、體態、運動紀錄', path: '/fitness' },
   { icon: 'history', label: '入場紀錄', description: '查看進出場記錄', path: '/profile/checkins' },
   { icon: 'payment', label: '付款紀錄', description: '交易與帳單明細', path: '/profile/payments' },
   { icon: 'bell', label: '通知設定', description: '管理推播與提醒', path: '/profile/notifications' },
+  { icon: 'alert', label: '問題回報', description: '回報問題與查看狀態', path: '/profile/issues' },
   { icon: 'help', label: '聯絡客服', description: '問題諮詢與回報', path: '/profile/support' },
 ]
 
@@ -378,7 +380,10 @@ onMounted(() => {
           class="menu-item"
         >
           <span class="menu-icon">
-            <svg v-if="item.icon === 'history'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-if="item.icon === 'activity'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            <svg v-else-if="item.icon === 'history'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
@@ -389,6 +394,11 @@ onMounted(() => {
             <svg v-else-if="item.icon === 'bell'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            <svg v-else-if="item.icon === 'alert'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
             <svg v-else-if="item.icon === 'help'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />

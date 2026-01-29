@@ -22,6 +22,10 @@ import { registerAuditRoutes } from './audit.js';
 import { registerPaymentRoutes } from './payment.js';
 import { registerHealthRoutes } from './health.js';
 import { registerCsrfRoutes } from './csrf.js';
+import { registerGoalsRoutes } from './goals.js';
+import { registerMeasurementsRoutes } from './measurements.js';
+import { registerWorkoutsRoutes } from './workouts.js';
+import { registerIssuesRoutes } from './issues.js';
 
 /**
  * Register all routes with the router
@@ -85,6 +89,18 @@ export function registerAllRoutes(router, context, middleware) {
 
   // Payment routes (authentication required, checked internally)
   registerPaymentRoutes(router, context);
+
+  // Goals routes (member auth required)
+  registerGoalsRoutes(router, context, memberAuth);
+
+  // Measurements routes (member auth required)
+  registerMeasurementsRoutes(router, context, memberAuth);
+
+  // Workouts routes (member auth required)
+  registerWorkoutsRoutes(router, context, memberAuth);
+
+  // Issues routes (member auth required)
+  registerIssuesRoutes(router, context, memberAuth);
 }
 
 export default registerAllRoutes;
