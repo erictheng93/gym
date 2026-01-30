@@ -1,0 +1,59 @@
+{
+  "name": "@gym-nexus/hr-service",
+  "version": "0.1.0",
+  "description": "Gym Nexus HR Microservice - Standalone HR management service",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate": "node --import tsx migrations/run.ts",
+    "migrate:up": "node --import tsx migrations/run.ts up",
+    "migrate:down": "node --import tsx migrations/run.ts down",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src/",
+    "docker:build": "docker build -t gym-nexus/hr-service .",
+    "docker:up": "docker-compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f docker/docker-compose.yml down"
+  },
+  "keywords": [
+    "hr",
+    "microservice",
+    "attendance",
+    "leave",
+    "api"
+  ],
+  "author": "Gym Nexus",
+  "license": "MIT",
+  "dependencies": {
+    "@gym-nexus/hr-business-logic": "file:../backend/packages/hr-business-logic",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0",
+    "pino": "^9.4.0",
+    "pino-http": "^10.3.0",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^22.7.5",
+    "@types/pg": "^8.11.10",
+    "@types/uuid": "^10.0.0",
+    "pino-pretty": "^11.2.2",
+    "tsx": "^4.19.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

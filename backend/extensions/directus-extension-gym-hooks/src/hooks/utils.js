@@ -1,6 +1,28 @@
 /**
  * Shared Utilities for Hooks
+ *
+ * 這些函數從 @gym-nexus/hr-business-logic 重新導出
+ * 以保持現有代碼的向後兼容性
  */
+
+// 重新導出 HR 業務邏輯包的計算函數
+export {
+  // Work Hours
+  calculateWorkHours,
+  calculateOvertimeHours,
+  // Late Minutes
+  calculateLateMinutes,
+  calculateEarlyLeaveMinutes,
+  // Leave Balance
+  calculateLeaveDays,
+  calculateAvailableDays,
+  hasEnoughBalance,
+  getLeaveTypeName
+} from '@gym-nexus/hr-business-logic';
+
+// ============================================
+// 非 HR 相關的工具函數（保留在此處）
+// ============================================
 
 /**
  * 根據會員的所有合約計算會員狀態
@@ -30,51 +52,6 @@ export function calculatePaymentStatus(totalAmount, paidAmount) {
   if (!paidAmount || paidAmount <= 0) return 'UNPAID';
   if (paidAmount >= totalAmount) return 'PAID';
   return 'PARTIAL';
-}
-
-/**
- * 計算工時 (小時)
- */
-export function calculateWorkHours(checkIn, checkOut, breakMinutes = 60) {
-  if (!checkIn || !checkOut) return 0;
-
-  const inTime = new Date(checkIn);
-  const outTime = new Date(checkOut);
-  const diffMs = outTime - inTime;
-  const diffHours = diffMs / (1000 * 60 * 60);
-
-  // 扣除休息時間
-  const workHours = diffHours - (breakMinutes / 60);
-  return Math.max(0, Math.round(workHours * 100) / 100);
-}
-
-/**
- * 計算遲到分鐘數
- */
-export function calculateLateMinutes(checkIn, scheduledStart, graceMinutes = 10) {
-  if (!checkIn || !scheduledStart) return 0;
-
-  const inTime = new Date(checkIn);
-  const scheduled = new Date(scheduledStart);
-  const diffMs = inTime - scheduled;
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-  // 寬限時間內不算遲到
-  if (diffMinutes <= graceMinutes) return 0;
-  return diffMinutes - graceMinutes;
-}
-
-/**
- * 計算請假天數 (支援半天假)
- */
-export function calculateLeaveDays(startDate, endDate, isHalfDay) {
-  if (isHalfDay) return 0.5;
-
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end - start);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  return diffDays;
 }
 
 /**

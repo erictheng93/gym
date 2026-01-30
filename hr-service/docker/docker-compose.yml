@@ -1,0 +1,75 @@
+# HR Service Docker Compose
+# For development and standalone deployment
+
+version: '3.8'
+
+services:
+  # ============================================
+  # HR API Service
+  # ============================================
+  hr-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: hr-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://hr_user:hr_password@postgres:5432/hr_db
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - MAIN_SYSTEM_API_URL=${MAIN_SYSTEM_API_URL:-http://host.docker.internal:8500}
+      - MAIN_SYSTEM_API_KEY=${MAIN_SYSTEM_API_KEY:-}
+      - SYNC_ENABLED=${SYNC_ENABLED:-false}
+      - SYNC_INTERVAL_MINUTES=${SYNC_INTERVAL_MINUTES:-15}
+      - SYNC_WEBHOOK_SECRET=${SYNC_WEBHOOK_SECRET:-}
+      - RATE_LIMIT_WINDOW_MS=60000
+      - RATE_LIMIT_MAX_REQUESTS=100
+      - LOG_LEVEL=info
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hr-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:18-alpine
+    container_name: hr-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=hr_user
+      - POSTGRES_PASSWORD=hr_password
+      - POSTGRES_DB=hr_db
+    volumes:
+      - hr_postgres_data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - hr-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hr_user -d hr_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  hr-network:
+    driver: bridge
+
+volumes:
+  hr_postgres_data:
+    driver: local

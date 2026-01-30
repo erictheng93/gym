@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@directus/sdk": "^20.3.0",
+    "@gym-nexus/hr-composables": "workspace:*",
+    "@gym-nexus/hr-core": "workspace:*",
+    "@gym-nexus/hr-directus-adapter": "workspace:*",
     "@gym-nexus/shared": "workspace:*",
     "@sentry/vue": "^10.32.1",
     "jspdf": "^3.0.4",

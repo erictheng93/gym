@@ -12,6 +12,7 @@
     "build": "cp -r src/* dist/"
   },
   "dependencies": {
+    "@gym-nexus/hr-business-logic": "file:../../packages/hr-business-logic",
     "ioredis": "^5.4.1",
     "web-push": "^3.6.7"
   }
