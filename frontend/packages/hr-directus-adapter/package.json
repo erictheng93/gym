@@ -1,0 +1,31 @@
+{
+  "name": "@gym-nexus/hr-directus-adapter",
+  "version": "0.1.0",
+  "description": "HR Module Directus Adapter - Implements HR interfaces for Directus backend",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./adapters": "./src/adapters/index.ts",
+    "./mappers": "./src/mappers/index.ts"
+  },
+  "keywords": [
+    "hr",
+    "directus",
+    "adapter"
+  ],
+  "author": "Gym Nexus",
+  "license": "MIT",
+  "dependencies": {
+    "@gym-nexus/hr-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@directus/sdk": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@directus/sdk": "^20.3.0",
+    "typescript": "^5.9.3"
+  }
+}

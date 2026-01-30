@@ -1,0 +1,52 @@
+{
+  "name": "@gym-nexus/hr-business-logic",
+  "version": "0.1.0",
+  "description": "HR Module Business Logic - Reusable HR services and calculations",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./services": {
+      "import": "./dist/services/index.js",
+      "types": "./dist/services/index.d.ts"
+    },
+    "./calculations": {
+      "import": "./dist/calculations/index.js",
+      "types": "./dist/calculations/index.d.ts"
+    },
+    "./validators": {
+      "import": "./dist/validators/index.js",
+      "types": "./dist/validators/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "hr",
+    "business-logic",
+    "attendance",
+    "leave",
+    "services"
+  ],
+  "author": "Gym Nexus",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.3",
+    "rimraf": "^6.0.1"
+  }
+}

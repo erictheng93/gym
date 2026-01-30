@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+
+# Development files
+*.log
+*.md
+!API.md
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.vitest/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker/
+Dockerfile*
+docker-compose*.yml
+
+# Misc
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db

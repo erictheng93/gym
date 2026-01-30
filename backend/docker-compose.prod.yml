@@ -3,13 +3,38 @@
 #
 # This file contains production-specific overrides for the base docker-compose.yml
 # All sensitive values should be set via environment variables or .env file
+#
+# 域名: gym.imfinethankyouandyou.com
+# API: api.gym.imfinethankyouandyou.com
 
 services:
+  # ============================================
+  # Cloudflare Tunnel (Zero Trust)
+  # ============================================
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN}"
+    depends_on:
+      directus:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
   # ============================================
   # Redis Production Configuration
   # ============================================
   redis:
     restart: always
+    # 生產環境不暴露端口 (透過 Cloudflare Tunnel)
+    ports: []
     command:
       - "redis-server"
       - "--maxmemory"
@@ -36,6 +61,8 @@ services:
   # ============================================
   database:
     restart: always
+    # 生產環境不暴露端口 (透過 Cloudflare Tunnel)
+    ports: []
     environment:
       POSTGRES_USER: "${DB_USER:-directus}"
       POSTGRES_PASSWORD: "${DB_PASSWORD}"   # Required in production
@@ -88,7 +115,11 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
+    # 生產環境不暴露端口 (透過 Cloudflare Tunnel)
+    ports: []
     environment:
+      # Public URL for Directus (used for OAuth callbacks, etc.)
+      PUBLIC_URL: "https://api.gym.imfinethankyouandyou.com"
       # Security - REQUIRED in production
       SECRET: "${SECRET}"                    # Must be set
 
