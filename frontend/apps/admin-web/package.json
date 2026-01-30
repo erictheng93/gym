@@ -17,6 +17,7 @@
     "@gym-nexus/hr-directus-adapter": "workspace:*",
     "@gym-nexus/shared": "workspace:*",
     "@sentry/vue": "^10.32.1",
+    "chart.js": "^4.5.1",
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
     "jsqr": "^1.4.0",
