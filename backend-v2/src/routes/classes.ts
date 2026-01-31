@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, classes, classSchedules, classSessions, branches, employees } from '../db/index.js';
-import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -55,7 +55,7 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  let condition = sql`${classes.branchId} = ANY(${branchIds}) AND ${classes.status} = 'active'`;
+  let condition = and(inArray(classes.branchId, branchIds), eq(classes.status, 'active'));
 
   if (branchId) {
     condition = and(condition, eq(classes.branchId, branchId))!;
@@ -190,7 +190,7 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
     .update(classes)
     .set({
       ...data,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(classes.id, id))
     .returning();

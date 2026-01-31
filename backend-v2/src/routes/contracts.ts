@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, contracts, contractLogs, members, membershipPlans, branches, payments } from '../db/index.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -48,7 +48,7 @@ app.get('/', async (c) => {
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(contracts)
-    .where(sql`${contracts.branchId} = ANY(${branchIds})`);
+    .where(inArray(contracts.branchId, branchIds));
 
   const total = Number(countResult?.count || 0);
 
@@ -69,8 +69,8 @@ app.get('/', async (c) => {
     .from(contracts)
     .leftJoin(members, eq(contracts.memberId, members.id))
     .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(sql`${contracts.branchId} = ANY(${branchIds})`)
-    .orderBy(desc(contracts.dateCreated))
+    .where(inArray(contracts.branchId, branchIds))
+    .orderBy(desc(contracts.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -126,13 +126,13 @@ app.get('/:id', async (c) => {
     .select()
     .from(contractLogs)
     .where(eq(contractLogs.contractId, id))
-    .orderBy(desc(contractLogs.dateCreated));
+    .orderBy(desc(contractLogs.createdAt));
 
   const contractPayments = await db
     .select()
     .from(payments)
     .where(eq(payments.contractId, id))
-    .orderBy(desc(payments.dateCreated));
+    .orderBy(desc(payments.createdAt));
 
   return c.json({
     success: true,
@@ -207,7 +207,7 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
     startDate: data.startDate,
     endDate,
     originalEndDate: endDate,
-    contractStatus: 'DRAFT',
+    status: 'DRAFT',
     remainingCounts,
     totalAmount: String(data.totalAmount),
     paymentStatus: 'UNPAID',
@@ -218,6 +218,48 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   }).returning();
 
   return c.json({ success: true, data: newContract }, 201);
+});
+
+const updateContractSchema = z.object({
+  notes: z.string().optional().nullable(),
+  salesPersonId: z.string().uuid().optional().nullable(),
+});
+
+app.patch('/:id', zValidator('json', updateContractSchema), async (c) => {
+  const id = c.req.param('id');
+  const tenantId = c.get('tenantId')!;
+  const data = c.req.valid('json');
+
+  const [contract] = await db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.id, id))
+    .limit(1);
+
+  if (!contract) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
+
+  const [branch] = await db
+    .select()
+    .from(branches)
+    .where(and(eq(branches.id, contract.branchId!), eq(branches.tenantId, tenantId)))
+    .limit(1);
+
+  if (!branch) {
+    return c.json({ success: false, error: '無權限操作此合約' }, 403);
+  }
+
+  const [updatedContract] = await db
+    .update(contracts)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(contracts.id, id))
+    .returning();
+
+  return c.json({ success: true, data: updatedContract });
 });
 
 app.post('/:id/activate', async (c) => {
@@ -244,19 +286,19 @@ app.post('/:id/activate', async (c) => {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
-  if (contract.contractStatus !== 'DRAFT') {
+  if (contract.status !== 'DRAFT') {
     return c.json({ success: false, error: '只有草稿狀態的合約可以啟用' }, 400);
   }
 
   const [updatedContract] = await db
     .update(contracts)
-    .set({ contractStatus: 'ACTIVE', dateUpdated: new Date() })
+    .set({ status: 'ACTIVE', updatedAt: new Date() })
     .where(eq(contracts.id, id))
     .returning();
 
   await db.update(members).set({
-    memberStatus: 'ACTIVE',
-    dateUpdated: new Date(),
+    status: 'ACTIVE',
+    updatedAt: new Date(),
   }).where(eq(members.id, contract.memberId));
 
   return c.json({ success: true, data: updatedContract });
@@ -288,7 +330,7 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
-  if (contract.contractStatus !== 'ACTIVE') {
+  if (contract.status !== 'ACTIVE') {
     return c.json({ success: false, error: '只有有效狀態的合約可以暫停' }, 400);
   }
 
@@ -308,24 +350,24 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
     logType: 'PAUSE',
     startDate: data.startDate,
     endDate: data.endDate,
-    daysAffected,
+    days: daysAffected,
     reason: data.reason,
-    branchId: contract.branchId,
+    tenantId: tenantId,
   });
 
   const [updatedContract] = await db
     .update(contracts)
     .set({
-      contractStatus: 'PAUSED',
+      status: 'PAUSED',
       endDate: newEndDate,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, id))
     .returning();
 
   await db.update(members).set({
-    memberStatus: 'PAUSED',
-    dateUpdated: new Date(),
+    status: 'PAUSED',
+    updatedAt: new Date(),
   }).where(eq(members.id, contract.memberId));
 
   return c.json({ success: true, data: updatedContract });
@@ -355,25 +397,28 @@ app.post('/:id/resume', async (c) => {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
-  if (contract.contractStatus !== 'PAUSED') {
+  if (contract.status !== 'PAUSED') {
     return c.json({ success: false, error: '只有暫停狀態的合約可以恢復' }, 400);
   }
 
   await db.insert(contractLogs).values({
     contractId: id,
     logType: 'RESUME',
-    branchId: contract.branchId,
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    days: 0,
+    tenantId: tenantId,
   });
 
   const [updatedContract] = await db
     .update(contracts)
-    .set({ contractStatus: 'ACTIVE', dateUpdated: new Date() })
+    .set({ status: 'ACTIVE', updatedAt: new Date() })
     .where(eq(contracts.id, id))
     .returning();
 
   await db.update(members).set({
-    memberStatus: 'ACTIVE',
-    dateUpdated: new Date(),
+    status: 'ACTIVE',
+    updatedAt: new Date(),
   }).where(eq(members.id, contract.memberId));
 
   return c.json({ success: true, data: updatedContract });

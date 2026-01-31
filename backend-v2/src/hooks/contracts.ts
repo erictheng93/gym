@@ -38,7 +38,7 @@ export async function syncMemberStatusOnContractChange(memberId: string): Promis
       .update(members)
       .set({
         memberStatus,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(members.id, memberId));
 
@@ -89,7 +89,7 @@ export async function activateContract(contractId: string): Promise<void> {
     .update(contracts)
     .set({
       contractStatus: 'ACTIVE',
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, contractId));
 
@@ -114,7 +114,7 @@ export async function expireContract(contractId: string): Promise<void> {
     .update(contracts)
     .set({
       contractStatus: 'EXPIRED',
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, contractId));
 
@@ -139,7 +139,7 @@ export async function cancelContract(contractId: string): Promise<void> {
     .update(contracts)
     .set({
       contractStatus: 'CANCELLED',
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, contractId));
 

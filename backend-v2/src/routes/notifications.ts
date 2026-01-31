@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, notifications, branches, members, employees } from '../db/index.js';
-import { eq, and, sql, desc, isNull } from 'drizzle-orm';
+import { eq, and, sql, desc, isNull, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -62,7 +62,7 @@ app.get('/', async (c) => {
     .from(notifications)
     .innerJoin(branches, eq(notifications.branchId, branches.id))
     .where(and(...conditions))
-    .orderBy(desc(notifications.dateCreated))
+    .orderBy(desc(notifications.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -185,7 +185,7 @@ app.post('/:id/read', async (c) => {
 
   await db.update(notifications).set({
     readAt: new Date(),
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(notifications.id, id));
 
   return c.json({ success: true, message: '已標記為已讀' });
@@ -223,8 +223,8 @@ app.post('/read-all', async (c) => {
     const ids = toUpdate.map(n => n.id);
     await db.update(notifications).set({
       readAt: new Date(),
-      dateUpdated: new Date(),
-    }).where(sql`${notifications.id} = ANY(${ids})`);
+      updatedAt: new Date(),
+    }).where(inArray(notifications.id, ids));
   }
 
   return c.json({

@@ -78,7 +78,7 @@ async function generateMonthlyInvoices() {
       await db.update(subscriptions).set({
         currentPeriodStart: periodStart.toISOString().split('T')[0],
         currentPeriodEnd: periodEnd.toISOString().split('T')[0],
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       }).where(eq(subscriptions.id, sub.id));
 
       console.log(`[Billing] Generated invoice for tenant ${tenant.name}`);

@@ -140,7 +140,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     .where(
       and(
         eq(contracts.memberId, data.memberId),
-        eq(contracts.contractStatus, 'ACTIVE'),
+        eq(contracts.status, 'ACTIVE'),
         lte(contracts.startDate, today),
         gte(contracts.endDate, today)
       )
@@ -206,7 +206,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     if (remainingCounts > 0) {
       await db.update(contracts).set({
         remainingCounts: remainingCounts - 1,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       }).where(eq(contracts.id, activeContract.id));
     }
   }
@@ -241,7 +241,7 @@ app.get('/:id', async (c) => {
       contract: {
         id: contracts.id,
         contractNo: contracts.contractNo,
-        contractStatus: contracts.contractStatus,
+        contractStatus: contracts.status,
       },
     })
     .from(checkIns)

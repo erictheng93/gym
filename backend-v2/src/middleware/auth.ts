@@ -9,7 +9,16 @@ export type AuthVariables = {
 };
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
-  const sessionId = getCookie(c, lucia.sessionCookieName) ?? null;
+  // Check for session ID in cookie first, then Authorization header
+  let sessionId = getCookie(c, lucia.sessionCookieName) ?? null;
+
+  // Support Bearer token authentication
+  if (!sessionId) {
+    const authHeader = c.req.header('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      sessionId = authHeader.slice(7);
+    }
+  }
 
   if (!sessionId) {
     c.set('user', null);

@@ -124,7 +124,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     .update(branches)
     .set({
       ...data,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(branches.id, id))
     .returning();
@@ -165,7 +165,7 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
 
   await db
     .update(branches)
-    .set({ status: 'archived', dateUpdated: new Date() })
+    .set({ status: 'archived', updatedAt: new Date() })
     .where(eq(branches.id, id));
 
   return c.json({ success: true, message: '分店已封存' });

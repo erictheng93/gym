@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, members, contracts, branches } from '../db/index.js';
-import { eq, and, or, ilike, sql, desc, asc } from 'drizzle-orm';
+import { db, members, contracts, branches, membershipPlans } from '../db/index.js';
+import { eq, and, or, ilike, sql, desc, asc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -56,14 +56,14 @@ app.get('/', zValidator('query', querySchema), async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
 
-  let baseCondition = sql`${members.branchId} = ANY(${branchIds})`;
+  let baseCondition = inArray(members.branchId, branchIds);
 
   if (branchId) {
     baseCondition = and(baseCondition, eq(members.branchId, branchId))!;
   }
 
   if (status) {
-    baseCondition = and(baseCondition, eq(members.memberStatus, status))!;
+    baseCondition = and(baseCondition, eq(members.status, status))!;
   }
 
   if (search) {
@@ -82,7 +82,7 @@ app.get('/', zValidator('query', querySchema), async (c) => {
     fullName: members.fullName,
     memberCode: members.memberCode,
     joinDate: members.joinDate,
-    dateCreated: members.dateCreated,
+    dateCreated: members.createdAt,
   }[sortBy];
 
   const orderBy = sortOrder === 'asc' ? asc(sortColumn) : desc(sortColumn);
@@ -105,7 +105,7 @@ app.get('/', zValidator('query', querySchema), async (c) => {
   return c.json({
     success: true,
     data: result,
-    meta: {
+    pagination: {
       total,
       page,
       limit,
@@ -142,7 +142,7 @@ app.get('/:id', async (c) => {
     .select()
     .from(contracts)
     .where(eq(contracts.memberId, id))
-    .orderBy(desc(contracts.dateCreated));
+    .orderBy(desc(contracts.createdAt));
 
   return c.json({
     success: true,
@@ -228,7 +228,7 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
     .update(members)
     .set({
       ...data,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(members.id, id))
     .returning();
@@ -262,10 +262,58 @@ app.delete('/:id', async (c) => {
 
   await db
     .update(members)
-    .set({ status: 'archived', dateUpdated: new Date() })
+    .set({ status: 'archived', updatedAt: new Date() })
     .where(eq(members.id, id));
 
   return c.json({ success: true, message: '會員已封存' });
+});
+
+// Get member's contracts
+app.get('/:id/contracts', async (c) => {
+  const id = c.req.param('id');
+  const tenantId = c.get('tenantId')!;
+
+  const [member] = await db
+    .select()
+    .from(members)
+    .where(eq(members.id, id))
+    .limit(1);
+
+  if (!member) {
+    return c.json({ success: false, error: '會員不存在' }, 404);
+  }
+
+  const [branch] = await db
+    .select()
+    .from(branches)
+    .where(and(eq(branches.id, member.branchId!), eq(branches.tenantId, tenantId)))
+    .limit(1);
+
+  if (!branch) {
+    return c.json({ success: false, error: '無權限存取此會員' }, 403);
+  }
+
+  const result = await db
+    .select({
+      contract: contracts,
+      plan: {
+        id: membershipPlans.id,
+        name: membershipPlans.name,
+        planType: membershipPlans.planType,
+      },
+    })
+    .from(contracts)
+    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+    .where(eq(contracts.memberId, id))
+    .orderBy(desc(contracts.createdAt));
+
+  return c.json({
+    success: true,
+    data: result.map(r => ({
+      ...r.contract,
+      plan: r.plan,
+    })),
+  });
 });
 
 export default app;

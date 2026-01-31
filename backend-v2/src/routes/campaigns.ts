@@ -191,7 +191,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCamp
 
   const updateData: Record<string, unknown> = {
     ...data,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   };
 
   if (data.budget !== undefined) {

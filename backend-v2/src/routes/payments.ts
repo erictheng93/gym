@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, payments, contracts, members, branches } from '../db/index.js';
-import { eq, and, sql, desc, sum } from 'drizzle-orm';
+import { eq, and, sql, desc, sum, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -41,7 +41,7 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
   }
 
-  let conditions = [sql`${payments.branchId} = ANY(${branchIds})`];
+  let conditions = [inArray(payments.branchId, branchIds)];
 
   if (branchId) {
     conditions.push(eq(payments.branchId, branchId));
@@ -81,7 +81,7 @@ app.get('/', async (c) => {
     .leftJoin(members, eq(payments.memberId, members.id))
     .leftJoin(contracts, eq(payments.contractId, contracts.id))
     .where(whereCondition)
-    .orderBy(desc(payments.dateCreated))
+    .orderBy(desc(payments.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -116,7 +116,7 @@ app.get('/summary', async (c) => {
     });
   }
 
-  let conditions = [sql`${payments.branchId} = ANY(${branchIds})`];
+  let conditions = [inArray(payments.branchId, branchIds)];
 
   if (branchId) {
     conditions.push(eq(payments.branchId, branchId));
@@ -266,7 +266,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
 
       await db.update(contracts).set({
         paymentStatus,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       }).where(eq(contracts.id, data.contractId));
     }
   }

@@ -72,7 +72,7 @@ app.get('/', async (c) => {
     .leftJoin(branches, eq(coupons.branchId, branches.id))
     .leftJoin(campaigns, eq(coupons.campaignId, campaigns.id))
     .where(and(...conditions))
-    .orderBy(desc(coupons.dateCreated))
+    .orderBy(desc(coupons.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -311,7 +311,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCoup
 
   const updateData: Record<string, unknown> = {
     ...data,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   };
 
   if (data.discountValue !== undefined) {

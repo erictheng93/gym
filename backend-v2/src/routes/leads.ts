@@ -78,7 +78,7 @@ app.get('/', async (c) => {
     .innerJoin(branches, eq(leads.branchId, branches.id))
     .leftJoin(employees, eq(leads.assignedToId, employees.id))
     .where(and(...conditions))
-    .orderBy(desc(leads.dateCreated))
+    .orderBy(desc(leads.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -196,7 +196,7 @@ app.patch('/:id', zValidator('json', updateLeadSchema), async (c) => {
 
   const updateData: Record<string, unknown> = {
     ...data,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   };
 
   if (data.expectedBudget !== undefined) {
@@ -235,7 +235,7 @@ app.post('/:id/convert', async (c) => {
   const [lastMember] = await db
     .select({ memberCode: members.memberCode })
     .from(members)
-    .orderBy(desc(members.dateCreated))
+    .orderBy(desc(members.createdAt))
     .limit(1);
 
   const lastNum = lastMember?.memberCode ? parseInt(lastMember.memberCode.slice(1)) : 0;
@@ -248,7 +248,7 @@ app.post('/:id/convert', async (c) => {
     email: lead.lead.email,
     memberCode,
     branchId: lead.lead.branchId,
-    memberStatus: 'ACTIVE',
+    status: 'ACTIVE',
     joinDate: new Date().toISOString().split('T')[0],
     notes: lead.lead.source ? `來源: ${lead.lead.source}` : undefined,
   }).returning();
@@ -258,7 +258,7 @@ app.post('/:id/convert', async (c) => {
     leadStatus: 'CONVERTED',
     convertedMemberId: newMember.id,
     convertedAt: new Date(),
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(leads.id, id));
 
   return c.json({

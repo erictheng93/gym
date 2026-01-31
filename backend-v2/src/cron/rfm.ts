@@ -105,7 +105,7 @@ export async function runRFMSegmentation() {
           .update(members)
           .set({
             tags: updatedTags,
-            dateUpdated: new Date(),
+            updatedAt: new Date(),
           })
           .where(eq(members.id, member.id));
 

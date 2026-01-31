@@ -145,12 +145,15 @@ describe('Check-ins API', () => {
       // Create a COUNT_BASED plan
       const [countPlan] = await db.insert(membershipPlans).values({
         name: 'Test Count Plan',
+        code: 'COUNT001',
         planType: 'COUNT_BASED',
         classCounts: 10,
         price: '3000',
         tenantId: TEST_TENANT_ID,
         branchId: TEST_BRANCH_ID,
         isActive: true,
+        allowPause: false,
+        allowTransfer: false,
       }).returning();
 
       // Create a COUNT_BASED contract
@@ -163,8 +166,9 @@ describe('Check-ins API', () => {
         memberId: TEST_MEMBER_ID,
         planId: countPlan.id,
         startDate: today.toISOString().split('T')[0],
+        originalEndDate: endDate.toISOString().split('T')[0],
         endDate: endDate.toISOString().split('T')[0],
-        contractStatus: 'ACTIVE',
+        status: 'ACTIVE',
         remainingCounts: 10,
         totalAmount: '3000',
         paymentStatus: 'PAID',
@@ -178,7 +182,8 @@ describe('Check-ins API', () => {
         phone: '0999888777',
         memberCode: 'M-COUNT-001',
         branchId: TEST_BRANCH_ID,
-        memberStatus: 'ACTIVE',
+        status: 'ACTIVE',
+        joinDate: today.toISOString().split('T')[0],
         tenantId: TEST_TENANT_ID,
       }).returning();
 

@@ -21,12 +21,13 @@ async function migrateUsers() {
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255),
         role VARCHAR(50) NOT NULL,
-        employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
-        tenant_id UUID REFERENCES tenants(id),
+        employee_id UUID,
+        tenant_id UUID,
         is_active BOOLEAN DEFAULT true,
-        last_login_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP
+        email_verified BOOLEAN DEFAULT false,
+        last_login_at TIMESTAMPTZ,
+        date_created TIMESTAMPTZ DEFAULT NOW(),
+        date_updated TIMESTAMPTZ
       )
     `;
 
@@ -35,8 +36,11 @@ async function migrateUsers() {
     await sql`
       CREATE TABLE IF NOT EXISTS sessions (
         id VARCHAR(255) PRIMARY KEY,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        expires_at TIMESTAMP NOT NULL
+        user_id UUID NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        ip_address INET,
+        user_agent TEXT,
+        date_created TIMESTAMPTZ DEFAULT NOW()
       )
     `;
 
@@ -73,12 +77,9 @@ async function migrateUsers() {
         du.password,
         du.role,
         du.status,
-        e.id as employee_id,
-        e.branch_id,
-        b.tenant_id
+        e.id as employee_id
       FROM directus_users du
       LEFT JOIN employees e ON e.user_id = du.id
-      LEFT JOIN branches b ON e.branch_id = b.id
       WHERE du.email IS NOT NULL
     `;
 
@@ -110,16 +111,14 @@ async function migrateUsers() {
           password_hash,
           role,
           employee_id,
-          tenant_id,
           is_active,
-          created_at
+          date_created
         ) VALUES (
           ${directusUser.id},
           ${directusUser.email},
           ${directusUser.password},
           ${role},
           ${directusUser.employee_id},
-          ${directusUser.tenant_id},
           ${isActive},
           NOW()
         )

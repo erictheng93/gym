@@ -157,7 +157,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
 
   const updateData: Record<string, unknown> = {
     ...data,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   };
 
   if (data.price !== undefined) {
@@ -190,7 +190,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   // Soft delete by setting isActive to false
   await db.update(membershipPlans).set({
     isActive: false,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(membershipPlans.id, id));
 
   return c.json({ success: true, message: '方案已停用' });

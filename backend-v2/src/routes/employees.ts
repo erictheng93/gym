@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, employees, branches, jobTitles, users, attendances } from '../db/index.js';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -40,7 +40,7 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  let condition = sql`${employees.branchId} = ANY(${branchIds})`;
+  let condition = inArray(employees.branchId, branchIds);
 
   if (branchId) {
     condition = and(condition, eq(employees.branchId, branchId))!;
@@ -115,7 +115,7 @@ app.get('/:id', async (c) => {
     .select()
     .from(attendances)
     .where(eq(attendances.employeeId, id))
-    .orderBy(desc(attendances.dateCreated))
+    .orderBy(desc(attendances.createdAt))
     .limit(30);
 
   return c.json({
@@ -205,7 +205,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     .set({
       ...data,
       basicSalary: data.basicSalary ? String(data.basicSalary) : undefined,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(employees.id, id))
     .returning();
@@ -242,14 +242,14 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
     .set({
       status: 'archived',
       employmentStatus: 'RESIGNED',
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(employees.id, id));
 
   if (employee.userId) {
     await db.update(users).set({
       isActive: false,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     }).where(eq(users.id, employee.userId));
   }
 

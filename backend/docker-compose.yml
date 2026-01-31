@@ -1,53 +1,74 @@
+# ============================================
+# Gym Nexus - Docker Compose
+# ============================================
+# 使用方式: make up 或 docker-compose up -d
+
 services:
+  # ============================================
+  # PostgreSQL + PostGIS
+  # ============================================
   database:
-    # 使用 PostGIS 映像以支援地理空間查詢 (PostgreSQL 17 + PostGIS 3.4)
     image: postgis/postgis:17-3.4
     restart: unless-stopped
     ports:
-      - 15432:5432
+      - "${DB_PORT:-15432}:5432"
     volumes:
-      - ./data/database:/var/lib/postgresql/data
-      # 初始化腳本 - 首次啟動時自動創建業務表
+      - db_data:/var/lib/postgresql/data
       - ./schema/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-      # 注意: register_all_collections.sql 需要在 Directus 啟動後手動執行
-      # cat migrations/register_all_collections.sql | docker exec -i backend-database-1 psql -U directus -d gym_nexus
     environment:
-      POSTGRES_USER: directus
-      POSTGRES_PASSWORD: directus
-      POSTGRES_DB: gym_nexus
-      # UTF-8 編碼設定 (防止中文亂碼)
+      POSTGRES_USER: "${DB_USER:-directus}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-directus}"
+      POSTGRES_DB: "${DB_DATABASE:-gym_nexus}"
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
       LANG: "en_US.UTF-8"
       LC_ALL: "en_US.UTF-8"
-    # 生產環境連接池優化參數
     command:
       - "postgres"
       - "-c"
-      - "max_connections=300"           # 擴展最大連接數 (原 100)
+      - "max_connections=500"
       - "-c"
-      - "shared_buffers=256MB"          # 共享緩衝區
+      - "shared_buffers=512MB"
       - "-c"
-      - "effective_cache_size=1GB"      # 預期可用記憶體
+      - "effective_cache_size=2GB"
       - "-c"
-      - "work_mem=16MB"                 # 每個查詢的工作記憶體
+      - "work_mem=32MB"
       - "-c"
-      - "maintenance_work_mem=128MB"    # 維護操作記憶體
+      - "maintenance_work_mem=256MB"
       - "-c"
-      - "random_page_cost=1.1"          # SSD 優化
+      - "random_page_cost=1.1"
       - "-c"
-      - "effective_io_concurrency=200"  # SSD 並行 IO
+      - "effective_io_concurrency=200"
       - "-c"
-      - "idle_in_transaction_session_timeout=30000"  # 30 秒空閒事務超時
+      - "idle_in_transaction_session_timeout=30000"
       - "-c"
-      - "statement_timeout=60000"       # 60 秒查詢超時
+      - "statement_timeout=120000"
       - "-c"
-      - "lock_timeout=10000"            # 10 秒鎖等待超時
+      - "lock_timeout=10000"
+      - "-c"
+      - "log_min_duration_statement=1000"
+      - "-c"
+      - "log_checkpoints=on"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U directus -d gym_nexus"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-directus} -d ${DB_DATABASE:-gym_nexus}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
 
+  # ============================================
+  # Directus CMS
+  # ============================================
   directus:
     build:
       context: .
@@ -55,60 +76,64 @@ services:
     image: gym-directus:11
     restart: unless-stopped
     ports:
-      - "8055:8055"
+      - "${DIRECTUS_PORT:-8055}:8055"
     volumes:
-      - ./uploads:/directus/uploads
+      - directus_uploads:/directus/uploads
       - ./extensions:/directus/extensions
     depends_on:
       database:
         condition: service_healthy
     environment:
-      SECRET: "replace-with-secure-random-string"
+      SECRET: "${SECRET:-replace-with-secure-random-string}"
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8055}"
+
+      # Database
       DB_CLIENT: pg
       DB_HOST: database
       DB_PORT: 5432
-      DB_DATABASE: gym_nexus
-      DB_USER: directus
-      DB_PASSWORD: directus
-      # UTF-8 客戶端編碼 (防止中文亂碼)
+      DB_DATABASE: "${DB_DATABASE:-gym_nexus}"
+      DB_USER: "${DB_USER:-directus}"
+      DB_PASSWORD: "${DB_PASSWORD:-directus}"
       DB_CHARSET: "utf8"
-      # 連接池優化配置 (Directus 11 支援的選項)
-      DB_POOL__MIN: "2"                   # 最小連接數
-      DB_POOL__MAX: "50"                  # 最大連接數
-      # ============================================
-      # 內存緩存配置
-      # ============================================
+      DB_POOL__MIN: "5"
+      DB_POOL__MAX: "100"
+
+      # Cache
       CACHE_ENABLED: "true"
-      CACHE_STORE: "memory"               # 使用內存緩存（單實例足夠）
-      CACHE_TTL: "5m"                     # 預設緩存 5 分鐘
-      CACHE_AUTO_PURGE: "true"            # 自動清除過期緩存
-      # 效能優化
-      RATE_LIMITER_ENABLED: "false"       # 開發環境關閉限流
-      # 基礎配置
-      ADMIN_EMAIL: admin@gym.com
-      ADMIN_PASSWORD: admin
+      CACHE_STORE: "memory"
+      CACHE_TTL: "${CACHE_TTL:-10m}"
+      CACHE_AUTO_PURGE: "true"
+
+      # Rate Limiting
+      RATE_LIMITER_ENABLED: "true"
+      RATE_LIMITER_STORE: "memory"
+      RATE_LIMITER_POINTS: "100"
+      RATE_LIMITER_DURATION: "60"
+
+      # Logging
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_STYLE: "${LOG_STYLE:-raw}"
+
+      # Admin
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@gym.com}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
+
+      # Session
       WEBSOCKETS_ENABLED: "true"
-      # Session Cookie Configuration (for cross-origin development)
-      SESSION_COOKIE_SAME_SITE: "lax"
-      SESSION_COOKIE_SECURE: "false"
-      SESSION_COOKIE_DOMAIN: "localhost"
-      # CORS Configuration (externalized for production)
-      CORS_ENABLED: "${CORS_ENABLED:-true}"
-      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3006,http://localhost:3007,http://localhost:3008,http://localhost:3009,http://localhost:3010}"
-      CORS_CREDENTIALS: "${CORS_CREDENTIALS:-true}"
-      CORS_ALLOWED_HEADERS: "${CORS_ALLOWED_HEADERS:-Content-Type,Authorization,X-Member-Token}"
+      SESSION_COOKIE_SAME_SITE: "${SESSION_COOKIE_SAME_SITE:-lax}"
+      SESSION_COOKIE_SECURE: "${SESSION_COOKIE_SECURE:-false}"
+      SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
 
-      # ============================================
-      # OAuth / SSO Authentication Providers
-      # ============================================
-      # Enabled providers (comma-separated)
-      # 設定環境變數 AUTH_PROVIDERS=google,line,apple 來啟用
+      # CORS
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
+      CORS_CREDENTIALS: "true"
+      CORS_ALLOWED_HEADERS: "Content-Type,Authorization,X-Member-Token"
+
+      # OAuth
       AUTH_PROVIDERS: "${AUTH_PROVIDERS:-}"
-
-      # Member role for OAuth users (created in migration 011)
       MEMBER_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
 
-      # --- Google (OpenID Connect) ---
       AUTH_GOOGLE_DRIVER: "openid"
       AUTH_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
       AUTH_GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
@@ -119,7 +144,6 @@ services:
       AUTH_GOOGLE_ALLOW_PUBLIC_REGISTRATION: "true"
       AUTH_GOOGLE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
 
-      # --- LINE (OAuth 2.0 - Generic Driver) ---
       AUTH_LINE_DRIVER: "oauth2"
       AUTH_LINE_CLIENT_ID: "${LINE_CHANNEL_ID:-}"
       AUTH_LINE_CLIENT_SECRET: "${LINE_CHANNEL_SECRET:-}"
@@ -133,7 +157,6 @@ services:
       AUTH_LINE_ALLOW_PUBLIC_REGISTRATION: "true"
       AUTH_LINE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
 
-      # --- Apple (OpenID Connect) ---
       AUTH_APPLE_DRIVER: "openid"
       AUTH_APPLE_CLIENT_ID: "${APPLE_CLIENT_ID:-}"
       AUTH_APPLE_CLIENT_SECRET: "${APPLE_CLIENT_SECRET:-}"
@@ -146,23 +169,7 @@ services:
       AUTH_APPLE_ALLOW_PUBLIC_REGISTRATION: "true"
       AUTH_APPLE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
 
-      # --- Facebook (OAuth 2.0) - 可選，需要時啟用 ---
-      # AUTH_FACEBOOK_DRIVER: "oauth2"
-      # AUTH_FACEBOOK_CLIENT_ID: "${FACEBOOK_CLIENT_ID:-}"
-      # AUTH_FACEBOOK_CLIENT_SECRET: "${FACEBOOK_CLIENT_SECRET:-}"
-      # AUTH_FACEBOOK_AUTHORIZE_URL: "https://www.facebook.com/dialog/oauth"
-      # AUTH_FACEBOOK_ACCESS_URL: "https://graph.facebook.com/oauth/access_token"
-      # AUTH_FACEBOOK_PROFILE_URL: "https://graph.facebook.com/me?fields=id,email,name,picture"
-      # AUTH_FACEBOOK_IDENTIFIER_KEY: "email"
-      # AUTH_FACEBOOK_ICON: "facebook"
-      # AUTH_FACEBOOK_LABEL: "Facebook"
-      # AUTH_FACEBOOK_ALLOW_PUBLIC_REGISTRATION: "true"
-      # AUTH_FACEBOOK_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
-
-      # ============================================
-      # Email Configuration (Amazon SES SMTP)
-      # ============================================
-      # See backend/.env.example for setup instructions
+      # Email
       EMAIL_TRANSPORT: "${EMAIL_TRANSPORT:-smtp}"
       EMAIL_FROM: "${EMAIL_FROM:-Gym Nexus <noreply@gym-nexus.com>}"
       EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-email-smtp.ap-northeast-1.amazonaws.com}"
@@ -172,26 +179,58 @@ services:
       EMAIL_SMTP_SECURE: "${EMAIL_SMTP_SECURE:-false}"
       EMAIL_SMTP_IGNORE_TLS: "${EMAIL_SMTP_IGNORE_TLS:-false}"
 
-      # ============================================
-      # Push Notification (VAPID for Web Push)
-      # ============================================
+      # Push Notification
       VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
       VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
       VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:admin@gym-nexus.com}"
 
-      # ============================================
-      # LINE Messaging API (Notifications)
-      # ============================================
-      # Separate from LINE Login - for sending push notifications
+      # LINE Messaging
       LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
       LINE_MESSAGING_CHANNEL_SECRET: "${LINE_MESSAGING_CHANNEL_SECRET:-}"
 
-      # ============================================
-      # SMS Gateway (Mitake 三竹簡訊)
-      # ============================================
+      # SMS
       MITAKE_USERNAME: "${MITAKE_USERNAME:-}"
       MITAKE_PASSWORD: "${MITAKE_PASSWORD:-}"
       MITAKE_API_URL: "${MITAKE_API_URL:-https://smsapi.mitake.com.tw/api/mtk/SmSend}"
       MITAKE_COST_PER_SMS: "${MITAKE_COST_PER_SMS:-0.5}"
       SMS_DAILY_LIMIT_PER_MEMBER: "${SMS_DAILY_LIMIT_PER_MEMBER:-5}"
       SMS_OTP_ONLY: "${SMS_OTP_ONLY:-false}"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8055/gym/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # Cloudflare Tunnel
+  # ============================================
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      directus:
+        condition: service_healthy
+
+# ============================================
+# Named Volumes
+# ============================================
+volumes:
+  db_data:
+    driver: local
+    name: gym_db_data
+  directus_uploads:
+    driver: local
+    name: gym_directus_uploads

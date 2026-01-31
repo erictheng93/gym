@@ -77,7 +77,7 @@ export async function updateContractPaymentStatus(contractId: string): Promise<v
         .update(contracts)
         .set({
           paymentStatus: newPaymentStatus,
-          dateUpdated: new Date(),
+          updatedAt: new Date(),
         })
         .where(eq(contracts.id, contractId));
 

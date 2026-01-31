@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { db, members, contracts, payments, branches, checkIns } from '../db/index.js';
-import { eq, and, sql, gte, lte, count } from 'drizzle-orm';
+import { eq, and, sql, gte, lte, count, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -31,7 +31,7 @@ app.get('/revenue', async (c) => {
   }
 
   let conditions = [
-    sql`${payments.branchId} = ANY(${branchIds})`,
+    inArray(payments.branchId, branchIds),
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.paymentType, 'INCOME'),
@@ -100,7 +100,7 @@ app.get('/member-growth', async (c) => {
     return c.json({ success: true, data: { total: 0, byMonth: [] } });
   }
 
-  let conditions = [sql`${members.branchId} = ANY(${branchIds})`];
+  let conditions = [inArray(members.branchId, branchIds)];
 
   if (branchId) {
     conditions.push(eq(members.branchId, branchId));
@@ -116,13 +116,13 @@ app.get('/member-growth', async (c) => {
 
   const byMonth = await db
     .select({
-      month: sql<string>`TO_CHAR(${members.dateCreated}, 'YYYY-MM')`,
+      month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
       count: count(),
     })
     .from(members)
-    .where(and(...conditions, gte(members.dateCreated, startDate)))
-    .groupBy(sql`TO_CHAR(${members.dateCreated}, 'YYYY-MM')`)
-    .orderBy(sql`TO_CHAR(${members.dateCreated}, 'YYYY-MM')`);
+    .where(and(...conditions, gte(members.createdAt, startDate)))
+    .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
+    .orderBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`);
 
   return c.json({
     success: true,
@@ -157,8 +157,8 @@ app.get('/contract-expiry', async (c) => {
   futureDate.setDate(today.getDate() + days);
 
   let conditions = [
-    sql`${contracts.branchId} = ANY(${branchIds})`,
-    eq(contracts.contractStatus, 'ACTIVE'),
+    inArray(contracts.branchId, branchIds),
+    eq(contracts.status, 'ACTIVE'),
     gte(contracts.endDate, today.toISOString().split('T')[0]),
     lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
   ];
@@ -220,7 +220,7 @@ app.get('/member-activity', async (c) => {
   startDate.setDate(startDate.getDate() - days);
 
   let conditions = [
-    sql`${checkIns.branchId} = ANY(${branchIds})`,
+    inArray(checkIns.branchId, branchIds),
     gte(checkIns.checkInTime, startDate),
   ];
 

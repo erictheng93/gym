@@ -192,7 +192,7 @@ export async function deductSessionCount(contractId: string): Promise<{
       .update(contracts)
       .set({
         remainingCounts: newCount,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(contracts.id, contractId));
 
@@ -206,7 +206,7 @@ export async function deductSessionCount(contractId: string): Promise<{
         .update(contracts)
         .set({
           contractStatus: 'EXPIRED',
-          dateUpdated: new Date(),
+          updatedAt: new Date(),
         })
         .where(eq(contracts.id, contractId));
 

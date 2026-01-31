@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { db, members, contracts, payments, checkIns, branches, classSessions } from '../db/index.js';
-import { eq, and, sql, gte, lte, count, sum, desc } from 'drizzle-orm';
+import { eq, and, sql, gte, lte, count, sum, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -53,15 +53,15 @@ app.get('/overview', async (c) => {
       active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
     })
     .from(members)
-    .where(sql`${members.branchId} = ANY(${branchIds})`);
+    .where(inArray(members.branchId, branchIds));
 
   const [newMembersThisMonth] = await db
     .select({ count: count() })
     .from(members)
     .where(
       and(
-        sql`${members.branchId} = ANY(${branchIds})`,
-        gte(members.dateCreated, monthStartDate)
+        inArray(members.branchId, branchIds),
+        gte(members.createdAt, monthStartDate)
       )
     );
 
@@ -73,8 +73,8 @@ app.get('/overview', async (c) => {
     .from(contracts)
     .where(
       and(
-        sql`${contracts.branchId} = ANY(${branchIds})`,
-        eq(contracts.contractStatus, 'ACTIVE')
+        inArray(contracts.branchId, branchIds),
+        eq(contracts.status, 'ACTIVE')
       )
     );
 
@@ -85,8 +85,8 @@ app.get('/overview', async (c) => {
     .from(contracts)
     .where(
       and(
-        sql`${contracts.branchId} = ANY(${branchIds})`,
-        eq(contracts.contractStatus, 'ACTIVE'),
+        inArray(contracts.branchId, branchIds),
+        eq(contracts.status, 'ACTIVE'),
         gte(contracts.endDate, todayStr),
         lte(contracts.endDate, sevenDaysFromNow)
       )
@@ -98,7 +98,7 @@ app.get('/overview', async (c) => {
     .from(payments)
     .where(
       and(
-        sql`${payments.branchId} = ANY(${branchIds})`,
+        inArray(payments.branchId, branchIds),
         eq(payments.paymentType, 'INCOME'),
         gte(payments.paymentDate, monthStartDate)
       )
@@ -109,7 +109,7 @@ app.get('/overview', async (c) => {
     .from(payments)
     .where(
       and(
-        sql`${payments.branchId} = ANY(${branchIds})`,
+        inArray(payments.branchId, branchIds),
         eq(payments.paymentType, 'INCOME'),
         gte(payments.paymentDate, lastMonthStartDate),
         lte(payments.paymentDate, lastMonthEndDate)
@@ -131,7 +131,7 @@ app.get('/overview', async (c) => {
     .from(checkIns)
     .where(
       and(
-        sql`${checkIns.branchId} = ANY(${branchIds})`,
+        inArray(checkIns.branchId, branchIds),
         gte(checkIns.checkInTime, todayStart)
       )
     );
@@ -141,7 +141,7 @@ app.get('/overview', async (c) => {
     .from(checkIns)
     .where(
       and(
-        sql`${checkIns.branchId} = ANY(${branchIds})`,
+        inArray(checkIns.branchId, branchIds),
         gte(checkIns.checkInTime, monthStartDate)
       )
     );
@@ -203,7 +203,7 @@ app.get('/revenue-trend', async (c) => {
       .from(payments)
       .where(
         and(
-          sql`${payments.branchId} = ANY(${branchIds})`,
+          inArray(payments.branchId, branchIds),
           eq(payments.paymentType, 'INCOME'),
           gte(payments.paymentDate, sql`current_date - interval '12 months'`)
         )
@@ -229,7 +229,7 @@ app.get('/revenue-trend', async (c) => {
     .from(payments)
     .where(
       and(
-        sql`${payments.branchId} = ANY(${branchIds})`,
+        inArray(payments.branchId, branchIds),
         eq(payments.paymentType, 'INCOME'),
         gte(payments.paymentDate, sql`current_date - interval '30 days'`)
       )

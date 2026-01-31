@@ -23,9 +23,9 @@ import { relations, sql } from 'drizzle-orm';
 
 export const STATUS = ['active', 'archived'] as const;
 export const BRANCH_TYPE = ['HEADQUARTER', 'BRANCH'] as const;
-export const EMPLOYMENT_STATUS = ['ACTIVE', 'RESIGNED', 'SUSPENDED'] as const;
-export const EMPLOYMENT_TYPE = ['FULL_TIME', 'PART_TIME', 'CONTRACT'] as const;
-export const MEMBER_STATUS = ['ACTIVE', 'INACTIVE', 'PAUSED', 'EXPIRED'] as const;
+export const EMPLOYMENT_STATUS = ['ACTIVE', 'RESIGNED', 'LEAVE'] as const;
+export const EMPLOYMENT_TYPE = ['FULL_TIME', 'PART_TIME', 'FREELANCE'] as const;
+export const MEMBER_STATUS = ['ACTIVE', 'EXPIRED', 'SUSPENDED', 'BANNED'] as const;
 export const GENDER = ['MALE', 'FEMALE', 'OTHER'] as const;
 export const PLAN_TYPE = ['TIME_BASED', 'COUNT_BASED'] as const;
 export const CONTRACT_STATUS = ['DRAFT', 'ACTIVE', 'PAUSED', 'EXPIRED', 'CANCELLED', 'TRANSFERRED'] as const;
@@ -62,8 +62,8 @@ export const users = pgTable('users', {
   isActive: boolean('is_active').default(true),
   emailVerified: boolean('email_verified').default(false),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
 });
 
 export const sessions = pgTable('sessions', {
@@ -72,7 +72,7 @@ export const sessions = pgTable('sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
 // =============================================================================
@@ -82,8 +82,8 @@ export const sessions = pgTable('sessions', {
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 100 }).unique().notNull(),
   email: varchar('email', { length: 255 }).notNull(),
@@ -113,16 +113,17 @@ export const tenants = pgTable('tenants', {
 
 export const branches = pgTable('branches', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  status: varchar('status', { length: 20 }).default('published'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   name: varchar('name', { length: 255 }).notNull(),
-  type: varchar('type', { length: 20 }).notNull().$type<typeof BRANCH_TYPE[number]>(),
+  code: varchar('code', { length: 20 }).notNull(),
+  type: varchar('type', { length: 20 }).notNull().default('BRANCH').$type<typeof BRANCH_TYPE[number]>(),
   address: text('address'),
   phone: varchar('phone', { length: 50 }),
   taxId: varchar('tax_id', { length: 20 }),
   settings: jsonb('settings').default({}),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
 }, (table) => [
   index('idx_branches_tenant_id').on(table.tenantId),
   index('idx_branches_tenant_status').on(table.tenantId, table.status),
@@ -130,12 +131,13 @@ export const branches = pgTable('branches', {
 
 export const jobTitles = pgTable('job_titles', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   name: varchar('name', { length: 100 }).notNull(),
+  code: varchar('code', { length: 20 }).notNull(),
+  description: text('description'),
   level: integer('level').default(0),
-  permissionsConfig: jsonb('permissions_config').default({}),
+  sort: integer('sort'),
+  permissionsConfig: jsonb('permissions_config').notNull().default('{}'),
   tenantId: uuid('tenant_id').references(() => tenants.id),
 }, (table) => [
   index('idx_job_titles_tenant').on(table.tenantId),
@@ -143,21 +145,21 @@ export const jobTitles = pgTable('job_titles', {
 
 export const employees = pgTable('employees', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
-  employeeCode: varchar('employee_code', { length: 20 }).unique(),
+  userId: uuid('user_id').references(() => users.id),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  jobTitleId: uuid('job_title_id').notNull().references(() => jobTitles.id),
+  employeeCode: varchar('employee_code', { length: 20 }).notNull().unique(),
   fullName: varchar('full_name', { length: 100 }).notNull(),
   phone: varchar('phone', { length: 50 }),
   email: varchar('email', { length: 255 }),
-  branchId: uuid('branch_id').references(() => branches.id),
-  jobTitleId: uuid('job_title_id').references(() => jobTitles.id),
-  userId: uuid('user_id').references(() => users.id),
-  employmentStatus: varchar('employment_status', { length: 20 }).default('ACTIVE').$type<typeof EMPLOYMENT_STATUS[number]>(),
-  employmentType: varchar('employment_type', { length: 20 }).$type<typeof EMPLOYMENT_TYPE[number]>(),
-  hireDate: date('hire_date'),
+  status: varchar('status', { length: 20 }).notNull().default('ACTIVE').$type<typeof EMPLOYMENT_STATUS[number]>(),
+  employmentType: varchar('employment_type', { length: 20 }).notNull().$type<typeof EMPLOYMENT_TYPE[number]>(),
+  hireDate: date('hire_date').notNull(),
+  resignDate: date('resign_date'),
   basicSalary: decimal('basic_salary', { precision: 12, scale: 2 }),
   customPermissions: jsonb('custom_permissions'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id'),
 }, (table) => [
   index('idx_employees_branch').on(table.branchId),
@@ -166,18 +168,20 @@ export const employees = pgTable('employees', {
 
 export const membershipPlans = pgTable('membership_plans', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
   name: varchar('name', { length: 100 }).notNull(),
-  planType: varchar('plan_type', { length: 20 }).notNull().$type<typeof PLAN_TYPE[number]>(),
+  code: varchar('code', { length: 20 }).notNull(),
+  planType: varchar('type', { length: 20 }).notNull().$type<typeof PLAN_TYPE[number]>(),
+  description: text('description'),
   durationMonths: integer('duration_months'),
   classCounts: integer('class_counts'),
   price: decimal('price', { precision: 12, scale: 2 }).notNull(),
-  allowTransfer: boolean('allow_transfer').default(false),
-  allowPause: boolean('allow_pause').default(false),
-  description: text('description'),
-  isActive: boolean('is_active').default(true),
+  allowPause: boolean('allow_pause').notNull().default(false),
+  maxPauseDays: integer('max_pause_days'),
+  allowTransfer: boolean('allow_transfer').notNull().default(false),
+  isActive: boolean('is_active').notNull().default(true),
+  sort: integer('sort'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id').references(() => tenants.id),
   branchId: uuid('branch_id').references(() => branches.id),
 }, (table) => [
@@ -187,100 +191,99 @@ export const membershipPlans = pgTable('membership_plans', {
 
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
-  memberCode: varchar('member_code', { length: 20 }).unique(),
+  memberCode: varchar('member_code', { length: 20 }).notNull().unique(),
   fullName: varchar('full_name', { length: 100 }).notNull(),
-  phone: varchar('phone', { length: 50 }),
+  phone: varchar('phone', { length: 50 }).notNull(),
   email: varchar('email', { length: 255 }),
-  branchId: uuid('branch_id').references(() => branches.id),
-  memberStatus: varchar('member_status', { length: 20 }).default('ACTIVE').$type<typeof MEMBER_STATUS[number]>(),
-  joinDate: date('join_date'),
-  salesPersonId: uuid('sales_person_id').references(() => employees.id),
   gender: varchar('gender', { length: 10 }).$type<typeof GENDER[number]>(),
   birthday: date('birthday'),
+  idNumber: varchar('id_number', { length: 20 }),
   address: text('address'),
   emergencyContact: varchar('emergency_contact', { length: 100 }),
   emergencyPhone: varchar('emergency_phone', { length: 50 }),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  salesPersonId: uuid('sales_person_id').references(() => employees.id),
+  status: varchar('status', { length: 20 }).notNull().default('ACTIVE').$type<typeof MEMBER_STATUS[number]>(),
+  joinDate: date('join_date').notNull(),
   tags: jsonb('tags'),
   notes: text('notes'),
+  avatar: uuid('avatar'),
   height: real('height'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id'),
 }, (table) => [
   index('idx_members_branch').on(table.branchId),
-  index('idx_members_status').on(table.memberStatus),
+  index('idx_members_status').on(table.status),
   index('idx_members_tenant').on(table.tenantId),
 ]);
 
 export const contracts = pgTable('contracts', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
-  contractNo: varchar('contract_no', { length: 30 }).unique(),
+  contractNo: varchar('contract_no', { length: 30 }).notNull().unique(),
   memberId: uuid('member_id').notNull().references(() => members.id),
-  planId: uuid('plan_id').references(() => membershipPlans.id),
+  planId: uuid('plan_id').notNull().references(() => membershipPlans.id),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  salesPersonId: uuid('sales_person_id').references(() => employees.id),
+  status: varchar('status', { length: 20 }).notNull().default('published').$type<typeof CONTRACT_STATUS[number]>(),
   signDate: date('sign_date'),
   startDate: date('start_date').notNull(),
-  endDate: date('end_date'),
-  originalEndDate: date('original_end_date'),
-  contractStatus: varchar('contract_status', { length: 20 }).default('DRAFT').$type<typeof CONTRACT_STATUS[number]>(),
+  originalEndDate: date('original_end_date').notNull(),
+  endDate: date('end_date').notNull(),
   remainingCounts: integer('remaining_counts'),
-  totalAmount: decimal('total_amount', { precision: 12, scale: 2 }),
-  paymentStatus: varchar('payment_status', { length: 20 }).default('UNPAID').$type<typeof PAYMENT_STATUS[number]>(),
-  salesPersonId: uuid('sales_person_id').references(() => employees.id),
-  branchId: uuid('branch_id').references(() => branches.id),
-  notes: text('notes'),
+  totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
+  paidAmount: decimal('paid_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  paymentStatus: varchar('payment_status', { length: 20 }).notNull().default('UNPAID').$type<typeof PAYMENT_STATUS[number]>(),
   digitalSignature: uuid('digital_signature'),
   contractPdf: uuid('contract_pdf'),
+  termsAccepted: boolean('terms_accepted').notNull().default(false),
+  notes: text('notes'),
+  createdBy: uuid('created_by').references(() => employees.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id'),
 }, (table) => [
   index('idx_contracts_member').on(table.memberId),
   index('idx_contracts_branch').on(table.branchId),
-  index('idx_contracts_status').on(table.contractStatus),
+  index('idx_contracts_status').on(table.status),
   index('idx_contracts_tenant').on(table.tenantId),
 ]);
 
 export const contractLogs = pgTable('contract_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
   contractId: uuid('contract_id').notNull().references(() => contracts.id),
   logType: varchar('log_type', { length: 20 }).notNull().$type<typeof LOG_TYPE[number]>(),
-  startDate: date('start_date'),
-  endDate: date('end_date'),
-  daysAffected: integer('days_affected'),
-  reason: text('reason'),
-  createdByEmployee: uuid('created_by_employee').references(() => employees.id),
-  branchId: uuid('branch_id').references(() => branches.id),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  days: integer('days').notNull(),
+  reason: varchar('reason', { length: 255 }),
   originalMemberId: uuid('original_member_id').references(() => members.id),
   targetMemberId: uuid('target_member_id').references(() => members.id),
+  createdBy: uuid('created_by').references(() => employees.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   tenantId: uuid('tenant_id').references(() => tenants.id),
 }, (table) => [
   index('idx_contract_logs_contract').on(table.contractId),
-  index('idx_contract_logs_tenant').on(table.tenantId),
 ]);
 
 export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),
-  status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
-  contractId: uuid('contract_id').references(() => contracts.id),
-  memberId: uuid('member_id').references(() => members.id),
-  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
-  paymentMethod: varchar('payment_method', { length: 20 }).$type<typeof PAYMENT_METHOD[number]>(),
-  paymentDate: timestamp('payment_date', { withTimezone: true }),
-  paymentType: varchar('payment_type', { length: 20 }).default('INCOME').$type<typeof PAYMENT_TYPE[number]>(),
-  branchId: uuid('branch_id').references(() => branches.id),
-  receivedBy: uuid('received_by').references(() => employees.id),
-  notes: text('notes'),
+  contractId: uuid('contract_id').notNull().references(() => contracts.id),
+  memberId: uuid('member_id').notNull().references(() => members.id),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: varchar('payment_method', { length: 20 }).notNull().$type<typeof PAYMENT_METHOD[number]>(),
+  paymentDate: timestamp('payment_date', { withTimezone: true }).defaultNow().notNull(),
+  type: varchar('type', { length: 20 }).notNull().default('INCOME').$type<typeof PAYMENT_TYPE[number]>(),
+  receiptNo: varchar('receipt_no', { length: 30 }),
+  notes: varchar('notes', { length: 255 }),
+  createdBy: uuid('created_by').references(() => employees.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   tenantId: uuid('tenant_id'),
 }, (table) => [
   index('idx_payments_contract').on(table.contractId),
   index('idx_payments_branch').on(table.branchId),
-  index('idx_payments_tenant').on(table.tenantId),
+  index('idx_payments_member').on(table.memberId),
 ]);
 
 // =============================================================================
@@ -289,7 +292,7 @@ export const payments = pgTable('payments', {
 
 export const attendances = pgTable('attendances', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   employeeId: uuid('employee_id').notNull().references(() => employees.id),
   checkIn: timestamp('check_in', { withTimezone: true }),
   checkOut: timestamp('check_out', { withTimezone: true }),
@@ -304,8 +307,8 @@ export const attendances = pgTable('attendances', {
 export const leaveRequests = pgTable('leave_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   employeeId: uuid('employee_id').notNull().references(() => employees.id),
   leaveType: varchar('leave_type', { length: 20 }).notNull().$type<typeof LEAVE_TYPE[number]>(),
   startDate: timestamp('start_date', { withTimezone: true }).notNull(),
@@ -324,8 +327,8 @@ export const leaveRequests = pgTable('leave_requests', {
 export const classes = pgTable('classes', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   name: varchar('name', { length: 100 }).notNull(),
   description: text('description'),
   durationMinutes: integer('duration_minutes').notNull().default(60),
@@ -346,8 +349,8 @@ export const classes = pgTable('classes', {
 export const classSchedules = pgTable('class_schedules', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
   branchId: uuid('branch_id').notNull().references(() => branches.id),
   instructorId: uuid('instructor_id').references(() => employees.id),
@@ -367,8 +370,8 @@ export const classSchedules = pgTable('class_schedules', {
 export const classSessions = pgTable('class_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   scheduleId: uuid('schedule_id').references(() => classSchedules.id),
   classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
   branchId: uuid('branch_id').notNull().references(() => branches.id),
@@ -392,8 +395,8 @@ export const classSessions = pgTable('class_sessions', {
 export const bookings = pgTable('bookings', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   sessionId: uuid('session_id').notNull().references(() => classSessions.id, { onDelete: 'cascade' }),
   memberId: uuid('member_id').notNull().references(() => members.id),
   contractId: uuid('contract_id').references(() => contracts.id),
@@ -419,8 +422,8 @@ export const CHECKIN_TYPE = ['ENTRY', 'CLASS', 'FACILITY'] as const;
 export const checkIns = pgTable('check_ins', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
   branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
   contractId: uuid('contract_id').references(() => contracts.id, { onDelete: 'set null' }),
@@ -447,8 +450,8 @@ export const LEAD_STATUS = ['NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL', 'NEGOTIATI
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   fullName: varchar('full_name', { length: 100 }).notNull(),
   phone: varchar('phone', { length: 20 }),
   email: varchar('email', { length: 100 }),
@@ -478,8 +481,8 @@ export const DISCOUNT_TYPE = ['PERCENTAGE', 'FIXED', 'FREE_TRIAL', 'GIFT'] as co
 export const campaigns = pgTable('campaigns', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   branchId: uuid('branch_id').references(() => branches.id),
   name: varchar('name', { length: 100 }).notNull(),
@@ -508,8 +511,8 @@ export const COUPON_DISCOUNT_TYPE = ['PERCENTAGE', 'FIXED'] as const;
 export const coupons = pgTable('coupons', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   branchId: uuid('branch_id').references(() => branches.id),
   campaignId: uuid('campaign_id').references(() => campaigns.id),
@@ -534,7 +537,7 @@ export const coupons = pgTable('coupons', {
 
 export const couponUsages = pgTable('coupon_usages', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   couponId: uuid('coupon_id').notNull().references(() => coupons.id, { onDelete: 'cascade' }),
   memberId: uuid('member_id').references(() => members.id),
   contractId: uuid('contract_id').references(() => contracts.id),
@@ -554,8 +557,8 @@ export const NOTIFICATION_PRIORITY = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as cons
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   notificationType: varchar('notification_type', { length: 50 }),
   type: varchar('type', { length: 50 }),
   title: varchar('title', { length: 255 }).notNull(),
@@ -584,8 +587,8 @@ export const notifications = pgTable('notifications', {
 
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   userId: uuid('user_id').references(() => users.id),
   memberId: uuid('member_id').references(() => members.id),
   endpoint: text('endpoint').notNull(),
@@ -619,7 +622,7 @@ export const otpTokens = pgTable('otp_tokens', {
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
 export const otpSendLogs = pgTable('otp_send_logs', {
@@ -638,8 +641,8 @@ export const otpSendLogs = pgTable('otp_send_logs', {
 
 export const subscriptions = pgTable('subscriptions', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   planType: varchar('plan_type', { length: 50 }).notNull().$type<typeof TENANT_PLAN[number]>(),
   status: varchar('status', { length: 20 }).notNull().default('active'),
@@ -658,8 +661,8 @@ export const subscriptions = pgTable('subscriptions', {
 
 export const invoices = pgTable('invoices', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   subscriptionId: uuid('subscription_id').references(() => subscriptions.id, { onDelete: 'set null' }),
   invoiceNumber: varchar('invoice_number', { length: 50 }).unique().notNull(),
@@ -684,7 +687,7 @@ export const invoices = pgTable('invoices', {
 
 export const usageRecords = pgTable('usage_records', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   recordDate: date('record_date').notNull().default(sql`CURRENT_DATE`),
   membersCount: integer('members_count').default(0),
@@ -707,7 +710,7 @@ export const usageRecords = pgTable('usage_records', {
 
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   userId: uuid('user_id'),
   employeeId: uuid('employee_id').references(() => employees.id, { onDelete: 'set null' }),
@@ -733,7 +736,7 @@ export const auditLogs = pgTable('audit_logs', {
   index('idx_audit_logs_tenant').on(table.tenantId),
   index('idx_audit_logs_user').on(table.userId),
   index('idx_audit_logs_action').on(table.action),
-  index('idx_audit_logs_date').on(table.dateCreated),
+  index('idx_audit_logs_date').on(table.createdAt),
 ]);
 
 // =============================================================================
@@ -742,8 +745,8 @@ export const auditLogs = pgTable('audit_logs', {
 
 export const files = pgTable('files', {
   id: uuid('id').primaryKey().defaultRandom(),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
-  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
   tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   uploadedBy: uuid('uploaded_by').references(() => users.id),
   filename: varchar('filename', { length: 255 }).notNull(),
@@ -897,7 +900,7 @@ export const LEAD_ACTIVITY_TYPE = ['CALL', 'EMAIL', 'VISIT', 'TRIAL', 'FOLLOW_UP
 export const leadActivities = pgTable('lead_activities', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   leadId: uuid('lead_id').notNull().references(() => leads.id, { onDelete: 'cascade' }),
   activityType: varchar('activity_type', { length: 30 }).notNull().$type<typeof LEAD_ACTIVITY_TYPE[number]>(),
   content: text('content'),

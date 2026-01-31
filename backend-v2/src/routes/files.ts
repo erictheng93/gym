@@ -34,7 +34,7 @@ app.get('/', async (c) => {
     .select()
     .from(files)
     .where(and(...conditions))
-    .orderBy(desc(files.dateCreated))
+    .orderBy(desc(files.createdAt))
     .limit(limitNum)
     .offset(offset);
 
@@ -189,7 +189,7 @@ app.post('/', async (c) => {
       .set({
         title,
         description,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(files.id, result.id));
   }
@@ -238,7 +238,7 @@ app.patch('/:id', async (c) => {
       title: body.title,
       description: body.description,
       folder: body.folder,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(files.id, id))
     .returning();

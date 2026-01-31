@@ -34,7 +34,7 @@ describe('Contracts API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       expect(Array.isArray(data.data)).toBe(true);
-      expect(data).toHaveProperty('pagination');
+      expect(data).toHaveProperty('meta');
     });
 
     it('should filter by member', async () => {
@@ -48,8 +48,8 @@ describe('Contracts API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       // All contracts should belong to the test member
-      data.data.forEach((contract: { memberId: string }) => {
-        expect(contract.memberId).toBe(TEST_MEMBER_ID);
+      data.data.forEach((item: { contract: { memberId: string } }) => {
+        expect(item.contract.memberId).toBe(TEST_MEMBER_ID);
       });
     });
 
@@ -63,8 +63,8 @@ describe('Contracts API', () => {
 
       const data = await response.json();
       expect(data.success).toBe(true);
-      data.data.forEach((contract: { contractStatus: string }) => {
-        expect(contract.contractStatus).toBe('ACTIVE');
+      data.data.forEach((item: { contract: { status: string } }) => {
+        expect(item.contract.status).toBe('ACTIVE');
       });
     });
   });
@@ -80,9 +80,9 @@ describe('Contracts API', () => {
 
       const data = await response.json();
       expect(data.success).toBe(true);
-      expect(data.data.id).toBe(TEST_CONTRACT_ID);
-      expect(data.data.contractNo).toBe('C000001');
-      expect(data.data.memberId).toBe(TEST_MEMBER_ID);
+      expect(data.data.contract.id).toBe(TEST_CONTRACT_ID);
+      expect(data.data.contract.contractNo).toBe('C000001');
+      expect(data.data.contract.memberId).toBe(TEST_MEMBER_ID);
       expect(data.data).toHaveProperty('member');
       expect(data.data).toHaveProperty('plan');
     });
@@ -124,7 +124,7 @@ describe('Contracts API', () => {
       expect(data.success).toBe(true);
       expect(data.data.memberId).toBe(TEST_MEMBER_ID);
       expect(data.data.contractNo).toBeTruthy(); // Auto-generated
-      expect(data.data.contractStatus).toBe('DRAFT');
+      expect(data.data.status).toBe('DRAFT');
     });
 
     it('should validate required fields', async () => {
@@ -213,7 +213,7 @@ describe('Contracts API', () => {
 
       const data = await response.json();
       expect(data.success).toBe(true);
-      expect(data.data.contractStatus).toBe('ACTIVE');
+      expect(data.data.status).toBe('ACTIVE');
     });
   });
 });

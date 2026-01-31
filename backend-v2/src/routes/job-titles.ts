@@ -90,7 +90,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobT
 
   const [updated] = await db.update(jobTitles).set({
     ...data,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(jobTitles.id, id)).returning();
 
   return c.json({

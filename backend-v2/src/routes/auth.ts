@@ -73,6 +73,8 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
   return c.json({
     success: true,
     data: {
+      token: session.id,
+      expiresAt: session.expiresAt,
       user: {
         id: user.id,
         email: user.email,
@@ -120,12 +122,14 @@ app.get('/me', requireAuth, async (c) => {
   return c.json({
     success: true,
     data: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      employeeId: user.employeeId,
-      tenantId: user.tenantId,
-      isActive: user.isActive,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        employeeId: user.employeeId,
+        tenantId: user.tenantId,
+        isActive: user.isActive,
+      },
       employee: employee ? {
         id: employee.id,
         fullName: employee.fullName,
@@ -172,7 +176,7 @@ app.post('/change-password', requireAuth, zValidator('json', changePasswordSchem
 
   await db.update(users).set({
     passwordHash: newPasswordHash,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(users.id, user.id));
 
   await lucia.invalidateUserSessions(user.id);
@@ -201,6 +205,7 @@ app.post('/refresh', async (c) => {
   return c.json({
     success: true,
     data: {
+      token: newSession.id,
       expiresAt: newSession.expiresAt,
     },
   });

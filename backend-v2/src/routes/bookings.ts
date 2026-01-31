@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, bookings, classSessions, classes, members, contracts, branches } from '../db/index.js';
-import { eq, and, sql, desc, or } from 'drizzle-orm';
+import { eq, and, sql, desc, or, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -41,7 +41,7 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
   }
 
-  let conditions = [sql`${classSessions.branchId} = ANY(${branchIds})`];
+  let conditions = [inArray(classSessions.branchId, branchIds)];
 
   if (memberId) {
     conditions.push(eq(bookings.memberId, memberId));
@@ -234,12 +234,12 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
   if (bookingStatus === 'CONFIRMED') {
     await db.update(classSessions).set({
       currentCount: currentCount + 1,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     }).where(eq(classSessions.id, data.sessionId));
   } else {
     await db.update(classSessions).set({
       waitlistCount: waitlistCount + 1,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     }).where(eq(classSessions.id, data.sessionId));
   }
 
@@ -303,13 +303,13 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
     bookingStatus: 'CANCELLED',
     cancelledAt: new Date(),
     cancelReason: data.reason,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(bookings.id, id));
 
   if (booking.booking.bookingStatus === 'CONFIRMED') {
     await db.update(classSessions).set({
       currentCount: Math.max(0, sessionCurrentCount - 1),
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     }).where(eq(classSessions.id, booking.session.id));
 
     const [nextWaitlist] = await db
@@ -328,19 +328,19 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
       await db.update(bookings).set({
         bookingStatus: 'CONFIRMED',
         waitlistPosition: null,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       }).where(eq(bookings.id, nextWaitlist.id));
 
       await db.update(classSessions).set({
         currentCount: sessionCurrentCount,
         waitlistCount: Math.max(0, sessionWaitlistCount - 1),
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       }).where(eq(classSessions.id, booking.session.id));
     }
   } else {
     await db.update(classSessions).set({
       waitlistCount: Math.max(0, sessionWaitlistCount - 1),
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     }).where(eq(classSessions.id, booking.session.id));
   }
 
@@ -403,7 +403,7 @@ app.post('/:id/attend', async (c) => {
       remainingCounts = contract.remainingCounts - (booking.class.countDeduction || 1);
       await db.update(contracts).set({
         remainingCounts,
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       }).where(eq(contracts.id, booking.booking.contractId));
     }
   }
@@ -412,7 +412,7 @@ app.post('/:id/attend', async (c) => {
     bookingStatus: 'ATTENDED',
     attendedAt: new Date(),
     countDeducted: booking.class.requiresCount,
-    dateUpdated: new Date(),
+    updatedAt: new Date(),
   }).where(eq(bookings.id, id));
 
   return c.json({

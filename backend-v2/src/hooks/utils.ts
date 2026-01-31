@@ -71,8 +71,8 @@ export async function generateMemberCode(): Promise<string> {
       .from(members)
       .where(
         and(
-          gte(members.dateCreated, startOfDay),
-          sql`${members.dateCreated} <= ${endOfDay}`
+          gte(members.createdAt, startOfDay),
+          sql`${members.createdAt} <= ${endOfDay}`
         )
       );
 
@@ -106,8 +106,8 @@ export async function generateContractNo(): Promise<string> {
       .from(contracts)
       .where(
         and(
-          gte(contracts.dateCreated, startOfDay),
-          sql`${contracts.dateCreated} <= ${endOfDay}`
+          gte(contracts.createdAt, startOfDay),
+          sql`${contracts.createdAt} <= ${endOfDay}`
         )
       );
 

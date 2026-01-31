@@ -207,7 +207,7 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
     .update(notifications)
     .set({
       readStatus: true,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(notifications.id, notificationId));
 }
@@ -223,7 +223,7 @@ export async function markAllNotificationsAsRead(
     .update(notifications)
     .set({
       readStatus: true,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(
       and(

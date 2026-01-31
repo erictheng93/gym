@@ -6,6 +6,8 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
+    // Run test files sequentially to avoid shared fixture conflicts
+    fileParallelism: false,
     env: {
       NODE_ENV: 'test',
     },

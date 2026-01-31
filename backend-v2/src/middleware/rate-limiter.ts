@@ -79,6 +79,6 @@ export const strictRateLimiter = rateLimiter({
 
 export const authRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === 'test' ? 100 : 5,
   message: '登入嘗試過多，請 15 分鐘後再試',
 });

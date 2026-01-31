@@ -51,7 +51,7 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
     .set({
       endDate: newEndDate.toISOString().split('T')[0],
       contractStatus: 'PAUSED',
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
 
@@ -93,7 +93,7 @@ export async function handleResumeLog(data: ContractLogData): Promise<void> {
     .update(contracts)
     .set({
       contractStatus: 'ACTIVE',
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
 
@@ -134,7 +134,7 @@ export async function handleClassUsedLog(data: ContractLogData): Promise<void> {
     .update(contracts)
     .set({
       remainingCounts: newCount,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
 
@@ -146,7 +146,7 @@ export async function handleClassUsedLog(data: ContractLogData): Promise<void> {
       .update(contracts)
       .set({
         contractStatus: 'EXPIRED',
-        dateUpdated: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(contracts.id, data.contractId));
 
@@ -184,7 +184,7 @@ export async function handleTransferLog(data: ContractLogData): Promise<void> {
     .update(contracts)
     .set({
       memberId: data.targetMemberId,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
 
@@ -225,7 +225,7 @@ export async function handleExtendLog(data: ContractLogData): Promise<void> {
     .update(contracts)
     .set({
       endDate: newEndDate.toISOString().split('T')[0],
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
 
@@ -281,7 +281,7 @@ async function updateMemberStatus(memberId: string): Promise<void> {
     .update(members)
     .set({
       memberStatus,
-      dateUpdated: new Date(),
+      updatedAt: new Date(),
     })
     .where(eq(members.id, memberId));
 

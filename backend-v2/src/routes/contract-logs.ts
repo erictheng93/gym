@@ -65,7 +65,7 @@ app.get('/', async (c) => {
     .innerJoin(branches, eq(contracts.branchId, branches.id))
     .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
     .where(and(eq(branches.tenantId, tenantId), ...conditions))
-    .orderBy(desc(contractLogs.dateCreated))
+    .orderBy(desc(contractLogs.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -124,7 +124,7 @@ app.get('/contract/:contractId', async (c) => {
     .from(contractLogs)
     .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
     .where(eq(contractLogs.contractId, contractId))
-    .orderBy(desc(contractLogs.dateCreated));
+    .orderBy(desc(contractLogs.createdAt));
 
   return c.json({
     success: true,
