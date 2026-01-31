@@ -3,10 +3,32 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { hash, verify } from '@node-rs/argon2';
 import { lucia } from '../auth/lucia.js';
-import { db, users, employees } from '../db/index.js';
+import { db, users, employees, branches, jobTitles } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth, authRateLimiter } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+
+// Helper to fetch employee with relations
+async function getEmployeeWithRelations(employeeId: string) {
+  const [result] = await db
+    .select({
+      id: employees.id,
+      fullName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      phone: employees.phone,
+      branchId: employees.branchId,
+      branchName: branches.name,
+      jobTitleId: employees.jobTitleId,
+      jobTitleName: jobTitles.name,
+    })
+    .from(employees)
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+
+  return result || null;
+}
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -51,15 +73,9 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
 
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
 
-  let employee = null;
-  if (user.employeeId) {
-    const [emp] = await db
-      .select()
-      .from(employees)
-      .where(eq(employees.id, user.employeeId))
-      .limit(1);
-    employee = emp || null;
-  }
+  const employee = user.employeeId
+    ? await getEmployeeWithRelations(user.employeeId)
+    : null;
 
   return c.json({
     success: true,
@@ -68,12 +84,17 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
         id: user.id,
         email: user.email,
         role: user.role,
+        employeeId: user.employeeId,
         tenantId: user.tenantId,
       },
       employee: employee ? {
         id: employee.id,
         fullName: employee.fullName,
+        employeeCode: employee.employeeCode,
         branchId: employee.branchId,
+        branchName: employee.branchName,
+        jobTitleId: employee.jobTitleId,
+        jobTitleName: employee.jobTitleName,
       } : null,
     },
   });
@@ -99,31 +120,28 @@ app.get('/me', requireAuth, async (c) => {
     return c.json({ success: false, error: '未授權' }, 401);
   }
 
-  let employee = null;
-  if (user.employeeId) {
-    const [emp] = await db
-      .select()
-      .from(employees)
-      .where(eq(employees.id, user.employeeId))
-      .limit(1);
-    employee = emp || null;
-  }
+  const employee = user.employeeId
+    ? await getEmployeeWithRelations(user.employeeId)
+    : null;
 
   return c.json({
     success: true,
     data: {
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        tenantId: user.tenantId,
-      },
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      employeeId: user.employeeId,
+      tenantId: user.tenantId,
+      isActive: user.isActive,
       employee: employee ? {
         id: employee.id,
         fullName: employee.fullName,
-        branchId: employee.branchId,
         employeeCode: employee.employeeCode,
         phone: employee.phone,
+        branchId: employee.branchId,
+        branchName: employee.branchName,
+        jobTitleId: employee.jobTitleId,
+        jobTitleName: employee.jobTitleName,
       } : null,
     },
   });

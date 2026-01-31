@@ -49,6 +49,10 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8055',
+      // New backend-v2 API URL
+      apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8056',
+      // Feature flag for using new auth backend
+      useNewAuth: process.env.USE_NEW_AUTH === 'true',
       // Sentry error tracking configuration
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnvironment: process.env.NODE_ENV || 'development',
@@ -75,7 +79,7 @@ export default defineNuxtConfig({
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: blob: https:",
-          "connect-src 'self' http://localhost:* https://*.directus.io https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com ws://localhost:* wss://localhost:*",
+          "connect-src 'self' http://localhost:* https://*.directus.io https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com ws://localhost:* wss://localhost:* http://127.0.0.1:*",
           "frame-src 'self' https://accounts.google.com",
           "object-src 'none'",
           "base-uri 'self'",
