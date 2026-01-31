@@ -13,8 +13,15 @@ export const TEST_PLAN_ID = '00000000-0000-0000-0000-000000000006';
 export const TEST_CONTRACT_ID = '00000000-0000-0000-0000-000000000007';
 export const TEST_JOB_TITLE_ID = '00000000-0000-0000-0000-000000000008';
 
+// Additional IDs for users tests
+export const TEST_STAFF_USER_ID = '00000000-0000-0000-0000-000000000009';
+export const TEST_STAFF_EMPLOYEE_ID = '00000000-0000-0000-0000-00000000000a';
+export const TEST_UNLINKED_EMPLOYEE_ID = '00000000-0000-0000-0000-00000000000b';
+
 export const TEST_USER_EMAIL = 'test@gym-nexus.test';
 export const TEST_USER_PASSWORD = 'TestPassword123!';
+export const TEST_STAFF_EMAIL = 'staff@gym-nexus.test';
+export const TEST_STAFF_PASSWORD = 'StaffPass123!';
 
 /**
  * Create test fixtures in database

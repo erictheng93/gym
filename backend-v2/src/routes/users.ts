@@ -42,6 +42,28 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8, '密碼至少 8 個字元'),
 });
 
+// Get available employees (not linked to any user) - MUST be before /:id route
+app.get('/available-employees', async (c) => {
+  const tenantId = c.get('tenantId')!;
+
+  const result = await db
+    .select({
+      id: employees.id,
+      fullName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      email: employees.email,
+    })
+    .from(employees)
+    .where(and(
+      eq(employees.tenantId, tenantId),
+      eq(employees.status, 'ACTIVE'),
+      sql`${employees.userId} IS NULL`
+    ))
+    .orderBy(employees.fullName);
+
+  return c.json({ success: true, data: result });
+});
+
 // List users
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -404,28 +426,6 @@ app.delete('/:id', async (c) => {
   await db.delete(users).where(eq(users.id, id));
 
   return c.json({ success: true, message: '使用者已刪除' });
-});
-
-// Get available employees (not linked to any user)
-app.get('/available-employees', async (c) => {
-  const tenantId = c.get('tenantId')!;
-
-  const result = await db
-    .select({
-      id: employees.id,
-      fullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      email: employees.email,
-    })
-    .from(employees)
-    .where(and(
-      eq(employees.tenantId, tenantId),
-      eq(employees.status, 'ACTIVE'),
-      sql`${employees.userId} IS NULL`
-    ))
-    .orderBy(employees.fullName);
-
-  return c.json({ success: true, data: result });
 });
 
 export default app;
