@@ -5,4 +5,5 @@
 
 export * from './useErrorHandler'
 export * from './useApi'
+export * from './useFetch'
 export * from './useFormValidation'

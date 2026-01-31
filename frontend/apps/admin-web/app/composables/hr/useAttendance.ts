@@ -3,7 +3,7 @@
  * 包含：打卡、考勤記錄、統計報表、工時計算
  */
 
-import { readItems, createItem, updateItem, aggregate } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
 import type { Attendance, Employee } from '~/types/directus'
 
 // ============================================
@@ -49,7 +49,7 @@ export interface MonthlyAttendanceStats {
 }
 
 export const useAttendance = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, apiFetch } = useFetch()
 
   // ============================================
   // 狀態
@@ -74,52 +74,34 @@ export const useAttendance = () => {
 
     try {
       const filter: Record<string, unknown> = {
-        attendance_date: { _eq: today }
+        attendance_date: today
       }
 
       if (branchId) {
-        filter.branch_id = { _eq: branchId }
+        filter.branch_id = branchId
       }
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('attendances', {
-            filter,
-            fields: [
-              '*',
-              'employee.id',
-              'employee.full_name',
-              'employee.employee_code',
-              'employee.job_title.name',
-              'branch.id',
-              'branch.name'
-            ] as any,
-            sort: ['-check_in'],
-            limit: 50
-          })
-        ),
-        directus.request(
-          aggregate('attendances', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
+      const result = await readItems<Attendance>('attendances', {
+        filter,
+        sort: 'check_in',
+        sortOrder: 'desc',
+        limit: 50
+      })
 
-      todayAttendances.value = (data as Attendance[]).map(att => ({
+      todayAttendances.value = result.data.map(att => ({
         id: att.id,
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
         attendance_date: att.attendance_date || today,
-        check_type: (att.check_type as any) || 'REGULAR',
-        attendance_status: (att.attendance_status as any) || 'PRESENT',
+        check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
+        attendance_status: (att.attendance_status as AttendanceRecord['attendance_status']) || 'PRESENT',
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: att.early_leave_minutes || 0,
         work_hours: att.work_hours || null,
-        notes: att.notes || null
+        notes: att.notes || undefined
       }))
-      todayCount.value = Number(countResult[0]?.count) || 0
+      todayCount.value = result.total
     } catch (error) {
       console.error('Failed to fetch today attendances:', error)
     } finally {
@@ -132,38 +114,29 @@ export const useAttendance = () => {
     const today = getTodayDate()
 
     try {
-      const data = await directus.request(
-        readItems('attendances', {
-          filter: {
-            employee_id: { _eq: employeeId },
-            attendance_date: { _eq: today }
-          },
-          fields: [
-            '*',
-            'employee.id',
-            'employee.full_name',
-            'employee.employee_code',
-            'employee.job_title.name'
-          ] as any,
-          limit: 1
-        })
-      )
+      const result = await readItems<Attendance>('attendances', {
+        filter: {
+          employee_id: employeeId,
+          attendance_date: today
+        },
+        limit: 1
+      })
 
-      if (data.length === 0) return null
+      if (result.data.length === 0) return null
 
-      const att = data[0] as Attendance
+      const att = result.data[0]
       return {
         id: att.id,
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
-        attendance_date: att.attendance_date || today as string,
-        check_type: (att.check_type as any) || 'REGULAR',
-        attendance_status: (att.attendance_status as any) || 'PRESENT',
+        attendance_date: att.attendance_date || today,
+        check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
+        attendance_status: (att.attendance_status as AttendanceRecord['attendance_status']) || 'PRESENT',
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: att.early_leave_minutes || 0,
         work_hours: att.work_hours || null,
-        notes: att.notes || null
+        notes: att.notes || undefined
       }
     } catch (error) {
       console.error('Failed to get today attendance:', error)
@@ -208,17 +181,6 @@ export const useAttendance = () => {
     return Math.round(hours * 100) / 100 // Round to 2 decimal places
   }
 
-  // Determine attendance status
-  const determineAttendanceStatus = (
-    lateMinutes: number,
-    earlyLeaveMinutes: number,
-    hasCheckOut: boolean
-  ): 'PRESENT' | 'LATE' | 'EARLY_LEAVE' => {
-    if (lateMinutes > 0) return 'LATE'
-    if (hasCheckOut && earlyLeaveMinutes > 0) return 'EARLY_LEAVE'
-    return 'PRESENT'
-  }
-
   // Perform check-in
   const performCheckIn = async (options: {
     employeeId: string
@@ -245,26 +207,19 @@ export const useAttendance = () => {
         notes
       }
 
-      const result = await directus.request(
-        createItem('attendances', attendanceData)
-      )
+      const result = await createItem<Attendance>('attendances', attendanceData)
+
+      if (!result) {
+        throw new Error('Failed to create attendance record')
+      }
 
       // Fetch the created record with relations
-      const createdRecords = await directus.request(
-        readItems('attendances', {
-          filter: { id: { _eq: (result as Attendance).id } },
-          fields: [
-            '*',
-            'employee.id',
-            'employee.full_name',
-            'employee.employee_code',
-            'employee.job_title.name'
-          ] as any,
-          limit: 1
-        })
-      )
+      const createdResult = await readItems<Attendance>('attendances', {
+        filter: { id: result.id },
+        limit: 1
+      })
 
-      const att = (Array.isArray(createdRecords) ? createdRecords[0] : createdRecords) as Attendance
+      const att = createdResult.data[0] || result
       const record: AttendanceRecord = {
         id: att.id,
         employee: att.employee as Employee,
@@ -299,15 +254,8 @@ export const useAttendance = () => {
 
     try {
       // Get the attendance record first
-      const attendanceRecords = await directus.request(
-        readItems('attendances', {
-          filter: { id: { _eq: attendanceId } },
-          fields: ['*', 'employee.id', 'employee.full_name', 'employee.employee_code'] as any,
-          limit: 1
-        })
-      )
+      const attendance = await readItem<Attendance>('attendances', attendanceId)
 
-      const attendance = Array.isArray(attendanceRecords) ? attendanceRecords[0] : attendanceRecords
       if (!attendance || !attendance.check_in) {
         throw new Error('找不到上班打卡記錄')
       }
@@ -330,38 +278,27 @@ export const useAttendance = () => {
         notes: notes || attendance.notes
       }
 
-      await directus.request(
-        updateItem('attendances', attendanceId, updateData)
-      )
+      await updateItem<Attendance>('attendances', attendanceId, updateData)
 
       // Fetch the updated record
-      const updatedRecords = await directus.request(
-        readItems('attendances', {
-          filter: { id: { _eq: attendanceId } },
-          fields: [
-            '*',
-            'employee.id',
-            'employee.full_name',
-            'employee.employee_code',
-            'employee.job_title.name'
-          ] as any,
-          limit: 1
-        })
-      )
+      const updatedResult = await readItems<Attendance>('attendances', {
+        filter: { id: attendanceId },
+        limit: 1
+      })
 
-      const att = (Array.isArray(updatedRecords) ? updatedRecords[0] : updatedRecords) as Attendance
+      const att = updatedResult.data[0] || { ...attendance, ...updateData }
       const record: AttendanceRecord = {
         id: att.id,
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
         attendance_date: att.attendance_date || getTodayDate(),
-        check_type: (att.check_type as any) || 'REGULAR',
-        attendance_status: attendanceStatus as any,
+        check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
+        attendance_status: attendanceStatus as AttendanceRecord['attendance_status'],
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: earlyLeaveMinutes,
         work_hours: workHours,
-        notes: att.notes || null
+        notes: att.notes || undefined
       }
 
       // Update in today's list
@@ -389,18 +326,16 @@ export const useAttendance = () => {
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - days)
 
-      const data = await directus.request(
-        readItems('attendances', {
-          filter: {
-            employee_id: { _eq: employeeId },
-            attendance_date: { _gte: startDate.toISOString().split('T')[0] }
-          },
-          fields: ['*', 'branch.name'] as any,
-          sort: ['-attendance_date'],
-          limit: days
-        })
-      )
-      recentAttendances.value = data as Attendance[]
+      const result = await readItems<Attendance>('attendances', {
+        filter: {
+          employee_id: employeeId,
+          attendance_date_gte: startDate.toISOString().split('T')[0]
+        },
+        sort: 'attendance_date',
+        sortOrder: 'desc',
+        limit: days
+      })
+      recentAttendances.value = result.data
     } catch (error) {
       console.error('Failed to fetch recent attendances:', error)
     }
@@ -413,39 +348,36 @@ export const useAttendance = () => {
     const today = getTodayDate()
 
     try {
-      const employeeFilter: Record<string, unknown> = { employment_status: { _eq: 'ACTIVE' } }
-      if (branchId) employeeFilter.branch_id = { _eq: branchId }
+      // Get total active employees
+      const employeeFilter: Record<string, unknown> = { employment_status: 'ACTIVE' }
+      if (branchId) employeeFilter.branch_id = branchId
 
-      const employeesResult = await directus.request(
-        aggregate('employees', {
-          aggregate: { count: '*' },
-          query: { filter: employeeFilter }
-        })
-      )
-      const totalEmployees = Number(employeesResult[0]?.count) || 0
+      const employeesResult = await readItems<Employee>('employees', {
+        filter: employeeFilter,
+        limit: 1000
+      })
+      const totalEmployees = employeesResult.total
 
-      const attendanceFilter: Record<string, unknown> = { attendance_date: { _eq: today } }
-      if (branchId) attendanceFilter.branch_id = { _eq: branchId }
+      // Get today's attendances
+      const attendanceFilter: Record<string, unknown> = { attendance_date: today }
+      if (branchId) attendanceFilter.branch_id = branchId
 
-      const attendances = await directus.request(
-        readItems('attendances', {
-          filter: attendanceFilter,
-          fields: ['id', 'check_in', 'check_out', 'attendance_status']
-        })
-      ) as { id: string; check_in: string | null; check_out: string | null; attendance_status: string }[]
+      const attendanceResult = await readItems<Attendance>('attendances', {
+        filter: attendanceFilter,
+        limit: 1000
+      })
+      const attendances = attendanceResult.data
 
-      const leaveFilter: Record<string, unknown> = {
-        leave_status: { _eq: 'APPROVED' },
-        start_date: { _lte: today },
-        end_date: { _gte: today }
-      }
-      const leaveResult = await directus.request(
-        aggregate('leave_requests', {
-          aggregate: { count: '*' },
-          query: { filter: leaveFilter }
-        })
-      )
-      const onLeave = Number(leaveResult[0]?.count) || 0
+      // Get approved leaves for today
+      const leaveResult = await readItems<{ id: string }>('leave_requests', {
+        filter: {
+          leave_status: 'APPROVED',
+          start_date_lte: today,
+          end_date_gte: today
+        },
+        limit: 1000
+      })
+      const onLeave = leaveResult.total
 
       const checkedIn = attendances.filter(a => a.check_in).length
       const checkedOut = attendances.filter(a => a.check_out).length
@@ -491,20 +423,17 @@ export const useAttendance = () => {
 
     try {
       const filter: Record<string, unknown> = {
-        attendance_date: {
-          _gte: startDate,
-          _lte: endDate
-        }
+        attendance_date_gte: startDate,
+        attendance_date_lte: endDate
       }
-      if (branchId) filter.branch_id = { _eq: branchId }
+      if (branchId) filter.branch_id = branchId
 
-      const attendances = await directus.request(
-        readItems('attendances', {
-          filter,
-          fields: ['*', 'employee.id', 'employee.full_name', 'employee.employee_code'] as any,
-          sort: ['employee_id', 'attendance_date']
-        })
-      ) as Attendance[]
+      const result = await readItems<Attendance>('attendances', {
+        filter,
+        sort: 'employee_id',
+        limit: 10000
+      })
+      const attendances = result.data
 
       const statsMap = new Map<string, MonthlyAttendanceStats>()
 
@@ -570,20 +499,16 @@ export const useAttendance = () => {
     const endDate = new Date(year, month, 0).toISOString().split('T')[0]
 
     try {
-      const data = await directus.request(
-        readItems('attendances', {
-          filter: {
-            employee_id: { _eq: employeeId },
-            attendance_date: {
-              _gte: startDate,
-              _lte: endDate
-            }
-          },
-          fields: ['*', 'branch.name'] as any,
-          sort: ['attendance_date']
-        })
-      )
-      return data as Attendance[]
+      const result = await readItems<Attendance>('attendances', {
+        filter: {
+          employee_id: employeeId,
+          attendance_date_gte: startDate,
+          attendance_date_lte: endDate
+        },
+        sort: 'attendance_date',
+        limit: 31
+      })
+      return result.data
     } catch (error) {
       console.error('Failed to fetch employee monthly attendance:', error)
       return []

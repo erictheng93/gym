@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { createItem, readItems } from '@directus/sdk'
 import type { ContractLog, Member } from '~/types/directus'
 import { MESSAGES, PAGES, STATUS, LABELS, TIMING } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
+import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
   middleware: 'auth',
@@ -11,7 +11,7 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const directus = useDirectus()
+const { readItems, createItem } = useFetch()
 const { getContract, updateContract } = useContracts()
 const { fetchPayments, payments } = usePayments()
 const { currentEmployee, fetchCurrentEmployee } = useAuth()
@@ -69,26 +69,15 @@ const searchMembers = async (query: string) => {
 
   isSearching.value = true
   try {
-    const data = await directus.request(
-      readItems('members', {
-        filter: {
-          _and: [
-            {
-              _or: [
-                { full_name: { _contains: query } },
-                { member_code: { _contains: query } },
-                { phone: { _contains: query } }
-              ]
-            },
-            // 排除當前合約的會員 (member_id 是展開後的物件，需要取 .id)
-            { id: { _neq: contract.value?.member_id?.id } }
-          ]
-        },
-        fields: ['id', 'full_name', 'member_code', 'phone', 'member_status'],
-        limit: 10
-      })
-    )
-    memberSearchResults.value = data as Member[]
+    const result = await readItems<Member>('members', {
+      search: query,
+      limit: 10
+    })
+    // 排除當前合約的會員
+    const currentMemberId = contract.value?.member_id?.id
+    memberSearchResults.value = currentMemberId
+      ? result.data.filter(m => m.id !== currentMemberId)
+      : result.data
   } catch (error) {
     console.error('Failed to search members:', error)
     useToast().error(MESSAGES.ERRORS.MEMBER_SEARCH_FAILED)
@@ -222,7 +211,7 @@ const handlePause = async () => {
     const daysAffected = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
 
     // 建立異動紀錄（包含完整資訊：經辦員工、執行分店）
-    await directus.request(createItem('contract_logs', {
+    await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'PAUSE',
       start_date: pauseForm.startDate,
@@ -231,7 +220,7 @@ const handlePause = async () => {
       reason: pauseForm.reason,
       created_by_employee: currentEmployee.value?.id || null,
       branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
-    } as Partial<ContractLog>))
+    })
 
     // 計算新的結束日期
     const originalEnd = new Date(contract.value.end_date!)
@@ -261,13 +250,13 @@ const handleResume = async () => {
   isProcessing.value = true
   try {
     // 建立恢復異動紀錄
-    await directus.request(createItem('contract_logs', {
+    await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'RESUME',
       reason: '合約恢復',
       created_by_employee: currentEmployee.value?.id || null,
       branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
-    } as Partial<ContractLog>))
+    })
 
     // 更新合約狀態
     await updateContract(contract.value.id, {
@@ -337,7 +326,7 @@ const handleTransfer = async () => {
   try {
     // 建立轉讓異動紀錄 (後端 hook 會自動更新 contract.member_id)
     // 包含完整資訊：經辦員工、執行分店、原因
-    await directus.request(createItem('contract_logs', {
+    await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'TRANSFER',
       original_member_id: contract.value.member_id?.id,
@@ -345,7 +334,7 @@ const handleTransfer = async () => {
       reason: transferForm.reason || `轉讓給 ${selectedMember.value?.full_name}`,
       created_by_employee: currentEmployee.value?.id || null,
       branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
-    } as Partial<ContractLog>))
+    })
 
     showTransferModal.value = false
     resetTransferForm()
@@ -366,13 +355,13 @@ const handleTerminate = async () => {
   isProcessing.value = true
   try {
     // 建立終止異動紀錄
-    await directus.request(createItem('contract_logs', {
+    await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'CANCEL',
       reason: terminateForm.reason || '合約終止',
       created_by_employee: currentEmployee.value?.id || null,
       branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
-    } as Partial<ContractLog>))
+    })
 
     // 更新合約狀態為終止
     await updateContract(contract.value.id, {
@@ -381,7 +370,7 @@ const handleTerminate = async () => {
 
     // 如果有退款金額，建立退款紀錄
     if (terminateForm.refundAmount > 0) {
-      await directus.request(createItem('payments', {
+      await createItem('payments', {
         contract_id: contract.value.id,
         member_id: contract.value.member_id?.id,
         amount: terminateForm.refundAmount,
@@ -390,7 +379,7 @@ const handleTerminate = async () => {
         branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null,
         received_by: currentEmployee.value?.id || null,
         notes: `合約終止退款 - ${terminateForm.reason}`
-      }))
+      })
     }
 
     showTerminateModal.value = false
@@ -413,14 +402,14 @@ const handleExtend = async () => {
   isProcessing.value = true
   try {
     // 建立延期異動紀錄
-    await directus.request(createItem('contract_logs', {
+    await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'EXTEND',
       days_affected: extendForm.days,
       reason: extendForm.reason || `延期 ${extendForm.days} 天`,
       created_by_employee: currentEmployee.value?.id || null,
       branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
-    } as Partial<ContractLog>))
+    })
 
     // 更新合約結束日期
     await updateContract(contract.value.id, {
@@ -455,13 +444,13 @@ const handleRenew = async () => {
     const newEndDate = startDate.toISOString().split('T')[0]
 
     // 建立續約紀錄（在舊合約上）
-    await directus.request(createItem('contract_logs', {
+    await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'RENEWAL',
       reason: '續約',
       created_by_employee: currentEmployee.value?.id || null,
       branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
-    } as Partial<ContractLog>))
+    })
 
     // 建立新合約
     const newContract = await createContract({

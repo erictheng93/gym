@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { readItems } from '@directus/sdk'
 import type { Contract } from '@gym-nexus/shared/types'
-import { useDirectus } from '@gym-nexus/shared/composables'
+import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl
+const apiUrl = config.public.directusUrl || config.public.apiBaseUrl
 
-const directus = useDirectus()
+const { readItems } = useFetch()
 const { member, accessToken } = useMemberAuth()
 const { handleError } = useApiError()
 
@@ -30,20 +29,14 @@ const fetchContracts = async () => {
 
   try {
     isLoading.value = true
-    const result = await directus.request(
-      readItems('contracts', {
-        filter: {
-          member_id: { _eq: member.value.id }
-        },
-        fields: [
-          'id', 'contract_no', 'contract_status', 'start_date', 'end_date',
-          'remaining_counts', 'total_amount', 'payment_status',
-          'plan.name', 'plan.plan_type'
-        ],
-        sort: ['-start_date']
-      })
-    )
-    contracts.value = result as typeof contracts.value
+    const result = await readItems<Contract & { plan?: { name: string, plan_type: string } }>('contracts', {
+      filter: {
+        member_id: member.value.id
+      },
+      sort: 'start_date',
+      sortOrder: 'desc'
+    })
+    contracts.value = result.data
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入合約資料' })
   } finally {

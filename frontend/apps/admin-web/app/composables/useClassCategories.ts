@@ -1,9 +1,15 @@
-import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
+/**
+ * 課程類別管理 Composable
+ * 管理課程類別的 CRUD 操作
+ */
+
 import type { ClassCategory } from '~/types/directus'
 import { MESSAGES } from '~/constants'
+import { useFetch } from '~/composables/core/useFetch'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 export const useClassCategories = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const categories = useState<ClassCategory[]>('class_categories', () => [])
   const isLoading = useState('class_categories_loading', () => false)
@@ -27,45 +33,26 @@ export const useClassCategories = () => {
 
       // 篩選父類別
       if (parentId === null) {
-        filter.parent_id = { _null: true }
+        filter.parent_id_null = true
       } else if (parentId) {
-        filter.parent_id = { _eq: parentId }
+        filter.parent_id = parentId
       }
 
       // 篩選啟用狀態
       if (isActive !== undefined) {
-        filter.is_active = { _eq: isActive }
+        filter.is_active = isActive
       }
 
-      // 搜尋
-      if (search) {
-        filter._or = [
-          { name: { _icontains: search } },
-          { name_en: { _icontains: search } },
-          { code: { _icontains: search } }
-        ]
-      }
+      const { data, total } = await readItems<ClassCategory>('class_categories', {
+        page,
+        limit,
+        search,
+        filter,
+        sort: 'sort'
+      })
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('class_categories', {
-            filter,
-            fields: ['*', 'parent.id', 'parent.name', 'parent.code', 'children.id', 'owner_branch.id', 'owner_branch.name'],
-            sort: ['sort', 'name'],
-            limit,
-            offset: (page - 1) * limit
-          })
-        ),
-        directus.request(
-          aggregate('class_categories', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
-
-      categories.value = data as ClassCategory[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      categories.value = data
+      totalCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'useClassCategories.fetchCategories',
@@ -83,17 +70,14 @@ export const useClassCategories = () => {
    */
   const fetchRootCategories = async () => {
     try {
-      const data = await directus.request(
-        readItems('class_categories', {
-          filter: {
-            parent_id: { _null: true },
-            is_active: { _eq: true }
-          },
-          fields: ['id', 'code', 'name', 'name_en', 'icon', 'color'],
-          sort: ['sort', 'name']
-        })
-      )
-      return data as ClassCategory[]
+      const { data } = await readItems<ClassCategory>('class_categories', {
+        filter: {
+          parent_id_null: true,
+          is_active: true
+        },
+        sort: 'sort'
+      })
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassCategories.fetchRootCategories',
@@ -108,20 +92,17 @@ export const useClassCategories = () => {
    */
   const fetchCategoryTree = async () => {
     try {
-      const data = await directus.request(
-        readItems('class_categories', {
-          filter: {
-            is_active: { _eq: true },
-            status: { _eq: 'published' }
-          },
-          fields: ['id', 'code', 'name', 'name_en', 'parent_id', 'icon', 'color', 'sort', 'description'],
-          sort: ['sort', 'name'],
-          limit: -1
-        })
-      )
+      const { data } = await readItems<ClassCategory>('class_categories', {
+        filter: {
+          is_active: true,
+          status: 'published'
+        },
+        limit: 1000,
+        sort: 'sort'
+      })
 
       // 建構樹狀結構
-      const items = data as ClassCategory[]
+      const items = data
       const rootItems = items.filter(item => !item.parent_id)
 
       const buildTree = (parentId: string | null): ClassCategory[] => {
@@ -151,12 +132,8 @@ export const useClassCategories = () => {
    */
   const getCategory = async (id: string) => {
     try {
-      const data = await directus.request(
-        readItem('class_categories', id, {
-          fields: ['*', 'parent.id', 'parent.name', 'parent.code', 'owner_branch.id', 'owner_branch.name']
-        })
-      )
-      return data as ClassCategory
+      const data = await readItem<ClassCategory>('class_categories', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassCategories.getCategory',
@@ -171,7 +148,7 @@ export const useClassCategories = () => {
    */
   const createCategory = async (category: Partial<ClassCategory>) => {
     try {
-      const data = await directus.request(createItem('class_categories', category))
+      const data = await createItem<ClassCategory>('class_categories', category)
       return data
     } catch (error) {
       handleError(error, {
@@ -185,9 +162,9 @@ export const useClassCategories = () => {
   /**
    * 更新類別
    */
-  const updateCategory = async (id: string, category: Partial<ClassCategory>) => {
+  const updateCategoryItem = async (id: string, category: Partial<ClassCategory>) => {
     try {
-      const data = await directus.request(updateItem('class_categories', id, category))
+      const data = await updateItem<ClassCategory>('class_categories', id, category)
       return data
     } catch (error) {
       handleError(error, {
@@ -201,10 +178,10 @@ export const useClassCategories = () => {
   /**
    * 刪除類別
    */
-  const deleteCategory = async (id: string) => {
+  const deleteCategoryItem = async (id: string) => {
     try {
-      await directus.request(deleteItem('class_categories', id))
-      return true
+      const success = await deleteItem('class_categories', id)
+      return success
     } catch (error) {
       handleError(error, {
         context: 'useClassCategories.deleteCategory',
@@ -219,22 +196,22 @@ export const useClassCategories = () => {
    */
   const getCategoryStats = async () => {
     try {
-      const [total, active, rootCount] = await Promise.all([
-        directus.request(aggregate('class_categories', { aggregate: { count: '*' } })),
-        directus.request(aggregate('class_categories', {
-          aggregate: { count: '*' },
-          query: { filter: { is_active: { _eq: true } } }
-        })),
-        directus.request(aggregate('class_categories', {
-          aggregate: { count: '*' },
-          query: { filter: { parent_id: { _null: true } } }
-        }))
+      const [totalResult, activeResult, rootResult] = await Promise.all([
+        readItems<ClassCategory>('class_categories', { limit: 1 }),
+        readItems<ClassCategory>('class_categories', {
+          filter: { is_active: true },
+          limit: 1
+        }),
+        readItems<ClassCategory>('class_categories', {
+          filter: { parent_id_null: true },
+          limit: 1
+        })
       ])
 
       return {
-        total: Number(total[0]?.count) || 0,
-        active: Number(active[0]?.count) || 0,
-        root: Number(rootCount[0]?.count) || 0
+        total: totalResult.total,
+        active: activeResult.total,
+        root: rootResult.total
       }
     } catch (error) {
       handleError(error, {
@@ -254,8 +231,8 @@ export const useClassCategories = () => {
     fetchCategoryTree,
     getCategory,
     createCategory,
-    updateCategory,
-    deleteCategory,
+    updateCategory: updateCategoryItem,
+    deleteCategory: deleteCategoryItem,
     getCategoryStats
   }
 }

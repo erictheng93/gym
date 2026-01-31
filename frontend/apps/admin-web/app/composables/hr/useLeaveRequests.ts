@@ -3,11 +3,11 @@
  * 包含：休假申請、審核、餘額查詢
  */
 
-import { readItems, readItem, createItem, updateItem, aggregate } from '@directus/sdk'
-import type { LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/directus'
+import { useFetch } from '~/composables/core/useFetch'
+import type { LeaveRequest, LeaveBalance, LeaveApprovalLog, Employee } from '~/types/directus'
 
 export const useLeaveRequests = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem } = useFetch()
 
   // ============================================
   // 狀態
@@ -29,16 +29,13 @@ export const useLeaveRequests = () => {
   const fetchLeaveBalances = async (employeeId: string, year?: number) => {
     const currentYear = year || new Date().getFullYear()
     try {
-      const data = await directus.request(
-        readItems('leave_balances', {
-          filter: {
-            employee_id: { _eq: employeeId },
-            year: { _eq: currentYear }
-          },
-          fields: ['*']
-        })
-      )
-      leaveBalances.value = data as LeaveBalance[]
+      const result = await readItems<LeaveBalance>('leave_balances', {
+        filter: {
+          employee_id: employeeId,
+          year: currentYear
+        }
+      })
+      leaveBalances.value = result.data
     } catch (error) {
       console.error('Failed to fetch leave balances:', error)
     }
@@ -62,29 +59,19 @@ export const useLeaveRequests = () => {
 
     try {
       const filter: Record<string, unknown> = {}
-      if (employeeId) filter.employee_id = { _eq: employeeId }
-      if (status) filter.leave_status = { _eq: status }
+      if (employeeId) filter.employee_id = employeeId
+      if (status) filter.leave_status = status
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('leave_requests', {
-            filter,
-            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name'] as any,
-            sort: ['-date_created'],
-            limit,
-            offset: (page - 1) * limit
-          })
-        ),
-        directus.request(
-          aggregate('leave_requests', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
+      const result = await readItems<LeaveRequest>('leave_requests', {
+        filter,
+        sort: 'date_created',
+        sortOrder: 'desc',
+        limit,
+        page
+      })
 
-      leaveRequests.value = data as LeaveRequest[]
-      leavesTotalCount.value = Number(countResult[0]?.count) || 0
+      leaveRequests.value = result.data
+      leavesTotalCount.value = result.total
     } catch (error) {
       console.error('Failed to fetch leave requests:', error)
     } finally {
@@ -97,32 +84,31 @@ export const useLeaveRequests = () => {
    */
   const fetchPendingApprovals = async (supervisorId: string) => {
     try {
-      const subordinates = await directus.request(
-        readItems('employees', {
-          filter: { supervisor_id: { _eq: supervisorId } },
-          fields: ['id']
-        })
-      )
+      const subordinatesResult = await readItems<Employee>('employees', {
+        filter: { supervisor_id: supervisorId }
+      })
 
-      if (subordinates.length === 0) {
+      if (subordinatesResult.data.length === 0) {
         pendingApprovals.value = []
         return
       }
 
-      const subordinateIds = subordinates.map((e: { id: string }) => e.id)
+      const subordinateIds = subordinatesResult.data.map(e => e.id)
 
-      const data = await directus.request(
-        readItems('leave_requests', {
-          filter: {
-            employee_id: { _in: subordinateIds },
-            leave_status: { _eq: 'PENDING' }
-          },
-          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name'] as any,
-          sort: ['-submitted_at']
-        })
+      // Fetch pending leave requests for all subordinates
+      // Since the API might not support _in filter, we fetch all pending and filter client-side
+      const result = await readItems<LeaveRequest>('leave_requests', {
+        filter: {
+          leave_status: 'PENDING'
+        },
+        sort: 'submitted_at',
+        sortOrder: 'desc',
+        limit: 100
+      })
+
+      pendingApprovals.value = result.data.filter(lr =>
+        subordinateIds.includes(lr.employee_id)
       )
-
-      pendingApprovals.value = data as LeaveRequest[]
     } catch (error) {
       console.error('Failed to fetch pending approvals:', error)
     }
@@ -145,33 +131,33 @@ export const useLeaveRequests = () => {
     isHalfDay?: boolean
     halfDayType?: 'AM' | 'PM'
   }) => {
-    const data = await directus.request(
-      createItem('leave_requests', {
-        employee_id: leaveData.employeeId,
-        leave_type: leaveData.leaveType,
-        start_date: leaveData.startDate,
-        end_date: leaveData.endDate,
-        reason: leaveData.reason || null,
-        days_requested: leaveData.daysRequested,
-        is_half_day: leaveData.isHalfDay || false,
-        half_day_type: leaveData.halfDayType || null,
-        leave_status: 'PENDING',
-        submitted_at: new Date().toISOString()
-      })
-    )
+    const data = await createItem<LeaveRequest>('leave_requests', {
+      employee_id: leaveData.employeeId,
+      leave_type: leaveData.leaveType,
+      start_date: leaveData.startDate,
+      end_date: leaveData.endDate,
+      reason: leaveData.reason || null,
+      days_requested: leaveData.daysRequested,
+      is_half_day: leaveData.isHalfDay || false,
+      half_day_type: leaveData.halfDayType || null,
+      leave_status: 'PENDING',
+      submitted_at: new Date().toISOString()
+    })
 
-    await directus.request(
-      createItem('leave_approval_logs', {
-        leave_request_id: (data as LeaveRequest).id,
-        action_by: leaveData.employeeId,
-        action: 'SUBMIT',
-        previous_status: null,
-        new_status: 'PENDING',
-        notes: '提交休假申請'
-      })
-    )
+    if (!data) {
+      throw new Error('Failed to create leave request')
+    }
 
-    return data as LeaveRequest
+    await createItem<LeaveApprovalLog>('leave_approval_logs', {
+      leave_request_id: data.id,
+      action_by: leaveData.employeeId,
+      action: 'SUBMIT',
+      previous_status: null,
+      new_status: 'PENDING',
+      notes: '提交休假申請'
+    })
+
+    return data
   }
 
   /**
@@ -183,104 +169,93 @@ export const useLeaveRequests = () => {
     action: 'APPROVE' | 'REJECT',
     notes?: string
   ) => {
-    const leaveRequest = await directus.request(
-      readItem('leave_requests', leaveRequestId)
-    ) as LeaveRequest
+    const leaveRequest = await readItem<LeaveRequest>('leave_requests', leaveRequestId)
+
+    if (!leaveRequest) {
+      throw new Error('Leave request not found')
+    }
 
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED'
 
-    const data = await directus.request(
-      updateItem('leave_requests', leaveRequestId, {
-        leave_status: newStatus,
-        approver_id: approverId,
-        approved_at: new Date().toISOString(),
-        approval_notes: notes || null
-      })
-    )
+    const data = await updateItem<LeaveRequest>('leave_requests', leaveRequestId, {
+      leave_status: newStatus,
+      approver_id: approverId,
+      approved_at: new Date().toISOString(),
+      approval_notes: notes || null
+    })
 
-    await directus.request(
-      createItem('leave_approval_logs', {
-        leave_request_id: leaveRequestId,
-        action_by: approverId,
-        action,
-        previous_status: leaveRequest.leave_status,
-        new_status: newStatus,
-        notes
-      })
-    )
+    await createItem<LeaveApprovalLog>('leave_approval_logs', {
+      leave_request_id: leaveRequestId,
+      action_by: approverId,
+      action,
+      previous_status: leaveRequest.leave_status,
+      new_status: newStatus,
+      notes
+    })
 
     // 如果核准，更新休假餘額
     if (action === 'APPROVE' && leaveRequest.days_requested) {
       const year = new Date(leaveRequest.start_date).getFullYear()
-      const balances = await directus.request(
-        readItems('leave_balances', {
-          filter: {
-            employee_id: { _eq: leaveRequest.employee_id },
-            leave_type: { _eq: leaveRequest.leave_type },
-            year: { _eq: year }
-          },
-          limit: 1
-        })
-      )
+      const balancesResult = await readItems<LeaveBalance>('leave_balances', {
+        filter: {
+          employee_id: leaveRequest.employee_id,
+          leave_type: leaveRequest.leave_type,
+          year: year
+        },
+        limit: 1
+      })
 
-      if (balances.length > 0) {
-        const balance = balances[0] as LeaveBalance
-        await directus.request(
-          updateItem('leave_balances', balance.id, {
-            used_days: balance.used_days + leaveRequest.days_requested,
-            pending_days: Math.max(0, balance.pending_days - leaveRequest.days_requested)
-          })
-        )
+      if (balancesResult.data.length > 0) {
+        const balance = balancesResult.data[0]
+        await updateItem<LeaveBalance>('leave_balances', balance.id, {
+          used_days: balance.used_days + leaveRequest.days_requested,
+          pending_days: Math.max(0, balance.pending_days - leaveRequest.days_requested)
+        })
       }
     }
 
-    return data as LeaveRequest
+    return data
   }
 
   /**
    * 取消休假申請
    */
   const cancelLeave = async (leaveRequestId: string, employeeId: string) => {
-    const leaveRequest = await directus.request(
-      readItem('leave_requests', leaveRequestId)
-    ) as LeaveRequest
+    const leaveRequest = await readItem<LeaveRequest>('leave_requests', leaveRequestId)
+
+    if (!leaveRequest) {
+      throw new Error('Leave request not found')
+    }
 
     if (leaveRequest.leave_status !== 'PENDING') {
       throw new Error('只能取消待審核的申請')
     }
 
-    const data = await directus.request(
-      updateItem('leave_requests', leaveRequestId, {
-        leave_status: 'CANCELLED'
-      })
-    )
+    const data = await updateItem<LeaveRequest>('leave_requests', leaveRequestId, {
+      leave_status: 'CANCELLED'
+    })
 
-    await directus.request(
-      createItem('leave_approval_logs', {
-        leave_request_id: leaveRequestId,
-        action_by: employeeId,
-        action: 'CANCEL',
-        previous_status: 'PENDING',
-        new_status: 'CANCELLED',
-        notes: '取消申請'
-      })
-    )
+    await createItem<LeaveApprovalLog>('leave_approval_logs', {
+      leave_request_id: leaveRequestId,
+      action_by: employeeId,
+      action: 'CANCEL',
+      previous_status: 'PENDING',
+      new_status: 'CANCELLED',
+      notes: '取消申請'
+    })
 
-    return data as LeaveRequest
+    return data
   }
 
   /**
    * 取得休假審核歷程
    */
   const fetchApprovalHistory = async (leaveRequestId: string) => {
-    const data = await directus.request(
-      readItems('leave_approval_logs', {
-        filter: { leave_request_id: { _eq: leaveRequestId } },
-        fields: ['*', 'action_by.full_name'] as any,
-        sort: ['date_created']
-      })
-    )
-    return data as LeaveApprovalLog[]
+    const result = await readItems<LeaveApprovalLog>('leave_approval_logs', {
+      filter: { leave_request_id: leaveRequestId },
+      sort: 'date_created'
+    })
+    return result.data
   }
 
   return {

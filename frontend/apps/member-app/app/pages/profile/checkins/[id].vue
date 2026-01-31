@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { readItem } from '@directus/sdk'
-import { useDirectus } from '@gym-nexus/shared/composables'
+import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
   middleware: 'auth'
@@ -14,6 +13,7 @@ interface CheckinDetail {
   is_cross_branch: boolean
   notes: string | null
   date_created: string
+  member_id?: string
   branch_id: {
     id: string
     name: string
@@ -38,7 +38,7 @@ interface CheckinDetail {
 
 const route = useRoute()
 const router = useRouter()
-const directus = useDirectus()
+const { readItem } = useFetch()
 const { member } = useMemberAuth()
 
 const checkin = ref<CheckinDetail | null>(null)
@@ -52,32 +52,20 @@ const fetchCheckin = async () => {
     isLoading.value = true
     error.value = null
 
-    const result = await directus.request(
-      readItem('member_checkins', route.params.id as string, {
-        fields: [
-          'id', 'check_time', 'check_type', 'verification_method',
-          'is_cross_branch', 'notes', 'date_created',
-          'branch_id.id', 'branch_id.name', 'branch_id.address', 'branch_id.phone',
-          'contract_id.id', 'contract_id.contract_no', 'contract_id.contract_type',
-          'contract_id.remaining_counts', 'contract_id.plan_id.id', 'contract_id.plan_id.name',
-          'verified_by.id', 'verified_by.full_name'
-        ]
-      })
-    )
+    const result = await readItem<CheckinDetail>('member_checkins', route.params.id as string)
+
+    if (!result) {
+      error.value = '無法載入入場記錄'
+      return
+    }
 
     // Verify this checkin belongs to the current member
-    const fullResult = await directus.request(
-      readItem('member_checkins', route.params.id as string, {
-        fields: ['member_id']
-      })
-    ) as { member_id: string }
-
-    if (fullResult.member_id !== member.value.id) {
+    if (result.member_id !== member.value.id) {
       error.value = '無權查看此記錄'
       return
     }
 
-    checkin.value = result as CheckinDetail
+    checkin.value = result
   } catch {
     error.value = '無法載入入場記錄'
   } finally {

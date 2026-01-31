@@ -1,19 +1,13 @@
-import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
 import type { Member } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
-import {
-  buildPaginationParams,
-  buildSearchFilter,
-  buildFilter,
-  mergeFilters
-} from '~/utils/api-helpers'
+import { useFetch } from '~/composables/core/useFetch'
 
 export const useMembers = () => {
-  const directus = useDirectus()
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
 
   const members = useState<Member[]>('members', () => [])
   const isLoading = useState('members_loading', () => false)
@@ -27,40 +21,23 @@ export const useMembers = () => {
     status?: string
   }) => {
     isLoading.value = true
-    const { search, branchId, status } = options || {}
+    const { page = 1, limit = 20, search, branchId, status } = options || {}
 
     try {
-      // 使用工具函數建構分頁和過濾器
-      const { limit, offset } = buildPaginationParams(options)
+      const result = await readItems<Member>('members', {
+        page,
+        limit,
+        search,
+        filter: {
+          branchId,
+          status
+        },
+        sort: 'dateCreated',
+        sortOrder: 'desc'
+      })
 
-      const filter = mergeFilters(
-        buildSearchFilter(search, ['full_name', 'member_code', 'phone']),
-        buildFilter([
-          { field: 'branch_id', value: branchId },
-          { field: 'member_status', value: status }
-        ])
-      )
-
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('members', {
-            filter,
-            fields: ['*', 'branch.name', 'sales_person.full_name'],
-            sort: ['-date_created'],
-            limit,
-            offset
-          })
-        ),
-        directus.request(
-          aggregate('members', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
-
-      members.value = data as Member[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      members.value = result.data
+      totalCount.value = result.total
     } catch (error) {
       handleError(error, {
         context: 'useMembers.fetchMembers',
@@ -73,12 +50,7 @@ export const useMembers = () => {
 
   const getMember = async (id: string): Promise<Member | null> => {
     try {
-      const data = await directus.request(
-        readItem('members', id, {
-          fields: ['*', 'branch.*', 'sales_person.*', 'contracts.*']
-        })
-      )
-      return data as Member
+      return await readItem<Member>('members', id)
     } catch (error) {
       handleError(error, {
         context: 'useMembers.getMember',
@@ -90,10 +62,9 @@ export const useMembers = () => {
 
   const createMember = async (member: Partial<Member>): Promise<Member | null> => {
     try {
-      const data = await directus.request(createItem('members', member))
-      // 失效會員列表緩存
+      const data = await createItem<Member>('members', member)
       invalidateCache([CACHE_KEYS.MEMBERS])
-      return data as Member
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useMembers.createMember',
@@ -105,10 +76,9 @@ export const useMembers = () => {
 
   const updateMember = async (id: string, member: Partial<Member>): Promise<Member | null> => {
     try {
-      const data = await directus.request(updateItem('members', id, member))
-      // 失效會員列表緩存
+      const data = await updateItem<Member>('members', id, member)
       invalidateCache([CACHE_KEYS.MEMBERS])
-      return data as Member
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useMembers.updateMember',
@@ -120,10 +90,11 @@ export const useMembers = () => {
 
   const deleteMember = async (id: string): Promise<boolean> => {
     try {
-      await directus.request(deleteItem('members', id))
-      // 失效會員和合約緩存（刪除會員可能影響合約）
-      invalidateCache([CACHE_KEYS.MEMBERS, CACHE_KEYS.CONTRACTS])
-      return true
+      const result = await deleteItem('members', id)
+      if (result) {
+        invalidateCache([CACHE_KEYS.MEMBERS, CACHE_KEYS.CONTRACTS])
+      }
+      return result
     } catch (error) {
       handleError(error, {
         context: 'useMembers.deleteMember',

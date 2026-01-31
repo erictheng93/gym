@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { readItems } from '@directus/sdk'
-import { useDirectus } from '@gym-nexus/shared/composables'
+import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
   middleware: 'auth'
@@ -20,7 +19,7 @@ interface Checkin {
   } | null
 }
 
-const directus = useDirectus()
+const { readItems } = useFetch()
 const { member } = useMemberAuth()
 
 const checkins = ref<Checkin[]>([])
@@ -38,30 +37,23 @@ const fetchCheckins = async (loadMore = false) => {
       currentPage.value = 1
     }
 
-    const result = await directus.request(
-      readItems('member_checkins', {
-        filter: {
-          member_id: { _eq: member.value.id }
-        },
-        fields: [
-          'id', 'check_time', 'check_type', 'verification_method',
-          'is_cross_branch', 'branch_id.id', 'branch_id.name'
-        ],
-        sort: ['-check_time'],
-        limit: pageSize,
-        offset: (currentPage.value - 1) * pageSize
-      })
-    )
-
-    const items = result as Checkin[]
+    const result = await readItems<Checkin>('member_checkins', {
+      filter: {
+        member_id: member.value.id
+      },
+      page: currentPage.value,
+      limit: pageSize,
+      sort: 'check_time',
+      sortOrder: 'desc'
+    })
 
     if (loadMore) {
-      checkins.value = [...checkins.value, ...items]
+      checkins.value = [...checkins.value, ...result.data]
     } else {
-      checkins.value = items
+      checkins.value = result.data
     }
 
-    hasMore.value = items.length === pageSize
+    hasMore.value = result.data.length === pageSize
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入入場紀錄' })
   } finally {

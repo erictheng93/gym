@@ -1,16 +1,20 @@
-import { createDirectus, rest, authentication } from '@directus/sdk'
-import type { DirectusSchema } from '@gym-nexus/shared/types'
-
+/**
+ * Directus Client Plugin - DEPRECATED
+ *
+ * This plugin has been deprecated as part of the Directus migration.
+ * The application now uses backend-v2 (Hono.js) for all API operations.
+ *
+ * Authentication is handled by useAuthV2 composable.
+ * API calls are made directly to backend-v2 via fetch.
+ *
+ * @deprecated This plugin is no longer used
+ */
 export default defineNuxtPlugin(() => {
-  const config = useRuntimeConfig()
-
-  const directus = createDirectus<DirectusSchema>(config.public.directusUrl)
-    .with(rest({ credentials: 'include' }))
-    .with(authentication('session', { credentials: 'include' }))
-
+  // No-op plugin - Directus has been replaced by backend-v2
+  // Keeping this file to prevent import errors during transition
   return {
     provide: {
-      directus
+      directus: null
     }
   }
 })

@@ -1,9 +1,10 @@
-import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import type { MembershipPlan } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 
 export const usePlans = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const plans = useState<MembershipPlan[]>('plans', () => [])
   const isLoading = useState('plans_loading', () => false)
@@ -17,18 +18,14 @@ export const usePlans = () => {
 
     try {
       const filter: Record<string, unknown> = {}
-      // 只在 status 有值且不為空字串時添加篩選
-      if (status && status !== '') filter.status = { _eq: status }
-      if (planType && planType !== '') filter.plan_type = { _eq: planType }
+      if (status && status !== '') filter.status = status
+      if (planType && planType !== '') filter.plan_type = planType
 
-      const data = await directus.request(
-        readItems('membership_plans', {
-          filter,
-          fields: ['*'],
-          sort: ['price']
-        })
-      )
-      plans.value = data as MembershipPlan[]
+      const { data } = await readItems<MembershipPlan>('membership_plans', {
+        filter,
+        sort: 'price'
+      })
+      plans.value = data
     } catch (error) {
       handleError(error, {
         context: 'usePlans.fetchPlans',
@@ -42,12 +39,8 @@ export const usePlans = () => {
 
   const getPlan = async (id: string) => {
     try {
-      const data = await directus.request(
-        readItem('membership_plans', id, {
-          fields: ['*']
-        })
-      )
-      return data as MembershipPlan
+      const data = await readItem<MembershipPlan>('membership_plans', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'usePlans.getPlan',
@@ -59,7 +52,7 @@ export const usePlans = () => {
 
   const createPlan = async (plan: Partial<MembershipPlan>) => {
     try {
-      const data = await directus.request(createItem('membership_plans', plan))
+      const data = await createItem<MembershipPlan>('membership_plans', plan)
       return data
     } catch (error) {
       handleError(error, {
@@ -72,7 +65,7 @@ export const usePlans = () => {
 
   const updatePlan = async (id: string, plan: Partial<MembershipPlan>) => {
     try {
-      const data = await directus.request(updateItem('membership_plans', id, plan))
+      const data = await updateItem<MembershipPlan>('membership_plans', id, plan)
       return data
     } catch (error) {
       handleError(error, {
@@ -85,8 +78,8 @@ export const usePlans = () => {
 
   const deletePlan = async (id: string) => {
     try {
-      await directus.request(deleteItem('membership_plans', id))
-      return true
+      const result = await deleteItem('membership_plans', id)
+      return result
     } catch (error) {
       handleError(error, {
         context: 'usePlans.deletePlan',

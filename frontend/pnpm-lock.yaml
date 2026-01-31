@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@directus/sdk':
-        specifier: ^20.3.0
-        version: 20.3.0
       vue:
         specifier: ^3.5.13
         version: 3.5.26(typescript@5.9.3)
@@ -105,18 +102,12 @@ importers:
 
   apps/admin-web:
     dependencies:
-      '@directus/sdk':
-        specifier: ^20.3.0
-        version: 20.3.0
       '@gym-nexus/hr-composables':
         specifier: workspace:*
         version: link:../../packages/hr-composables
       '@gym-nexus/hr-core':
         specifier: workspace:*
         version: link:../../packages/hr-core
-      '@gym-nexus/hr-directus-adapter':
-        specifier: workspace:*
-        version: link:../../packages/hr-directus-adapter
       '@gym-nexus/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -160,9 +151,6 @@ importers:
 
   apps/coach-app:
     dependencies:
-      '@directus/sdk':
-        specifier: ^20.3.0
-        version: 20.3.0
       '@gym-nexus/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -188,9 +176,6 @@ importers:
 
   apps/member-app:
     dependencies:
-      '@directus/sdk':
-        specifier: ^20.3.0
-        version: 20.3.0
       '@gym-nexus/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -248,18 +233,12 @@ importers:
         specifier: workspace:*
         version: link:../hr-core
     devDependencies:
-      '@directus/sdk':
-        specifier: ^20.3.0
-        version: 20.3.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
 
   packages/shared:
     dependencies:
-      '@directus/sdk':
-        specifier: ^20.3.0
-        version: 20.3.0
       vue:
         specifier: ^3.5.0
         version: 3.5.26(typescript@5.9.3)
@@ -841,10 +820,6 @@ packages:
   '@cloudflare/kv-asset-handler@0.4.1':
     resolution: {integrity: sha512-Nu8ahitGFFJztxUml9oD/DLb7Z28C8cd8F46IVQ7y5Btz575pvMY8AqZsXkX7Gds29eCKdMgIHjIvzskHgPSFg==}
     engines: {node: '>=18.0.0'}
-
-  '@directus/sdk@20.3.0':
-    resolution: {integrity: sha512-auy59B0A7Ri+4JDy0JcdFHnsHvOkl3ixWMWYciXAbm4oYIE9S4be8xEpIwA5qhlPTOprJ6JHPWo9rEvcrLwNtA==}
-    engines: {node: '>=22'}
 
   '@dxup/nuxt@0.2.2':
     resolution: {integrity: sha512-RNpJjDZs9+JcT9N87AnOuHsNM75DEd58itADNd/s1LIF6BZbTLZV0xxilJZb55lntn4TYvscTaXLCBX2fq9CXg==}
@@ -7761,8 +7736,6 @@ snapshots:
   '@cloudflare/kv-asset-handler@0.4.1':
     dependencies:
       mime: 3.0.0
-
-  '@directus/sdk@20.3.0': {}
 
   '@dxup/nuxt@0.2.2(magicast@0.5.1)':
     dependencies:

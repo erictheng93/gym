@@ -7,7 +7,7 @@ import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { saveSession, loadSession, clearSession } from '~/utils/session-storage'
 
-interface User {
+export interface User {
   id: string
   email: string
   role: string
@@ -17,7 +17,10 @@ interface User {
   last_name?: string | null
 }
 
-interface CurrentEmployee {
+// Alias for backwards compatibility
+export type Employee = CurrentEmployee
+
+export interface CurrentEmployee {
   id: string
   full_name: string
   employee_code: string | null

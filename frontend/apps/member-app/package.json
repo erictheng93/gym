@@ -10,7 +10,6 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@directus/sdk": "^20.3.0",
     "@gym-nexus/shared": "workspace:*",
     "@sentry/vue": "^10.32.1",
     "nuxt": "^4.2.1",

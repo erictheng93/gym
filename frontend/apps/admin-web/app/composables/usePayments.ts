@@ -1,18 +1,11 @@
-import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
 import type { Payment } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
-import {
-  buildPaginationParams,
-  buildSearchFilter,
-  buildFilter,
-  buildDateRangeFilter,
-  mergeFilters
-} from '~/utils/api-helpers'
 
 export const usePayments = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
   const payments = useState<Payment[]>('payments', () => [])
@@ -31,43 +24,28 @@ export const usePayments = () => {
     search?: string
   }) => {
     isLoading.value = true
-    const { memberId, contractId, branchId, paymentType, startDate, endDate, search } = options || {}
+    const { page = 1, limit = 20, memberId, contractId, branchId, paymentType, startDate, endDate, search } = options || {}
 
     try {
-      // 使用工具函數建構分頁和過濾器
-      const { limit, offset } = buildPaginationParams(options)
+      const filter: Record<string, unknown> = {}
+      if (memberId) filter.member_id = memberId
+      if (contractId) filter.contract_id = contractId
+      if (branchId) filter.branch_id = branchId
+      if (paymentType) filter.payment_type = paymentType
+      if (startDate) filter.start_date = startDate
+      if (endDate) filter.end_date = endDate
 
-      const filter = mergeFilters(
-        buildSearchFilter(search, ['notes']),
-        buildFilter([
-          { field: 'member_id', value: memberId },
-          { field: 'contract_id', value: contractId },
-          { field: 'branch_id', value: branchId },
-          { field: 'payment_type', value: paymentType }
-        ]),
-        buildDateRangeFilter('payment_date', startDate, endDate)
-      )
+      const { data, total } = await readItems<Payment>('payments', {
+        page,
+        limit,
+        search,
+        filter,
+        sort: 'payment_date',
+        sortOrder: 'desc'
+      })
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('payments', {
-            filter,
-            fields: ['*', 'member.full_name', 'member.member_code', 'contract.contract_no', 'branch.name', 'received_by.full_name'],
-            sort: ['-payment_date', '-date_created'],
-            limit,
-            offset
-          })
-        ),
-        directus.request(
-          aggregate('payments', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
-
-      payments.value = data as Payment[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      payments.value = data
+      totalCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'usePayments.fetchPayments',
@@ -82,12 +60,8 @@ export const usePayments = () => {
 
   const getPayment = async (id: string) => {
     try {
-      const data = await directus.request(
-        readItem('payments', id, {
-          fields: ['*', 'member.*', 'contract.*', 'branch.*', 'receiver.*']
-        })
-      )
-      return data as Payment
+      const data = await readItem<Payment>('payments', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'usePayments.getPayment',
@@ -99,7 +73,7 @@ export const usePayments = () => {
 
   const createPayment = async (payment: Partial<Payment>) => {
     try {
-      const data = await directus.request(createItem('payments', payment))
+      const data = await createItem<Payment>('payments', payment)
       // 失效付款和合約緩存（付款可能影響合約狀態）
       invalidateCache([CACHE_KEYS.PAYMENTS, CACHE_KEYS.CONTRACTS])
       return data
@@ -114,7 +88,7 @@ export const usePayments = () => {
 
   const updatePayment = async (id: string, payment: Partial<Payment>) => {
     try {
-      const data = await directus.request(updateItem('payments', id, payment))
+      const data = await updateItem<Payment>('payments', id, payment)
       // 失效付款緩存
       invalidateCache([CACHE_KEYS.PAYMENTS])
       return data
@@ -129,10 +103,12 @@ export const usePayments = () => {
 
   const deletePayment = async (id: string) => {
     try {
-      await directus.request(deleteItem('payments', id))
-      // 失效付款和合約緩存
-      invalidateCache([CACHE_KEYS.PAYMENTS, CACHE_KEYS.CONTRACTS])
-      return true
+      const success = await deleteItem('payments', id)
+      if (success) {
+        // 失效付款和合約緩存
+        invalidateCache([CACHE_KEYS.PAYMENTS, CACHE_KEYS.CONTRACTS])
+      }
+      return success
     } catch (error) {
       handleError(error, {
         context: 'usePayments.deletePayment',
@@ -151,32 +127,40 @@ export const usePayments = () => {
     }
 
     try {
-      const baseFilter = mergeFilters(
-        buildFilter([{ field: 'branch_id', value: branchId }]),
-        buildDateRangeFilter('payment_date', startDate, endDate)
-      )
+      const baseFilter: Record<string, unknown> = {}
+      if (branchId) baseFilter.branch_id = branchId
+      if (startDate) baseFilter.start_date = startDate
+      if (endDate) baseFilter.end_date = endDate
 
-      const [income, refund] = await Promise.all([
-        directus.request(aggregate('payments', {
-          aggregate: { count: '*', sum: ['amount'] },
-          query: { filter: { ...baseFilter, payment_type: { _eq: 'INCOME' } } }
-        })),
-        directus.request(aggregate('payments', {
-          aggregate: { count: '*', sum: ['amount'] },
-          query: { filter: { ...baseFilter, payment_type: { _eq: 'REFUND' } } }
-        }))
+      // Fetch income and refund payments in parallel
+      const [incomeResult, refundResult] = await Promise.all([
+        readItems<Payment>('payments', {
+          limit: 1000, // Get all for aggregation
+          filter: {
+            ...baseFilter,
+            payment_type: 'INCOME'
+          }
+        }),
+        readItems<Payment>('payments', {
+          limit: 1000, // Get all for aggregation
+          filter: {
+            ...baseFilter,
+            payment_type: 'REFUND'
+          }
+        })
       ])
 
-      const incomeAmount = Number(income[0]?.sum?.amount) || 0
-      const refundAmount = Number(refund[0]?.sum?.amount) || 0
+      // Calculate totals from the returned data
+      const incomeAmount = incomeResult.data.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+      const refundAmount = refundResult.data.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
 
       return {
         income: {
-          count: Number(income[0]?.count) || 0,
+          count: incomeResult.total,
           amount: incomeAmount
         },
         refund: {
-          count: Number(refund[0]?.count) || 0,
+          count: refundResult.total,
           amount: refundAmount
         },
         netAmount: incomeAmount - refundAmount

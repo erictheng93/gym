@@ -3,8 +3,8 @@
  * 管理會員課程預約
  */
 
-import { readItems, readItem, createItem, updateItem, aggregate } from '@directus/sdk'
 import type { Booking, ClassSession, Member } from '~/types/directus'
+import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 // 預約狀態標籤
@@ -17,7 +17,7 @@ export const BOOKING_STATUS_LABELS: Record<string, { label: string; color: strin
 }
 
 export const useClassBookings = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
   const config = useRuntimeConfig()
 
@@ -42,37 +42,22 @@ export const useClassBookings = () => {
 
     try {
       const filter: Record<string, unknown> = {}
-      if (sessionId) filter.session_id = { _eq: sessionId }
-      if (memberId) filter.member_id = { _eq: memberId }
-      if (bookingStatus) filter.booking_status = { _eq: bookingStatus }
+      if (sessionId) filter.session_id = sessionId
+      if (memberId) filter.member_id = memberId
+      if (bookingStatus) filter.booking_status = bookingStatus
+      if (startDate) filter.start_date = startDate
+      if (endDate) filter.end_date = endDate
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('bookings', {
-            filter,
-            fields: [
-              '*',
-              'session.id', 'session.session_date', 'session.start_time', 'session.end_time',
-              'session.class.id', 'session.class.name',
-              'session.branch.id', 'session.branch.name',
-              'member.id', 'member.full_name', 'member.phone', 'member.member_code',
-              'contract.id', 'contract.contract_no'
-            ],
-            sort: ['-booked_at'],
-            limit,
-            offset: (page - 1) * limit
-          })
-        ),
-        directus.request(
-          aggregate('bookings', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
+      const { data, total } = await readItems<Booking>('bookings', {
+        page,
+        limit,
+        filter,
+        sort: 'booked_at',
+        sortOrder: 'desc'
+      })
 
-      bookings.value = data as Booking[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      bookings.value = data
+      totalCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'useClassBookings.fetchBookings',
@@ -88,20 +73,8 @@ export const useClassBookings = () => {
    */
   const getBooking = async (id: string): Promise<Booking | null> => {
     try {
-      const data = await directus.request(
-        readItem('bookings', id, {
-          fields: [
-            '*',
-            'session.*',
-            'session.class.*',
-            'session.branch.*',
-            'session.instructor.*',
-            'member.*',
-            'contract.*'
-          ]
-        })
-      )
-      return data as Booking
+      const data = await readItem<Booking>('bookings', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassBookings.getBooking',
@@ -226,10 +199,10 @@ export const useClassBookings = () => {
    */
   const markNoShow = async (bookingId: string): Promise<boolean> => {
     try {
-      await directus.request(updateItem('bookings', bookingId, {
+      const result = await updateItem<Booking>('bookings', bookingId, {
         booking_status: 'NO_SHOW'
-      }))
-      return true
+      })
+      return result !== null
     } catch (error) {
       handleError(error, {
         context: 'useClassBookings.markNoShow',
@@ -250,33 +223,22 @@ export const useClassBookings = () => {
 
     try {
       const filter: Record<string, unknown> = {
-        member_id: { _eq: memberId },
-        booking_status: { _in: ['CONFIRMED', 'WAITLIST'] }
+        member_id: memberId,
+        booking_status: 'CONFIRMED,WAITLIST'
       }
 
       // 只顯示未來的課程
       if (upcoming) {
-        filter['session'] = {
-          session_date: { _gte: new Date().toISOString().split('T')[0] }
-        }
+        filter.upcoming = true
       }
 
-      const data = await directus.request(
-        readItems('bookings', {
-          filter,
-          fields: [
-            '*',
-            'session.id', 'session.session_date', 'session.start_time', 'session.end_time',
-            'session.class.id', 'session.class.name',
-            'session.branch.name',
-            'session.instructor.full_name'
-          ],
-          sort: ['session.session_date', 'session.start_time'],
-          limit
-        })
-      )
+      const { data } = await readItems<Booking>('bookings', {
+        filter,
+        limit,
+        sort: 'session_date'
+      })
 
-      return data as Booking[]
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassBookings.getMemberBookings',
@@ -291,21 +253,15 @@ export const useClassBookings = () => {
    */
   const getSessionBookings = async (sessionId: string): Promise<Booking[]> => {
     try {
-      const data = await directus.request(
-        readItems('bookings', {
-          filter: {
-            session_id: { _eq: sessionId },
-            booking_status: { _nin: ['CANCELLED'] }
-          },
-          fields: [
-            '*',
-            'member.id', 'member.full_name', 'member.phone', 'member.member_code'
-          ],
-          sort: ['waitlist_position', 'booked_at']
-        })
-      )
+      const { data } = await readItems<Booking>('bookings', {
+        filter: {
+          session_id: sessionId,
+          exclude_cancelled: true
+        },
+        sort: 'booked_at'
+      })
 
-      return data as Booking[]
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassBookings.getSessionBookings',
@@ -328,47 +284,40 @@ export const useClassBookings = () => {
 
     try {
       const baseFilter: Record<string, unknown> = {}
-      if (sessionId) baseFilter.session_id = { _eq: sessionId }
+      if (sessionId) baseFilter.session_id = sessionId
+      if (branchId) baseFilter.branch_id = branchId
+      if (startDate) baseFilter.start_date = startDate
+      if (endDate) baseFilter.end_date = endDate
 
       const [confirmed, waitlist, cancelled, attended, noShow] = await Promise.all([
-        directus.request(
-          aggregate('bookings', {
-            aggregate: { count: '*' },
-            query: { filter: { ...baseFilter, booking_status: { _eq: 'CONFIRMED' } } }
-          })
-        ),
-        directus.request(
-          aggregate('bookings', {
-            aggregate: { count: '*' },
-            query: { filter: { ...baseFilter, booking_status: { _eq: 'WAITLIST' } } }
-          })
-        ),
-        directus.request(
-          aggregate('bookings', {
-            aggregate: { count: '*' },
-            query: { filter: { ...baseFilter, booking_status: { _eq: 'CANCELLED' } } }
-          })
-        ),
-        directus.request(
-          aggregate('bookings', {
-            aggregate: { count: '*' },
-            query: { filter: { ...baseFilter, booking_status: { _eq: 'ATTENDED' } } }
-          })
-        ),
-        directus.request(
-          aggregate('bookings', {
-            aggregate: { count: '*' },
-            query: { filter: { ...baseFilter, booking_status: { _eq: 'NO_SHOW' } } }
-          })
-        )
+        readItems<Booking>('bookings', {
+          filter: { ...baseFilter, booking_status: 'CONFIRMED' },
+          limit: 1
+        }),
+        readItems<Booking>('bookings', {
+          filter: { ...baseFilter, booking_status: 'WAITLIST' },
+          limit: 1
+        }),
+        readItems<Booking>('bookings', {
+          filter: { ...baseFilter, booking_status: 'CANCELLED' },
+          limit: 1
+        }),
+        readItems<Booking>('bookings', {
+          filter: { ...baseFilter, booking_status: 'ATTENDED' },
+          limit: 1
+        }),
+        readItems<Booking>('bookings', {
+          filter: { ...baseFilter, booking_status: 'NO_SHOW' },
+          limit: 1
+        })
       ])
 
       return {
-        confirmed: Number(confirmed[0]?.count) || 0,
-        waitlist: Number(waitlist[0]?.count) || 0,
-        cancelled: Number(cancelled[0]?.count) || 0,
-        attended: Number(attended[0]?.count) || 0,
-        noShow: Number(noShow[0]?.count) || 0
+        confirmed: confirmed.total,
+        waitlist: waitlist.total,
+        cancelled: cancelled.total,
+        attended: attended.total,
+        noShow: noShow.total
       }
     } catch (error) {
       handleError(error, {

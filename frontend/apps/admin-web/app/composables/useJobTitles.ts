@@ -1,9 +1,10 @@
-import { readItems, readItem, createItem, updateItem, deleteItem } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import type { JobTitle } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 
 export const useJobTitles = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const jobTitles = useState<JobTitle[]>('job_titles', () => [])
   const isLoading = useState('job_titles_loading', () => false)
@@ -11,15 +12,12 @@ export const useJobTitles = () => {
   const fetchJobTitles = async () => {
     isLoading.value = true
     try {
-      const data = await directus.request(
-        readItems('job_titles', {
-          fields: ['*'],
-          filter: { status: { _eq: 'active' } },
-          sort: ['name'],
-          limit: -1
-        })
-      )
-      jobTitles.value = data as JobTitle[]
+      const { data } = await readItems<JobTitle>('job_titles', {
+        filter: { status: 'active' },
+        sort: 'name',
+        limit: 1000
+      })
+      jobTitles.value = data
     } catch (error) {
       handleError(error, {
         context: 'useJobTitles.fetchJobTitles',
@@ -33,12 +31,8 @@ export const useJobTitles = () => {
 
   const getJobTitle = async (id: string) => {
     try {
-      const data = await directus.request(
-        readItem('job_titles', id, {
-          fields: ['*']
-        })
-      )
-      return data as JobTitle
+      const data = await readItem<JobTitle>('job_titles', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useJobTitles.getJobTitle',
@@ -50,7 +44,7 @@ export const useJobTitles = () => {
 
   const createJobTitle = async (jobTitle: Partial<JobTitle>) => {
     try {
-      const data = await directus.request(createItem('job_titles', jobTitle))
+      const data = await createItem<JobTitle>('job_titles', jobTitle)
       return data
     } catch (error) {
       handleError(error, {
@@ -63,7 +57,7 @@ export const useJobTitles = () => {
 
   const updateJobTitle = async (id: string, jobTitle: Partial<JobTitle>) => {
     try {
-      const data = await directus.request(updateItem('job_titles', id, jobTitle))
+      const data = await updateItem<JobTitle>('job_titles', id, jobTitle)
       return data
     } catch (error) {
       handleError(error, {
@@ -76,8 +70,8 @@ export const useJobTitles = () => {
 
   const deleteJobTitle = async (id: string) => {
     try {
-      await directus.request(deleteItem('job_titles', id))
-      return true
+      const result = await deleteItem('job_titles', id)
+      return result
     } catch (error) {
       handleError(error, {
         context: 'useJobTitles.deleteJobTitle',

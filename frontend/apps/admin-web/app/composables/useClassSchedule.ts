@@ -3,16 +3,17 @@
  * 管理課程排程和場次
  */
 
-import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
 import type { ClassSchedule, ClassSession } from '~/types/directus'
+import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 // 星期幾的中文名稱
 export const DAY_OF_WEEK_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
 
 export const useClassSchedule = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
+  const config = useRuntimeConfig()
 
   const schedules = useState<ClassSchedule[]>('class_schedules', () => [])
   const sessions = useState<ClassSession[]>('class_sessions', () => [])
@@ -36,26 +37,17 @@ export const useClassSchedule = () => {
 
     try {
       const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = { _eq: branchId }
-      if (classId) filter.class_id = { _eq: classId }
-      if (typeof dayOfWeek === 'number') filter.day_of_week = { _eq: dayOfWeek }
-      if (typeof isRecurring === 'boolean') filter.is_recurring = { _eq: isRecurring }
+      if (branchId) filter.branch_id = branchId
+      if (classId) filter.class_id = classId
+      if (typeof dayOfWeek === 'number') filter.day_of_week = dayOfWeek
+      if (typeof isRecurring === 'boolean') filter.is_recurring = isRecurring
 
-      const data = await directus.request(
-        readItems('class_schedules', {
-          filter,
-          fields: [
-            '*',
-            'class.id', 'class.name', 'class.duration_minutes', 'class.max_capacity',
-            'class.class_category.name', 'class.class_category.color',
-            'branch.id', 'branch.name',
-            'instructor.id', 'instructor.full_name'
-          ],
-          sort: ['day_of_week', 'start_time']
-        })
-      )
+      const { data } = await readItems<ClassSchedule>('class_schedules', {
+        filter,
+        sort: 'day_of_week'
+      })
 
-      schedules.value = data as ClassSchedule[]
+      schedules.value = data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.fetchSchedules',
@@ -71,8 +63,8 @@ export const useClassSchedule = () => {
    */
   const createSchedule = async (scheduleData: Partial<ClassSchedule>): Promise<ClassSchedule | null> => {
     try {
-      const data = await directus.request(createItem('class_schedules', scheduleData))
-      return data as ClassSchedule
+      const data = await createItem<ClassSchedule>('class_schedules', scheduleData)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.createSchedule',
@@ -87,8 +79,8 @@ export const useClassSchedule = () => {
    */
   const updateSchedule = async (id: string, scheduleData: Partial<ClassSchedule>): Promise<ClassSchedule | null> => {
     try {
-      const data = await directus.request(updateItem('class_schedules', id, scheduleData))
-      return data as ClassSchedule
+      const data = await updateItem<ClassSchedule>('class_schedules', id, scheduleData)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.updateSchedule',
@@ -103,8 +95,8 @@ export const useClassSchedule = () => {
    */
   const deleteSchedule = async (id: string): Promise<boolean> => {
     try {
-      await directus.request(deleteItem('class_schedules', id))
-      return true
+      const success = await deleteItem('class_schedules', id)
+      return success
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.deleteSchedule',
@@ -134,34 +126,19 @@ export const useClassSchedule = () => {
 
     try {
       const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = { _eq: branchId }
-      if (classId) filter.class_id = { _eq: classId }
-      if (sessionStatus) filter.session_status = { _eq: sessionStatus }
-      if (instructorId) filter.instructor_id = { _eq: instructorId }
+      if (branchId) filter.branch_id = branchId
+      if (classId) filter.class_id = classId
+      if (sessionStatus) filter.session_status = sessionStatus
+      if (instructorId) filter.instructor_id = instructorId
+      if (startDate) filter.start_date = startDate
+      if (endDate) filter.end_date = endDate
 
-      // 日期範圍篩選
-      if (startDate || endDate) {
-        filter.session_date = {}
-        if (startDate) (filter.session_date as Record<string, string>)._gte = startDate
-        if (endDate) (filter.session_date as Record<string, string>)._lte = endDate
-      }
+      const { data } = await readItems<ClassSession>('class_sessions', {
+        filter,
+        sort: 'session_date'
+      })
 
-      const data = await directus.request(
-        readItems('class_sessions', {
-          filter,
-          fields: [
-            '*',
-            'class.id', 'class.name', 'class.duration_minutes',
-            'class.class_category.name', 'class.class_category.color',
-            'branch.id', 'branch.name',
-            'instructor.id', 'instructor.full_name',
-            'schedule.id'
-          ],
-          sort: ['session_date', 'start_time']
-        })
-      )
-
-      sessions.value = data as ClassSession[]
+      sessions.value = data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.fetchSessions',
@@ -177,20 +154,8 @@ export const useClassSchedule = () => {
    */
   const getSession = async (id: string): Promise<ClassSession | null> => {
     try {
-      const data = await directus.request(
-        readItem('class_sessions', id, {
-          fields: [
-            '*',
-            'class.*',
-            'class.class_category.*',
-            'branch.*',
-            'instructor.*',
-            'bookings.*',
-            'bookings.member.id', 'bookings.member.full_name', 'bookings.member.phone', 'bookings.member.member_code'
-          ]
-        })
-      )
-      return data as ClassSession
+      const data = await readItem<ClassSession>('class_sessions', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.getSession',
@@ -205,8 +170,8 @@ export const useClassSchedule = () => {
    */
   const createSession = async (sessionData: Partial<ClassSession>): Promise<ClassSession | null> => {
     try {
-      const data = await directus.request(createItem('class_sessions', sessionData))
-      return data as ClassSession
+      const data = await createItem<ClassSession>('class_sessions', sessionData)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.createSession',
@@ -221,8 +186,8 @@ export const useClassSchedule = () => {
    */
   const updateSession = async (id: string, sessionData: Partial<ClassSession>): Promise<ClassSession | null> => {
     try {
-      const data = await directus.request(updateItem('class_sessions', id, sessionData))
-      return data as ClassSession
+      const data = await updateItem<ClassSession>('class_sessions', id, sessionData)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.updateSession',
@@ -237,12 +202,12 @@ export const useClassSchedule = () => {
    */
   const cancelSession = async (id: string, reason?: string): Promise<boolean> => {
     try {
-      await directus.request(updateItem('class_sessions', id, {
+      const result = await updateItem<ClassSession>('class_sessions', id, {
         session_status: 'CANCELLED',
         cancelled_reason: reason,
         cancelled_at: new Date().toISOString()
-      }))
-      return true
+      })
+      return result !== null
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.cancelSession',
@@ -261,7 +226,7 @@ export const useClassSchedule = () => {
       const response = await $fetch<{ created: number }>('/gym/classes/generate-sessions', {
         method: 'POST',
         body: { branch_id: branchId, start_date: startDate, end_date: endDate },
-        baseURL: useRuntimeConfig().public.directusUrl
+        baseURL: config.public.directusUrl
       })
       return response?.created || 0
     } catch (error) {
@@ -282,22 +247,14 @@ export const useClassSchedule = () => {
    */
   const getSessionsByDate = async (date: string, branchId?: string): Promise<ClassSession[]> => {
     try {
-      const filter: Record<string, unknown> = { session_date: { _eq: date } }
-      if (branchId) filter.branch_id = { _eq: branchId }
+      const filter: Record<string, unknown> = { session_date: date }
+      if (branchId) filter.branch_id = branchId
 
-      const data = await directus.request(
-        readItems('class_sessions', {
-          filter,
-          fields: [
-            '*',
-            'class.id', 'class.name',
-            'class.class_category.name', 'class.class_category.color',
-            'instructor.id', 'instructor.full_name'
-          ],
-          sort: ['start_time']
-        })
-      )
-      return data as ClassSession[]
+      const { data } = await readItems<ClassSession>('class_sessions', {
+        filter,
+        sort: 'start_time'
+      })
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClassSchedule.getSessionsByDate',
@@ -329,39 +286,30 @@ export const useClassSchedule = () => {
    */
   const getSessionStats = async (branchId?: string, startDate?: string, endDate?: string) => {
     try {
-      const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = { _eq: branchId }
-      if (startDate || endDate) {
-        filter.session_date = {}
-        if (startDate) (filter.session_date as Record<string, string>)._gte = startDate
-        if (endDate) (filter.session_date as Record<string, string>)._lte = endDate
-      }
+      const baseFilter: Record<string, unknown> = {}
+      if (branchId) baseFilter.branch_id = branchId
+      if (startDate) baseFilter.start_date = startDate
+      if (endDate) baseFilter.end_date = endDate
 
       const [scheduled, completed, cancelled] = await Promise.all([
-        directus.request(
-          aggregate('class_sessions', {
-            aggregate: { count: '*' },
-            query: { filter: { ...filter, session_status: { _eq: 'SCHEDULED' } } }
-          })
-        ),
-        directus.request(
-          aggregate('class_sessions', {
-            aggregate: { count: '*' },
-            query: { filter: { ...filter, session_status: { _eq: 'COMPLETED' } } }
-          })
-        ),
-        directus.request(
-          aggregate('class_sessions', {
-            aggregate: { count: '*' },
-            query: { filter: { ...filter, session_status: { _eq: 'CANCELLED' } } }
-          })
-        )
+        readItems<ClassSession>('class_sessions', {
+          filter: { ...baseFilter, session_status: 'SCHEDULED' },
+          limit: 1
+        }),
+        readItems<ClassSession>('class_sessions', {
+          filter: { ...baseFilter, session_status: 'COMPLETED' },
+          limit: 1
+        }),
+        readItems<ClassSession>('class_sessions', {
+          filter: { ...baseFilter, session_status: 'CANCELLED' },
+          limit: 1
+        })
       ])
 
       return {
-        scheduled: Number(scheduled[0]?.count) || 0,
-        completed: Number(completed[0]?.count) || 0,
-        cancelled: Number(cancelled[0]?.count) || 0
+        scheduled: scheduled.total,
+        completed: completed.total,
+        cancelled: cancelled.total
       }
     } catch (error) {
       handleError(error, {

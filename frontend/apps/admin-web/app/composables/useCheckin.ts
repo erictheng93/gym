@@ -1,4 +1,5 @@
-import { readItems, createItem, updateItem, aggregate } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import type { MemberCheckin, Member, Contract, ContractLog } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 
@@ -34,7 +35,7 @@ export interface QrCheckinResult {
 export const useCheckin = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.directusUrl
-  const directus = useDirectus()
+  const { readItems, createItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
   const todayCheckins = useState<CheckinRecord[]>('today_checkins', () => [])
   const isLoading = useState('checkin_loading', () => false)
@@ -58,53 +59,29 @@ export const useCheckin = () => {
 
     try {
       const filter: Record<string, unknown> = {
-        check_time: {
-          _gte: start,
-          _lt: end
-        }
+        check_time_gte: start,
+        check_time_lt: end
       }
 
       if (branchId) {
-        filter.branch_id = { _eq: branchId }
+        filter.branch_id = branchId
       }
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('member_checkins', {
-            filter,
-            fields: [
-              '*',
-              'member.id',
-              'member.full_name',
-              'member.member_code',
-              'member.member_status',
-              'member.phone',
-              'contract.id',
-              'contract.contract_no',
-              'contract.contract_status',
-              'branch.id',
-              'branch.name'
-            ],
-            sort: ['-check_time'],
-            limit: 50
-          })
-        ),
-        directus.request(
-          aggregate('member_checkins', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
+      const { data, total } = await readItems<MemberCheckin>('member_checkins', {
+        filter,
+        sort: 'check_time',
+        sortOrder: 'desc',
+        limit: 50
+      })
 
-      todayCheckins.value = (data as MemberCheckin[]).map(checkin => ({
+      todayCheckins.value = data.map(checkin => ({
         id: checkin.id,
         member: checkin.member as Member,
         time: checkin.check_time,
         contract: checkin.contract as Contract,
         branch_id: checkin.branch_id || undefined
       }))
-      todayCount.value = Number(countResult[0]?.count) || 0
+      todayCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.fetchTodayCheckins',
@@ -136,9 +113,11 @@ export const useCheckin = () => {
       if (contractId) checkinData.contract_id = contractId
       if (verifiedBy) checkinData.verified_by = verifiedBy
 
-      const result = await directus.request(
-        createItem('member_checkins', checkinData)
-      )
+      const result = await createItem<MemberCheckin>('member_checkins', checkinData)
+
+      if (!result) {
+        throw new Error('Failed to create checkin record')
+      }
 
       // Handle COUNT_BASED contract - deduct remaining counts
       let countDeducted = false
@@ -146,35 +125,28 @@ export const useCheckin = () => {
 
       if (contractId) {
         // Fetch the contract with plan info
-        const [contractData] = await directus.request(
-          readItems('contracts', {
-            filter: { id: { _eq: contractId } },
-            fields: ['*', 'plan.plan_type', 'plan.name'],
-            limit: 1
-          })
-        )
+        const { data: contracts } = await readItems<Contract>('contracts', {
+          filter: { id: contractId },
+          limit: 1
+        })
 
-        const contract = contractData as Contract
+        const contract = contracts[0]
         if (contract?.plan?.plan_type === 'COUNT_BASED' && contract.remaining_counts !== null && contract.remaining_counts > 0) {
           // Deduct one count
           const newRemainingCounts = contract.remaining_counts - 1
-          await directus.request(
-            updateItem('contracts', contractId, {
-              remaining_counts: newRemainingCounts
-            })
-          )
+          await updateItem<Contract>('contracts', contractId, {
+            remaining_counts: newRemainingCounts
+          })
 
           // Create contract log for the deduction
-          await directus.request(
-            createItem('contract_logs', {
-              contract_id: contractId,
-              log_type: 'CLASS_USED',
-              reason: '入場扣堂',
-              days_affected: 1,
-              created_by_employee: verifiedBy || null,
-              branch_id: branchId || null
-            } as Partial<ContractLog>)
-          )
+          await createItem<ContractLog>('contract_logs', {
+            contract_id: contractId,
+            log_type: 'CLASS_USED',
+            reason: '入場扣堂',
+            days_affected: 1,
+            created_by_employee: verifiedBy || null,
+            branch_id: branchId || null
+          } as Partial<ContractLog>)
 
           countDeducted = true
           remainingCounts = newRemainingCounts
@@ -182,30 +154,22 @@ export const useCheckin = () => {
       }
 
       // Fetch the created record with relations
-      const [created] = await directus.request(
-        readItems('member_checkins', {
-          filter: { id: { _eq: (result as MemberCheckin).id } },
-          fields: [
-            '*',
-            'member.id',
-            'member.full_name',
-            'member.member_code',
-            'member.member_status',
-            'member.phone',
-            'contract.id',
-            'contract.contract_no',
-            'contract.remaining_counts'
-          ],
-          limit: 1
-        })
-      )
+      const { data: createdRecords } = await readItems<MemberCheckin>('member_checkins', {
+        filter: { id: result.id },
+        limit: 1
+      })
+
+      const created = createdRecords[0]
+      if (!created) {
+        throw new Error('Failed to fetch created checkin record')
+      }
 
       const checkinRecord: CheckinRecord = {
-        id: (created as MemberCheckin).id,
-        member: (created as MemberCheckin).member as Member,
-        time: (created as MemberCheckin).check_time,
-        contract: (created as MemberCheckin).contract as Contract,
-        branch_id: (created as MemberCheckin).branch_id || undefined,
+        id: created.id,
+        member: created.member as Member,
+        time: created.check_time,
+        contract: created.contract as Contract,
+        branch_id: created.branch_id || undefined,
         countDeducted,
         remainingCounts
       }
@@ -228,24 +192,19 @@ export const useCheckin = () => {
   const getMemberActiveContract = async (memberId: string): Promise<Contract | null> => {
     try {
       const now = new Date().toISOString().split('T')[0]
-      const contracts = await directus.request(
-        readItems('contracts', {
-          filter: {
-            member_id: { _eq: memberId },
-            contract_status: { _eq: 'ACTIVE' },
-            start_date: { _lte: now },
-            _or: [
-              { end_date: { _gte: now } },
-              { end_date: { _null: true } }
-            ]
-          },
-          fields: ['*', 'plan.name', 'plan.plan_type', 'plan.class_counts'],
-          sort: ['-start_date'],
-          limit: 1
-        })
-      )
+      const { data: contracts } = await readItems<Contract>('contracts', {
+        filter: {
+          member_id: memberId,
+          contract_status: 'ACTIVE',
+          start_date_lte: now,
+          end_date_gte: now
+        },
+        sort: 'start_date',
+        sortOrder: 'desc',
+        limit: 1
+      })
 
-      const contract = contracts[0] as Contract
+      const contract = contracts[0]
       // For COUNT_BASED contracts, also check if there are remaining counts
       if (contract?.plan?.plan_type === 'COUNT_BASED' && contract.remaining_counts !== null && contract.remaining_counts <= 0) {
         // No remaining counts - treat as no active contract for check-in
@@ -265,15 +224,13 @@ export const useCheckin = () => {
   // Fetch check-in history for a specific member
   const fetchMemberCheckinHistory = async (memberId: string, limit = 20) => {
     try {
-      const data = await directus.request(
-        readItems('member_checkins', {
-          filter: { member_id: { _eq: memberId } },
-          fields: ['*', 'branch.name', 'contract.contract_no'],
-          sort: ['-check_time'],
-          limit
-        })
-      )
-      return data as MemberCheckin[]
+      const { data } = await readItems<MemberCheckin>('member_checkins', {
+        filter: { member_id: memberId },
+        sort: 'check_time',
+        sortOrder: 'desc',
+        limit
+      })
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.fetchMemberCheckinHistory',
@@ -287,25 +244,21 @@ export const useCheckin = () => {
   const hasCheckedInToday = async (memberId: string, branchId?: string): Promise<boolean> => {
     const { start, end } = getTodayRange()
     const filter: Record<string, unknown> = {
-      member_id: { _eq: memberId },
-      check_time: {
-        _gte: start,
-        _lt: end
-      }
+      member_id: memberId,
+      check_time_gte: start,
+      check_time_lt: end
     }
 
     if (branchId) {
-      filter.branch_id = { _eq: branchId }
+      filter.branch_id = branchId
     }
 
     try {
-      const result = await directus.request(
-        aggregate('member_checkins', {
-          aggregate: { count: '*' },
-          query: { filter }
-        })
-      )
-      return Number(result[0]?.count) > 0
+      const { total } = await readItems<MemberCheckin>('member_checkins', {
+        filter,
+        limit: 1
+      })
+      return total > 0
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.hasCheckedInToday',

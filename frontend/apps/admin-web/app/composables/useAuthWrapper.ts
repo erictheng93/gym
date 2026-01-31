@@ -1,28 +1,16 @@
 /**
- * useAuthWrapper - Feature flag wrapper for authentication
- * Allows switching between old Directus auth and new backend-v2 auth
+ * useAuthWrapper - Authentication wrapper (fully migrated to backend-v2)
+ *
+ * This wrapper previously allowed switching between Directus and backend-v2 auth.
+ * Now that migration is complete, it always uses backend-v2 auth.
  *
  * Usage:
  *   const { login, logout, user, isAuthenticated, checkAuth } = useAuthWrapper()
- *
- * Set USE_NEW_AUTH=true in .env to use the new backend-v2 auth
  */
-import { useAuth } from './useAuth'
 import { useAuthV2 } from './useAuthV2'
 
-export const useAuthWrapper = () => {
-  const config = useRuntimeConfig()
-  const useNewAuth = config.public?.useNewAuth === true
+// Re-export useAuthV2 as useAuthWrapper for backwards compatibility
+export const useAuthWrapper = useAuthV2
 
-  if (useNewAuth) {
-    return useAuthV2()
-  }
-
-  return useAuth()
-}
-
-// Helper to check if new auth is enabled
-export const isNewAuthEnabled = () => {
-  const config = useRuntimeConfig()
-  return config.public?.useNewAuth === true
-}
+// Export useAuth as alias for easier migration
+export const useAuth = useAuthV2

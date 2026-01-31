@@ -179,6 +179,9 @@ export const campaignFilterSchema = z.object({
   limit: z.number().int().positive().max(100).default(20)
 })
 
+// Alias for backwards compatibility
+export const campaignSchema = createCampaignSchema
+
 // 導出類型
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>
 export type UpdateCampaignInput = z.infer<typeof updateCampaignSchema>

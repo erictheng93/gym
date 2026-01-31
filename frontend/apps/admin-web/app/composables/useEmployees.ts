@@ -1,9 +1,10 @@
-import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
 import type { Employee } from '~/types/directus'
 import { MESSAGES } from '~/constants'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 export const useEmployees = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const employees = useState<Employee[]>('employees', () => [])
   const isLoading = useState('employees_loading', () => false)
@@ -22,37 +23,21 @@ export const useEmployees = () => {
 
     try {
       const filter: Record<string, unknown> = {}
+      if (branchId) filter.branch_id = branchId
+      if (status) filter.employment_status = status
+      if (jobTitleId) filter.job_title_id = jobTitleId
 
-      if (search) {
-        filter._or = [
-          { full_name: { _contains: search } },
-          { employee_code: { _contains: search } }
-        ]
-      }
-      if (branchId) filter.branch_id = { _eq: branchId }
-      if (status) filter.employment_status = { _eq: status }
-      if (jobTitleId) filter.job_title_id = { _eq: jobTitleId }
+      const { data, total } = await readItems<Employee>('employees', {
+        page,
+        limit,
+        search,
+        filter,
+        sort: 'date_created',
+        sortOrder: 'desc'
+      })
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('employees', {
-            filter,
-            fields: ['*', 'branch_id.name', 'job_title_id.name'],
-            sort: ['-date_created'],
-            limit,
-            offset: (page - 1) * limit
-          })
-        ),
-        directus.request(
-          aggregate('employees', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
-
-      employees.value = data as Employee[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      employees.value = data
+      totalCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'useEmployees.fetchEmployees',
@@ -67,12 +52,8 @@ export const useEmployees = () => {
 
   const getEmployee = async (id: string) => {
     try {
-      const data = await directus.request(
-        readItem('employees', id, {
-          fields: ['*', 'branch_id.*', 'job_title_id.*']
-        })
-      )
-      return data as Employee
+      const data = await readItem<Employee>('employees', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useEmployees.getEmployee',
@@ -84,7 +65,7 @@ export const useEmployees = () => {
 
   const createEmployee = async (employee: Partial<Employee>) => {
     try {
-      const data = await directus.request(createItem('employees', employee))
+      const data = await createItem<Employee>('employees', employee)
       return data
     } catch (error) {
       handleError(error, {
@@ -97,7 +78,7 @@ export const useEmployees = () => {
 
   const updateEmployee = async (id: string, employee: Partial<Employee>) => {
     try {
-      const data = await directus.request(updateItem('employees', id, employee))
+      const data = await updateItem<Employee>('employees', id, employee)
       return data
     } catch (error) {
       handleError(error, {
@@ -110,8 +91,8 @@ export const useEmployees = () => {
 
   const deleteEmployee = async (id: string) => {
     try {
-      await directus.request(deleteItem('employees', id))
-      return true
+      const success = await deleteItem('employees', id)
+      return success
     } catch (error) {
       handleError(error, {
         context: 'useEmployees.deleteEmployee',
@@ -124,15 +105,15 @@ export const useEmployees = () => {
   // 取得所有員工（用於下拉選單）
   const fetchAllEmployees = async () => {
     try {
-      const data = await directus.request(
-        readItems('employees', {
-          fields: ['id', 'full_name', 'employee_code', 'branch_id'],
-          filter: { employment_status: { _eq: 'ACTIVE' } },
-          sort: ['full_name'],
-          limit: -1
-        })
-      )
-      return data as Employee[]
+      const { data } = await readItems<Employee>('employees', {
+        limit: 1000, // Large limit to get all
+        filter: {
+          employment_status: 'ACTIVE'
+        },
+        sort: 'full_name',
+        sortOrder: 'asc'
+      })
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useEmployees.fetchAllEmployees',

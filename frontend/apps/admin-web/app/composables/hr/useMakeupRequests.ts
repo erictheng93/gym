@@ -3,11 +3,11 @@
  * 包含：補打卡申請、審核、考勤更新
  */
 
-import { readItems, readItem, createItem, updateItem, aggregate } from '@directus/sdk'
-import type { MakeupRequest, MakeupApprovalLog, Attendance } from '~/types/directus'
+import { useFetch } from '~/composables/core/useFetch'
+import type { MakeupRequest, MakeupApprovalLog, Attendance, Employee } from '~/types/directus'
 
 export const useMakeupRequests = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem } = useFetch()
 
   // ============================================
   // 狀態
@@ -36,29 +36,19 @@ export const useMakeupRequests = () => {
 
     try {
       const filter: Record<string, unknown> = {}
-      if (employeeId) filter.employee_id = { _eq: employeeId }
-      if (status) filter.request_status = { _eq: status }
+      if (employeeId) filter.employee_id = employeeId
+      if (status) filter.request_status = status
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('makeup_requests', {
-            filter,
-            fields: ['*', 'employee.full_name', 'employee.employee_code', 'approver.full_name', 'branch.name'] as any,
-            sort: ['-date_created'],
-            limit,
-            offset: (page - 1) * limit
-          })
-        ),
-        directus.request(
-          aggregate('makeup_requests', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
+      const result = await readItems<MakeupRequest>('makeup_requests', {
+        filter,
+        sort: 'date_created',
+        sortOrder: 'desc',
+        limit,
+        page
+      })
 
-      makeupRequests.value = data as MakeupRequest[]
-      makeupTotalCount.value = Number(countResult[0]?.count) || 0
+      makeupRequests.value = result.data
+      makeupTotalCount.value = result.total
     } catch (error) {
       console.error('Failed to fetch makeup requests:', error)
     } finally {
@@ -71,32 +61,30 @@ export const useMakeupRequests = () => {
    */
   const fetchPendingMakeupApprovals = async (supervisorId: string) => {
     try {
-      const subordinates = await directus.request(
-        readItems('employees', {
-          filter: { supervisor_id: { _eq: supervisorId } },
-          fields: ['id']
-        })
-      )
+      const subordinatesResult = await readItems<Employee>('employees', {
+        filter: { supervisor_id: supervisorId }
+      })
 
-      if (subordinates.length === 0) {
+      if (subordinatesResult.data.length === 0) {
         pendingMakeupApprovals.value = []
         return
       }
 
-      const subordinateIds = subordinates.map((e: { id: string }) => e.id)
+      const subordinateIds = subordinatesResult.data.map(e => e.id)
 
-      const data = await directus.request(
-        readItems('makeup_requests', {
-          filter: {
-            employee_id: { _in: subordinateIds },
-            request_status: { _eq: 'PENDING' }
-          },
-          fields: ['*', 'employee.full_name', 'employee.employee_code', 'employee.branch.name', 'branch.name'] as any,
-          sort: ['-submitted_at']
-        })
+      // Fetch pending makeup requests and filter client-side
+      const result = await readItems<MakeupRequest>('makeup_requests', {
+        filter: {
+          request_status: 'PENDING'
+        },
+        sort: 'submitted_at',
+        sortOrder: 'desc',
+        limit: 100
+      })
+
+      pendingMakeupApprovals.value = result.data.filter(mr =>
+        subordinateIds.includes(mr.employee_id)
       )
-
-      pendingMakeupApprovals.value = data as MakeupRequest[]
     } catch (error) {
       console.error('Failed to fetch pending makeup approvals:', error)
     }
@@ -118,32 +106,32 @@ export const useMakeupRequests = () => {
     requestedCheckOut?: string
     reason: string
   }) => {
-    const data = await directus.request(
-      createItem('makeup_requests', {
-        employee_id: makeupData.employeeId,
-        branch_id: makeupData.branchId,
-        target_date: makeupData.targetDate,
-        makeup_type: makeupData.makeupType,
-        requested_check_in: makeupData.requestedCheckIn || null,
-        requested_check_out: makeupData.requestedCheckOut || null,
-        reason: makeupData.reason,
-        request_status: 'PENDING',
-        submitted_at: new Date().toISOString()
-      })
-    )
+    const data = await createItem<MakeupRequest>('makeup_requests', {
+      employee_id: makeupData.employeeId,
+      branch_id: makeupData.branchId,
+      target_date: makeupData.targetDate,
+      makeup_type: makeupData.makeupType,
+      requested_check_in: makeupData.requestedCheckIn || null,
+      requested_check_out: makeupData.requestedCheckOut || null,
+      reason: makeupData.reason,
+      request_status: 'PENDING',
+      submitted_at: new Date().toISOString()
+    })
 
-    await directus.request(
-      createItem('makeup_approval_logs', {
-        makeup_request_id: (data as MakeupRequest).id,
-        action_by: makeupData.employeeId,
-        action: 'SUBMIT',
-        previous_status: null,
-        new_status: 'PENDING',
-        notes: '提交補打卡申請'
-      })
-    )
+    if (!data) {
+      throw new Error('Failed to create makeup request')
+    }
 
-    return data as MakeupRequest
+    await createItem<MakeupApprovalLog>('makeup_approval_logs', {
+      makeup_request_id: data.id,
+      action_by: makeupData.employeeId,
+      action: 'SUBMIT',
+      previous_status: null,
+      new_status: 'PENDING',
+      notes: '提交補打卡申請'
+    })
+
+    return data
   }
 
   /**
@@ -155,53 +143,49 @@ export const useMakeupRequests = () => {
     action: 'APPROVE' | 'REJECT',
     notes?: string
   ) => {
-    const makeupRequest = await directus.request(
-      readItem('makeup_requests', makeupRequestId)
-    ) as MakeupRequest
+    const makeupRequest = await readItem<MakeupRequest>('makeup_requests', makeupRequestId)
+
+    if (!makeupRequest) {
+      throw new Error('Makeup request not found')
+    }
 
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED'
 
-    const data = await directus.request(
-      updateItem('makeup_requests', makeupRequestId, {
-        request_status: newStatus,
-        approver_id: approverId,
-        approved_at: new Date().toISOString(),
-        approval_notes: notes || null
-      })
-    )
+    const data = await updateItem<MakeupRequest>('makeup_requests', makeupRequestId, {
+      request_status: newStatus,
+      approver_id: approverId,
+      approved_at: new Date().toISOString(),
+      approval_notes: notes || null
+    })
 
-    await directus.request(
-      createItem('makeup_approval_logs', {
-        makeup_request_id: makeupRequestId,
-        action_by: approverId,
-        action,
-        previous_status: makeupRequest.request_status,
-        new_status: newStatus,
-        notes
-      })
-    )
+    await createItem<MakeupApprovalLog>('makeup_approval_logs', {
+      makeup_request_id: makeupRequestId,
+      action_by: approverId,
+      action,
+      previous_status: makeupRequest.request_status,
+      new_status: newStatus,
+      notes
+    })
 
     // 如果核准，更新考勤紀錄
     if (action === 'APPROVE') {
       await applyMakeupToAttendance(makeupRequest)
     }
 
-    return data as MakeupRequest
+    return data
   }
 
   /**
    * 將補打卡應用到考勤紀錄
    */
   const applyMakeupToAttendance = async (makeupRequest: MakeupRequest) => {
-    const existingAttendances = await directus.request(
-      readItems('attendances', {
-        filter: {
-          employee_id: { _eq: makeupRequest.employee_id },
-          attendance_date: { _eq: makeupRequest.target_date }
-        },
-        limit: 1
-      })
-    ) as Attendance[]
+    const existingResult = await readItems<Attendance>('attendances', {
+      filter: {
+        employee_id: makeupRequest.employee_id,
+        attendance_date: makeupRequest.target_date
+      },
+      limit: 1
+    })
 
     const updateData: Partial<Attendance> = {
       check_type: 'MAKEUP',
@@ -220,20 +204,16 @@ export const useMakeupRequests = () => {
       }
     }
 
-    if (existingAttendances.length > 0) {
-      await directus.request(
-        updateItem('attendances', existingAttendances[0].id, updateData)
-      )
+    if (existingResult.data.length > 0) {
+      await updateItem<Attendance>('attendances', existingResult.data[0].id, updateData)
     } else {
-      await directus.request(
-        createItem('attendances', {
-          employee_id: makeupRequest.employee_id,
-          branch_id: makeupRequest.branch_id,
-          attendance_date: makeupRequest.target_date,
-          attendance_status: 'PRESENT',
-          ...updateData
-        })
-      )
+      await createItem<Attendance>('attendances', {
+        employee_id: makeupRequest.employee_id,
+        branch_id: makeupRequest.branch_id,
+        attendance_date: makeupRequest.target_date,
+        attendance_status: 'PRESENT',
+        ...updateData
+      })
     }
   }
 
@@ -241,46 +221,41 @@ export const useMakeupRequests = () => {
    * 取消補打卡申請
    */
   const cancelMakeup = async (makeupRequestId: string, employeeId: string) => {
-    const makeupRequest = await directus.request(
-      readItem('makeup_requests', makeupRequestId)
-    ) as MakeupRequest
+    const makeupRequest = await readItem<MakeupRequest>('makeup_requests', makeupRequestId)
+
+    if (!makeupRequest) {
+      throw new Error('Makeup request not found')
+    }
 
     if (makeupRequest.request_status !== 'PENDING') {
       throw new Error('只能取消待審核的申請')
     }
 
-    const data = await directus.request(
-      updateItem('makeup_requests', makeupRequestId, {
-        request_status: 'CANCELLED'
-      })
-    )
+    const data = await updateItem<MakeupRequest>('makeup_requests', makeupRequestId, {
+      request_status: 'CANCELLED'
+    })
 
-    await directus.request(
-      createItem('makeup_approval_logs', {
-        makeup_request_id: makeupRequestId,
-        action_by: employeeId,
-        action: 'CANCEL',
-        previous_status: 'PENDING',
-        new_status: 'CANCELLED',
-        notes: '取消申請'
-      })
-    )
+    await createItem<MakeupApprovalLog>('makeup_approval_logs', {
+      makeup_request_id: makeupRequestId,
+      action_by: employeeId,
+      action: 'CANCEL',
+      previous_status: 'PENDING',
+      new_status: 'CANCELLED',
+      notes: '取消申請'
+    })
 
-    return data as MakeupRequest
+    return data
   }
 
   /**
    * 取得補打卡審核歷程
    */
   const fetchMakeupApprovalHistory = async (makeupRequestId: string) => {
-    const data = await directus.request(
-      readItems('makeup_approval_logs', {
-        filter: { makeup_request_id: { _eq: makeupRequestId } },
-        fields: ['*', 'actor.full_name'] as any,
-        sort: ['date_created']
-      })
-    )
-    return data as MakeupApprovalLog[]
+    const result = await readItems<MakeupApprovalLog>('makeup_approval_logs', {
+      filter: { makeup_request_id: makeupRequestId },
+      sort: 'date_created'
+    })
+    return result.data
   }
 
   return {

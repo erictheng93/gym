@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { aggregate, readItems } from '@directus/sdk'
 import { MESSAGES, PAGES, STATUS } from '~/constants'
+import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const directus = useDirectus()
 const { user } = useAuth()
 const { getRevenueReport } = useReports()
+const { readItems } = useFetch()
 
 // Stats
 const stats = ref({
@@ -42,9 +42,10 @@ const fetchDashboardData = async () => {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     const [
-      totalMembers,
+      allMembers,
       activeMembers,
       newMembers,
       activeContracts,
@@ -54,13 +55,13 @@ const fetchDashboardData = async () => {
       monthlyRevenue,
       todayRevenue
     ] = await Promise.all([
-      directus.request(aggregate('members', { aggregate: { count: '*' } })),
-      directus.request(aggregate('members', { aggregate: { count: '*' }, query: { filter: { member_status: { _eq: 'ACTIVE' } } } })),
-      directus.request(aggregate('members', { aggregate: { count: '*' }, query: { filter: { date_created: { _gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() } } } })),
-      directus.request(aggregate('contracts', { aggregate: { count: '*' }, query: { filter: { contract_status: { _eq: 'ACTIVE' } } } })),
-      directus.request(aggregate('contracts', { aggregate: { count: '*' }, query: { filter: { contract_status: { _eq: 'DRAFT' } } } })),
-      directus.request(readItems('members', { limit: 5, sort: ['-date_created'], fields: ['id', 'full_name', 'member_code', 'member_status', 'date_created'] })),
-      directus.request(readItems('contracts', { limit: 5, sort: ['-date_created'], fields: ['id', 'contract_no', 'contract_status', 'total_amount', 'date_created', 'member.full_name'] })),
+      readItems<any>('members', { limit: 1 }),
+      readItems<any>('members', { limit: 1, filter: { status: 'ACTIVE' } }),
+      readItems<any>('members', { limit: 1, filter: { date_created_gte: oneWeekAgo } }),
+      readItems<any>('contracts', { limit: 1, filter: { status: 'ACTIVE' } }),
+      readItems<any>('contracts', { limit: 1, filter: { status: 'DRAFT' } }),
+      readItems<any>('members', { limit: 5, sort: 'dateCreated', sortOrder: 'desc' }),
+      readItems<any>('contracts', { limit: 5, sort: 'dateCreated', sortOrder: 'desc' }),
       // Fetch monthly revenue from reports API
       getRevenueReport(
         startOfMonth.toISOString().split('T')[0],
@@ -75,13 +76,13 @@ const fetchDashboardData = async () => {
 
     stats.value = {
       members: {
-        total: Number(totalMembers[0]?.count) || 0,
-        active: Number(activeMembers[0]?.count) || 0,
-        new: Number(newMembers[0]?.count) || 0
+        total: allMembers.total || 0,
+        active: activeMembers.total || 0,
+        new: newMembers.total || 0
       },
       contracts: {
-        active: Number(activeContracts[0]?.count) || 0,
-        draft: Number(draftContracts[0]?.count) || 0,
+        active: activeContracts.total || 0,
+        draft: draftContracts.total || 0,
         expiring: 0
       },
       revenue: {
@@ -90,8 +91,8 @@ const fetchDashboardData = async () => {
       }
     }
 
-    recentMembers.value = members as any[]
-    recentContracts.value = contracts as any[]
+    recentMembers.value = members.data
+    recentContracts.value = contracts.data
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
     useToast().error(MESSAGES.ERRORS.DASHBOARD_LOAD_FAILED)
@@ -251,16 +252,16 @@ const getStatusBadge = (status: string) => {
             </div>
             <ul v-else class="member-list">
               <li v-for="(member, index) in recentMembers" :key="member.id" class="member-item stagger-item" :style="{ animationDelay: `${index * 0.1}s` }">
-                <div class="member-avatar">{{ member.full_name[0] }}</div>
+                <div class="member-avatar">{{ member.fullName?.[0] || member.full_name?.[0] || '?' }}</div>
                 <div class="member-info">
-                  <p class="member-name">{{ member.full_name }}</p>
-                  <p class="member-code text-caption text-tertiary">{{ member.member_code }}</p>
+                  <p class="member-name">{{ member.fullName || member.full_name }}</p>
+                  <p class="member-code text-caption text-tertiary">{{ member.memberCode || member.member_code }}</p>
                 </div>
                 <div class="member-meta">
-                  <span :class="['badge', getStatusBadge(member.member_status).class]">
-                    {{ getStatusBadge(member.member_status).label }}
+                  <span :class="['badge', getStatusBadge(member.status || member.member_status).class]">
+                    {{ getStatusBadge(member.status || member.member_status).label }}
                   </span>
-                  <span class="text-caption text-tertiary">{{ formatDate(member.date_created) }}</span>
+                  <span class="text-caption text-tertiary">{{ formatDate(member.createdAt || member.date_created) }}</span>
                 </div>
               </li>
             </ul>
@@ -289,14 +290,14 @@ const getStatusBadge = (status: string) => {
                   </svg>
                 </div>
                 <div class="contract-info">
-                  <p class="contract-no">{{ contract.contract_no }}</p>
-                  <p class="contract-member text-caption text-tertiary">{{ contract.member?.full_name || '—' }}</p>
+                  <p class="contract-no">{{ contract.contractNo || contract.contract_no }}</p>
+                  <p class="contract-member text-caption text-tertiary">{{ contract.member?.fullName || contract.member?.full_name || '—' }}</p>
                 </div>
                 <div class="contract-meta">
-                  <span :class="['badge', getStatusBadge(contract.contract_status).class]">
-                    {{ getStatusBadge(contract.contract_status).label }}
+                  <span :class="['badge', getStatusBadge(contract.status || contract.contract_status).class]">
+                    {{ getStatusBadge(contract.status || contract.contract_status).label }}
                   </span>
-                  <span class="contract-amount text-body-emphasis">{{ formatCurrency(contract.total_amount) }}</span>
+                  <span class="contract-amount text-body-emphasis">{{ formatCurrency(contract.totalAmount || contract.total_amount) }}</span>
                 </div>
               </li>
             </ul>

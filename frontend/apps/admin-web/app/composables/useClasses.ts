@@ -3,13 +3,12 @@
  * 管理課程定義的 CRUD 操作
  */
 
-import { readItems, readItem, createItem, updateItem, deleteItem, aggregate } from '@directus/sdk'
-import type { Class, ClassCategory } from '~/types/directus'
-import { MESSAGES } from '~/constants'
+import type { Class } from '~/types/directus'
+import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 export const useClasses = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
 
   const classes = useState<Class[]>('classes', () => [])
@@ -34,42 +33,22 @@ export const useClasses = () => {
     try {
       const filter: Record<string, unknown> = {}
 
-      if (search) {
-        filter._or = [
-          { name: { _contains: search } },
-          { description: { _contains: search } }
-        ]
-      }
-      if (branchId) filter.branch_id = { _eq: branchId }
-      if (categoryId) filter.category_id = { _eq: categoryId }
-      if (typeof isActive === 'boolean') filter.is_active = { _eq: isActive }
-      if (difficulty) filter.difficulty_level = { _eq: difficulty }
+      if (branchId) filter.branch_id = branchId
+      if (categoryId) filter.category_id = categoryId
+      if (typeof isActive === 'boolean') filter.is_active = isActive
+      if (difficulty) filter.difficulty_level = difficulty
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('classes', {
-            filter,
-            fields: [
-              '*',
-              'branch.id', 'branch.name',
-              'instructor.id', 'instructor.full_name',
-              'class_category.id', 'class_category.name', 'class_category.color', 'class_category.icon'
-            ],
-            sort: ['-date_created'],
-            limit,
-            offset: (page - 1) * limit
-          })
-        ),
-        directus.request(
-          aggregate('classes', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
+      const { data, total } = await readItems<Class>('classes', {
+        page,
+        limit,
+        search,
+        filter,
+        sort: 'date_created',
+        sortOrder: 'desc'
+      })
 
-      classes.value = data as Class[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      classes.value = data
+      totalCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'useClasses.fetchClasses',
@@ -85,17 +64,8 @@ export const useClasses = () => {
    */
   const getClass = async (id: string): Promise<Class | null> => {
     try {
-      const data = await directus.request(
-        readItem('classes', id, {
-          fields: [
-            '*',
-            'branch.*',
-            'instructor.*',
-            'class_category.*'
-          ]
-        })
-      )
-      return data as Class
+      const data = await readItem<Class>('classes', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClasses.getClass',
@@ -108,10 +78,10 @@ export const useClasses = () => {
   /**
    * 新增課程
    */
-  const createClass = async (classData: Partial<Class>): Promise<Class | null> => {
+  const createClassItem = async (classData: Partial<Class>): Promise<Class | null> => {
     try {
-      const data = await directus.request(createItem('classes', classData))
-      return data as Class
+      const data = await createItem<Class>('classes', classData)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClasses.createClass',
@@ -124,10 +94,10 @@ export const useClasses = () => {
   /**
    * 更新課程
    */
-  const updateClass = async (id: string, classData: Partial<Class>): Promise<Class | null> => {
+  const updateClassItem = async (id: string, classData: Partial<Class>): Promise<Class | null> => {
     try {
-      const data = await directus.request(updateItem('classes', id, classData))
-      return data as Class
+      const data = await updateItem<Class>('classes', id, classData)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useClasses.updateClass',
@@ -140,10 +110,10 @@ export const useClasses = () => {
   /**
    * 刪除課程
    */
-  const deleteClass = async (id: string): Promise<boolean> => {
+  const deleteClassItem = async (id: string): Promise<boolean> => {
     try {
-      await directus.request(deleteItem('classes', id))
-      return true
+      const success = await deleteItem('classes', id)
+      return success
     } catch (error) {
       handleError(error, {
         context: 'useClasses.deleteClass',
@@ -158,8 +128,8 @@ export const useClasses = () => {
    */
   const toggleClassActive = async (id: string, isActive: boolean): Promise<boolean> => {
     try {
-      await directus.request(updateItem('classes', id, { is_active: isActive }))
-      return true
+      const result = await updateItem<Class>('classes', id, { is_active: isActive })
+      return result !== null
     } catch (error) {
       handleError(error, {
         context: 'useClasses.toggleClassActive',
@@ -175,26 +145,16 @@ export const useClasses = () => {
   const getClassStats = async (branchId?: string) => {
     try {
       const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = { _eq: branchId }
+      if (branchId) filter.branch_id = branchId
 
       const [totalResult, activeResult] = await Promise.all([
-        directus.request(
-          aggregate('classes', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        ),
-        directus.request(
-          aggregate('classes', {
-            aggregate: { count: '*' },
-            query: { filter: { ...filter, is_active: { _eq: true } } }
-          })
-        )
+        readItems<Class>('classes', { filter, limit: 1 }),
+        readItems<Class>('classes', { filter: { ...filter, is_active: true }, limit: 1 })
       ])
 
       return {
-        total: Number(totalResult[0]?.count) || 0,
-        active: Number(activeResult[0]?.count) || 0
+        total: totalResult.total,
+        active: activeResult.total
       }
     } catch (error) {
       handleError(error, {
@@ -211,9 +171,9 @@ export const useClasses = () => {
     totalCount,
     fetchClasses,
     getClass,
-    createClass,
-    updateClass,
-    deleteClass,
+    createClass: createClassItem,
+    updateClass: updateClassItem,
+    deleteClass: deleteClassItem,
     toggleClassActive,
     getClassStats
   }

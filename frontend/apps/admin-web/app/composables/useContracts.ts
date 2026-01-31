@@ -1,17 +1,11 @@
-import { readItems, readItem, createItem, updateItem, aggregate } from '@directus/sdk'
+import { useFetch } from '~/composables/core/useFetch'
 import type { Contract } from '~/types/directus'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
-import {
-  buildPaginationParams,
-  buildSearchFilter,
-  buildFilter,
-  mergeFilters
-} from '~/utils/api-helpers'
 
 export const useContracts = () => {
-  const directus = useDirectus()
+  const { readItems, readItem, createItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
   const contracts = useState<Contract[]>('contracts', () => [])
@@ -27,41 +21,25 @@ export const useContracts = () => {
     search?: string
   }) => {
     isLoading.value = true
-    const { memberId, branchId, status, search } = options || {}
+    const { page = 1, limit = 20, memberId, branchId, status, search } = options || {}
 
     try {
-      // 使用工具函數建構分頁和過濾器
-      const { limit, offset } = buildPaginationParams(options)
+      const filter: Record<string, unknown> = {}
+      if (memberId) filter.member_id = memberId
+      if (branchId) filter.branch_id = branchId
+      if (status) filter.contract_status = status
 
-      const filter = mergeFilters(
-        buildSearchFilter(search, ['contract_no']),
-        buildFilter([
-          { field: 'member_id', value: memberId },
-          { field: 'branch_id', value: branchId },
-          { field: 'contract_status', value: status }
-        ])
-      )
+      const { data, total } = await readItems<Contract>('contracts', {
+        page,
+        limit,
+        search,
+        filter,
+        sort: 'date_created',
+        sortOrder: 'desc'
+      })
 
-      const [data, countResult] = await Promise.all([
-        directus.request(
-          readItems('contracts', {
-            filter,
-            fields: ['*', 'member_id.full_name', 'member_id.member_code', 'plan_id.name', 'branch_id.name'],
-            sort: ['-date_created'],
-            limit,
-            offset
-          })
-        ),
-        directus.request(
-          aggregate('contracts', {
-            aggregate: { count: '*' },
-            query: { filter }
-          })
-        )
-      ])
-
-      contracts.value = data as Contract[]
-      totalCount.value = Number(countResult[0]?.count) || 0
+      contracts.value = data
+      totalCount.value = total
     } catch (error) {
       handleError(error, {
         context: 'useContracts.fetchContracts',
@@ -76,28 +54,8 @@ export const useContracts = () => {
 
   const getContract = async (id: string) => {
     try {
-      const data = await directus.request(
-        readItem('contracts', id, {
-          fields: [
-            '*',
-            'member_id.*',
-            'plan_id.*',
-            'branch_id.*',
-            'sales_person_id.*',
-            'logs.*',
-            'logs.created_by_employee.id',
-            'logs.created_by_employee.full_name',
-            'logs.branch_id.id',
-            'logs.branch_id.name',
-            'logs.original_member_id.id',
-            'logs.original_member_id.full_name',
-            'logs.target_member_id.id',
-            'logs.target_member_id.full_name',
-            'payments.*'
-          ]
-        })
-      )
-      return data as Contract
+      const data = await readItem<Contract>('contracts', id)
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useContracts.getContract',
@@ -109,7 +67,7 @@ export const useContracts = () => {
 
   const createContract = async (contract: Partial<Contract>) => {
     try {
-      const data = await directus.request(createItem('contracts', contract))
+      const data = await createItem<Contract>('contracts', contract)
       // 失效合約和會員緩存（新合約可能影響會員狀態）
       invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
       return data
@@ -124,7 +82,7 @@ export const useContracts = () => {
 
   const updateContract = async (id: string, contract: Partial<Contract>) => {
     try {
-      const data = await directus.request(updateItem('contracts', id, contract))
+      const data = await updateItem<Contract>('contracts', id, contract)
       // 失效合約和會員緩存（合約狀態變更可能影響會員狀態）
       invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
       return data
@@ -142,29 +100,35 @@ export const useContracts = () => {
     const defaultStats = { active: 0, expired: 0, draft: 0 }
 
     try {
-      const baseFilter = buildFilter([
-        { field: 'branch_id', value: branchId }
-      ])
-
-      const [active, expired, draft] = await Promise.all([
-        directus.request(aggregate('contracts', {
-          aggregate: { count: '*' },
-          query: { filter: { ...baseFilter, contract_status: { _eq: 'ACTIVE' } } }
-        })),
-        directus.request(aggregate('contracts', {
-          aggregate: { count: '*' },
-          query: { filter: { ...baseFilter, contract_status: { _eq: 'EXPIRED' } } }
-        })),
-        directus.request(aggregate('contracts', {
-          aggregate: { count: '*' },
-          query: { filter: { ...baseFilter, contract_status: { _eq: 'DRAFT' } } }
-        }))
+      // Fetch stats for each status in parallel
+      const [activeResult, expiredResult, draftResult] = await Promise.all([
+        readItems<Contract>('contracts', {
+          limit: 1,
+          filter: {
+            ...(branchId && { branch_id: branchId }),
+            contract_status: 'ACTIVE'
+          }
+        }),
+        readItems<Contract>('contracts', {
+          limit: 1,
+          filter: {
+            ...(branchId && { branch_id: branchId }),
+            contract_status: 'EXPIRED'
+          }
+        }),
+        readItems<Contract>('contracts', {
+          limit: 1,
+          filter: {
+            ...(branchId && { branch_id: branchId }),
+            contract_status: 'DRAFT'
+          }
+        })
       ])
 
       return {
-        active: Number(active[0]?.count) || 0,
-        expired: Number(expired[0]?.count) || 0,
-        draft: Number(draft[0]?.count) || 0
+        active: activeResult.total,
+        expired: expiredResult.total,
+        draft: draftResult.total
       }
     } catch (error) {
       handleError(error, {

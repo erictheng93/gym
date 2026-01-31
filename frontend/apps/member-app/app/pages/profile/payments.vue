@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { readItems } from '@directus/sdk'
-import { useDirectus } from '@gym-nexus/shared/composables'
+import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
   middleware: 'auth'
@@ -24,7 +23,7 @@ interface Payment {
   } | null
 }
 
-const directus = useDirectus()
+const { readItems } = useFetch()
 const { member } = useMemberAuth()
 
 const payments = ref<Payment[]>([])
@@ -42,30 +41,23 @@ const fetchPayments = async (loadMore = false) => {
       currentPage.value = 1
     }
 
-    const result = await directus.request(
-      readItems('payments', {
-        filter: {
-          member_id: { _eq: member.value.id }
-        },
-        fields: [
-          'id', 'amount', 'payment_method', 'payment_date', 'payment_type', 'notes',
-          'contract_id.id', 'contract_id.contract_no', 'contract_id.plan_id.name'
-        ],
-        sort: ['-payment_date', '-date_created'],
-        limit: pageSize,
-        offset: (currentPage.value - 1) * pageSize
-      })
-    )
-
-    const items = result as Payment[]
+    const result = await readItems<Payment>('payments', {
+      filter: {
+        member_id: member.value.id
+      },
+      page: currentPage.value,
+      limit: pageSize,
+      sort: 'payment_date',
+      sortOrder: 'desc'
+    })
 
     if (loadMore) {
-      payments.value = [...payments.value, ...items]
+      payments.value = [...payments.value, ...result.data]
     } else {
-      payments.value = items
+      payments.value = result.data
     }
 
-    hasMore.value = items.length === pageSize
+    hasMore.value = result.data.length === pageSize
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入付款紀錄' })
   } finally {
