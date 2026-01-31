@@ -134,8 +134,12 @@ export const jobTitles = pgTable('job_titles', {
   dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
   dateUpdated: timestamp('date_updated', { withTimezone: true }),
   name: varchar('name', { length: 100 }).notNull(),
+  level: integer('level').default(0),
   permissionsConfig: jsonb('permissions_config').default({}),
-});
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_job_titles_tenant').on(table.tenantId),
+]);
 
 export const employees = pgTable('employees', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -173,7 +177,13 @@ export const membershipPlans = pgTable('membership_plans', {
   allowTransfer: boolean('allow_transfer').default(false),
   allowPause: boolean('allow_pause').default(false),
   description: text('description'),
-});
+  isActive: boolean('is_active').default(true),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+  branchId: uuid('branch_id').references(() => branches.id),
+}, (table) => [
+  index('idx_membership_plans_tenant').on(table.tenantId),
+  index('idx_membership_plans_branch').on(table.branchId),
+]);
 
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -402,6 +412,8 @@ export const bookings = pgTable('bookings', {
 // CHECK-IN SYSTEM
 // =============================================================================
 
+export const CHECKIN_TYPE = ['ENTRY', 'CLASS', 'FACILITY'] as const;
+
 export const checkIns = pgTable('check_ins', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
@@ -409,8 +421,11 @@ export const checkIns = pgTable('check_ins', {
   dateUpdated: timestamp('date_updated', { withTimezone: true }),
   memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
   branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
+  contractId: uuid('contract_id').references(() => contracts.id, { onDelete: 'set null' }),
   checkInTime: timestamp('check_in_time', { withTimezone: true }).defaultNow(),
-  checkInMethod: varchar('check_in_method', { length: 20 }).notNull().$type<typeof CHECKIN_METHOD[number]>(),
+  checkInType: varchar('check_in_type', { length: 20 }).default('ENTRY').$type<typeof CHECKIN_TYPE[number]>(),
+  checkInMethod: varchar('check_in_method', { length: 20 }).$type<typeof CHECKIN_METHOD[number]>(),
+  processedById: uuid('processed_by_id').references(() => employees.id),
   locationIp: varchar('location_ip', { length: 50 }),
   locationDevice: varchar('location_device', { length: 100 }),
   notes: text('notes'),
@@ -421,13 +436,124 @@ export const checkIns = pgTable('check_ins', {
 ]);
 
 // =============================================================================
+// LEADS (潛在客戶)
+// =============================================================================
+
+export const LEAD_SOURCE = ['WALK_IN', 'REFERRAL', 'WEBSITE', 'SOCIAL_MEDIA', 'EVENT', 'AD', 'OTHER'] as const;
+export const LEAD_STATUS = ['NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL', 'NEGOTIATION', 'CONVERTED', 'LOST'] as const;
+
+export const leads = pgTable('leads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  status: varchar('status', { length: 20 }).default('active'),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  fullName: varchar('full_name', { length: 100 }).notNull(),
+  phone: varchar('phone', { length: 20 }),
+  email: varchar('email', { length: 100 }),
+  source: varchar('source', { length: 30 }).$type<typeof LEAD_SOURCE[number]>(),
+  sourceDetail: text('source_detail'),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  assignedToId: uuid('assigned_to_id').references(() => employees.id),
+  leadStatus: varchar('lead_status', { length: 30 }).default('NEW').$type<typeof LEAD_STATUS[number]>(),
+  notes: text('notes'),
+  interests: jsonb('interests').default([]),
+  expectedBudget: decimal('expected_budget', { precision: 10, scale: 2 }),
+  convertedMemberId: uuid('converted_member_id').references(() => members.id),
+  convertedAt: timestamp('converted_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_leads_branch').on(table.branchId),
+  index('idx_leads_status').on(table.leadStatus),
+  index('idx_leads_assigned').on(table.assignedToId),
+]);
+
+// =============================================================================
+// CAMPAIGNS (行銷活動)
+// =============================================================================
+
+export const CAMPAIGN_TYPE = ['PROMOTION', 'REFERRAL', 'SEASONAL', 'MEMBERSHIP', 'EVENT', 'OTHER'] as const;
+export const DISCOUNT_TYPE = ['PERCENTAGE', 'FIXED', 'FREE_TRIAL', 'GIFT'] as const;
+
+export const campaigns = pgTable('campaigns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  status: varchar('status', { length: 20 }).default('active'),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  branchId: uuid('branch_id').references(() => branches.id),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  campaignType: varchar('campaign_type', { length: 30 }).$type<typeof CAMPAIGN_TYPE[number]>(),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  targetAudience: text('target_audience'),
+  budget: decimal('budget', { precision: 10, scale: 2 }),
+  discountType: varchar('discount_type', { length: 30 }).$type<typeof DISCOUNT_TYPE[number]>(),
+  discountValue: decimal('discount_value', { precision: 10, scale: 2 }),
+  isActive: boolean('is_active').default(true),
+  terms: text('terms'),
+  createdById: uuid('created_by_id').references(() => employees.id),
+}, (table) => [
+  index('idx_campaigns_tenant').on(table.tenantId),
+  index('idx_campaigns_dates').on(table.startDate, table.endDate),
+]);
+
+// =============================================================================
+// COUPONS (優惠券)
+// =============================================================================
+
+export const COUPON_DISCOUNT_TYPE = ['PERCENTAGE', 'FIXED'] as const;
+
+export const coupons = pgTable('coupons', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  status: varchar('status', { length: 20 }).default('active'),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  dateUpdated: timestamp('date_updated', { withTimezone: true }),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  branchId: uuid('branch_id').references(() => branches.id),
+  campaignId: uuid('campaign_id').references(() => campaigns.id),
+  code: varchar('code', { length: 20 }).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  discountType: varchar('discount_type', { length: 20 }).notNull().$type<typeof COUPON_DISCOUNT_TYPE[number]>(),
+  discountValue: decimal('discount_value', { precision: 10, scale: 2 }).notNull(),
+  minPurchase: decimal('min_purchase', { precision: 10, scale: 2 }),
+  maxDiscount: decimal('max_discount', { precision: 10, scale: 2 }),
+  validFrom: date('valid_from').notNull(),
+  validUntil: date('valid_until').notNull(),
+  usageLimit: integer('usage_limit'),
+  usageLimitPerMember: integer('usage_limit_per_member').default(1),
+  isActive: boolean('is_active').default(true),
+  applicablePlans: jsonb('applicable_plans').default([]),
+}, (table) => [
+  index('idx_coupons_tenant').on(table.tenantId),
+  index('idx_coupons_code').on(table.code),
+  uniqueIndex('uq_coupons_code_tenant').on(table.code, table.tenantId),
+]);
+
+export const couponUsages = pgTable('coupon_usages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  couponId: uuid('coupon_id').notNull().references(() => coupons.id, { onDelete: 'cascade' }),
+  memberId: uuid('member_id').references(() => members.id),
+  contractId: uuid('contract_id').references(() => contracts.id),
+  discountAmount: decimal('discount_amount', { precision: 10, scale: 2 }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index('idx_coupon_usages_coupon').on(table.couponId),
+  index('idx_coupon_usages_member').on(table.memberId),
+]);
+
+// =============================================================================
 // NOTIFICATIONS
 // =============================================================================
+
+export const NOTIFICATION_PRIORITY = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as const;
 
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
   dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  dateUpdated: timestamp('date_updated', { withTimezone: true }),
   notificationType: varchar('notification_type', { length: 50 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   message: text('message'),
@@ -435,9 +561,16 @@ export const notifications = pgTable('notifications', {
   referenceId: uuid('reference_id'),
   branchId: uuid('branch_id').references(() => branches.id),
   targetUserId: uuid('target_user_id').references(() => users.id),
+  targetMemberId: uuid('target_member_id').references(() => members.id),
+  targetEmployeeId: uuid('target_employee_id').references(() => employees.id),
+  priority: varchar('priority', { length: 20 }).default('NORMAL').$type<typeof NOTIFICATION_PRIORITY[number]>(),
   isRead: boolean('is_read').default(false),
   readAt: timestamp('read_at', { withTimezone: true }),
-});
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_notifications_branch').on(table.branchId),
+  index('idx_notifications_target_employee').on(table.targetEmployeeId),
+]);
 
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: uuid('id').primaryKey().defaultRandom(),

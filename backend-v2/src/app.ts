@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -11,11 +12,20 @@ import type { TenantVariables } from './middleware/index.js';
 import authRoutes from './routes/auth.js';
 import membersRoutes from './routes/members.js';
 import contractsRoutes from './routes/contracts.js';
+import contractLogsRoutes from './routes/contract-logs.js';
 import branchesRoutes from './routes/branches.js';
 import employeesRoutes from './routes/employees.js';
+import jobTitlesRoutes from './routes/job-titles.js';
+import membershipPlansRoutes from './routes/membership-plans.js';
 import classesRoutes from './routes/classes.js';
 import bookingsRoutes from './routes/bookings.js';
+import checkInsRoutes from './routes/check-ins.js';
 import paymentsRoutes from './routes/payments.js';
+import leadsRoutes from './routes/leads.js';
+import campaignsRoutes from './routes/campaigns.js';
+import couponsRoutes from './routes/coupons.js';
+import notificationsRoutes from './routes/notifications.js';
+import dashboardRoutes from './routes/dashboard.js';
 import reportsRoutes from './routes/reports.js';
 import healthRoutes from './routes/health.js';
 import { initCronJobs } from './cron/index.js';
@@ -39,14 +49,32 @@ app.use('*', apiLogger);
 app.use('*', authMiddleware);
 app.use('*', tenantMiddleware);
 
+// Core routes
 app.route('/api/auth', authRoutes);
 app.route('/api/members', membersRoutes);
 app.route('/api/contracts', contractsRoutes);
+app.route('/api/contract-logs', contractLogsRoutes);
 app.route('/api/branches', branchesRoutes);
 app.route('/api/employees', employeesRoutes);
+app.route('/api/job-titles', jobTitlesRoutes);
+app.route('/api/membership-plans', membershipPlansRoutes);
+
+// Class & booking routes
 app.route('/api/classes', classesRoutes);
 app.route('/api/bookings', bookingsRoutes);
+app.route('/api/check-ins', checkInsRoutes);
+
+// Payment routes
 app.route('/api/payments', paymentsRoutes);
+
+// Marketing routes
+app.route('/api/leads', leadsRoutes);
+app.route('/api/campaigns', campaignsRoutes);
+app.route('/api/coupons', couponsRoutes);
+
+// System routes
+app.route('/api/notifications', notificationsRoutes);
+app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/reports', reportsRoutes);
 app.route('/health', healthRoutes);
 
