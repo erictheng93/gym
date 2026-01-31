@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { TEST_USERS, login, logout } from './fixtures/auth'
 import { TestEnv } from './config/test-env'
+import { waitForElementStable, waitForFormSubmission } from './helpers/wait-helpers'
+import { findButton, findInput, TEST_IDS } from './helpers/selector-helpers'
 
 test.describe('登录流程 E2E', () => {
   test.beforeEach(async ({ page }) => {
@@ -22,11 +24,12 @@ test.describe('登录流程 E2E', () => {
   })
 
   test('应该在空字段时显示错误信息', async ({ page }) => {
-    // 等待頁面動畫完成
-    await page.waitForTimeout(500)
+    // 等待表單元素穩定
+    const submitButton = findButton(page, 'submit', '登')
+    await waitForElementStable(submitButton)
 
     // 不填写任何字段直接提交
-    await page.locator('button[type="submit"]').click()
+    await submitButton.click()
 
     // 等待错误消息显示 - 使用 .error-banner 類名
     const errorBanner = page.locator('.error-banner')
@@ -40,15 +43,16 @@ test.describe('登录流程 E2E', () => {
   })
 
   test('应该在错误的凭证时显示错误信息', async ({ page }) => {
-    // 等待頁面動畫完成
-    await page.waitForTimeout(500)
+    // 等待表單元素穩定
+    const emailInput = findInput(page, 'email', 'email')
+    await waitForElementStable(emailInput)
 
     // 填写错误的凭证
-    await page.locator('#email').fill('wrong@example.com')
-    await page.locator('#password').fill('wrongpassword')
+    await emailInput.fill('wrong@example.com')
+    await findInput(page, 'password', 'password').fill('wrongpassword')
 
     // 点击登录按钮
-    await page.locator('button[type="submit"]').click()
+    await findButton(page, 'submit', '登').click()
 
     // 等待错误消息显示
     const errorBanner = page.locator('.error-banner')
@@ -59,15 +63,15 @@ test.describe('登录流程 E2E', () => {
   })
 
   test('应该在邮箱格式无效时进行前端验证', async ({ page }) => {
-    // 等待頁面動畫完成
-    await page.waitForTimeout(500)
+    // 等待表單元素穩定
+    const emailInput = findInput(page, 'email', 'email')
+    await waitForElementStable(emailInput)
 
     // 填写无效的邮箱
-    await page.locator('#email').fill('invalid-email')
-    await page.locator('#password').fill('password123')
+    await emailInput.fill('invalid-email')
+    await findInput(page, 'password', 'password').fill('password123')
 
     // HTML5验证应该阻止表单提交
-    const emailInput = page.locator('#email')
     const validationMessage = await emailInput.evaluate((el: HTMLInputElement) => el.validationMessage)
 
     // 验证浏览器显示验证消息
@@ -85,20 +89,21 @@ test.describe('登录流程 E2E', () => {
     await expect(page).toHaveURL('/login')
 
     // 验证登录表单可见
-    const emailInput = page.locator('#email')
+    const emailInput = findInput(page, 'email', 'email')
     await expect(emailInput).toBeVisible()
   })
 
   test('应该在加载时显示加载状态', async ({ page }) => {
-    // 等待頁面動畫完成
-    await page.waitForTimeout(500)
+    // 等待表單元素穩定
+    const emailInput = findInput(page, 'email', 'email')
+    await waitForElementStable(emailInput)
 
     // 填写登录表单
-    await page.locator('#email').fill(TEST_USERS.admin.email)
-    await page.locator('#password').fill(TEST_USERS.admin.password)
+    await emailInput.fill(TEST_USERS.admin.email)
+    await findInput(page, 'password', 'password').fill(TEST_USERS.admin.password)
 
     // 使用 Promise.all 同時點擊按鈕並檢測加載狀態
-    const submitButton = page.locator('button[type="submit"]')
+    const submitButton = findButton(page, 'submit', '登')
 
     // 點擊按鈕後立即檢查
     await submitButton.click()
@@ -120,8 +125,8 @@ test.describe('登录流程 E2E', () => {
     const newPage = await context.newPage()
     await newPage.goto('/login')
 
-    // 等待一下讓重定向發生
-    await newPage.waitForTimeout(2000)
+    // 等待重定向或頁面載入
+    await newPage.waitForLoadState('networkidle')
 
     // 應該已經被重定向到首頁，或者仍在登入頁（取決於 cookie 是否共享）
     // 由於 cookie 可能不會在新 tab 之間立即共享，我們只驗證頁面正常載入
