@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { mockFetchInstance } from '@test/setup'
 import { useHR } from './useHR'
 import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/directus'
 
@@ -26,7 +26,7 @@ describe('useHR', () => {
           attendance_date: '2025-01-15'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce([mockAttendance])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockAttendance], total: 1 })
 
         const { fetchTodayAttendance } = useHR()
 
@@ -38,7 +38,7 @@ describe('useHR', () => {
       })
 
       it('應該在沒有今日記錄時返回 null', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchTodayAttendance } = useHR()
 
@@ -49,7 +49,7 @@ describe('useHR', () => {
 
       it('應該處理取得失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+        mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
         const { fetchTodayAttendance } = useHR()
 
@@ -69,7 +69,7 @@ describe('useHR', () => {
           { id: 'att-2', attendance_date: '2025-01-14' }
         ]
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockAttendances)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockAttendances, total: 2 })
 
         const { fetchRecentAttendances, recentAttendances } = useHR()
 
@@ -79,7 +79,7 @@ describe('useHR', () => {
       })
 
       it('應該使用預設天數 7 天', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchRecentAttendances } = useHR()
 
@@ -89,7 +89,7 @@ describe('useHR', () => {
 
       it('應該處理取得失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+        mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
         const { fetchRecentAttendances } = useHR()
 
@@ -112,9 +112,9 @@ describe('useHR', () => {
         }
 
         // Mock createItem response
-        mockDirectusInstance.request.mockResolvedValueOnce(createdAttendance)
+        mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
         // Mock readItems response (fetch with relations)
-        mockDirectusInstance.request.mockResolvedValueOnce([createdAttendance])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [createdAttendance], total: 1 })
 
         const { checkIn } = useHR()
 
@@ -124,7 +124,8 @@ describe('useHR', () => {
         })
 
         expect(result.id).toEqual(createdAttendance.id)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
 
       it('應該支援不同打卡類型', async () => {
@@ -134,8 +135,8 @@ describe('useHR', () => {
           check_type: 'OVERTIME'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce(createdAttendance)
-        mockDirectusInstance.request.mockResolvedValueOnce([createdAttendance])
+        mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [createdAttendance], total: 1 })
 
         const { checkIn } = useHR()
 
@@ -159,8 +160,8 @@ describe('useHR', () => {
           attendance_status: 'LATE'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce(createdAttendance)
-        mockDirectusInstance.request.mockResolvedValueOnce([createdAttendance])
+        mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [createdAttendance], total: 1 })
 
         const { checkIn } = useHR()
 
@@ -169,7 +170,8 @@ describe('useHR', () => {
           branchId: 'branch-1'
         })
 
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -189,24 +191,26 @@ describe('useHR', () => {
           work_hours: 8
         }
 
-        // Mock readItems (get existing record)
-        mockDirectusInstance.request.mockResolvedValueOnce([existingAttendance])
+        // Mock readItem (get existing record)
+        mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
         // Mock updateItem
-        mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
+        mockFetchInstance.updateItem.mockResolvedValueOnce(updatedAttendance)
         // Mock readItems (fetch updated record with relations)
-        mockDirectusInstance.request.mockResolvedValueOnce([updatedAttendance])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [updatedAttendance], total: 1 })
 
         const { checkOut } = useHR()
 
         const result = await checkOut('attendance-1')
 
         expect(result.check_out).toBeDefined()
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
 
       it('應該在找不到打卡記錄時拋出錯誤', async () => {
-        // Mock readItems returns empty array (no record found)
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        // Mock readItem returns null (no record found)
+        mockFetchInstance.readItem.mockResolvedValueOnce(null)
 
         const { checkOut } = useHR()
 
@@ -214,11 +218,11 @@ describe('useHR', () => {
       })
 
       it('應該在未上班打卡時拋出錯誤', async () => {
-        // Mock readItems returns record without check_in
-        mockDirectusInstance.request.mockResolvedValueOnce([{
+        // Mock readItem returns record without check_in
+        mockFetchInstance.readItem.mockResolvedValueOnce({
           id: 'attendance-1',
           check_in: null
-        }])
+        })
 
         const { checkOut } = useHR()
 
@@ -241,9 +245,9 @@ describe('useHR', () => {
           work_hours: 8.5
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce([existingAttendance])
-        mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
-        mockDirectusInstance.request.mockResolvedValueOnce([updatedAttendance])
+        mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
+        mockFetchInstance.updateItem.mockResolvedValueOnce(updatedAttendance)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [updatedAttendance], total: 1 })
 
         const { checkOut } = useHR()
 
@@ -265,9 +269,9 @@ describe('useHR', () => {
           notes: '加班完成專案'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce([existingAttendance])
-        mockDirectusInstance.request.mockResolvedValueOnce(updatedAttendance)
-        mockDirectusInstance.request.mockResolvedValueOnce([updatedAttendance])
+        mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
+        mockFetchInstance.updateItem.mockResolvedValueOnce(updatedAttendance)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [updatedAttendance], total: 1 })
 
         const { checkOut } = useHR()
 
@@ -286,7 +290,7 @@ describe('useHR', () => {
           { id: 'balance-2', leave_type: 'SICK', total_days: 7, used_days: 2 }
         ]
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockBalances)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockBalances, total: 2 })
 
         const { fetchLeaveBalances, leaveBalances } = useHR()
 
@@ -296,7 +300,7 @@ describe('useHR', () => {
       })
 
       it('應該使用當前年份作為預設值', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchLeaveBalances } = useHR()
 
@@ -306,7 +310,7 @@ describe('useHR', () => {
 
       it('應該處理取得失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+        mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
         const { fetchLeaveBalances } = useHR()
 
@@ -325,9 +329,7 @@ describe('useHR', () => {
           { id: 'leave-2', employee_id: 'emp-1', leave_type: 'SICK' }
         ]
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockRequests)
-          .mockResolvedValueOnce([{ count: 2 }])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockRequests, total: 2 })
 
         const { fetchLeaveRequests, leaveRequests, leavesTotalCount } = useHR()
 
@@ -338,9 +340,7 @@ describe('useHR', () => {
       })
 
       it('應該支援狀態過濾', async () => {
-        mockDirectusInstance.request
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ count: 0 }])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchLeaveRequests } = useHR()
 
@@ -349,9 +349,7 @@ describe('useHR', () => {
       })
 
       it('應該支援分頁', async () => {
-        mockDirectusInstance.request
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ count: 0 }])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchLeaveRequests } = useHR()
 
@@ -361,7 +359,7 @@ describe('useHR', () => {
 
       it('應該處理取得失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+        mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
         const { fetchLeaveRequests, isLeavesLoading } = useHR()
 
@@ -374,9 +372,7 @@ describe('useHR', () => {
       })
 
       it('應該正確處理計數結果為 null 的情況', async () => {
-        mockDirectusInstance.request
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ count: null }])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchLeaveRequests, leavesTotalCount } = useHR()
 
@@ -397,32 +393,32 @@ describe('useHR', () => {
           { id: 'leave-1', employee_id: 'emp-2', leave_status: 'PENDING' }
         ]
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(subordinates)
-          .mockResolvedValueOnce(pendingLeaves)
+        mockFetchInstance.readItems
+          .mockResolvedValueOnce({ data: subordinates, total: 2 })
+          .mockResolvedValueOnce({ data: pendingLeaves, total: 1 })
 
         const { fetchPendingApprovals, pendingApprovals } = useHR()
 
         await fetchPendingApprovals('supervisor-1')
 
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(2)
         expect(pendingApprovals.value).toEqual(pendingLeaves)
       })
 
       it('應該在沒有下屬時返回空陣列', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchPendingApprovals, pendingApprovals } = useHR()
 
         await fetchPendingApprovals('supervisor-1')
 
         expect(pendingApprovals.value).toEqual([])
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
 
       it('應該處理取得失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+        mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
         const { fetchPendingApprovals } = useHR()
 
@@ -451,7 +447,7 @@ describe('useHR', () => {
           leave_status: 'PENDING'
         }
 
-        mockDirectusInstance.request
+        mockFetchInstance.createItem
           .mockResolvedValueOnce(mockCreatedLeave)
           .mockResolvedValueOnce({})
 
@@ -459,7 +455,7 @@ describe('useHR', () => {
         const result = await applyLeave(leaveData)
 
         expect(result).toEqual(mockCreatedLeave)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(2)
       })
 
       it('應該支援半天假', async () => {
@@ -473,14 +469,14 @@ describe('useHR', () => {
           halfDayType: 'AM' as const
         }
 
-        mockDirectusInstance.request
+        mockFetchInstance.createItem
           .mockResolvedValueOnce({ id: 'leave-1' })
           .mockResolvedValueOnce({})
 
         const { applyLeave } = useHR()
         await applyLeave(leaveData)
 
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(2)
       })
     })
 
@@ -507,18 +503,20 @@ describe('useHR', () => {
           leave_status: 'APPROVED'
         }
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockLeaveRequest)
-          .mockResolvedValueOnce(mockApprovedLeave)
-          .mockResolvedValueOnce({})
-          .mockResolvedValueOnce([mockBalance])
-          .mockResolvedValueOnce({})
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.updateItem.mockResolvedValueOnce(mockApprovedLeave)
+        mockFetchInstance.createItem.mockResolvedValueOnce({})
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockBalance], total: 1 })
+        mockFetchInstance.updateItem.mockResolvedValueOnce({})
 
         const { reviewLeave } = useHR()
         const result = await reviewLeave('leave-1', 'supervisor-1', 'APPROVE', '同意')
 
         expect(result).toEqual(mockApprovedLeave)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(5)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
 
       it('應該成功拒絕休假', async () => {
@@ -533,16 +531,17 @@ describe('useHR', () => {
           leave_status: 'REJECTED'
         }
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockLeaveRequest)
-          .mockResolvedValueOnce(mockRejectedLeave)
-          .mockResolvedValueOnce({})
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.updateItem.mockResolvedValueOnce(mockRejectedLeave)
+        mockFetchInstance.createItem.mockResolvedValueOnce({})
 
         const { reviewLeave } = useHR()
         const result = await reviewLeave('leave-1', 'supervisor-1', 'REJECT', '日期衝突')
 
         expect(result).toEqual(mockRejectedLeave)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
       })
 
       it('應該在核准時正確更新休假餘額', async () => {
@@ -561,17 +560,19 @@ describe('useHR', () => {
           pending_days: 2
         }
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockLeaveRequest)
-          .mockResolvedValueOnce({ leave_status: 'APPROVED' })
-          .mockResolvedValueOnce({})
-          .mockResolvedValueOnce([mockBalance])
-          .mockResolvedValueOnce({})
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.updateItem.mockResolvedValueOnce({ leave_status: 'APPROVED' })
+        mockFetchInstance.createItem.mockResolvedValueOnce({})
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockBalance], total: 1 })
+        mockFetchInstance.updateItem.mockResolvedValueOnce({})
 
         const { reviewLeave } = useHR()
         await reviewLeave('leave-1', 'supervisor-1', 'APPROVE')
 
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(5)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
 
       it('應該在沒有餘額記錄時不更新餘額', async () => {
@@ -584,16 +585,18 @@ describe('useHR', () => {
           leave_status: 'PENDING'
         }
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockLeaveRequest)
-          .mockResolvedValueOnce({ leave_status: 'APPROVED' })
-          .mockResolvedValueOnce({})
-          .mockResolvedValueOnce([])
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.updateItem.mockResolvedValueOnce({ leave_status: 'APPROVED' })
+        mockFetchInstance.createItem.mockResolvedValueOnce({})
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { reviewLeave } = useHR()
         await reviewLeave('leave-1', 'supervisor-1', 'APPROVE')
 
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(4)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -609,16 +612,17 @@ describe('useHR', () => {
           leave_status: 'CANCELLED'
         }
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockLeaveRequest)
-          .mockResolvedValueOnce(mockCancelledLeave)
-          .mockResolvedValueOnce({})
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.updateItem.mockResolvedValueOnce(mockCancelledLeave)
+        mockFetchInstance.createItem.mockResolvedValueOnce({})
 
         const { cancelLeave } = useHR()
         const result = await cancelLeave('leave-1', 'emp-1')
 
         expect(result).toEqual(mockCancelledLeave)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
       })
 
       it('應該拒絕取消已核准的休假申請', async () => {
@@ -627,12 +631,12 @@ describe('useHR', () => {
           leave_status: 'APPROVED'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
 
         const { cancelLeave } = useHR()
 
         await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('只能取消待審核的申請')
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
       })
 
       it('應該拒絕取消已拒絕的休假申請', async () => {
@@ -641,12 +645,12 @@ describe('useHR', () => {
           leave_status: 'REJECTED'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
 
         const { cancelLeave } = useHR()
 
         await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('只能取消待審核的申請')
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
       })
 
       it('應該拒絕取消已取消的休假申請', async () => {
@@ -655,12 +659,12 @@ describe('useHR', () => {
           leave_status: 'CANCELLED'
         }
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
 
         const { cancelLeave } = useHR()
 
         await expect(cancelLeave('leave-1', 'emp-1')).rejects.toThrow('只能取消待審核的申請')
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
       })
 
       it('應該記錄取消動作到審核歷程', async () => {
@@ -669,21 +673,22 @@ describe('useHR', () => {
           leave_status: 'PENDING'
         }
 
-        mockDirectusInstance.request
-          .mockResolvedValueOnce(mockLeaveRequest)
-          .mockResolvedValueOnce({ leave_status: 'CANCELLED' })
-          .mockResolvedValueOnce({ id: 'log-1' })
+        mockFetchInstance.readItem.mockResolvedValueOnce(mockLeaveRequest)
+        mockFetchInstance.updateItem.mockResolvedValueOnce({ leave_status: 'CANCELLED' })
+        mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'log-1' })
 
         const { cancelLeave } = useHR()
         await cancelLeave('leave-1', 'emp-1')
 
-        // 驗證呼叫了三次：readItem, updateItem, createItem (log)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+        // 驗證呼叫了：readItem, updateItem, createItem (log)
+        expect(mockFetchInstance.readItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1)
       })
 
       it('應該處理取消失敗的情況', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Database error'))
+        mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Database error'))
 
         const { cancelLeave } = useHR()
 
@@ -710,13 +715,13 @@ describe('useHR', () => {
           }
         ]
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockHistory)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockHistory, total: 2 })
 
         const { fetchApprovalHistory } = useHR()
         const result = await fetchApprovalHistory('leave-1')
 
         expect(result).toEqual(mockHistory)
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       })
 
       it('應該依時間順序排列歷程記錄', async () => {
@@ -738,7 +743,7 @@ describe('useHR', () => {
           }
         ]
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockHistory)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockHistory, total: 3 })
 
         const { fetchApprovalHistory } = useHR()
         const result = await fetchApprovalHistory('leave-1')
@@ -766,7 +771,7 @@ describe('useHR', () => {
           }
         ]
 
-        mockDirectusInstance.request.mockResolvedValueOnce(mockHistory)
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockHistory, total: 2 })
 
         const { fetchApprovalHistory } = useHR()
         const result = await fetchApprovalHistory('leave-1')
@@ -776,18 +781,18 @@ describe('useHR', () => {
       })
 
       it('應該正確過濾指定的休假申請', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchApprovalHistory } = useHR()
         const result = await fetchApprovalHistory('leave-123')
 
-        // 驗證有調用 request 且返回正確結果
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
+        // 驗證有調用 readItems 且返回正確結果
+        expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
         expect(result).toEqual([])
       })
 
       it('應該處理取得失敗的情況', async () => {
-        mockDirectusInstance.request.mockRejectedValueOnce(new Error('Network error'))
+        mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Network error'))
 
         const { fetchApprovalHistory } = useHR()
 
@@ -795,7 +800,7 @@ describe('useHR', () => {
       })
 
       it('應該在沒有歷程記錄時返回空陣列', async () => {
-        mockDirectusInstance.request.mockResolvedValueOnce([])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchApprovalHistory } = useHR()
         const result = await fetchApprovalHistory('leave-1')

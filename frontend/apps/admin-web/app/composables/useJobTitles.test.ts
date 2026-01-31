@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mockDirectusInstance } from '@test/setup'
+import { mockFetchInstance } from '@test/setup'
 import { useJobTitles } from './useJobTitles'
 
 describe('useJobTitles', () => {
@@ -39,7 +39,7 @@ describe('useJobTitles', () => {
         }
       ]
 
-      mockDirectusInstance.request.mockResolvedValueOnce(mockJobTitles)
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockJobTitles, total: 3 })
 
       const { fetchJobTitles, jobTitles } = useJobTitles()
       await fetchJobTitles()
@@ -48,53 +48,66 @@ describe('useJobTitles', () => {
     })
 
     it('應該只取得 active 狀態的職位', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchJobTitles } = useJobTitles()
       await fetchJobTitles()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job_titles', {
+        filter: { status: 'active' },
+        sort: 'name',
+        limit: 1000
+      })
     })
 
     it('應該按名稱排序', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchJobTitles } = useJobTitles()
       await fetchJobTitles()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job_titles', expect.objectContaining({
+        sort: 'name'
+      }))
     })
 
-    it('應該取得所有職位（limit: -1）', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+    it('應該取得所有職位（limit: 1000）', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchJobTitles } = useJobTitles()
       await fetchJobTitles()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job_titles', expect.objectContaining({
+        limit: 1000
+      }))
     })
 
     it('應該處理取得失敗', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Failed'))
+      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
 
-      const { fetchJobTitles, isLoading } = useJobTitles()
+      const { fetchJobTitles, isLoading, jobTitles } = useJobTitles()
       await fetchJobTitles()
 
       expect(isLoading.value).toBe(false)
+      expect(jobTitles.value).toEqual([])
     })
 
     it('應該在載入時設定 isLoading', async () => {
-      let isLoadingDuringFetch = false
-      mockDirectusInstance.request.mockImplementation(() => {
-        const { isLoading } = useJobTitles()
-        isLoadingDuringFetch = isLoading.value
-        return Promise.resolve([])
+      let resolvePromise: (value: any) => void
+      const pendingPromise = new Promise((resolve) => {
+        resolvePromise = resolve
       })
+      mockFetchInstance.readItems.mockReturnValueOnce(pendingPromise)
 
-      const { fetchJobTitles } = useJobTitles()
-      await fetchJobTitles()
+      const { fetchJobTitles, isLoading } = useJobTitles()
+      const fetchPromise = fetchJobTitles()
 
-      expect(isLoadingDuringFetch).toBe(true)
+      expect(isLoading.value).toBe(true)
+
+      resolvePromise!({ data: [], total: 0 })
+      await fetchPromise
+
+      expect(isLoading.value).toBe(false)
     })
   })
 
@@ -111,13 +124,22 @@ describe('useJobTitles', () => {
         }
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce(mockJobTitle)
+      mockFetchInstance.readItem.mockResolvedValueOnce(mockJobTitle)
 
       const { getJobTitle } = useJobTitles()
       const result = await getJobTitle('job-1')
 
       expect(result).toEqual(mockJobTitle)
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('job_titles', 'job-1')
+    })
+
+    it('應該處理取得失敗並返回 null', async () => {
+      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
+
+      const { getJobTitle } = useJobTitles()
+      const result = await getJobTitle('job-999')
+
+      expect(result).toBeNull()
     })
   })
 
@@ -130,12 +152,22 @@ describe('useJobTitles', () => {
       }
 
       const createdJobTitle = { id: 'job-4', ...newJobTitle }
-      mockDirectusInstance.request.mockResolvedValueOnce(createdJobTitle)
+      mockFetchInstance.createItem.mockResolvedValueOnce(createdJobTitle)
 
       const { createJobTitle } = useJobTitles()
       const result = await createJobTitle(newJobTitle)
 
       expect(result).toEqual(createdJobTitle)
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('job_titles', newJobTitle)
+    })
+
+    it('應該處理建立失敗並返回 null', async () => {
+      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
+
+      const { createJobTitle } = useJobTitles()
+      const result = await createJobTitle({ name: '測試職位' })
+
+      expect(result).toBeNull()
     })
   })
 
@@ -151,23 +183,43 @@ describe('useJobTitles', () => {
       }
       const updatedJobTitle = { id: 'job-1', name: '經理', ...updates }
 
-      mockDirectusInstance.request.mockResolvedValueOnce(updatedJobTitle)
+      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedJobTitle)
 
       const { updateJobTitle } = useJobTitles()
       const result = await updateJobTitle('job-1', updates)
 
       expect(result).toEqual(updatedJobTitle)
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('job_titles', 'job-1', updates)
+    })
+
+    it('應該處理更新失敗並返回 null', async () => {
+      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
+
+      const { updateJobTitle } = useJobTitles()
+      const result = await updateJobTitle('job-1', { name: '新名稱' })
+
+      expect(result).toBeNull()
     })
   })
 
   describe('deleteJobTitle', () => {
     it('應該成功刪除職位', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce(undefined)
+      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
 
       const { deleteJobTitle } = useJobTitles()
-      await deleteJobTitle('job-1')
+      const result = await deleteJobTitle('job-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(result).toBe(true)
+      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('job_titles', 'job-1')
+    })
+
+    it('應該處理刪除失敗並返回 false', async () => {
+      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
+
+      const { deleteJobTitle } = useJobTitles()
+      const result = await deleteJobTitle('job-1')
+
+      expect(result).toBe(false)
     })
   })
 })

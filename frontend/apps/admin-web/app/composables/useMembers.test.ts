@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance, mockHandleError } from '@test/setup'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useMembers } from './useMembers'
 import type { Member } from '~/types/directus'
 
@@ -39,107 +39,91 @@ describe('useMembers', () => {
     ]
 
     it('應該成功取得會員列表', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockMembers) // readItems
-        .mockResolvedValueOnce([{ count: 2 }]) // aggregate
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockMembers, total: 2 })
 
       const { fetchMembers, members, totalCount, isLoading } = useMembers()
 
       await fetchMembers()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual(mockMembers)
       expect(totalCount.value).toBe(2)
       expect(isLoading.value).toBe(false)
     })
 
     it('應該支援分頁參數', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockMembers)
-        .mockResolvedValueOnce([{ count: 100 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockMembers, total: 100 })
 
       const { fetchMembers, members } = useMembers()
 
       await fetchMembers({ page: 3, limit: 20 })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual(mockMembers)
     })
 
     it('應該根據姓名搜尋', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockMembers[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockMembers[0]], total: 1 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ search: '張三' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([mockMembers[0]])
       expect(totalCount.value).toBe(1)
     })
 
     it('應該根據會員編號搜尋', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockMembers[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockMembers[0]], total: 1 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ search: 'M001' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([mockMembers[0]])
       expect(totalCount.value).toBe(1)
     })
 
     it('應該根據電話號碼搜尋', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockMembers[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockMembers[0]], total: 1 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ search: '0912' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([mockMembers[0]])
       expect(totalCount.value).toBe(1)
     })
 
     it('應該根據分店 ID 過濾', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockMembers)
-        .mockResolvedValueOnce([{ count: 2 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockMembers, total: 2 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ branchId: 'branch-1' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual(mockMembers)
       expect(totalCount.value).toBe(2)
     })
 
     it('應該根據會員狀態過濾', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockMembers[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockMembers[0]], total: 1 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ status: 'ACTIVE' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([mockMembers[0]])
       expect(totalCount.value).toBe(1)
     })
 
     it('應該支援多個過濾條件組合', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockMembers[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockMembers[0]], total: 1 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
@@ -151,41 +135,37 @@ describe('useMembers', () => {
         limit: 10
       })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([mockMembers[0]])
       expect(totalCount.value).toBe(1)
     })
 
     it('應該正確排序會員列表', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockMembers)
-        .mockResolvedValueOnce([{ count: 2 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockMembers, total: 2 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual(mockMembers)
       expect(totalCount.value).toBe(2)
     })
 
     it('應該包含關聯資料欄位', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockMembers)
-        .mockResolvedValueOnce([{ count: 2 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockMembers, total: 2 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual(mockMembers)
       expect(totalCount.value).toBe(2)
     })
 
     it('應該處理取得失敗的情況', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
       const { fetchMembers, members, isLoading } = useMembers()
 
@@ -199,10 +179,10 @@ describe('useMembers', () => {
     it('應該在取得過程中設定 loading 狀態', async () => {
       let loadingDuringFetch = false
 
-      mockDirectusInstance.request.mockImplementationOnce(() => {
+      mockFetchInstance.readItems.mockImplementationOnce(() => {
         const { isLoading } = useMembers()
         loadingDuringFetch = isLoading.value
-        return Promise.resolve([])
+        return Promise.resolve({ data: [], total: 0 })
       })
 
       const { fetchMembers } = useMembers()
@@ -213,15 +193,13 @@ describe('useMembers', () => {
     })
 
     it('應該使用預設分頁參數', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 0 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([])
       expect(totalCount.value).toBe(0)
     })
@@ -238,18 +216,18 @@ describe('useMembers', () => {
     }
 
     it('應該成功取得單個會員詳情', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce(mockMember)
+      mockFetchInstance.readItem.mockResolvedValueOnce(mockMember)
 
       const { getMember } = useMembers()
 
       const result = await getMember('member-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItem).toHaveBeenCalled()
       expect(result).toEqual(mockMember)
     })
 
     it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Not found'))
+      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
 
       const { getMember } = useMembers()
 
@@ -272,18 +250,18 @@ describe('useMembers', () => {
 
     it('應該成功創建會員', async () => {
       const createdMember = { id: 'member-3', ...newMember }
-      mockDirectusInstance.request.mockResolvedValueOnce(createdMember)
+      mockFetchInstance.createItem.mockResolvedValueOnce(createdMember)
 
       const { createMember } = useMembers()
 
       const result = await createMember(newMember)
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.createItem).toHaveBeenCalled()
       expect(result).toEqual(createdMember)
     })
 
     it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Creation failed'))
+      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Creation failed'))
 
       const { createMember } = useMembers()
 
@@ -299,7 +277,7 @@ describe('useMembers', () => {
         member_code: 'M999'
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce({ id: 'member-999', ...minimalMember })
+      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'member-999', ...minimalMember })
 
       const { createMember } = useMembers()
 
@@ -318,18 +296,18 @@ describe('useMembers', () => {
 
     it('應該成功更新會員', async () => {
       const updatedMember = { id: 'member-1', ...updatedData }
-      mockDirectusInstance.request.mockResolvedValueOnce(updatedMember)
+      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedMember)
 
       const { updateMember } = useMembers()
 
       const result = await updateMember('member-1', updatedData)
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.updateItem).toHaveBeenCalled()
       expect(result).toEqual(updatedMember)
     })
 
     it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
+      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updateMember } = useMembers()
 
@@ -344,7 +322,7 @@ describe('useMembers', () => {
         phone: '0900000000'
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce({ id: 'member-1', phone: '0900000000' })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({ id: 'member-1', phone: '0900000000' })
 
       const { updateMember } = useMembers()
 
@@ -358,7 +336,7 @@ describe('useMembers', () => {
         member_status: 'BANNED'
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce({ id: 'member-1', member_status: 'BANNED' })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({ id: 'member-1', member_status: 'BANNED' })
 
       const { updateMember } = useMembers()
 
@@ -370,17 +348,17 @@ describe('useMembers', () => {
 
   describe('deleteMember', () => {
     it('應該成功刪除會員', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce(undefined)
+      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
 
       const { deleteMember } = useMembers()
 
       await deleteMember('member-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.deleteItem).toHaveBeenCalled()
     })
 
     it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Delete failed'))
+      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
 
       const { deleteMember } = useMembers()
 
@@ -391,7 +369,7 @@ describe('useMembers', () => {
     })
 
     it('應該能夠刪除不存在的會員時返回 false 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Member not found'))
+      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Member not found'))
 
       const { deleteMember } = useMembers()
 
@@ -415,9 +393,7 @@ describe('useMembers', () => {
     })
 
     it('應該正確管理 loading 狀態', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 0 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchMembers, isLoading } = useMembers()
 
@@ -436,29 +412,25 @@ describe('useMembers', () => {
 
   describe('搜尋功能邊界測試', () => {
     it('應該處理空字串搜尋', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 0 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ search: '' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([])
       expect(totalCount.value).toBe(0)
     })
 
     it('應該處理特殊字元搜尋', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ count: 0 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchMembers, members, totalCount } = useMembers()
 
       await fetchMembers({ search: '!@#$%' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalled()
       expect(members.value).toEqual([])
       expect(totalCount.value).toBe(0)
     })
@@ -469,15 +441,13 @@ describe('useMembers', () => {
 
     statuses.forEach(status => {
       it(`應該正確過濾 ${status} 狀態的會員`, async () => {
-        mockDirectusInstance.request
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([{ count: 0 }])
+        mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
         const { fetchMembers, members, totalCount } = useMembers()
 
         await fetchMembers({ status })
 
-        expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+        expect(mockFetchInstance.readItems).toHaveBeenCalled()
         expect(members.value).toEqual([])
         expect(totalCount.value).toBe(0)
       })

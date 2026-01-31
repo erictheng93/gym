@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance, mockHandleError } from '@test/setup'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useContracts } from './useContracts'
 import type { Contract } from '~/types/directus'
 
@@ -38,76 +38,64 @@ describe('useContracts', () => {
     ]
 
     it('應該成功取得合約列表', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockContracts) // data
-        .mockResolvedValueOnce([{ count: 2 }]) // count
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockContracts, total: 2 })
 
       const { fetchContracts, contracts, isLoading, totalCount } = useContracts()
 
       await fetchContracts()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       expect(contracts.value).toEqual(mockContracts)
       expect(totalCount.value).toBe(2)
       expect(isLoading.value).toBe(false)
     })
 
     it('應該根據會員 ID 過濾', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockContracts[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockContracts[0]], total: 1 })
 
       const { fetchContracts, contracts } = useContracts()
 
       await fetchContracts({ memberId: 'member-1' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       expect(contracts.value).toEqual([mockContracts[0]])
     })
 
     it('應該根據分店 ID 過濾', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockContracts)
-        .mockResolvedValueOnce([{ count: 2 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockContracts, total: 2 })
 
       const { fetchContracts, contracts } = useContracts()
 
       await fetchContracts({ branchId: 'branch-1' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       expect(contracts.value).toEqual(mockContracts)
     })
 
     it('應該根據合約狀態過濾', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockContracts[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockContracts[0]], total: 1 })
 
       const { fetchContracts, contracts } = useContracts()
 
       await fetchContracts({ status: 'ACTIVE' })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       expect(contracts.value).toEqual([mockContracts[0]])
     })
 
     it('應該支援自訂限制數量', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockContracts)
-        .mockResolvedValueOnce([{ count: 2 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockContracts, total: 2 })
 
       const { fetchContracts, contracts } = useContracts()
 
       await fetchContracts({ limit: 10 })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       expect(contracts.value).toEqual(mockContracts)
     })
 
     it('應該支援多個過濾條件組合', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([mockContracts[0]])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [mockContracts[0]], total: 1 })
 
       const { fetchContracts, contracts } = useContracts()
 
@@ -118,12 +106,12 @@ describe('useContracts', () => {
         limit: 20
       })
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
       expect(contracts.value).toEqual([mockContracts[0]])
     })
 
     it('應該處理取得失敗的情況', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
+      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
       const { fetchContracts, contracts, isLoading } = useContracts()
 
@@ -137,11 +125,11 @@ describe('useContracts', () => {
     it('應該在取得過程中設定 loading 狀態', async () => {
       let loadingDuringFetch = false
 
-      mockDirectusInstance.request.mockImplementationOnce(() => {
+      mockFetchInstance.readItems.mockImplementationOnce(() => {
         const { isLoading } = useContracts()
         loadingDuringFetch = isLoading.value
-        return Promise.resolve([])
-      }).mockResolvedValueOnce([{ count: 0 }])
+        return Promise.resolve({ data: [], total: 0 })
+      })
 
       const { fetchContracts } = useContracts()
 
@@ -162,18 +150,18 @@ describe('useContracts', () => {
     }
 
     it('應該成功取得單個合約詳情', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce(mockContract)
+      mockFetchInstance.readItem.mockResolvedValueOnce(mockContract)
 
       const { getContract } = useContracts()
 
       const result = await getContract('contract-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('contracts', 'contract-1')
       expect(result).toEqual(mockContract)
     })
 
     it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Not found'))
+      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
 
       const { getContract } = useContracts()
 
@@ -195,20 +183,18 @@ describe('useContracts', () => {
 
     it('應該成功創建合約', async () => {
       const createdContract = { id: 'contract-1', ...newContract }
-      mockDirectusInstance.request.mockResolvedValueOnce(createdContract)
+      mockFetchInstance.createItem.mockResolvedValueOnce(createdContract)
 
       const { createContract } = useContracts()
 
       const result = await createContract(newContract)
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledWith(
-        expect.anything() // createItem function
-      )
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('contracts', newContract)
       expect(result).toEqual(createdContract)
     })
 
     it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Creation failed'))
+      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Creation failed'))
 
       const { createContract } = useContracts()
 
@@ -227,20 +213,18 @@ describe('useContracts', () => {
 
     it('應該成功更新合約', async () => {
       const updatedContract = { id: 'contract-1', ...updatedData }
-      mockDirectusInstance.request.mockResolvedValueOnce(updatedContract)
+      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedContract)
 
       const { updateContract } = useContracts()
 
       const result = await updateContract('contract-1', updatedData)
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledWith(
-        expect.anything() // updateItem function
-      )
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('contracts', 'contract-1', updatedData)
       expect(result).toEqual(updatedContract)
     })
 
     it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
+      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updateContract } = useContracts()
 
@@ -253,16 +237,16 @@ describe('useContracts', () => {
 
   describe('getContractStats', () => {
     it('應該成功取得合約統計資料', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([{ count: 10 }]) // active
-        .mockResolvedValueOnce([{ count: 5 }])  // expired
-        .mockResolvedValueOnce([{ count: 3 }])  // draft
+      mockFetchInstance.readItems
+        .mockResolvedValueOnce({ data: [], total: 10 }) // active
+        .mockResolvedValueOnce({ data: [], total: 5 })  // expired
+        .mockResolvedValueOnce({ data: [], total: 3 })  // draft
 
       const { getContractStats } = useContracts()
 
       const result = await getContractStats()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(3)
       expect(result).toEqual({
         active: 10,
         expired: 5,
@@ -271,16 +255,16 @@ describe('useContracts', () => {
     })
 
     it('應該根據分店 ID 過濾統計資料', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([{ count: 8 }])
-        .mockResolvedValueOnce([{ count: 2 }])
-        .mockResolvedValueOnce([{ count: 1 }])
+      mockFetchInstance.readItems
+        .mockResolvedValueOnce({ data: [], total: 8 })
+        .mockResolvedValueOnce({ data: [], total: 2 })
+        .mockResolvedValueOnce({ data: [], total: 1 })
 
       const { getContractStats } = useContracts()
 
       const result = await getContractStats('branch-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(3)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(3)
       expect(result).toEqual({
         active: 8,
         expired: 2,
@@ -289,27 +273,10 @@ describe('useContracts', () => {
     })
 
     it('應該處理空結果', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-
-      const { getContractStats } = useContracts()
-
-      const result = await getContractStats()
-
-      expect(result).toEqual({
-        active: 0,
-        expired: 0,
-        draft: 0
-      })
-    })
-
-    it('應該處理 count 為 null 的情況', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce([{ count: null }])
-        .mockResolvedValueOnce([{ count: null }])
-        .mockResolvedValueOnce([{ count: null }])
+      mockFetchInstance.readItems
+        .mockResolvedValueOnce({ data: [], total: 0 })
+        .mockResolvedValueOnce({ data: [], total: 0 })
+        .mockResolvedValueOnce({ data: [], total: 0 })
 
       const { getContractStats } = useContracts()
 
@@ -323,7 +290,7 @@ describe('useContracts', () => {
     })
 
     it('應該處理統計失敗的情況並返回預設值', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Stats failed'))
+      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Stats failed'))
 
       const { getContractStats } = useContracts()
 

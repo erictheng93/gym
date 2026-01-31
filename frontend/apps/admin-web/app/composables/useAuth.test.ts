@@ -120,23 +120,31 @@ describe('useAuth', () => {
 
   describe('fetchUser', () => {
     it('應該成功取得用戶資訊', async () => {
-      const mockUser = {
+      const mockMeData = {
         id: 'user-1',
         email: 'test@example.com',
         role: 'admin',
         employeeId: 'emp-1',
-        tenantId: 'tenant-1'
+        tenantId: 'tenant-1',
+        isActive: true,
+        employee: null
       }
 
       mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
         success: true,
-        data: { user: mockUser }
+        data: mockMeData
       }))
 
       const { fetchUser, user } = useAuth()
       await fetchUser()
 
-      expect(user.value).toEqual(mockUser)
+      expect(user.value).toEqual({
+        id: 'user-1',
+        email: 'test@example.com',
+        role: 'admin',
+        employeeId: 'emp-1',
+        tenantId: 'tenant-1'
+      })
     })
 
     it('應該在取得失敗時設定為 null', async () => {
@@ -212,27 +220,28 @@ describe('useAuth', () => {
     })
 
     it('應該在沒有用戶時嘗試取得用戶資訊', async () => {
-      const mockUser = {
+      const mockMeData = {
         id: 'user-1',
         email: 'test@example.com',
         role: 'admin',
         employeeId: 'emp-1',
-        tenantId: 'tenant-1'
-      }
-
-      const mockEmployeeData = {
-        id: 'emp-1',
-        fullName: 'Test User',
-        employeeCode: 'EMP001',
-        branchId: 'branch-1',
-        branchName: '總店',
-        jobTitleId: 'job-1',
-        jobTitleName: '經理'
+        tenantId: 'tenant-1',
+        isActive: true,
+        employee: {
+          id: 'emp-1',
+          fullName: 'Test User',
+          employeeCode: 'EMP001',
+          phone: null,
+          branchId: 'branch-1',
+          branchName: '總店',
+          jobTitleId: 'job-1',
+          jobTitleName: '經理'
+        }
       }
 
       mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
         success: true,
-        data: { user: mockUser, employee: mockEmployeeData }
+        data: mockMeData
       }))
 
       const { user, checkAuth } = useAuth()
@@ -241,7 +250,13 @@ describe('useAuth', () => {
       const result = await checkAuth()
 
       expect(result).toBe(true)
-      expect(user.value).toEqual(mockUser)
+      expect(user.value).toEqual({
+        id: 'user-1',
+        email: 'test@example.com',
+        role: 'admin',
+        employeeId: 'emp-1',
+        tenantId: 'tenant-1'
+      })
     })
   })
 })
