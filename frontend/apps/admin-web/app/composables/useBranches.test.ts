@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance, mockHandleError } from '@test/setup'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useBranches } from './useBranches'
 import type { Branch, Employee } from '~/types/directus'
 
@@ -38,7 +38,7 @@ describe('useBranches', () => {
         }
       ]
 
-      mockDirectusInstance.request.mockResolvedValueOnce(mockBranches)
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockBranches, total: 2 })
 
       const { fetchBranches, branches, isLoading } = useBranches()
 
@@ -46,29 +46,33 @@ describe('useBranches', () => {
 
       expect(isLoading.value).toBe(false)
       expect(branches.value).toEqual(mockBranches)
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.any(Object))
     })
 
     it('應該預設只取得啟用的分店', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchBranches } = useBranches()
       await fetchBranches()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.objectContaining({
+        filter: { status: 'active' }
+      }))
     })
 
     it('應該可以包含已停用的分店', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchBranches } = useBranches()
       await fetchBranches(true)
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.objectContaining({
+        filter: {}
+      }))
     })
 
     it('應該處理取得失敗的情況', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Network error'))
+      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Network error'))
 
       const { fetchBranches, branches, isLoading } = useBranches()
       await fetchBranches()
@@ -79,12 +83,15 @@ describe('useBranches', () => {
     })
 
     it('應該按名稱排序', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchBranches } = useBranches()
       await fetchBranches()
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.objectContaining({
+        sort: 'name',
+        sortOrder: 'asc'
+      }))
     })
   })
 
@@ -101,17 +108,17 @@ describe('useBranches', () => {
         date_updated: null
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce(mockBranch)
+      mockFetchInstance.readItem.mockResolvedValueOnce(mockBranch)
 
       const { fetchBranch } = useBranches()
       const result = await fetchBranch('branch-1')
 
       expect(result).toEqual(mockBranch)
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('branches', 'branch-1')
     })
 
     it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Branch not found'))
+      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Branch not found'))
 
       const { fetchBranch } = useBranches()
 
@@ -137,31 +144,27 @@ describe('useBranches', () => {
         }
       ]
 
-      mockDirectusInstance.request.mockResolvedValueOnce(mockEmployees)
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockEmployees, total: 1 })
 
       const { fetchBranchEmployees } = useBranches()
       const result = await fetchBranchEmployees('branch-1')
 
       expect(result).toEqual(mockEmployees)
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
-    })
-
-    it('應該包含職稱資訊', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
-
-      const { fetchBranchEmployees } = useBranches()
-      await fetchBranchEmployees('branch-1')
-
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
+        filter: { branch_id: 'branch-1', status: 'active' }
+      }))
     })
 
     it('應該按姓名排序員工', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { fetchBranchEmployees } = useBranches()
       await fetchBranchEmployees('branch-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
+        sort: 'full_name',
+        sortOrder: 'asc'
+      }))
     })
   })
 
@@ -180,19 +183,18 @@ describe('useBranches', () => {
         date_updated: null
       } as Branch
 
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(createdBranch) // createItem
-        .mockResolvedValueOnce([]) // fetchBranches
+      mockFetchInstance.createItem.mockResolvedValueOnce(createdBranch)
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { createBranch } = useBranches()
       const result = await createBranch(newBranch)
 
       expect(result).toEqual(createdBranch)
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('branches', newBranch)
     })
 
     it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Create failed'))
+      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
 
       const { createBranch } = useBranches()
 
@@ -218,19 +220,18 @@ describe('useBranches', () => {
         date_updated: '2024-01-02'
       }
 
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(updatedBranch) // updateItem
-        .mockResolvedValueOnce([]) // fetchBranches
+      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedBranch)
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { updateBranch } = useBranches()
       const result = await updateBranch('branch-1', updates)
 
       expect(result).toEqual(updatedBranch)
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('branches', 'branch-1', updates)
     })
 
     it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Update failed'))
+      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
 
       const { updateBranch } = useBranches()
 
@@ -243,18 +244,18 @@ describe('useBranches', () => {
 
   describe('deleteBranch', () => {
     it('應該成功刪除分店並重新載入列表', async () => {
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(undefined) // deleteItem
-        .mockResolvedValueOnce([]) // fetchBranches
+      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { deleteBranch } = useBranches()
-      await deleteBranch('branch-1')
+      const result = await deleteBranch('branch-1')
 
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(2)
+      expect(result).toBe(true)
+      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('branches', 'branch-1')
     })
 
     it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Delete failed'))
+      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
 
       const { deleteBranch } = useBranches()
 

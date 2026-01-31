@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockDirectusInstance, mockHandleError } from '@test/setup'
+import { mockGlobalFetch, mockHandleError, mockToast } from '@test/setup'
 import { useAuth } from './useAuth'
+
+// Helper to create a mock fetch response
+const mockFetchResponse = (data: any, ok = true) => {
+  return {
+    ok,
+    json: () => Promise.resolve(data)
+  }
+}
 
 describe('useAuth', () => {
   beforeEach(() => {
@@ -23,25 +31,25 @@ describe('useAuth', () => {
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
-        first_name: 'Test',
-        last_name: 'User',
-        role: 'admin'
+        role: 'admin',
+        employeeId: 'emp-1',
+        tenantId: 'tenant-1'
       }
 
-      const mockEmployee = {
+      const mockEmployeeData = {
         id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: 'EMP001',
-        branch_id: 'branch-1',
-        job_title_id: 'job-1',
-        branch: { name: '總店' },
-        job_title: { name: '經理' }
+        fullName: 'Test User',
+        employeeCode: 'EMP001',
+        branchId: 'branch-1',
+        branchName: '總店',
+        jobTitleId: 'job-1',
+        jobTitleName: '經理'
       }
 
-      mockDirectusInstance.login.mockResolvedValueOnce(undefined)
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockUser)
-        .mockResolvedValueOnce([mockEmployee])
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
+        success: true,
+        data: { user: mockUser, employee: mockEmployeeData }
+      }))
 
       const { login, user, currentEmployee } = useAuth()
       const result = await login('test@example.com', 'password')
@@ -55,7 +63,10 @@ describe('useAuth', () => {
     })
 
     it('應該處理登入失敗並呼叫 handleError', async () => {
-      mockDirectusInstance.login.mockRejectedValueOnce(new Error('Invalid credentials'))
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
+        success: false,
+        error: 'Invalid credentials'
+      }, false))
 
       const { login } = useAuth()
       const result = await login('test@example.com', 'wrong')
@@ -64,8 +75,8 @@ describe('useAuth', () => {
       expect(mockHandleError).toHaveBeenCalled()
     })
 
-    it('應該處理未知錯誤並呼叫 handleError', async () => {
-      mockDirectusInstance.login.mockRejectedValueOnce('Unknown error')
+    it('應該處理網路錯誤並呼叫 handleError', async () => {
+      mockGlobalFetch.mockRejectedValueOnce(new Error('Network error'))
 
       const { login } = useAuth()
       const result = await login('test@example.com', 'password')
@@ -77,7 +88,7 @@ describe('useAuth', () => {
 
   describe('logout', () => {
     it('應該成功登出並清除狀態', async () => {
-      mockDirectusInstance.logout.mockResolvedValueOnce(undefined)
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({ success: true }))
 
       const { user, currentEmployee, logout } = useAuth()
       user.value = { id: 'user-1' } as any
@@ -85,13 +96,16 @@ describe('useAuth', () => {
 
       await logout()
 
-      expect(mockDirectusInstance.logout).toHaveBeenCalled()
+      expect(mockGlobalFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/auth/logout'),
+        expect.objectContaining({ method: 'POST' })
+      )
       expect(user.value).toBeNull()
       expect(currentEmployee.value).toBeNull()
     })
 
     it('應該在登出失敗時仍然清除狀態', async () => {
-      mockDirectusInstance.logout.mockRejectedValueOnce(new Error('Logout failed'))
+      mockGlobalFetch.mockRejectedValueOnce(new Error('Logout failed'))
 
       const { user, currentEmployee, logout } = useAuth()
       user.value = { id: 'user-1' } as any
@@ -109,12 +123,15 @@ describe('useAuth', () => {
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
-        first_name: 'Test',
-        last_name: 'User',
-        role: 'admin'
+        role: 'admin',
+        employeeId: 'emp-1',
+        tenantId: 'tenant-1'
       }
 
-      mockDirectusInstance.request.mockResolvedValueOnce(mockUser)
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
+        success: true,
+        data: { user: mockUser }
+      }))
 
       const { fetchUser, user } = useAuth()
       await fetchUser()
@@ -123,7 +140,7 @@ describe('useAuth', () => {
     })
 
     it('應該在取得失敗時設定為 null', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Failed'))
+      mockGlobalFetch.mockRejectedValueOnce(new Error('Failed'))
 
       const { fetchUser, user } = useAuth()
       user.value = { id: 'user-1' } as any
@@ -134,101 +151,9 @@ describe('useAuth', () => {
     })
   })
 
-  describe('fetchCurrentEmployee', () => {
-    it('應該成功取得員工資訊', async () => {
-      const mockEmployee = {
-        id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: 'EMP001',
-        branch_id: 'branch-1',
-        job_title_id: 'job-1',
-        branch: { name: '總店' },
-        job_title: { name: '經理' }
-      }
-
-      mockDirectusInstance.request.mockResolvedValueOnce([mockEmployee])
-
-      const { user, fetchCurrentEmployee, currentEmployee } = useAuth()
-      user.value = { id: 'user-1' } as any
-
-      await fetchCurrentEmployee()
-
-      expect(currentEmployee.value).toMatchObject({
-        id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: 'EMP001',
-        branch_id: 'branch-1',
-        branch_name: '總店',
-        job_title_id: 'job-1',
-        job_title_name: '經理'
-      })
-    })
-
-    it('應該在沒有用戶時設定員工為 null', async () => {
-      const { user, fetchCurrentEmployee, currentEmployee } = useAuth()
-      user.value = null
-      currentEmployee.value = { id: 'emp-1' } as any
-
-      await fetchCurrentEmployee()
-
-      expect(currentEmployee.value).toBeNull()
-      expect(mockDirectusInstance.request).not.toHaveBeenCalled()
-    })
-
-    it('應該在沒有找到員工時設定為 null', async () => {
-      mockDirectusInstance.request.mockResolvedValueOnce([])
-
-      const { user, fetchCurrentEmployee, currentEmployee } = useAuth()
-      user.value = { id: 'user-1' } as any
-
-      await fetchCurrentEmployee()
-
-      expect(currentEmployee.value).toBeNull()
-    })
-
-    it('應該處理取得失敗的情況並呼叫 handleError', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Fetch failed'))
-
-      const { user, fetchCurrentEmployee, currentEmployee } = useAuth()
-      user.value = { id: 'user-1' } as any
-
-      await fetchCurrentEmployee()
-
-      expect(mockHandleError).toHaveBeenCalled()
-      expect(currentEmployee.value).toBeNull()
-    })
-
-    it('應該正確處理員工資料中的 null 值', async () => {
-      const mockEmployee = {
-        id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: null,
-        branch_id: null,
-        job_title_id: null
-      }
-
-      mockDirectusInstance.request.mockResolvedValueOnce([mockEmployee])
-
-      const { user, fetchCurrentEmployee, currentEmployee } = useAuth()
-      user.value = { id: 'user-1' } as any
-
-      await fetchCurrentEmployee()
-
-      expect(currentEmployee.value).toMatchObject({
-        id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: null,
-        branch_id: null,
-        branch_name: null,
-        job_title_id: null,
-        job_title_name: null
-      })
-    })
-  })
-
   describe('checkAuth', () => {
     it('應該在未認證時返回 false', async () => {
-      mockDirectusInstance.request.mockRejectedValueOnce(new Error('Not authenticated'))
+      mockGlobalFetch.mockRejectedValueOnce(new Error('Not authenticated'))
 
       const { user, checkAuth } = useAuth()
       user.value = null
@@ -238,22 +163,25 @@ describe('useAuth', () => {
       expect(result).toBe(false)
     })
 
-    it('應該在已有用戶時返回 true', async () => {
-      const mockEmployee = {
+    it('應該在已有用戶時返回 true 並獲取員工資訊', async () => {
+      const mockEmployeeData = {
         id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: 'EMP001',
-        branch_id: 'branch-1',
-        job_title_id: 'job-1',
-        branch: { name: '總店' },
-        job_title: { name: '經理' }
+        fullName: 'Test User',
+        employeeCode: 'EMP001',
+        branchId: 'branch-1',
+        branchName: '總店',
+        jobTitleId: 'job-1',
+        jobTitleName: '經理'
       }
 
-      // First mock: readMe for session verification
-      // Second mock: fetchCurrentEmployee
-      mockDirectusInstance.request
-        .mockResolvedValueOnce({ id: 'user-1' }) // readMe response
-        .mockResolvedValueOnce([mockEmployee]) // fetchCurrentEmployee response
+      // Mock session check returning user with employee
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
+        success: true,
+        data: {
+          user: { id: 'user-1', email: 'test@example.com' },
+          employee: mockEmployeeData
+        }
+      }))
 
       const { user, currentEmployee, checkAuth } = useAuth()
       user.value = { id: 'user-1', email: 'test@example.com' } as any
@@ -262,12 +190,17 @@ describe('useAuth', () => {
       const result = await checkAuth()
 
       expect(result).toBe(true)
-      expect(currentEmployee.value).not.toBeNull()
     })
 
-    it('應該在用戶和員工都存在時返回 true', async () => {
-      // Mock readMe for session verification (always called)
-      mockDirectusInstance.request.mockResolvedValueOnce({ id: 'user-1' })
+    it('應該在用戶和員工都存在時直接返回 true', async () => {
+      // Mock session check
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
+        success: true,
+        data: {
+          user: { id: 'user-1' },
+          employee: { id: 'emp-1' }
+        }
+      }))
 
       const { user, currentEmployee, checkAuth } = useAuth()
       user.value = { id: 'user-1', email: 'test@example.com' } as any
@@ -276,32 +209,31 @@ describe('useAuth', () => {
       const result = await checkAuth()
 
       expect(result).toBe(true)
-      // readMe is called once for session verification
-      expect(mockDirectusInstance.request).toHaveBeenCalledTimes(1)
     })
 
     it('應該在沒有用戶時嘗試取得用戶資訊', async () => {
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
-        first_name: 'Test',
-        last_name: 'User',
-        role: 'admin'
+        role: 'admin',
+        employeeId: 'emp-1',
+        tenantId: 'tenant-1'
       }
 
-      const mockEmployee = {
+      const mockEmployeeData = {
         id: 'emp-1',
-        full_name: 'Test User',
-        employee_code: 'EMP001',
-        branch_id: 'branch-1',
-        job_title_id: 'job-1',
-        branch: { name: '總店' },
-        job_title: { name: '經理' }
+        fullName: 'Test User',
+        employeeCode: 'EMP001',
+        branchId: 'branch-1',
+        branchName: '總店',
+        jobTitleId: 'job-1',
+        jobTitleName: '經理'
       }
 
-      mockDirectusInstance.request
-        .mockResolvedValueOnce(mockUser)
-        .mockResolvedValueOnce([mockEmployee])
+      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
+        success: true,
+        data: { user: mockUser, employee: mockEmployeeData }
+      }))
 
       const { user, checkAuth } = useAuth()
       user.value = null

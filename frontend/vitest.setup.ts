@@ -19,6 +19,20 @@ vi.mock('~/composables/core/useErrorHandler', () => ({
   useErrorHandler: () => mockErrorHandlerInstance
 }))
 
+// Mock useFetch module
+export const mockFetchInstance = {
+  apiFetch: vi.fn(),
+  readItems: vi.fn().mockResolvedValue({ data: [], total: 0 }),
+  readItem: vi.fn().mockResolvedValue(null),
+  createItem: vi.fn().mockResolvedValue(null),
+  updateItem: vi.fn().mockResolvedValue(null),
+  deleteItem: vi.fn().mockResolvedValue(true)
+}
+
+vi.mock('~/composables/core/useFetch', () => ({
+  useFetch: () => mockFetchInstance
+}))
+
 import {
   useFormValidation,
   required,
@@ -108,15 +122,30 @@ export const mockOnMounted = vi.fn((callback: () => void) => {
 // Mock navigateTo
 export const mockNavigateTo = vi.fn().mockResolvedValue(undefined)
 
+// Mock useRuntimeConfig
+export const mockRuntimeConfig = {
+  public: {
+    apiBaseUrl: 'http://localhost:8056',
+    directusUrl: 'http://localhost:8055'
+  }
+}
+
+// Mock global fetch for useAuthV2
+export const mockGlobalFetch = vi.fn().mockResolvedValue({
+  ok: true,
+  json: () => Promise.resolve({ success: true, data: null })
+})
+
 // Mock defineNuxtRouteMiddleware
 export const mockDefineNuxtRouteMiddleware = (middleware: any) => middleware
 
-// Mock Directus instance (global)
+// Mock Directus instance (global) - DEPRECATED, use mockFetchInstance instead
 export const mockDirectusInstance = {
   login: vi.fn(),
   logout: vi.fn(),
   request: vi.fn()
 }
+
 
 // Mock useAuth (global) - for useHR tests
 export const mockAuthUser = mockUseState('auth-user', () => ({ id: 'user-1' }))
@@ -148,10 +177,12 @@ globalThis.watch = mockWatch as any
 globalThis.onMounted = mockOnMounted as any
 globalThis.navigateTo = mockNavigateTo as any
 globalThis.defineNuxtRouteMiddleware = mockDefineNuxtRouteMiddleware as any
+globalThis.useRuntimeConfig = vi.fn(() => mockRuntimeConfig) as any
 globalThis.useDirectus = vi.fn(() => mockDirectusInstance) as any
 globalThis.useAuth = vi.fn(() => mockAuthInstance) as any
 globalThis.useToast = vi.fn(() => mockToast) as any
 globalThis.useErrorHandler = vi.fn(() => mockErrorHandlerInstance) as any
+globalThis.fetch = mockGlobalFetch as any
 
 // 清理函数
 export function clearGlobalMocks() {
@@ -162,6 +193,13 @@ export function clearGlobalMocks() {
   mockDirectusInstance.login.mockClear()
   mockDirectusInstance.logout.mockClear()
   mockDirectusInstance.request.mockClear()
+  // Clear useFetch mocks
+  mockFetchInstance.apiFetch.mockClear()
+  mockFetchInstance.readItems.mockClear().mockResolvedValue({ data: [], total: 0 })
+  mockFetchInstance.readItem.mockClear().mockResolvedValue(null)
+  mockFetchInstance.createItem.mockClear().mockResolvedValue(null)
+  mockFetchInstance.updateItem.mockClear().mockResolvedValue(null)
+  mockFetchInstance.deleteItem.mockClear().mockResolvedValue(true)
   mockAuthInstance.login.mockClear()
   mockAuthInstance.logout.mockClear()
   mockAuthInstance.fetchUser.mockClear()
@@ -173,6 +211,11 @@ export function clearGlobalMocks() {
   mockHandleError.mockClear()
   // Reset auth user to default
   mockAuthUser.value = { id: 'user-1' }
+  // Reset fetch mock
+  mockGlobalFetch.mockClear().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ success: true, data: null })
+  })
 }
 
 // 在每个测试前清理
