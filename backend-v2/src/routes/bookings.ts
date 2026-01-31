@@ -215,9 +215,12 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
   let bookingStatus: 'CONFIRMED' | 'WAITLIST' = 'CONFIRMED';
   let waitlistPosition: number | null = null;
 
-  if (session.currentCount >= session.maxCapacity) {
+  const currentCount = session.currentCount ?? 0;
+  const waitlistCount = session.waitlistCount ?? 0;
+
+  if (currentCount >= session.maxCapacity) {
     bookingStatus = 'WAITLIST';
-    waitlistPosition = session.waitlistCount + 1;
+    waitlistPosition = waitlistCount + 1;
   }
 
   const [newBooking] = await db.insert(bookings).values({
@@ -230,12 +233,12 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
 
   if (bookingStatus === 'CONFIRMED') {
     await db.update(classSessions).set({
-      currentCount: session.currentCount + 1,
+      currentCount: currentCount + 1,
       dateUpdated: new Date(),
     }).where(eq(classSessions.id, data.sessionId));
   } else {
     await db.update(classSessions).set({
-      waitlistCount: session.waitlistCount + 1,
+      waitlistCount: waitlistCount + 1,
       dateUpdated: new Date(),
     }).where(eq(classSessions.id, data.sessionId));
   }
@@ -268,6 +271,10 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
     return c.json({ success: false, error: '預約不存在' }, 404);
   }
 
+  if (!booking.session.branchId) {
+    return c.json({ success: false, error: '課程分店資訊遺失' }, 400);
+  }
+
   const [branch] = await db
     .select()
     .from(branches)
@@ -278,7 +285,7 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
     return c.json({ success: false, error: '無權限取消此預約' }, 403);
   }
 
-  if (['CANCELLED', 'ATTENDED', 'NO_SHOW'].includes(booking.booking.bookingStatus)) {
+  if (['CANCELLED', 'ATTENDED', 'NO_SHOW'].includes(booking.booking.bookingStatus ?? '')) {
     return c.json({ success: false, error: '此預約無法取消' }, 400);
   }
 
@@ -289,6 +296,9 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
     return c.json({ success: false, error: '課程開始前 2 小時內無法取消' }, 400);
   }
 
+  const sessionCurrentCount = booking.session.currentCount ?? 0;
+  const sessionWaitlistCount = booking.session.waitlistCount ?? 0;
+
   await db.update(bookings).set({
     bookingStatus: 'CANCELLED',
     cancelledAt: new Date(),
@@ -298,7 +308,7 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
 
   if (booking.booking.bookingStatus === 'CONFIRMED') {
     await db.update(classSessions).set({
-      currentCount: booking.session.currentCount - 1,
+      currentCount: Math.max(0, sessionCurrentCount - 1),
       dateUpdated: new Date(),
     }).where(eq(classSessions.id, booking.session.id));
 
@@ -322,14 +332,14 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
       }).where(eq(bookings.id, nextWaitlist.id));
 
       await db.update(classSessions).set({
-        currentCount: booking.session.currentCount,
-        waitlistCount: booking.session.waitlistCount - 1,
+        currentCount: sessionCurrentCount,
+        waitlistCount: Math.max(0, sessionWaitlistCount - 1),
         dateUpdated: new Date(),
       }).where(eq(classSessions.id, booking.session.id));
     }
   } else {
     await db.update(classSessions).set({
-      waitlistCount: booking.session.waitlistCount - 1,
+      waitlistCount: Math.max(0, sessionWaitlistCount - 1),
       dateUpdated: new Date(),
     }).where(eq(classSessions.id, booking.session.id));
   }

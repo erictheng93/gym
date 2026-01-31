@@ -1,5 +1,5 @@
 import { db, contracts, members, branches, notifications } from '../db/index.js';
-import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { emailService } from '../services/email.js';
 
 export async function runContractExpiryCheck() {

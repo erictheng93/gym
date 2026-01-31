@@ -1,5 +1,5 @@
-import { db, tenants, branches, members, contracts, payments, checkIns, usageRecords } from '../db/index.js';
-import { eq, and, sql, sum, count, gte } from 'drizzle-orm';
+import { db, tenants, branches, members, contracts, payments, usageRecords } from '../db/index.js';
+import { eq, and, sql, sum, count } from 'drizzle-orm';
 
 export async function runAnalyticsTasks() {
   console.log('[Analytics] Starting analytics tasks...');

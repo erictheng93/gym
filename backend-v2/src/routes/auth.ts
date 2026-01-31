@@ -37,13 +37,6 @@ const loginSchema = z.object({
   password: z.string().min(6, '密碼至少 6 個字元'),
 });
 
-const registerSchema = z.object({
-  email: z.string().email('請輸入有效的電子郵件'),
-  password: z.string().min(8, '密碼至少 8 個字元'),
-  fullName: z.string().min(2, '姓名至少 2 個字元'),
-  tenantId: z.string().uuid().optional(),
-});
-
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, '請輸入目前密碼'),
   newPassword: z.string().min(8, '新密碼至少 8 個字元'),

@@ -1,4 +1,4 @@
-import { Context, MiddlewareHandler } from 'hono';
+import { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { lucia } from '../auth/lucia.js';
 import type { User, Session } from 'lucia';

@@ -146,7 +146,7 @@ app.get('/:id', async (c) => {
 
 app.post('/', zValidator('json', createContractSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
-  const user = c.get('user')!;
+  // User context available for future audit logging: c.get('user')
   const data = c.req.valid('json');
 
   const [branch] = await db
@@ -265,7 +265,7 @@ app.post('/:id/activate', async (c) => {
 app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
-  const user = c.get('user')!;
+  // User context available for future audit logging: c.get('user')
   const data = c.req.valid('json');
 
   const [contract] = await db

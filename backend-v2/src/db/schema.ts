@@ -14,8 +14,6 @@ import {
   real,
   index,
   uniqueIndex,
-  check,
-  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
