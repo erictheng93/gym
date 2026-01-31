@@ -138,7 +138,7 @@ node test-tenant-management.js
 ```
 
 #### 方法 B: 使用 Directus 管理后台
-1. 访问 http://localhost:8500/admin
+1. 访问 http://localhost:8055/admin
 2. 登录 Directus
 3. 直接在数据库中查看/修改租户数据
 

@@ -139,7 +139,7 @@ node test-tenant-management.js
 ### 方法 2: 手动浏览器测试
 
 #### 前提条件
-1. 后端服务正常运行 (http://localhost:8500)
+1. 后端服务正常运行 (http://localhost:8055)
 2. 前端服务正常运行 (http://localhost:3000)
 3. 使用管理员账号登录
 
@@ -200,11 +200,11 @@ node test-tenant-management.js
 
 ```bash
 # 1. 获取租户列表
-curl -X GET http://localhost:8500/gym/admin/tenants \
+curl -X GET http://localhost:8055/gym/admin/tenants \
   -H "Content-Type: application/json"
 
 # 2. 创建租户
-curl -X POST http://localhost:8500/gym/admin/tenants \
+curl -X POST http://localhost:8055/gym/admin/tenants \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试健身中心",
@@ -218,7 +218,7 @@ curl -X POST http://localhost:8500/gym/admin/tenants \
   }'
 
 # 3. 更新租户（替换 {tenant_id}）
-curl -X PATCH http://localhost:8500/gym/admin/tenants/{tenant_id} \
+curl -X PATCH http://localhost:8055/gym/admin/tenants/{tenant_id} \
   -H "Content-Type: application/json" \
   -d '{
     "name": "更新后的名称",
@@ -226,7 +226,7 @@ curl -X PATCH http://localhost:8500/gym/admin/tenants/{tenant_id} \
   }'
 
 # 4. 切换状态（替换 {tenant_id}）
-curl -X PATCH http://localhost:8500/gym/admin/tenants/{tenant_id}/status \
+curl -X PATCH http://localhost:8055/gym/admin/tenants/{tenant_id}/status \
   -H "Content-Type: application/json" \
   -d '{"status": "active"}'
 ```
@@ -248,7 +248,7 @@ curl -X PATCH http://localhost:8500/gym/admin/tenants/{tenant_id}/status \
 **绕过方法:**
 1. 直接测试 API 端点（临时禁用权限检查）
 2. 修复 KV 配置后重新测试
-3. 使用 Directus 管理后台 (http://localhost:8500/admin) 直接操作数据库
+3. 使用 Directus 管理后台 (http://localhost:8055/admin) 直接操作数据库
 
 ## 📊 测试覆盖率
 

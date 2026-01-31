@@ -9,16 +9,52 @@ import { vi, beforeEach, afterEach } from 'vitest';
 // Mock Database
 // ============================================
 export const mockDatabaseRaw = vi.fn();
-export const mockDatabase = {
+
+// Create a chainable mock database that supports both
+// database('table') and database.raw() patterns
+const createMockDatabaseMethods = () => ({
   raw: mockDatabaseRaw,
   select: vi.fn().mockReturnThis(),
   from: vi.fn().mockReturnThis(),
+  leftJoin: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
+  whereRaw: vi.fn().mockReturnThis(),
+  whereIn: vi.fn().mockReturnThis(),
+  whereNotIn: vi.fn().mockReturnThis(),
+  whereBetween: vi.fn().mockReturnThis(),
+  whereNotNull: vi.fn().mockReturnThis(),
+  andWhere: vi.fn().mockReturnThis(),
+  orWhere: vi.fn().mockReturnThis(),
+  orWhereBetween: vi.fn().mockReturnThis(),
+  orderBy: vi.fn().mockReturnThis(),
+  limit: vi.fn().mockReturnThis(),
+  offset: vi.fn().mockReturnThis(),
+  count: vi.fn().mockReturnThis(),
+  sum: vi.fn().mockReturnThis(),
+  avg: vi.fn().mockReturnThis(),
+  groupBy: vi.fn().mockReturnThis(),
   first: vi.fn(),
-  insert: vi.fn(),
-  update: vi.fn(),
-  delete: vi.fn(),
-};
+  clone: vi.fn().mockReturnThis(),
+  insert: vi.fn().mockReturnThis(),
+  update: vi.fn().mockReturnThis(),
+  delete: vi.fn().mockReturnThis(),
+  returning: vi.fn(),
+  onConflict: vi.fn().mockReturnThis(),
+  merge: vi.fn(),
+  then: vi.fn(),
+});
+
+// Create the base methods object
+const baseMethods = createMockDatabaseMethods();
+
+// Create a callable function that returns itself with all methods
+export const mockDatabase = Object.assign(
+  vi.fn().mockReturnValue(baseMethods),
+  baseMethods
+);
+
+// Make the function return the same object for chaining
+mockDatabase.mockReturnValue(mockDatabase);
 
 // ============================================
 // Mock Directus Context
@@ -59,6 +95,7 @@ export function createMockResponse() {
     json: vi.fn().mockReturnThis(),
     send: vi.fn().mockReturnThis(),
     set: vi.fn().mockReturnThis(),
+    setHeader: vi.fn().mockReturnThis(),
     end: vi.fn().mockReturnThis(),
     _jsonData: null,
     _statusCode: 200,

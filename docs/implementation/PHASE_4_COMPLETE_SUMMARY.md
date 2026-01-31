@@ -312,12 +312,12 @@ GET /gym/audit/export
 ### 1. Payment Integration
 ```bash
 # Test payment creation
-curl -X POST http://localhost:8500/gym/payment/create \
+curl -X POST http://localhost:8055/gym/payment/create \
   -H "Content-Type: application/json" \
   -d '{"gateway":"manual","invoiceId":"xxx","amount":1000}'
 
 # Test webhook
-curl -X POST http://localhost:8500/gym/payment/webhook/manual \
+curl -X POST http://localhost:8055/gym/payment/webhook/manual \
   -H "Content-Type: application/json" \
   -d '{"paymentId":"xxx","status":"completed"}'
 ```

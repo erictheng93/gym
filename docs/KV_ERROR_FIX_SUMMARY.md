@@ -90,7 +90,7 @@ pnpm run dev:admin
 
 ### 当前状态
 - **前端**: ✅ 完全正常运行 (http://localhost:3001)
-- **后端**: ✅ Directus 运行正常 (http://localhost:8500)
+- **后端**: ✅ Directus 运行正常 (http://localhost:8055)
 - **登录功能**: ✅ 技术上正常（凭据验证失败是预期的，因为使用的是测试账号）
 
 ## 📝 后续步骤
@@ -112,7 +112,7 @@ pnpm run dev:admin
 **选项 1: 使用 Directus 管理后台**
 ```bash
 # 访问 Directus 管理界面
-http://localhost:8500/admin
+http://localhost:8055/admin
 
 # 使用 Directus 管理员账号登录
 # 然后在用户管理中查看/创建 admin-web 用户

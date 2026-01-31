@@ -35,7 +35,7 @@ const mockServiceWorkerRegistration = {
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8500',
+    directusUrl: 'http://localhost:8055',
   },
 }))
 
@@ -185,7 +185,7 @@ describe('usePushNotifications', () => {
       expect(result).toBe(true)
       expect(mockPushSubscription.unsubscribe).toHaveBeenCalled()
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/push/unsubscribe',
+        'http://localhost:8055/gym/push/unsubscribe',
         expect.objectContaining({
           method: 'DELETE',
           body: { endpoint: 'https://push.example.com/subscription/123' },
@@ -246,7 +246,7 @@ describe('usePushNotifications', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/push/preferences',
+        'http://localhost:8055/gym/push/preferences',
         expect.objectContaining({
           method: 'PATCH',
           headers: { 'X-Member-Token': 'test-token' },

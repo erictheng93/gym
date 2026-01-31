@@ -17,7 +17,7 @@ Gym Nexus 是一個多分店健身房管理系統 (CRM/ERP)，建構於：
 ```bash
 cd backend
 docker-compose up -d
-# Directus 運行於 http://localhost:8500
+# Directus 運行於 http://localhost:8055
 ```
 
 ### 前端 (Nuxt 3)
@@ -83,8 +83,8 @@ gym-nexus/
 - **細節:** 完整文件請參閱 `backend/DATABASE_INDEXES.md`
 
 ### 連接埠設定 (Port Configuration - 避免 Windows 衝突)
-- **Directus**: http://localhost:8500
-- **PostgreSQL**: localhost:5444
+- **Directus**: http://localhost:8055
+- **PostgreSQL**: localhost:15432
 - **Redis**: localhost:6333
 
 ## 語言 (Language)

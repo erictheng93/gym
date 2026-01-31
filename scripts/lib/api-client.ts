@@ -26,7 +26,7 @@ export class DirectusClient {
   private baseUrl: string
   private accessToken: string | null = null
 
-  constructor(baseUrl: string = 'http://localhost:8500') {
+  constructor(baseUrl: string = 'http://localhost:8055') {
     this.baseUrl = baseUrl
   }
 

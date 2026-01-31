@@ -28,7 +28,7 @@ const mockMember = {
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8500',
+    directusUrl: 'http://localhost:8055',
   },
 }))
 

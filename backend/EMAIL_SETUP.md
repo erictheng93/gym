@@ -256,7 +256,7 @@ docker-compose logs directus | grep -i email
 
 可以透過 Directus 的內建密碼重設功能測試：
 
-1. 前往 Directus Admin (`http://localhost:8500`)
+1. 前往 Directus Admin (`http://localhost:8055`)
 2. 登出後點擊「忘記密碼」
 3. 輸入已驗證的 Email
 4. 檢查是否收到重設信

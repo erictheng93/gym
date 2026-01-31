@@ -18,6 +18,9 @@ import { registerQuotaCheckHooks } from './quota-check.js';
 import { registerStorageQuotaCheckHooks } from './storage-quota-check.js';
 import { registerBillingTasks } from '../cron/billing-tasks.js';
 import { registerAnalyticsTasks } from '../cron/analytics-tasks.js';
+// Phase 5: Marketing & HR Advanced Features
+import { registerLeadsHooks } from './leads.js';
+import { registerSegmentationTasks } from '../cron/segmentation-tasks.js';
 
 /**
  * Register all hooks with Directus
@@ -82,6 +85,14 @@ export function registerAllHooks(directusHooks, context, utils) {
   // 15. Analytics Cron Tasks (API usage aggregation, log cleanup)
   if (typeof schedule === 'function') {
     registerAnalyticsTasks(schedule, context);
+  }
+
+  // 16. Leads Hooks (auto-assignment, status tracking)
+  registerLeadsHooks({ action, filter }, context);
+
+  // 17. Segmentation Cron Tasks (daily RFM calculation)
+  if (typeof schedule === 'function') {
+    registerSegmentationTasks(schedule, context);
   }
 }
 

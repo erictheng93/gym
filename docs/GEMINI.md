@@ -120,7 +120,7 @@ Located in `frontend/` (Managed via `pnpm` workspaces)
    ```bash
    docker-compose up -d
    ```
-   - Directus Console: `http://localhost:8500`
+   - Directus Console: `http://localhost:8055`
    - Database: Port 5444
    - Redis: Port 6333
 

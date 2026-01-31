@@ -25,7 +25,7 @@ export const TestEnv = {
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
 
   // Directus API URL
-  directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500',
+  directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8055',
 
   // 測試用戶
   users: {

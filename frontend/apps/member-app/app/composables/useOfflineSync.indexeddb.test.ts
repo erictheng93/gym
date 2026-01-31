@@ -55,7 +55,7 @@ describe('useOfflineSync with IndexedDB', () => {
       const { queueRequest, pendingCount } = useOfflineSync()
 
       const requestId = await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         body: { data: 'test' },
         headers: { 'X-Member-Token': 'token123' },
@@ -72,14 +72,14 @@ describe('useOfflineSync with IndexedDB', () => {
       const { queueRequest, pendingCount, getPendingRequests } = useOfflineSync()
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test1',
+        url: 'http://localhost:8055/gym/api/test1',
         method: 'POST',
         maxRetries: 3,
         type: 'booking',
       })
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test2',
+        url: 'http://localhost:8055/gym/api/test2',
         method: 'DELETE',
         maxRetries: 3,
         type: 'booking',
@@ -96,7 +96,7 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const testData = { booking_id: 'b123', note: 'Test note' }
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         body: testData,
         headers: { 'X-Member-Token': 'token123' },
@@ -109,7 +109,7 @@ describe('useOfflineSync with IndexedDB', () => {
       expect(pending).toHaveLength(1)
 
       const request = pending[0]
-      expect(request.url).toBe('http://localhost:8500/gym/api/test')
+      expect(request.url).toBe('http://localhost:8055/gym/api/test')
       expect(request.method).toBe('POST')
       expect(request.body).toEqual(testData)
       expect(request.headers).toEqual({ 'X-Member-Token': 'token123' })
@@ -123,7 +123,7 @@ describe('useOfflineSync with IndexedDB', () => {
       const { queueRequest, removeFromQueue, pendingCount, getPendingRequests } = useOfflineSync()
 
       const requestId = await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         maxRetries: 3,
         type: 'booking',
@@ -143,14 +143,14 @@ describe('useOfflineSync with IndexedDB', () => {
       const { queueRequest, clearQueue, pendingCount, getPendingRequests } = useOfflineSync()
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test1',
+        url: 'http://localhost:8055/gym/api/test1',
         method: 'POST',
         maxRetries: 3,
         type: 'booking',
       })
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test2',
+        url: 'http://localhost:8055/gym/api/test2',
         method: 'DELETE',
         maxRetries: 3,
         type: 'booking',
@@ -240,7 +240,7 @@ describe('useOfflineSync with IndexedDB', () => {
       mockFetch.mockResolvedValue({ success: true })
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         body: { data: 'test' },
         maxRetries: 3,
@@ -264,7 +264,7 @@ describe('useOfflineSync with IndexedDB', () => {
       isOnline.value = false
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         maxRetries: 3,
         type: 'booking',
@@ -285,7 +285,7 @@ describe('useOfflineSync with IndexedDB', () => {
       mockFetch.mockRejectedValue(new Error('Network error'))
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         maxRetries: 3,
         type: 'booking',
@@ -309,7 +309,7 @@ describe('useOfflineSync with IndexedDB', () => {
       mockFetch.mockRejectedValue(new Error('Network error'))
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test',
+        url: 'http://localhost:8055/gym/api/test',
         method: 'POST',
         maxRetries: 1, // Only 1 retry allowed
         type: 'booking',
@@ -338,21 +338,21 @@ describe('useOfflineSync with IndexedDB', () => {
       mockFetch.mockResolvedValue({ success: true })
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test1',
+        url: 'http://localhost:8055/gym/api/test1',
         method: 'POST',
         maxRetries: 3,
         type: 'booking',
       })
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test2',
+        url: 'http://localhost:8055/gym/api/test2',
         method: 'DELETE',
         maxRetries: 3,
         type: 'booking',
       })
 
       await queueRequest({
-        url: 'http://localhost:8500/gym/api/test3',
+        url: 'http://localhost:8055/gym/api/test3',
         method: 'POST',
         maxRetries: 3,
         type: 'review',
@@ -375,7 +375,7 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const requestId = await queueCancelBooking(
         'booking-123',
-        'http://localhost:8500',
+        'http://localhost:8055',
         { 'X-Member-Token': 'token123' }
       )
 
@@ -383,7 +383,7 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
-      expect(pending[0].url).toBe('http://localhost:8500/gym/bookings/booking-123')
+      expect(pending[0].url).toBe('http://localhost:8055/gym/bookings/booking-123')
       expect(pending[0].method).toBe('DELETE')
       expect(pending[0].type).toBe('booking')
       expect(pending[0].optimisticId).toBe('booking-123')
@@ -400,7 +400,7 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const requestId = await queueSubmitReview(
         reviewPayload,
-        'http://localhost:8500',
+        'http://localhost:8055',
         { 'X-Member-Token': 'token123' }
       )
 
@@ -408,7 +408,7 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
-      expect(pending[0].url).toBe('http://localhost:8500/gym/reviews')
+      expect(pending[0].url).toBe('http://localhost:8055/gym/reviews')
       expect(pending[0].method).toBe('POST')
       expect(pending[0].body).toEqual(reviewPayload)
       expect(pending[0].type).toBe('review')

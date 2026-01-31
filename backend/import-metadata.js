@@ -2,7 +2,7 @@
  * 直接向 Directus metadata 表插入记录（跳过表创建）
  */
 
-const DIRECTUS_URL = 'http://localhost:8500';
+const DIRECTUS_URL = 'http://localhost:8055';
 const ADMIN_EMAIL = 'admin@gym.com';
 const ADMIN_PASSWORD = 'admin';
 

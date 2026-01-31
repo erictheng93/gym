@@ -236,12 +236,12 @@ router.get('/branches', async (req, res) => {
 
 ```bash
 # 使用員工帳號登入獲取 JWT
-curl -X POST http://localhost:8500/auth/login \
+curl -X POST http://localhost:8055/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "employee@branch1.com", "password": "password"}'
 
 # 使用 JWT 訪問 API（應自動注入租戶上下文）
-curl -X GET http://localhost:8500/gym/members \
+curl -X GET http://localhost:8055/gym/members \
   -H "Authorization: Bearer <JWT_TOKEN>"
 ```
 
@@ -269,7 +269,7 @@ WHERE slug = 'test-tenant';
 
 ```bash
 # 使用 Directus 管理員帳號登入
-curl -X POST http://localhost:8500/auth/login \
+curl -X POST http://localhost:8055/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@example.com", "password": "admin_password"}'
 

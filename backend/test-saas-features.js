@@ -8,7 +8,7 @@
  * 注意：需要 Node.js 18+ 支持內建 fetch
  */
 
-const DIRECTUS_URL = 'http://localhost:8500';
+const DIRECTUS_URL = 'http://localhost:8055';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@gym.com';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 

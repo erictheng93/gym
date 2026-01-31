@@ -26,15 +26,28 @@ import { registerGoalsRoutes } from './goals.js';
 import { registerMeasurementsRoutes } from './measurements.js';
 import { registerWorkoutsRoutes } from './workouts.js';
 import { registerIssuesRoutes } from './issues.js';
+import { registerDashboardRoutes } from './dashboard.js';
+// Phase 3: Coach App & Booking System
+import { registerCoachRoutes } from './coach.js';
+import { registerMemberCoachesRoutes } from './member-coaches.js';
+import { registerLessonPlansRoutes } from './lesson-plans.js';
+import { registerTeachingMaterialsRoutes } from './teaching-materials.js';
+// Phase 5: Marketing & HR Advanced Features
+import { registerLeadsRoutes } from './leads.js';
+import { registerSegmentationRoutes } from './segmentation.js';
+import { registerCouponsRoutes } from './coupons.js';
+import { registerCampaignsRoutes } from './campaigns.js';
+import { registerPerformanceRoutes } from './performance.js';
+import { registerPayrollRoutes } from './payroll.js';
 
 /**
  * Register all routes with the router
  * @param {object} router - Express router
  * @param {object} context - Directus context { services, database, getSchema, env }
- * @param {object} middleware - Middleware functions { memberAuth, adminNotification }
+ * @param {object} middleware - Middleware functions { memberAuth, coachAuth, adminNotification }
  */
 export function registerAllRoutes(router, context, middleware) {
-  const { memberAuth, adminNotification } = middleware;
+  const { memberAuth, coachAuth, adminNotification } = middleware;
 
   // Health check routes (no auth required, registered first)
   registerHealthRoutes(router, context);
@@ -101,6 +114,41 @@ export function registerAllRoutes(router, context, middleware) {
 
   // Issues routes (member auth required)
   registerIssuesRoutes(router, context, memberAuth);
+
+  // Dashboard routes (HQ War Room, authentication required)
+  registerDashboardRoutes(router, context);
+
+  // Phase 3: Coach App & Booking System
+  // Coach routes (coach auth required)
+  registerCoachRoutes(router, context, coachAuth);
+
+  // Member-Coaches routes (student management, coach auth required)
+  registerMemberCoachesRoutes(router, context, coachAuth);
+
+  // Lesson Plans routes (coach auth required)
+  registerLessonPlansRoutes(router, context, coachAuth);
+
+  // Teaching Materials routes (coach auth required)
+  registerTeachingMaterialsRoutes(router, context, coachAuth);
+
+  // Phase 5: Marketing & HR Advanced Features (authentication checked internally)
+  // Leads management (CRM)
+  registerLeadsRoutes(router, context);
+
+  // Member segmentation (RFM Analysis)
+  registerSegmentationRoutes(router, context);
+
+  // Coupons management
+  registerCouponsRoutes(router, context);
+
+  // Campaigns management
+  registerCampaignsRoutes(router, context);
+
+  // Performance reviews
+  registerPerformanceRoutes(router, context);
+
+  // Payroll management
+  registerPayrollRoutes(router, context);
 }
 
 export default registerAllRoutes;

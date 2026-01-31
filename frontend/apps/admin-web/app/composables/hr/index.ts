@@ -16,10 +16,27 @@ export { useAttendance } from './useAttendance'
 export { useLeaveRequests } from './useLeaveRequests'
 export { useShiftSchedules } from './useShiftSchedules'
 export { useMakeupRequests } from './useMakeupRequests'
+export { usePerformance } from './usePerformance'
+export { usePayroll } from './usePayroll'
 
-// Types
+// Types - Attendance
 export type {
   TodayAttendanceSummary,
   MonthlyAttendanceStats,
   AttendanceRecord
 } from './useAttendance'
+
+// Types - Performance
+export type {
+  PerformanceReview,
+  KPIItem,
+  KPITemplate,
+  TeamDashboard
+} from './usePerformance'
+
+// Types - Payroll
+export type {
+  SalaryRecord,
+  PromotionRecord,
+  PayrollSummary
+} from './usePayroll'

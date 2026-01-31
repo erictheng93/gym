@@ -43,12 +43,12 @@ async function checkUrl(url: string, timeout = 5000): Promise<boolean> {
 }
 
 async function checkBackend(): Promise<ServiceStatus> {
-  const url = 'http://localhost:8500/server/health'
+  const url = 'http://localhost:8055/server/health'
   const isRunning = await checkUrl(url, 3000)
 
   return {
     name: 'Backend (Directus)',
-    url: 'http://localhost:8500',
+    url: 'http://localhost:8055',
     status: isRunning ? 'running' : 'stopped',
     message: isRunning ? '✓ Running' : '✗ Not running'
   }

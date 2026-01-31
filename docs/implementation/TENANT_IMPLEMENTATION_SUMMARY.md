@@ -264,7 +264,7 @@ SELECT * FROM v_tenant_overview;
 ### API 端点测试 ✅
 ```bash
 # 测试配额端点（需认证）
-curl http://localhost:8500/gym/quota/status
+curl http://localhost:8055/gym/quota/status
 # 结果: {"success":false,"message":"未認證"}
 # ✓ 端点已注册并正常工作
 ```

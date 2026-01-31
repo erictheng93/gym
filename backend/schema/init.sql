@@ -123,9 +123,10 @@ CREATE TABLE IF NOT EXISTS job_titles (
 COMMENT ON TABLE job_titles IS '職位/角色定義表';
 
 -- 3.3 employees (員工資料)
+-- Note: user_id references directus_users but FK constraint is added after Directus creates the table
 CREATE TABLE IF NOT EXISTS employees (
     id UUID PRIMARY KEY DEFAULT gen_uuid_v7(),
-    user_id UUID REFERENCES directus_users(id) ON DELETE SET NULL,
+    user_id UUID,  -- FK to directus_users will be added by Directus migration
     branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
     job_title_id UUID NOT NULL REFERENCES job_titles(id) ON DELETE RESTRICT,
     employee_code VARCHAR(20) NOT NULL UNIQUE,
@@ -290,7 +291,7 @@ CREATE TABLE IF NOT EXISTS attendances (
 
 CREATE INDEX IF NOT EXISTS idx_attendances_employee ON attendances(employee_id);
 CREATE INDEX IF NOT EXISTS idx_attendances_branch ON attendances(branch_id);
-CREATE INDEX IF NOT EXISTS idx_attendances_date ON attendances(DATE(check_in));
+CREATE INDEX IF NOT EXISTS idx_attendances_check_in ON attendances(check_in);
 
 COMMENT ON TABLE attendances IS '打卡紀錄表';
 
@@ -766,6 +767,52 @@ CREATE INDEX IF NOT EXISTS idx_workout_logs_member ON workout_logs(member_id);
 CREATE INDEX IF NOT EXISTS idx_workout_logs_date ON workout_logs(date);
 
 COMMENT ON TABLE workout_logs IS '運動日誌表';
+
+-- ============================================
+-- I. RFM 分群與績效模組 (RFM Segmentation & Performance)
+-- ============================================
+
+-- 3.30 rfm_scores (RFM 分數)
+CREATE TABLE IF NOT EXISTS rfm_scores (
+    id UUID PRIMARY KEY DEFAULT gen_uuid_v7(),
+    member_id UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+    recency_score INTEGER NOT NULL CHECK (recency_score BETWEEN 1 AND 5),
+    frequency_score INTEGER NOT NULL CHECK (frequency_score BETWEEN 1 AND 5),
+    monetary_score INTEGER NOT NULL CHECK (monetary_score BETWEEN 1 AND 5),
+    rfm_segment VARCHAR(30) NOT NULL CHECK (rfm_segment IN ('CHAMPIONS', 'LOYAL', 'POTENTIAL_LOYAL', 'NEW_CUSTOMERS', 'PROMISING', 'NEED_ATTENTION', 'ABOUT_TO_SLEEP', 'AT_RISK', 'HIBERNATING', 'LOST')),
+    last_payment_date DATE,
+    last_checkin_date DATE,
+    total_payments_12m DECIMAL(12, 2) DEFAULT 0,
+    total_checkins_12m INTEGER DEFAULT 0,
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(member_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rfm_scores_member ON rfm_scores(member_id);
+CREATE INDEX IF NOT EXISTS idx_rfm_scores_branch ON rfm_scores(branch_id);
+CREATE INDEX IF NOT EXISTS idx_rfm_scores_segment ON rfm_scores(rfm_segment);
+
+COMMENT ON TABLE rfm_scores IS 'RFM 會員分群分數表';
+
+-- 3.31 kpi_templates (KPI 範本)
+CREATE TABLE IF NOT EXISTS kpi_templates (
+    id UUID PRIMARY KEY DEFAULT gen_uuid_v7(),
+    name VARCHAR(100) NOT NULL,
+    job_title_id UUID REFERENCES job_titles(id) ON DELETE SET NULL,
+    review_type VARCHAR(20) NOT NULL CHECK (review_type IN ('MONTHLY', 'QUARTERLY', 'ANNUAL')),
+    kpi_config JSONB NOT NULL DEFAULT '[]',
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by UUID REFERENCES employees(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_templates_job_title ON kpi_templates(job_title_id);
+
+COMMENT ON TABLE kpi_templates IS 'KPI 考核範本表';
+COMMENT ON COLUMN kpi_templates.kpi_config IS 'KPI 配置 JSON: [{"id": "new_contracts", "name": "新簽合約數", "weight": 30, "target": 10, "unit": "件"}]';
 
 -- ============================================
 -- 觸發器函數 (Triggers)

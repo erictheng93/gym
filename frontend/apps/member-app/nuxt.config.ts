@@ -43,7 +43,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8500',
+      directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8055',
       // Sentry error monitoring
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryDebug: process.env.NUXT_PUBLIC_SENTRY_DEBUG === 'true',

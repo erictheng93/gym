@@ -163,13 +163,13 @@ cd backend && bash test-storage-quota-simple.sh
 ### API 測試 ✅
 ```bash
 # 配額狀態
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8500/gym/quota/status
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8055/gym/quota/status
 
 # API 統計
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8500/gym/analytics/api-stats?timeRange=24h
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8055/gym/analytics/api-stats?timeRange=24h
 
 # 速率限制日誌
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8500/gym/analytics/rate-limit-logs?limit=10
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8055/gym/analytics/rate-limit-logs?limit=10
 ```
 
 ---

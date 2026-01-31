@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Test configuration
-const DIRECTUS_URL = 'http://localhost:8500';
+const DIRECTUS_URL = 'http://localhost:8055';
 const TEST_FILE_PATH = path.join(__dirname, 'test-file.txt');
 
 // Colors for console output

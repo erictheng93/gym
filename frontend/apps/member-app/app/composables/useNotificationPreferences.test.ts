@@ -87,7 +87,7 @@ const mockNotificationHistory = [
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8500',
+    directusUrl: 'http://localhost:8055',
   },
 }))
 
@@ -182,7 +182,7 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/preferences',
+        'http://localhost:8055/gym/notifications/preferences',
         { headers: { 'X-Member-Token': 'test-token' } }
       )
       expect(preferences.value).toEqual(mockPreferences)
@@ -257,7 +257,7 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/preferences',
+        'http://localhost:8055/gym/notifications/preferences',
         expect.objectContaining({
           method: 'PATCH',
           headers: expect.objectContaining({
@@ -294,7 +294,7 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/preferences',
+        'http://localhost:8055/gym/notifications/preferences',
         expect.objectContaining({
           body: { enable_line: false },
         })
@@ -323,7 +323,7 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/channels',
+        'http://localhost:8055/gym/notifications/channels',
         { headers: { 'X-Member-Token': 'test-token' } }
       )
       expect(channelDetails.value).toEqual(mockChannelDetails)
@@ -361,7 +361,7 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/history?limit=20&offset=0',
+        'http://localhost:8055/gym/notifications/history?limit=20&offset=0',
         { headers: { 'X-Member-Token': 'test-token' } }
       )
       expect(history.value).toEqual(mockNotificationHistory)
@@ -457,7 +457,7 @@ describe('useNotificationPreferences', () => {
       await loadMoreHistory()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/history?limit=20&offset=20',
+        'http://localhost:8055/gym/notifications/history?limit=20&offset=20',
         expect.any(Object)
       )
     })
@@ -484,7 +484,7 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toEqual({ success: true, channel: 'push' })
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/notifications/test',
+        'http://localhost:8055/gym/notifications/test',
         expect.objectContaining({
           method: 'POST',
           body: { channel: 'push', type: 'test' },

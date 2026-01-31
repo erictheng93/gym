@@ -13,7 +13,7 @@ echo ""
 echo "============================================================"
 echo "Step 1: 登入獲取 Token"
 echo "============================================================"
-TOKEN=$(curl -s -X POST http://localhost:8500/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8055/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@gym.com","password":"admin"}' \
   | grep -o '"access_token":"[^"]*"' \
@@ -32,7 +32,7 @@ echo "============================================================"
 echo "Step 2: 檢查初始配額狀態"
 echo "============================================================"
 curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8500/gym/quota/status \
+  http://localhost:8055/gym/quota/status \
   | python -m json.tool
 echo ""
 
@@ -49,7 +49,7 @@ echo ""
 echo "============================================================"
 echo "Step 4: 上傳小文件 (應該成功)"
 echo "============================================================"
-UPLOAD_RESULT=$(curl -s -X POST http://localhost:8500/files \
+UPLOAD_RESULT=$(curl -s -X POST http://localhost:8055/files \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@test-small.bin")
 
@@ -71,7 +71,7 @@ echo "============================================================"
 echo "Step 5: 上傳後檢查配額狀態"
 echo "============================================================"
 curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8500/gym/quota/status \
+  http://localhost:8055/gym/quota/status \
   | python -m json.tool
 echo ""
 
@@ -85,7 +85,7 @@ if [ ! -z "$FILE_ID" ]; then
   echo "============================================================"
   echo "Step 6: 清理上傳的文件"
   echo "============================================================"
-  curl -s -X DELETE http://localhost:8500/files/$FILE_ID \
+  curl -s -X DELETE http://localhost:8055/files/$FILE_ID \
     -H "Authorization: Bearer $TOKEN"
   echo ""
   echo "✓ 上傳的文件已刪除"

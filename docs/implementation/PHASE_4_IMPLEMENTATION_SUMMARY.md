@@ -373,13 +373,13 @@ docker-compose restart
 
 ```bash
 # 测试配额 API
-curl http://localhost:8500/gym/quota/status
+curl http://localhost:8055/gym/quota/status
 
 # 测试账单 API
-curl http://localhost:8500/gym/billing/subscriptions
+curl http://localhost:8055/gym/billing/subscriptions
 
 # 测试审计日志 API
-curl http://localhost:8500/gym/audit/logs
+curl http://localhost:8055/gym/audit/logs
 ```
 
 ---

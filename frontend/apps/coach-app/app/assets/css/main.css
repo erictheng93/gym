@@ -1,0 +1,34 @@
+/* Coach App Main Styles */
+@import '@ui/assets/css/main.css';
+
+/* Coach App specific theme - Blue accent */
+:root {
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-light: #dbeafe;
+}
+
+/* Safe area padding for PWA */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Page transition */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.2s ease-out;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}

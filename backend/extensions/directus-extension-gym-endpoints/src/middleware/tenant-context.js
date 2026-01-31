@@ -92,7 +92,7 @@ export function createTenantContextMiddleware(database) {
         INNER JOIN branches b ON e.branch_id = b.id
         INNER JOIN tenants t ON b.tenant_id = t.id
         WHERE e.user_id = ?::uuid
-          AND e.status = 'active'
+          AND UPPER(e.status) = 'ACTIVE'
         LIMIT 1
       `, [userId]);
 

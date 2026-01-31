@@ -345,7 +345,7 @@ WHERE uploaded_by = ANY(?)
 #### 測試場景 1: 正常上傳
 ```bash
 # 測試小文件上傳（未超限）
-curl -X POST http://localhost:8500/files \
+curl -X POST http://localhost:8055/files \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@test-small.jpg"
 
@@ -356,7 +356,7 @@ curl -X POST http://localhost:8500/files \
 #### 測試場景 2: 超限阻止
 ```bash
 # 測試大文件上傳（超過配額）
-curl -X POST http://localhost:8500/files \
+curl -X POST http://localhost:8055/files \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@test-large.zip"
 
@@ -369,7 +369,7 @@ curl -X POST http://localhost:8500/files \
 ```bash
 # 獲取配額狀態（包含實際存儲使用量）
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8500/gym/quota/status
+  http://localhost:8055/gym/quota/status
 
 # 預期返回:
 {
@@ -389,15 +389,15 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```bash
 # 測試 API 使用統計
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8500/gym/analytics/api-stats?timeRange=24h"
+  "http://localhost:8055/gym/analytics/api-stats?timeRange=24h"
 
 # 測試速率限制日誌
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8500/gym/analytics/rate-limit-logs?limit=10&offset=0"
+  "http://localhost:8055/gym/analytics/rate-limit-logs?limit=10&offset=0"
 
 # 測試配額歷史
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8500/gym/analytics/quota-history?resource=members&days=30"
+  "http://localhost:8055/gym/analytics/quota-history?resource=members&days=30"
 ```
 
 ### 4. 前端組件測試

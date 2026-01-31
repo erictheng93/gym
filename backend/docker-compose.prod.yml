@@ -6,6 +6,25 @@
 #
 # 域名: gym.imfinethankyouandyou.com
 # API: api.gym.imfinethankyouandyou.com
+#
+# ============================================
+# Volume Strategy (Production)
+# ============================================
+# - db_data: Named volume for PostgreSQL (better performance, Docker-managed)
+# - directus_uploads: Named volume for user uploads (portable, easy backup)
+# - extensions: Keep bind mount for easy deployment updates
+#
+# 資料遷移指南 (從 bind mount 轉換):
+#   1. 停止服務: docker-compose down
+#   2. 備份現有資料:
+#      - cp -r ./data/database ./data/database.backup
+#      - cp -r ./uploads ./uploads.backup
+#   3. 啟動新服務建立 named volumes:
+#      - docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   4. 複製資料到 named volumes:
+#      - docker cp ./data/database.backup/. $(docker-compose ps -q database):/var/lib/postgresql/data/
+#      - docker cp ./uploads.backup/. $(docker-compose ps -q directus):/directus/uploads/
+#   5. 重啟服務: docker-compose restart
 
 services:
   # ============================================
@@ -29,40 +48,16 @@ services:
           cpus: '0.1'
           memory: 64M
   # ============================================
-  # Redis Production Configuration
-  # ============================================
-  redis:
-    restart: always
-    # 生產環境不暴露端口 (透過 Cloudflare Tunnel)
-    ports: []
-    command:
-      - "redis-server"
-      - "--maxmemory"
-      - "512mb"                           # Increased memory for production
-      - "--maxmemory-policy"
-      - "allkeys-lru"
-      - "--appendonly"
-      - "yes"
-      - "--tcp-keepalive"
-      - "60"
-      - "--requirepass"
-      - "${REDIS_PASSWORD:-}"             # Optional password for production
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 768M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-
-  # ============================================
   # PostgreSQL Production Configuration
   # ============================================
   database:
     restart: always
     # 生產環境不暴露端口 (透過 Cloudflare Tunnel)
     ports: []
+    # 使用 Named Volume 取代 Bind Mount (生產環境)
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./schema/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     environment:
       POSTGRES_USER: "${DB_USER:-directus}"
       POSTGRES_PASSWORD: "${DB_PASSWORD}"   # Required in production
@@ -117,6 +112,11 @@ services:
     restart: always
     # 生產環境不暴露端口 (透過 Cloudflare Tunnel)
     ports: []
+    # 使用 Named Volume 取代 Bind Mount (生產環境)
+    # extensions 保持 bind mount 方便部署時更新
+    volumes:
+      - directus_uploads:/directus/uploads
+      - ./extensions:/directus/extensions
     environment:
       # Public URL for Directus (used for OAuth callbacks, etc.)
       PUBLIC_URL: "https://api.gym.imfinethankyouandyou.com"
@@ -129,17 +129,16 @@ services:
       DB_POOL__MIN: "5"                      # Higher minimum pool
       DB_POOL__MAX: "100"                    # Higher maximum pool
 
-      # Redis with optional password
-      CACHE_REDIS: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+      # Cache - 使用內存緩存（單實例足夠，未來需要時再升級 Redis）
+      CACHE_STORE: "memory"
 
       # Production logging
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       LOG_STYLE: "raw"                       # JSON logging for production
 
-      # Rate limiting - enabled in production
+      # Rate limiting - 使用內存（單實例足夠）
       RATE_LIMITER_ENABLED: "true"
-      RATE_LIMITER_STORE: "redis"
-      RATE_LIMITER_REDIS: "redis://:${REDIS_PASSWORD:-}@redis:6379"
+      RATE_LIMITER_STORE: "memory"
       RATE_LIMITER_POINTS: "100"
       RATE_LIMITER_DURATION: "60"
 
@@ -173,3 +172,26 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+# ============================================
+# Named Volumes (生產環境)
+# ============================================
+# 優點:
+#   - Docker 管理，可攜性高
+#   - 效能較佳（尤其 Mac/Windows）
+#   - 標準化備份流程
+#
+# 備份指令:
+#   docker run --rm -v gym_db_data:/data -v $(pwd):/backup alpine tar czf /backup/db_backup.tar.gz /data
+#   docker run --rm -v gym_directus_uploads:/data -v $(pwd):/backup alpine tar czf /backup/uploads_backup.tar.gz /data
+#
+# 還原指令:
+#   docker run --rm -v gym_db_data:/data -v $(pwd):/backup alpine tar xzf /backup/db_backup.tar.gz -C /
+#   docker run --rm -v gym_directus_uploads:/data -v $(pwd):/backup alpine tar xzf /backup/uploads_backup.tar.gz -C /
+volumes:
+  db_data:
+    driver: local
+    name: gym_db_data
+  directus_uploads:
+    driver: local
+    name: gym_directus_uploads

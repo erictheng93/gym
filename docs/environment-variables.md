@@ -160,7 +160,7 @@ Located in `frontend/apps/member-app/.env`:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DIRECTUS_URL` | No | `http://localhost:8500` | Backend API URL |
+| `DIRECTUS_URL` | No | `http://localhost:8055` | Backend API URL |
 | `PORT` | No | `3002` | Dev server port |
 | `NUXT_PUBLIC_SENTRY_DSN` | No | - | Sentry DSN |
 | `NUXT_PUBLIC_SENTRY_DEBUG` | No | `false` | Enable Sentry debug mode |
@@ -183,7 +183,7 @@ Located in `frontend/apps/admin-web/.env`:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DIRECTUS_URL` | No | `http://localhost:8500` | Backend API URL |
+| `DIRECTUS_URL` | No | `http://localhost:8055` | Backend API URL |
 | `PORT` | No | `3001` | Dev server port |
 | `NUXT_PUBLIC_SENTRY_DSN` | No | - | Sentry DSN |
 
@@ -264,11 +264,11 @@ RATE_LIMITER_ENABLED=false
 LOG_LEVEL=debug
 
 # Frontend - frontend/apps/member-app/.env
-DIRECTUS_URL=http://localhost:8500
+DIRECTUS_URL=http://localhost:8055
 PORT=3002
 
 # Frontend - frontend/apps/admin-web/.env
-DIRECTUS_URL=http://localhost:8500
+DIRECTUS_URL=http://localhost:8055
 PORT=3001
 ```
 

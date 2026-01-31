@@ -19,6 +19,7 @@
 import { initRedis } from './utils/redis.js';
 import { logger } from './utils/logger.js';
 import { createMemberAuthMiddleware } from './middleware/member-auth.js';
+import { createCoachAuthMiddleware } from './middleware/coach-auth.js';
 import { createAdminNotificationMiddleware } from './middleware/admin-auth.js';
 import { createTenantContextMiddleware } from './middleware/tenant-context.js';
 import { createAuthMiddleware } from './middleware/auth.js';
@@ -43,6 +44,7 @@ export default {
     // 初始化中間件
     const authMiddleware = createAuthMiddleware(env, database);
     const memberAuthMiddleware = createMemberAuthMiddleware(env);
+    const coachAuthMiddleware = createCoachAuthMiddleware(env);
     const adminNotificationMiddleware = createAdminNotificationMiddleware(database);
     const tenantContextMiddleware = createTenantContextMiddleware(database);
     const apiLoggerMiddleware = createApiLogger({ database });
@@ -97,6 +99,7 @@ export default {
 
     const middleware = {
       memberAuth: memberAuthMiddleware,
+      coachAuth: coachAuthMiddleware,
       adminNotification: adminNotificationMiddleware,
       tenantContext: tenantContextMiddleware,
     };

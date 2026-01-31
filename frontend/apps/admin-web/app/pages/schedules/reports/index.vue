@@ -304,7 +304,7 @@ interface DailyTrend {
   overtime: number
 }
 
-const API_BASE = 'http://localhost:8500'
+const API_BASE = 'http://localhost:8055'
 
 const dateRange = ref({
   start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],

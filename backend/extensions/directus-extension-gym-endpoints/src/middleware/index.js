@@ -4,6 +4,7 @@
  */
 
 export { createMemberAuthMiddleware } from './member-auth.js';
+export { createCoachAuthMiddleware } from './coach-auth.js';
 export { createAdminNotificationMiddleware } from './admin-auth.js';
 export {
   createTenantContextMiddleware,

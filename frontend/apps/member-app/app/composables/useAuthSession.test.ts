@@ -11,7 +11,7 @@ const cookieStore = new Map<string, { value: string | null | undefined }>()
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8500',
+    directusUrl: 'http://localhost:8055',
   },
 }))
 
@@ -229,7 +229,7 @@ describe('useAuthSession', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/member/me',
+        'http://localhost:8055/gym/member/me',
         { headers: { 'X-Member-Token': 'valid-token' } }
       )
       expect(member.value).toBeTruthy()
@@ -258,7 +258,7 @@ describe('useAuthSession', () => {
       await fetchMember('provided-token')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8500/gym/member/me',
+        'http://localhost:8055/gym/member/me',
         { headers: { 'X-Member-Token': 'provided-token' } }
       )
     })

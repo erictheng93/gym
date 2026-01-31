@@ -121,6 +121,27 @@ export function registerAnalyticsTasks(schedule, context) {
     }
   });
 
+  /**
+   * Refresh Dashboard KPIs materialized views
+   * Runs every 15 minutes
+   */
+  schedule('*/15 * * * *', async () => {
+    try {
+      // Status logged('[AnalyticsTasks] Refreshing Dashboard KPIs...');
+
+      await database.raw('SELECT refresh_dashboard_kpis()');
+
+      // Status logged('[AnalyticsTasks] Dashboard KPIs refreshed successfully');
+    } catch (error) {
+      // 如果函數不存在，靜默失敗 (migration 可能尚未執行)
+      if (error.message && error.message.includes('function refresh_dashboard_kpis() does not exist')) {
+        // Status logged('[AnalyticsTasks] Dashboard KPIs function not found, skipping refresh');
+      } else {
+        console.error('[AnalyticsTasks] Error refreshing Dashboard KPIs:', error);
+      }
+    }
+  });
+
   // Status logged('[AnalyticsTasks] All analytics cron tasks registered successfully');
 }
 

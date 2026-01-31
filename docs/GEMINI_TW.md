@@ -120,7 +120,7 @@ Gym Nexus 是一套為支援 **多店點/連鎖架構 (Multi-Store/Chain)** 設�
    ```bash
    docker-compose up -d
    ```
-   - Directus 控制台: `http://localhost:8500`
+   - Directus 控制台: `http://localhost:8055`
    - 資料庫: Port 5444
    - Redis: Port 6333
 

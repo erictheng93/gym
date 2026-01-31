@@ -5,7 +5,7 @@
 
 const fetch = require('node-fetch');
 
-const BASE_URL = 'http://localhost:8500';
+const BASE_URL = 'http://localhost:8055';
 const API_URL = `${BASE_URL}/gym/admin/tenants`;
 
 // 测试数据

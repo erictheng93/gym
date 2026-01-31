@@ -309,6 +309,549 @@ export function registerAnalyticsRoutes(router, context) {
       });
     }
   });
+
+  // ============================================
+  // 業務分析端點 (Business Analytics)
+  // ============================================
+
+  /**
+   * GET /gym/analytics/member-demographics
+   * 會員人口統計分析
+   * 包含：會員狀態分佈、年齡分佈、性別分佈
+   */
+  router.get('/analytics/member-demographics', async (req, res) => {
+    try {
+      const userId = req.accountability?.user;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: '請先登入',
+          error_code: 'UNAUTHORIZED'
+        });
+      }
+
+      const branchId = req.query.branch_id;
+
+      // 會員狀態分佈
+      let statusQuery = `
+        SELECT
+          status,
+          COUNT(*)::INTEGER as count
+        FROM members
+      `;
+      if (branchId) {
+        statusQuery += ` WHERE branch_id = $1::uuid`;
+      }
+      statusQuery += ` GROUP BY status ORDER BY count DESC`;
+
+      const statusResult = await database.raw(
+        statusQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 性別分佈
+      let genderQuery = `
+        SELECT
+          COALESCE(gender, 'UNKNOWN') as gender,
+          COUNT(*)::INTEGER as count
+        FROM members
+      `;
+      if (branchId) {
+        genderQuery += ` WHERE branch_id = $1::uuid`;
+      }
+      genderQuery += ` GROUP BY gender ORDER BY count DESC`;
+
+      const genderResult = await database.raw(
+        genderQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 年齡分佈
+      let ageQuery = `
+        SELECT
+          CASE
+            WHEN birthday IS NULL THEN '未知'
+            WHEN EXTRACT(YEAR FROM AGE(birthday)) < 18 THEN '< 18'
+            WHEN EXTRACT(YEAR FROM AGE(birthday)) BETWEEN 18 AND 24 THEN '18-24'
+            WHEN EXTRACT(YEAR FROM AGE(birthday)) BETWEEN 25 AND 34 THEN '25-34'
+            WHEN EXTRACT(YEAR FROM AGE(birthday)) BETWEEN 35 AND 44 THEN '35-44'
+            WHEN EXTRACT(YEAR FROM AGE(birthday)) BETWEEN 45 AND 54 THEN '45-54'
+            WHEN EXTRACT(YEAR FROM AGE(birthday)) BETWEEN 55 AND 64 THEN '55-64'
+            ELSE '65+'
+          END as age_group,
+          COUNT(*)::INTEGER as count
+        FROM members
+      `;
+      if (branchId) {
+        ageQuery += ` WHERE branch_id = $1::uuid`;
+      }
+      ageQuery += ` GROUP BY age_group ORDER BY age_group`;
+
+      const ageResult = await database.raw(
+        ageQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 會員來源分佈 (如果有 referral 欄位)
+      let joinTrendQuery = `
+        SELECT
+          DATE_TRUNC('month', join_date)::DATE as month,
+          COUNT(*)::INTEGER as count
+        FROM members
+        WHERE join_date >= CURRENT_DATE - INTERVAL '12 months'
+      `;
+      if (branchId) {
+        joinTrendQuery += ` AND branch_id = $1::uuid`;
+      }
+      joinTrendQuery += ` GROUP BY month ORDER BY month`;
+
+      const joinTrendResult = await database.raw(
+        joinTrendQuery,
+        branchId ? [branchId] : []
+      );
+
+      res.json({
+        success: true,
+        data: {
+          by_status: statusResult.rows || [],
+          by_gender: genderResult.rows || [],
+          by_age: ageResult.rows || [],
+          join_trend: joinTrendResult.rows || []
+        }
+      });
+    } catch (error) {
+      console.error('[Analytics] Member demographics error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Internal server error'
+      });
+    }
+  });
+
+  /**
+   * GET /gym/analytics/contract-analytics
+   * 合約分析
+   * 包含：合約類型分佈、合約狀態分佈、續約率、合約價值分析
+   */
+  router.get('/analytics/contract-analytics', async (req, res) => {
+    try {
+      const userId = req.accountability?.user;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: '請先登入',
+          error_code: 'UNAUTHORIZED'
+        });
+      }
+
+      const branchId = req.query.branch_id;
+      const period = req.query.period || '12m'; // 12m, 6m, 3m
+
+      const periodMonths = {
+        '12m': 12,
+        '6m': 6,
+        '3m': 3
+      };
+      const months = periodMonths[period] || 12;
+
+      // 合約狀態分佈
+      let statusQuery = `
+        SELECT
+          status,
+          COUNT(*)::INTEGER as count,
+          COALESCE(SUM(total_amount), 0)::NUMERIC as total_value
+        FROM contracts
+      `;
+      if (branchId) {
+        statusQuery += ` WHERE branch_id = $1::uuid`;
+      }
+      statusQuery += ` GROUP BY status ORDER BY count DESC`;
+
+      const statusResult = await database.raw(
+        statusQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 合約類型分佈 (基於方案類型)
+      let typeQuery = `
+        SELECT
+          mp.type as contract_type,
+          mp.name as plan_name,
+          COUNT(c.id)::INTEGER as count,
+          COALESCE(SUM(c.total_amount), 0)::NUMERIC as total_value,
+          COALESCE(AVG(c.total_amount), 0)::NUMERIC as avg_value
+        FROM contracts c
+        JOIN membership_plans mp ON mp.id = c.plan_id
+      `;
+      if (branchId) {
+        typeQuery += ` WHERE c.branch_id = $1::uuid`;
+      }
+      typeQuery += ` GROUP BY mp.type, mp.name ORDER BY count DESC`;
+
+      const typeResult = await database.raw(
+        typeQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 月度合約趨勢
+      let trendQuery = `
+        SELECT
+          DATE_TRUNC('month', start_date)::DATE as month,
+          COUNT(*)::INTEGER as new_contracts,
+          COALESCE(SUM(total_amount), 0)::NUMERIC as total_value
+        FROM contracts
+        WHERE start_date >= CURRENT_DATE - INTERVAL '${months} months'
+      `;
+      if (branchId) {
+        trendQuery += ` AND branch_id = $1::uuid`;
+      }
+      trendQuery += ` GROUP BY month ORDER BY month`;
+
+      const trendResult = await database.raw(
+        trendQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 續約率計算
+      let renewalQuery = `
+        WITH expired_in_period AS (
+          SELECT DISTINCT member_id
+          FROM contracts
+          WHERE end_date BETWEEN CURRENT_DATE - INTERVAL '${months} months' AND CURRENT_DATE
+        ),
+        renewed AS (
+          SELECT DISTINCT c.member_id
+          FROM contracts c
+          JOIN expired_in_period ep ON c.member_id = ep.member_id
+          WHERE c.start_date >= CURRENT_DATE - INTERVAL '${months} months'
+            AND c.id NOT IN (
+              SELECT id FROM contracts
+              WHERE end_date BETWEEN CURRENT_DATE - INTERVAL '${months} months' AND CURRENT_DATE
+            )
+        )
+        SELECT
+          (SELECT COUNT(*) FROM expired_in_period)::INTEGER as expired_count,
+          (SELECT COUNT(*) FROM renewed)::INTEGER as renewed_count
+      `;
+
+      const renewalResult = await database.raw(renewalQuery);
+      const renewalData = renewalResult.rows?.[0] || {};
+      const expiredCount = parseInt(renewalData.expired_count || 0);
+      const renewedCount = parseInt(renewalData.renewed_count || 0);
+      const renewalRate = expiredCount > 0
+        ? ((renewedCount / expiredCount) * 100).toFixed(1)
+        : 0;
+
+      // 合約價值統計
+      let valueStatsQuery = `
+        SELECT
+          COALESCE(AVG(total_amount), 0)::NUMERIC as avg_value,
+          COALESCE(MIN(total_amount), 0)::NUMERIC as min_value,
+          COALESCE(MAX(total_amount), 0)::NUMERIC as max_value,
+          COALESCE(SUM(total_amount), 0)::NUMERIC as total_value,
+          COUNT(*)::INTEGER as count
+        FROM contracts
+        WHERE status IN ('ACTIVE', 'EXPIRED')
+      `;
+      if (branchId) {
+        valueStatsQuery += ` AND branch_id = $1::uuid`;
+      }
+
+      const valueStatsResult = await database.raw(
+        valueStatsQuery,
+        branchId ? [branchId] : []
+      );
+
+      res.json({
+        success: true,
+        period,
+        data: {
+          by_status: statusResult.rows || [],
+          by_type: typeResult.rows || [],
+          monthly_trend: trendResult.rows || [],
+          renewal: {
+            expired_count: expiredCount,
+            renewed_count: renewedCount,
+            rate: parseFloat(renewalRate)
+          },
+          value_stats: valueStatsResult.rows?.[0] || {}
+        }
+      });
+    } catch (error) {
+      console.error('[Analytics] Contract analytics error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Internal server error'
+      });
+    }
+  });
+
+  /**
+   * GET /gym/analytics/checkin-heatmap
+   * 打卡熱力圖 (24x7)
+   * 返回每天每小時的打卡次數
+   */
+  router.get('/analytics/checkin-heatmap', async (req, res) => {
+    try {
+      const userId = req.accountability?.user;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: '請先登入',
+          error_code: 'UNAUTHORIZED'
+        });
+      }
+
+      const branchId = req.query.branch_id;
+      const weeks = Math.min(parseInt(req.query.weeks) || 4, 12);
+
+      // 獲取打卡熱力圖數據 (以 attendances 表)
+      let heatmapQuery = `
+        SELECT
+          EXTRACT(DOW FROM check_in)::INTEGER as day_of_week,
+          EXTRACT(HOUR FROM check_in)::INTEGER as hour,
+          COUNT(*)::INTEGER as count
+        FROM attendances
+        WHERE check_in >= CURRENT_DATE - INTERVAL '${weeks} weeks'
+      `;
+      if (branchId) {
+        heatmapQuery += ` AND branch_id = $1::uuid`;
+      }
+      heatmapQuery += ` GROUP BY day_of_week, hour ORDER BY day_of_week, hour`;
+
+      const heatmapResult = await database.raw(
+        heatmapQuery,
+        branchId ? [branchId] : []
+      );
+
+      // 初始化 7x24 矩陣
+      const heatmap = Array(7).fill(null).map(() => Array(24).fill(0));
+
+      // 填充數據
+      heatmapResult.rows?.forEach(row => {
+        const day = parseInt(row.day_of_week);
+        const hour = parseInt(row.hour);
+        heatmap[day][hour] = parseInt(row.count);
+      });
+
+      // 計算尖峰時段
+      let peakDay = 0, peakHour = 0, maxCount = 0;
+      heatmap.forEach((dayData, day) => {
+        dayData.forEach((count, hour) => {
+          if (count > maxCount) {
+            maxCount = count;
+            peakDay = day;
+            peakHour = hour;
+          }
+        });
+      });
+
+      // 每日總計
+      const dailyTotals = heatmap.map(day => day.reduce((a, b) => a + b, 0));
+
+      // 每小時平均
+      const hourlyAverages = Array(24).fill(0);
+      for (let h = 0; h < 24; h++) {
+        let total = 0;
+        for (let d = 0; d < 7; d++) {
+          total += heatmap[d][h];
+        }
+        hourlyAverages[h] = Math.round(total / 7);
+      }
+
+      res.json({
+        success: true,
+        weeks,
+        data: {
+          heatmap,
+          peak: {
+            day: peakDay,
+            hour: peakHour,
+            count: maxCount
+          },
+          daily_totals: dailyTotals,
+          hourly_averages: hourlyAverages,
+          day_labels: ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
+        }
+      });
+    } catch (error) {
+      console.error('[Analytics] Checkin heatmap error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Internal server error'
+      });
+    }
+  });
+
+  /**
+   * GET /gym/analytics/revenue-breakdown
+   * 營收細分分析
+   * 包含：分店營收、方案營收、月度趨勢、YoY比較
+   */
+  router.get('/analytics/revenue-breakdown', async (req, res) => {
+    try {
+      const userId = req.accountability?.user;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: '請先登入',
+          error_code: 'UNAUTHORIZED'
+        });
+      }
+
+      const branchId = req.query.branch_id;
+      const year = parseInt(req.query.year) || new Date().getFullYear();
+
+      // 各分店營收
+      let branchRevenueQuery = `
+        SELECT
+          b.id as branch_id,
+          b.name as branch_name,
+          COALESCE(SUM(p.amount), 0)::NUMERIC as total_revenue,
+          COUNT(p.id)::INTEGER as transaction_count,
+          COALESCE(AVG(p.amount), 0)::NUMERIC as avg_transaction
+        FROM branches b
+        LEFT JOIN payments p ON p.branch_id = b.id
+          AND p.type = 'INCOME'
+          AND EXTRACT(YEAR FROM p.payment_date) = $1
+        GROUP BY b.id, b.name
+        ORDER BY total_revenue DESC
+      `;
+
+      const branchRevenueResult = await database.raw(branchRevenueQuery, [year]);
+
+      // 各方案營收
+      let planRevenueQuery = `
+        SELECT
+          mp.id as plan_id,
+          mp.name as plan_name,
+          mp.type as plan_type,
+          COALESCE(SUM(p.amount), 0)::NUMERIC as total_revenue,
+          COUNT(p.id)::INTEGER as transaction_count
+        FROM membership_plans mp
+        LEFT JOIN contracts c ON c.plan_id = mp.id
+        LEFT JOIN payments p ON p.contract_id = c.id
+          AND p.type = 'INCOME'
+          AND EXTRACT(YEAR FROM p.payment_date) = $1
+        GROUP BY mp.id, mp.name, mp.type
+        ORDER BY total_revenue DESC
+      `;
+
+      const planRevenueResult = await database.raw(planRevenueQuery, [year]);
+
+      // 月度營收趨勢
+      let monthlyQuery = `
+        SELECT
+          EXTRACT(MONTH FROM payment_date)::INTEGER as month,
+          COALESCE(SUM(amount), 0)::NUMERIC as revenue,
+          COUNT(*)::INTEGER as transactions
+        FROM payments
+        WHERE type = 'INCOME'
+          AND EXTRACT(YEAR FROM payment_date) = $1
+      `;
+      if (branchId) {
+        monthlyQuery += ` AND branch_id = $2::uuid`;
+      }
+      monthlyQuery += ` GROUP BY month ORDER BY month`;
+
+      const monthlyResult = await database.raw(
+        monthlyQuery,
+        branchId ? [year, branchId] : [year]
+      );
+
+      // 填充完整12個月
+      const monthlyData = Array(12).fill(null).map((_, i) => ({
+        month: i + 1,
+        revenue: 0,
+        transactions: 0
+      }));
+      monthlyResult.rows?.forEach(row => {
+        const idx = parseInt(row.month) - 1;
+        monthlyData[idx] = {
+          month: parseInt(row.month),
+          revenue: parseFloat(row.revenue),
+          transactions: parseInt(row.transactions)
+        };
+      });
+
+      // YoY 比較
+      const lastYear = year - 1;
+      let yoyQuery = `
+        SELECT
+          EXTRACT(YEAR FROM payment_date)::INTEGER as year,
+          COALESCE(SUM(amount), 0)::NUMERIC as total_revenue,
+          COUNT(*)::INTEGER as transaction_count
+        FROM payments
+        WHERE type = 'INCOME'
+          AND EXTRACT(YEAR FROM payment_date) IN ($1, $2)
+      `;
+      if (branchId) {
+        yoyQuery += ` AND branch_id = $3::uuid`;
+      }
+      yoyQuery += ` GROUP BY year ORDER BY year`;
+
+      const yoyResult = await database.raw(
+        yoyQuery,
+        branchId ? [year, lastYear, branchId] : [year, lastYear]
+      );
+
+      const yoyData = {};
+      yoyResult.rows?.forEach(row => {
+        yoyData[row.year] = {
+          revenue: parseFloat(row.total_revenue),
+          transactions: parseInt(row.transaction_count)
+        };
+      });
+
+      const currentYearRevenue = yoyData[year]?.revenue || 0;
+      const lastYearRevenue = yoyData[lastYear]?.revenue || 0;
+      const yoyChange = lastYearRevenue > 0
+        ? ((currentYearRevenue - lastYearRevenue) / lastYearRevenue * 100).toFixed(1)
+        : 0;
+
+      // 付款方式分佈
+      let paymentMethodQuery = `
+        SELECT
+          payment_method,
+          COALESCE(SUM(amount), 0)::NUMERIC as total,
+          COUNT(*)::INTEGER as count
+        FROM payments
+        WHERE type = 'INCOME'
+          AND EXTRACT(YEAR FROM payment_date) = $1
+      `;
+      if (branchId) {
+        paymentMethodQuery += ` AND branch_id = $2::uuid`;
+      }
+      paymentMethodQuery += ` GROUP BY payment_method ORDER BY total DESC`;
+
+      const paymentMethodResult = await database.raw(
+        paymentMethodQuery,
+        branchId ? [year, branchId] : [year]
+      );
+
+      res.json({
+        success: true,
+        year,
+        data: {
+          by_branch: branchRevenueResult.rows || [],
+          by_plan: planRevenueResult.rows || [],
+          by_payment_method: paymentMethodResult.rows || [],
+          monthly: monthlyData,
+          yoy: {
+            current_year: currentYearRevenue,
+            last_year: lastYearRevenue,
+            change_percent: parseFloat(yoyChange)
+          }
+        }
+      });
+    } catch (error) {
+      console.error('[Analytics] Revenue breakdown error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'Internal server error'
+      });
+    }
+  });
 }
 
 export default registerAnalyticsRoutes;

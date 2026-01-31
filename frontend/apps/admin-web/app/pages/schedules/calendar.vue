@@ -254,7 +254,7 @@ const batchAssignData = ref({
   shift_schedule_id: '',
 })
 
-const API_BASE = 'http://localhost:8500'
+const API_BASE = 'http://localhost:8055'
 
 const currentMonthYear = computed(() => {
   const year = currentDate.value.getFullYear()

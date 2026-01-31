@@ -182,7 +182,7 @@ cp .env.example .env
 # 啟動 Docker 容器
 docker-compose up -d
 
-# Directus Admin Panel: http://localhost:8500
+# Directus Admin Panel: http://localhost:8055
 # 預設帳號: admin@example.com / password (請於 .env 設定)
 ```
 
@@ -239,7 +239,7 @@ STORAGE_CLOUDFLARE_ENDPOINT=https://xxx.r2.cloudflarestorage.com
 
 ### Frontend (.env)
 ```env
-NUXT_PUBLIC_API_URL=http://localhost:8500
+NUXT_PUBLIC_API_URL=http://localhost:8055
 NUXT_PUBLIC_APP_NAME=Gym Nexus
 ```
 

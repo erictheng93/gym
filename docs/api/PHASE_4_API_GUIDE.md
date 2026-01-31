@@ -569,7 +569,7 @@ action('items.update', async ({ key, collection, payload }) => {
 
 ```bash
 # 每月1号清理超过365天的日志
-0 0 1 * * curl -X DELETE "http://localhost:8500/gym/audit/logs/cleanup?retention_days=365"
+0 0 1 * * curl -X DELETE "http://localhost:8055/gym/audit/logs/cleanup?retention_days=365"
 ```
 
 ### Q4: 使用量记录何时更新？
@@ -578,7 +578,7 @@ action('items.update', async ({ key, collection, payload }) => {
 
 ```bash
 # 每天 23:59 收集所有租户的使用量
-59 23 * * * curl -X POST "http://localhost:8500/gym/billing/usage-records/collect"
+59 23 * * * curl -X POST "http://localhost:8055/gym/billing/usage-records/collect"
 ```
 
 ---

@@ -22,10 +22,17 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
+    "lighthouse": "lhci autorun",
+    "lighthouse:collect": "lhci collect --config=lighthouserc.cjs",
+    "lighthouse:assert": "lhci assert --config=lighthouserc.cjs",
+    "lighthouse:upload": "lhci upload --config=lighthouserc.cjs",
+    "lighthouse:admin": "lhci autorun --config=lighthouserc.cjs --collect.url=http://localhost:3000/ --collect.url=http://localhost:3000/login --collect.url=http://localhost:3000/members",
+    "lighthouse:member": "lhci autorun --config=lighthouserc.cjs --collect.url=http://localhost:3001/ --collect.url=http://localhost:3001/login --collect.url=http://localhost:3001/bookings",
     "prepare": "cd .. && husky || true",
     "lint-staged": "pnpm exec lint-staged"
   },
   "devDependencies": {
+    "@lhci/cli": "^0.14.0",
     "@eslint/js": "^9.39.2",
     "@nuxt/eslint": "^1.12.1",
     "@nuxt/test-utils": "^3.21.0",
