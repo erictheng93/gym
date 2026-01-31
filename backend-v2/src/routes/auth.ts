@@ -34,7 +34,7 @@ const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
 const loginSchema = z.object({
   email: z.string().email('請輸入有效的電子郵件'),
-  password: z.string().min(6, '密碼至少 6 個字元'),
+  password: z.string().min(1, '請輸入密碼'),
 });
 
 const changePasswordSchema = z.object({
