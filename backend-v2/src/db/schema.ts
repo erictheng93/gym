@@ -256,8 +256,10 @@ export const contractLogs = pgTable('contract_logs', {
   branchId: uuid('branch_id').references(() => branches.id),
   originalMemberId: uuid('original_member_id').references(() => members.id),
   targetMemberId: uuid('target_member_id').references(() => members.id),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
 }, (table) => [
   index('idx_contract_logs_contract').on(table.contractId),
+  index('idx_contract_logs_tenant').on(table.tenantId),
 ]);
 
 export const payments = pgTable('payments', {
@@ -554,34 +556,52 @@ export const notifications = pgTable('notifications', {
   status: varchar('status', { length: 20 }).default('active'),
   dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
   dateUpdated: timestamp('date_updated', { withTimezone: true }),
-  notificationType: varchar('notification_type', { length: 50 }).notNull(),
+  notificationType: varchar('notification_type', { length: 50 }),
+  type: varchar('type', { length: 50 }),
   title: varchar('title', { length: 255 }).notNull(),
   message: text('message'),
+  data: text('data'),
   referenceType: varchar('reference_type', { length: 255 }),
   referenceId: uuid('reference_id'),
   branchId: uuid('branch_id').references(() => branches.id),
   targetUserId: uuid('target_user_id').references(() => users.id),
   targetMemberId: uuid('target_member_id').references(() => members.id),
   targetEmployeeId: uuid('target_employee_id').references(() => employees.id),
+  recipientType: varchar('recipient_type', { length: 20 }),
+  recipientId: uuid('recipient_id'),
   priority: varchar('priority', { length: 20 }).default('NORMAL').$type<typeof NOTIFICATION_PRIORITY[number]>(),
   isRead: boolean('is_read').default(false),
+  readStatus: boolean('read_status').default(false),
   readAt: timestamp('read_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
 }, (table) => [
   index('idx_notifications_branch').on(table.branchId),
   index('idx_notifications_target_employee').on(table.targetEmployeeId),
+  index('idx_notifications_tenant').on(table.tenantId),
+  index('idx_notifications_recipient').on(table.recipientType, table.recipientId),
 ]);
 
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: uuid('id').primaryKey().defaultRandom(),
   dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  dateUpdated: timestamp('date_updated', { withTimezone: true }),
   userId: uuid('user_id').references(() => users.id),
   memberId: uuid('member_id').references(() => members.id),
   endpoint: text('endpoint').notNull(),
   p256dh: text('p256dh').notNull(),
   auth: text('auth').notNull(),
   userAgent: text('user_agent'),
-});
+  isActive: boolean('is_active').default(true),
+  errorCount: integer('error_count').default(0),
+  notifyBookingReminder: boolean('notify_booking_reminder').default(true),
+  notifyClassCancelled: boolean('notify_class_cancelled').default(true),
+  notifyContractExpiry: boolean('notify_contract_expiry').default(true),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_push_subscriptions_member').on(table.memberId),
+  index('idx_push_subscriptions_user').on(table.userId),
+]);
 
 // =============================================================================
 // OTP AUTHENTICATION
@@ -867,3 +887,59 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
     references: [contracts.id],
   }),
 }));
+
+// =============================================================================
+// LEAD ACTIVITIES (潛在客戶活動記錄)
+// =============================================================================
+
+export const LEAD_ACTIVITY_TYPE = ['CALL', 'EMAIL', 'VISIT', 'TRIAL', 'FOLLOW_UP', 'NOTE', 'OTHER'] as const;
+
+export const leadActivities = pgTable('lead_activities', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  status: varchar('status', { length: 20 }).default('active'),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  leadId: uuid('lead_id').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+  activityType: varchar('activity_type', { length: 30 }).notNull().$type<typeof LEAD_ACTIVITY_TYPE[number]>(),
+  content: text('content'),
+  createdBy: uuid('created_by').references(() => employees.id),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  outcome: text('outcome'),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_lead_activities_lead').on(table.leadId),
+  index('idx_lead_activities_type').on(table.activityType),
+]);
+
+export const leadActivitiesRelations = relations(leadActivities, ({ one }) => ({
+  lead: one(leads, {
+    fields: [leadActivities.leadId],
+    references: [leads.id],
+  }),
+  createdByEmployee: one(employees, {
+    fields: [leadActivities.createdBy],
+    references: [employees.id],
+  }),
+}));
+
+export const leadsRelations = relations(leads, ({ one, many }) => ({
+  branch: one(branches, {
+    fields: [leads.branchId],
+    references: [branches.id],
+  }),
+  assignedTo: one(employees, {
+    fields: [leads.assignedToId],
+    references: [employees.id],
+  }),
+  convertedMember: one(members, {
+    fields: [leads.convertedMemberId],
+    references: [members.id],
+  }),
+  activities: many(leadActivities),
+}));
+
+// =============================================================================
+// MEMBER CHECK-INS TABLE (alias for routes compatibility)
+// =============================================================================
+
+export const memberCheckIns = checkIns;
