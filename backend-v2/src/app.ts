@@ -100,16 +100,19 @@ app.onError((err, c) => {
 
 const port = Number(process.env.PORT) || 8056;
 
-if (process.env.ENABLE_CRON !== 'false') {
-  initCronJobs();
+// Only start server and cron jobs if not in test mode
+if (process.env.NODE_ENV !== 'test') {
+  if (process.env.ENABLE_CRON !== 'false') {
+    initCronJobs();
+  }
+
+  console.log(`🚀 Gym Nexus API v2 is running on http://localhost:${port}`);
+
+  serve({
+    fetch: app.fetch,
+    port,
+  });
 }
-
-console.log(`🚀 Gym Nexus API v2 is running on http://localhost:${port}`);
-
-serve({
-  fetch: app.fetch,
-  port,
-});
 
 export default app;
 export type AppType = typeof app;
