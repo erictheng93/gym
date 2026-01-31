@@ -28,6 +28,7 @@ import notificationsRoutes from './routes/notifications.js';
 import dashboardRoutes from './routes/dashboard.js';
 import reportsRoutes from './routes/reports.js';
 import healthRoutes from './routes/health.js';
+import filesRoutes from './routes/files.js';
 import { initCronJobs } from './cron/index.js';
 
 type Variables = AuthVariables & TenantVariables;
@@ -76,6 +77,7 @@ app.route('/api/coupons', couponsRoutes);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/reports', reportsRoutes);
+app.route('/api/files', filesRoutes);
 app.route('/health', healthRoutes);
 
 app.get('/', (c) => {
