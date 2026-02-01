@@ -23,7 +23,7 @@ interface FetchOptions {
 
 export function useFetch() {
   const config = useRuntimeConfig()
-  const baseUrl = config.public?.apiBaseUrl || config.public?.directusUrl || 'http://localhost:8056'
+  const baseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
   const apiFetch = async <T>(
     endpoint: string,

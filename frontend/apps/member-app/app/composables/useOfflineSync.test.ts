@@ -193,7 +193,7 @@ describe('useOfflineSync', () => {
 
       await expect(queueCancelBooking(
         'booking-123',
-        'http://localhost:8055',
+        'http://localhost:8056',
         { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })
@@ -203,7 +203,7 @@ describe('useOfflineSync', () => {
 
       await expect(queueSubmitReview(
         { booking_id: 'b1', rating: 5 },
-        'http://localhost:8055',
+        'http://localhost:8056',
         { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })

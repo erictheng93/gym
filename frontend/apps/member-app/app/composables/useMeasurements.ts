@@ -60,7 +60,7 @@ interface StatsResponse {
 
 export const useMeasurements = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, member } = useMemberAuth()
   const { isOnline, getCache, setCache } = useOfflineSync()
 
@@ -104,7 +104,7 @@ export const useMeasurements = () => {
       if (options?.limit) params.append('limit', String(options.limit))
       if (options?.offset) params.append('offset', String(options.offset))
 
-      const response = await $fetch<MeasurementsResponse>(`${apiUrl}/gym/measurements?${params}`, {
+      const response = await $fetch<MeasurementsResponse>(`${apiUrl}/api/member/measurements?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -135,7 +135,7 @@ export const useMeasurements = () => {
 
     try {
       const response = await $fetch<{ success: boolean; data: Measurement | null }>(
-        `${apiUrl}/gym/measurements/latest`,
+        `${apiUrl}/api/member/measurements/latest`,
         { headers: getAuthHeader() }
       )
 
@@ -156,7 +156,7 @@ export const useMeasurements = () => {
 
     try {
       const response = await $fetch<StatsResponse>(
-        `${apiUrl}/gym/measurements/stats?period=${period}`,
+        `${apiUrl}/api/member/measurements/stats?period=${period}`,
         { headers: getAuthHeader() }
       )
 
@@ -186,7 +186,7 @@ export const useMeasurements = () => {
     }
 
     try {
-      const response = await $fetch<MeasurementResult>(`${apiUrl}/gym/measurements`, {
+      const response = await $fetch<MeasurementResult>(`${apiUrl}/api/member/measurements`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -215,7 +215,7 @@ export const useMeasurements = () => {
     }
 
     try {
-      const response = await $fetch<MeasurementResult>(`${apiUrl}/gym/measurements/${id}`, {
+      const response = await $fetch<MeasurementResult>(`${apiUrl}/api/member/measurements/${id}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

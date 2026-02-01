@@ -9,7 +9,7 @@ import type { TokenState } from '../types/auth'
 
 export const useAuthTokens = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
 
   // Token management - secure only in production (HTTPS)
   const isSecure = import.meta.env.PROD
@@ -62,18 +62,20 @@ export const useAuthTokens = () => {
     try {
       const response = await $fetch<{
         success: boolean
-        access_token: string
-        refresh_token: string
-      }>(`${apiUrl}/gym/otp/refresh`, {
+        data: {
+          accessToken: string
+          refreshToken: string
+        }
+      }>(`${apiUrl}/api/member/otp/refresh`, {
         method: 'POST',
         body: {
-          refresh_token: refreshToken.value,
+          refreshToken: refreshToken.value,
         },
       })
 
-      if (response.success) {
-        accessToken.value = response.access_token
-        refreshToken.value = response.refresh_token
+      if (response.success && response.data) {
+        accessToken.value = response.data.accessToken
+        refreshToken.value = response.data.refreshToken
         return true
       }
 

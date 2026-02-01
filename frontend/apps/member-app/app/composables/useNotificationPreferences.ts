@@ -35,7 +35,7 @@ interface HistoryResponse {
 
 export const useNotificationPreferences = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, isAuthenticated } = useMemberAuth()
 
   // State
@@ -67,7 +67,7 @@ export const useNotificationPreferences = () => {
     error.value = null
 
     try {
-      const response = await $fetch<PreferencesResponse>(`${apiUrl}/gym/notifications/preferences`, {
+      const response = await $fetch<PreferencesResponse>(`${apiUrl}/api/member/notifications/preferences`, {
         headers: getAuthHeader(),
       })
 
@@ -100,7 +100,7 @@ export const useNotificationPreferences = () => {
         success: boolean
         message: string
         preferences: NotificationPreferences
-      }>(`${apiUrl}/gym/notifications/preferences`, {
+      }>(`${apiUrl}/api/member/notifications/preferences`, {
         method: 'PATCH',
         headers: {
           ...getAuthHeader(),
@@ -137,7 +137,7 @@ export const useNotificationPreferences = () => {
     if (!isAuthenticated.value) return false
 
     try {
-      const response = await $fetch<ChannelsResponse>(`${apiUrl}/gym/notifications/channels`, {
+      const response = await $fetch<ChannelsResponse>(`${apiUrl}/api/member/notifications/channels`, {
         headers: getAuthHeader(),
       })
 
@@ -162,7 +162,7 @@ export const useNotificationPreferences = () => {
 
     try {
       const response = await $fetch<HistoryResponse>(
-        `${apiUrl}/gym/notifications/history?limit=${limit}&offset=${offset}`,
+        `${apiUrl}/api/member/notifications/history?limit=${limit}&offset=${offset}`,
         {
           headers: getAuthHeader(),
         }
@@ -212,7 +212,7 @@ export const useNotificationPreferences = () => {
         success: boolean
         channel?: string
         error?: string
-      }>(`${apiUrl}/gym/notifications/test`, {
+      }>(`${apiUrl}/api/member/notifications/test`, {
         method: 'POST',
         headers: {
           ...getAuthHeader(),

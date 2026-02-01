@@ -7,7 +7,7 @@ definePageMeta({
 })
 
 const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl || config.public.apiBaseUrl
+const apiUrl = config.public.apiBaseUrl
 
 const { readItems } = useFetch()
 const { member, accessToken } = useMemberAuth()
@@ -96,7 +96,7 @@ const submitPause = async () => {
   errorMessage.value = ''
 
   try {
-    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/contracts/${selectedContract.value.id}/pause`, {
+    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/api/member/contracts/${selectedContract.value.id}/pause`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken.value}`,
@@ -147,7 +147,7 @@ const resumeContract = async (contract: Contract) => {
       message: string
       new_end_date?: string
       days_extended?: number
-    }>(`${apiUrl}/gym/contracts/${contract.id}/resume`, {
+    }>(`${apiUrl}/api/member/contracts/${contract.id}/resume`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken.value}`,

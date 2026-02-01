@@ -17,7 +17,7 @@ interface MemberProfileResponse {
 
 export const useAuthSession = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, refreshAccessToken, hasAccessToken, accessToken } = useAuthTokens()
 
   const member = useState<CurrentMember | null>('current_member', () => null)
@@ -52,9 +52,8 @@ export const useAuthSession = () => {
     }
 
     try {
-      const response = await $fetch<MemberProfileResponse>(`${apiUrl}/gym/member/me`, {
+      const response = await $fetch<MemberProfileResponse>(`${apiUrl}/api/member/me`, {
         headers: {
-          // Use custom header to avoid Directus intercepting the token
           'X-Member-Token': authToken,
         },
       })

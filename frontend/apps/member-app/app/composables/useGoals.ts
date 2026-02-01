@@ -37,7 +37,7 @@ interface GoalsResponse {
 
 export const useGoals = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, member } = useMemberAuth()
   const { isOnline, getCache, setCache } = useOfflineSync()
 
@@ -77,7 +77,7 @@ export const useGoals = () => {
       if (options?.limit) params.append('limit', String(options.limit))
       if (options?.offset) params.append('offset', String(options.offset))
 
-      const response = await $fetch<GoalsResponse>(`${apiUrl}/gym/goals?${params}`, {
+      const response = await $fetch<GoalsResponse>(`${apiUrl}/api/member/goals?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -107,7 +107,7 @@ export const useGoals = () => {
     if (!member.value) return null
 
     try {
-      const response = await $fetch<{ success: boolean; data: Goal }>(`${apiUrl}/gym/goals/${id}`, {
+      const response = await $fetch<{ success: boolean; data: Goal }>(`${apiUrl}/api/member/goals/${id}`, {
         headers: getAuthHeader(),
       })
 
@@ -133,7 +133,7 @@ export const useGoals = () => {
     }
 
     try {
-      const response = await $fetch<GoalResult>(`${apiUrl}/gym/goals`, {
+      const response = await $fetch<GoalResult>(`${apiUrl}/api/member/goals`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -170,7 +170,7 @@ export const useGoals = () => {
     }
 
     try {
-      const response = await $fetch<GoalResult>(`${apiUrl}/gym/goals/${id}`, {
+      const response = await $fetch<GoalResult>(`${apiUrl}/api/member/goals/${id}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,
@@ -201,7 +201,7 @@ export const useGoals = () => {
     }
 
     try {
-      const response = await $fetch<GoalResult>(`${apiUrl}/gym/goals/${id}`, {
+      const response = await $fetch<GoalResult>(`${apiUrl}/api/member/goals/${id}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

@@ -8,7 +8,7 @@ definePageMeta({
 })
 
 const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl
+const apiUrl = config.public.apiBaseUrl
 const { member, getAuthHeader } = useMemberAuth()
 const toast = useToast()
 const { handleError } = useApiError()
@@ -134,7 +134,7 @@ const submitReport = async () => {
 
   try {
     // 提交到後端（假設有 support_tickets 表）
-    await $fetch(`${apiUrl}/items/support_tickets`, {
+    await $fetch(`${apiUrl}/api/member/support-tickets`, {
       method: 'POST',
       headers: getAuthHeader(),
       body: {

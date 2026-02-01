@@ -9,7 +9,7 @@ const cookieStore = new Map<string, { value: string | null | undefined }>()
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -112,7 +112,7 @@ describe('useAuthTokens', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/otp/refresh',
+        'http://localhost:8056/api/member/otp/refresh',
         {
           method: 'POST',
           body: { refresh_token: 'old-refresh-token' },

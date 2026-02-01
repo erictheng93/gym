@@ -106,6 +106,8 @@ export const useMemberAuth = () => {
     // OAuth Methods (from useAuthMethods)
     // ============================================
     loginWithOAuth: methods.loginWithOAuth,
+    completeOAuthLogin: methods.completeOAuthLogin,
+    initiateOAuth: methods.initiateOAuth,
 
     // ============================================
     // Password Management (from useAuthMethods)

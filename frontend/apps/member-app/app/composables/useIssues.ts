@@ -42,7 +42,7 @@ interface IssuesResponse {
 
 export const useIssues = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, member } = useMemberAuth()
   const { isOnline, getCache, setCache } = useOfflineSync()
 
@@ -84,7 +84,7 @@ export const useIssues = () => {
       if (options?.limit) params.append('limit', String(options.limit))
       if (options?.offset) params.append('offset', String(options.offset))
 
-      const response = await $fetch<IssuesResponse>(`${apiUrl}/gym/issues?${params}`, {
+      const response = await $fetch<IssuesResponse>(`${apiUrl}/api/member/issues?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -115,7 +115,7 @@ export const useIssues = () => {
 
     try {
       const response = await $fetch<{ success: boolean; data: Issue }>(
-        `${apiUrl}/gym/issues/${id}`,
+        `${apiUrl}/api/member/issues/${id}`,
         { headers: getAuthHeader() }
       )
 
@@ -139,7 +139,7 @@ export const useIssues = () => {
     }
 
     try {
-      const response = await $fetch<IssueResult>(`${apiUrl}/gym/issues`, {
+      const response = await $fetch<IssueResult>(`${apiUrl}/api/member/issues`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -174,7 +174,7 @@ export const useIssues = () => {
     }
 
     try {
-      const response = await $fetch<IssueResult>(`${apiUrl}/gym/issues/${id}`, {
+      const response = await $fetch<IssueResult>(`${apiUrl}/api/member/issues/${id}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,

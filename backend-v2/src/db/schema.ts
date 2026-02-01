@@ -942,6 +942,206 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
 }));
 
 // =============================================================================
+// MEMBER CREDENTIALS (Password Authentication)
+// =============================================================================
+
+export const memberCredentials = pgTable('member_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().unique().references(() => members.id, { onDelete: 'cascade' }),
+  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  failedAttempts: integer('failed_attempts').default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  passwordResetTokenHash: varchar('password_reset_token_hash', { length: 255 }),
+  passwordResetExpiresAt: timestamp('password_reset_expires_at', { withTimezone: true }),
+  lastPasswordChangeAt: timestamp('last_password_change_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_member_credentials_member').on(table.memberId),
+]);
+
+// =============================================================================
+// MEMBER SOCIAL ACCOUNTS (OAuth)
+// =============================================================================
+
+export const SOCIAL_PROVIDER = ['google', 'line', 'apple'] as const;
+
+export const memberSocialAccounts = pgTable('member_social_accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  provider: varchar('provider', { length: 20 }).notNull().$type<typeof SOCIAL_PROVIDER[number]>(),
+  providerUserId: varchar('provider_user_id', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }),
+  displayName: varchar('display_name', { length: 255 }),
+  avatarUrl: varchar('avatar_url', { length: 500 }),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+  rawProfile: jsonb('raw_profile'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_member_social_member').on(table.memberId),
+  uniqueIndex('uq_member_social_provider').on(table.provider, table.providerUserId),
+]);
+
+export const memberSocialAccountsRelations = relations(memberSocialAccounts, ({ one }) => ({
+  member: one(members, {
+    fields: [memberSocialAccounts.memberId],
+    references: [members.id],
+  }),
+}));
+
+// =============================================================================
+// CLASS REVIEWS
+// =============================================================================
+
+export const classReviews = pgTable('class_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  sessionId: uuid('session_id').references(() => classSessions.id, { onDelete: 'set null' }),
+  bookingId: uuid('booking_id').references(() => bookings.id, { onDelete: 'set null' }),
+  rating: integer('rating').notNull(), // 1-5
+  comment: text('comment'),
+  isAnonymous: boolean('is_anonymous').default(false),
+  isPublic: boolean('is_public').default(true),
+  // Moderation
+  status: varchar('status', { length: 20 }).default('published'), // draft, published, hidden
+  moderatedAt: timestamp('moderated_at', { withTimezone: true }),
+  moderatedBy: uuid('moderated_by').references(() => employees.id),
+  // Response from staff
+  staffResponse: text('staff_response'),
+  staffResponseAt: timestamp('staff_response_at', { withTimezone: true }),
+  staffResponseBy: uuid('staff_response_by').references(() => employees.id),
+  // Timestamps
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_class_reviews_member').on(table.memberId),
+  index('idx_class_reviews_class').on(table.classId),
+  index('idx_class_reviews_session').on(table.sessionId),
+  uniqueIndex('uq_class_review_booking').on(table.bookingId),
+]);
+
+export const classReviewsRelations = relations(classReviews, ({ one }) => ({
+  member: one(members, {
+    fields: [classReviews.memberId],
+    references: [members.id],
+  }),
+  class: one(classes, {
+    fields: [classReviews.classId],
+    references: [classes.id],
+  }),
+  session: one(classSessions, {
+    fields: [classReviews.sessionId],
+    references: [classSessions.id],
+  }),
+  booking: one(bookings, {
+    fields: [classReviews.bookingId],
+    references: [bookings.id],
+  }),
+}));
+
+// =============================================================================
+// WORKOUT LOGS
+// =============================================================================
+
+export const EXERCISE_CATEGORY = ['STRENGTH', 'CARDIO', 'FLEXIBILITY', 'BALANCE', 'OTHER'] as const;
+
+// Note: This matches the existing database schema
+export const workoutLogs = pgTable('workout_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  duration: integer('duration'), // minutes
+  calories: integer('calories'),
+  exercises: jsonb('exercises'), // [{ name, sets, reps, weight, duration }]
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index('idx_workout_logs_member').on(table.memberId),
+  index('idx_workout_logs_date').on(table.date),
+]);
+
+// =============================================================================
+// MEMBER GOALS
+// =============================================================================
+
+export const GOAL_TYPE = ['WEIGHT_LOSS', 'MUSCLE_GAIN', 'BODY_SHAPE', 'HEALTH', 'OTHER'] as const;
+export const GOAL_STATUS = ['IN_PROGRESS', 'ACHIEVED', 'ABANDONED'] as const;
+
+// Note: This matches the existing database schema
+export const memberGoals = pgTable('member_goals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  goalType: varchar('goal_type', { length: 20 }).notNull().$type<typeof GOAL_TYPE[number]>(),
+  targetValue: jsonb('target_value').notNull(), // { value, unit }
+  currentValue: jsonb('current_value'), // { value, unit }
+  startDate: date('start_date').notNull(),
+  targetDate: date('target_date'),
+  status: varchar('status', { length: 20 }).default('IN_PROGRESS').$type<typeof GOAL_STATUS[number]>(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_member_goals_member').on(table.memberId),
+  index('idx_member_goals_status').on(table.status),
+]);
+
+// =============================================================================
+// BODY MEASUREMENTS
+// =============================================================================
+
+export const MEASUREMENT_SOURCE = ['MANUAL', 'INBODY', 'APPLE_HEALTH'] as const;
+
+// Note: This matches the existing database schema
+export const bodyMeasurements = pgTable('body_measurements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  weight: real('weight'), // kg
+  bodyFat: real('body_fat'), // %
+  muscleMass: real('muscle_mass'), // kg
+  bmi: real('bmi'),
+  source: varchar('source', { length: 20 }).notNull().$type<typeof MEASUREMENT_SOURCE[number]>(),
+  rawData: jsonb('raw_data'), // Original data from devices
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index('idx_body_measurements_member').on(table.memberId),
+  index('idx_body_measurements_date').on(table.date),
+]);
+
+// =============================================================================
+// ISSUE REPORTS
+// =============================================================================
+
+export const ISSUE_TYPE = ['EQUIPMENT', 'SERVICE', 'SUGGESTION', 'COMPLAINT'] as const;
+export const ISSUE_STATUS = ['SUBMITTED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const;
+
+// Note: This matches the existing database schema
+export const issueReports = pgTable('issue_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  type: varchar('type', { length: 20 }).notNull().$type<typeof ISSUE_TYPE[number]>(),
+  title: varchar('title', { length: 100 }).notNull(),
+  content: text('content').notNull(),
+  attachments: jsonb('attachments'),
+  status: varchar('status', { length: 20 }).default('SUBMITTED').$type<typeof ISSUE_STATUS[number]>(),
+  assignedTo: uuid('assigned_to').references(() => employees.id, { onDelete: 'set null' }),
+  resolution: text('resolution'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_issue_reports_member').on(table.memberId),
+  index('idx_issue_reports_branch').on(table.branchId),
+  index('idx_issue_reports_status').on(table.status),
+]);
+
+// =============================================================================
 // MEMBER CHECK-INS TABLE (alias for routes compatibility)
 // =============================================================================
 

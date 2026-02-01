@@ -23,7 +23,7 @@ vi.stubGlobal('computed', (getter: () => unknown) => ({
 
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -74,7 +74,7 @@ describe('useClasses', () => {
       const result = await fetchClasses()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/classes?',
+        'http://localhost:8056/api/member/classes?',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
       expect(result).toHaveLength(2)
@@ -92,7 +92,7 @@ describe('useClasses', () => {
       await fetchClasses('branch-123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/classes?branch_id=branch-123',
+        'http://localhost:8056/api/member/classes?branch_id=branch-123',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
     })
@@ -131,7 +131,7 @@ describe('useClasses', () => {
       const result = await fetchWeeklySchedule()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/classes/schedule?',
+        'http://localhost:8056/api/member/classes/schedule?',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
       expect(result).toHaveLength(1)
@@ -206,7 +206,7 @@ describe('useClasses', () => {
       const result = await getSession('session-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/classes/sessions/session-1',
+        'http://localhost:8056/api/member/classes/sessions/session-1',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
       expect(result).toEqual(mockSession)

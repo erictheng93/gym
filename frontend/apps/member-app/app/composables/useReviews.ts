@@ -60,7 +60,7 @@ interface ClassReviewsResponse {
 
 export const useReviews = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader } = useMemberAuth()
 
   const myReviews = useState<Review[]>('my_reviews', () => [])
@@ -72,7 +72,7 @@ export const useReviews = () => {
   const checkEligibility = async (bookingId: string): Promise<ReviewEligibility> => {
     try {
       const response = await $fetch<{ success: boolean; data: ReviewEligibility }>(
-        `${apiUrl}/gym/reviews/eligibility/${bookingId}`,
+        `${apiUrl}/api/member/reviews/eligibility/${bookingId}`,
         { headers: getAuthHeader() }
       )
       return response.data
@@ -91,7 +91,7 @@ export const useReviews = () => {
   const submitReview = async (payload: SubmitReviewPayload): Promise<ReviewResult> => {
     isLoading.value = true
     try {
-      const response = await $fetch<ReviewResult>(`${apiUrl}/gym/reviews`, {
+      const response = await $fetch<ReviewResult>(`${apiUrl}/api/member/reviews`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: payload,
@@ -117,7 +117,7 @@ export const useReviews = () => {
   ): Promise<ReviewResult> => {
     isLoading.value = true
     try {
-      const response = await $fetch<ReviewResult>(`${apiUrl}/gym/reviews/${reviewId}`, {
+      const response = await $fetch<ReviewResult>(`${apiUrl}/api/member/reviews/${reviewId}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: { rating, comment },
@@ -139,7 +139,7 @@ export const useReviews = () => {
   const deleteReview = async (reviewId: string): Promise<ReviewResult> => {
     isLoading.value = true
     try {
-      const response = await $fetch<ReviewResult>(`${apiUrl}/gym/reviews/${reviewId}`, {
+      const response = await $fetch<ReviewResult>(`${apiUrl}/api/member/reviews/${reviewId}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })
@@ -173,7 +173,7 @@ export const useReviews = () => {
       if (options?.offset) params.append('offset', String(options.offset))
 
       const queryString = params.toString()
-      const url = `${apiUrl}/gym/reviews/class/${classId}${queryString ? '?' + queryString : ''}`
+      const url = `${apiUrl}/api/member/reviews/class/${classId}${queryString ? '?' + queryString : ''}`
 
       const response = await $fetch<ClassReviewsResponse>(url)
 
@@ -194,7 +194,7 @@ export const useReviews = () => {
       if (options?.offset) params.append('offset', String(options.offset))
 
       const queryString = params.toString()
-      const url = `${apiUrl}/gym/reviews/my${queryString ? '?' + queryString : ''}`
+      const url = `${apiUrl}/api/member/reviews/my${queryString ? '?' + queryString : ''}`
 
       const response = await $fetch<{ success: boolean; data: Review[] }>(
         url,

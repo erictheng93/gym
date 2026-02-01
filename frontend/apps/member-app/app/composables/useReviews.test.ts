@@ -41,7 +41,7 @@ vi.stubGlobal('computed', (getter: () => unknown) => ({
 
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -80,7 +80,7 @@ describe('useReviews', () => {
       const result = await checkEligibility('booking-123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/reviews/eligibility/booking-123',
+        'http://localhost:8056/api/member/reviews/eligibility/booking-123',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
       expect(result.can_review).toBe(true)
@@ -116,7 +116,7 @@ describe('useReviews', () => {
       })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/reviews',
+        'http://localhost:8056/api/member/reviews',
         {
           method: 'POST',
           headers: { 'X-Member-Token': 'mock-token' },
@@ -160,7 +160,7 @@ describe('useReviews', () => {
       const result = await updateReview('review-123', 4, 'Updated comment')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/reviews/review-123',
+        'http://localhost:8056/api/member/reviews/review-123',
         {
           method: 'PUT',
           headers: { 'X-Member-Token': 'mock-token' },
@@ -250,7 +250,7 @@ describe('useReviews', () => {
       const result = await getClassReviews('class-123', { limit: 10 })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/reviews/class/class-123?limit=10'
+        'http://localhost:8056/api/member/reviews/class/class-123?limit=10'
       )
       expect(result?.reviews).toHaveLength(1)
       expect(result?.summary.avg_rating).toBe(5)
@@ -296,7 +296,7 @@ describe('useReviews', () => {
       const result = await fetchMyReviews({ limit: 10 })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/reviews/my?limit=10',
+        'http://localhost:8056/api/member/reviews/my?limit=10',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
       expect(result).toHaveLength(2)

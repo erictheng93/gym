@@ -32,6 +32,24 @@ import filesRoutes from './routes/files.js';
 import usersRoutes from './routes/users.js';
 import { initCronJobs } from './cron/index.js';
 
+// Member-App routes (Phase 8a)
+import memberOtpRoutes from './routes/member-otp.js';
+import memberAuthRoutes from './routes/member-auth.js';
+import memberProfileRoutes from './routes/member-profile.js';
+import memberOAuthRoutes from './routes/member-oauth.js';
+
+// Member-App routes (Phase 8b)
+import memberPushRoutes from './routes/member-push.js';
+import memberNotificationsRoutes from './routes/member-notifications.js';
+import memberReviewsRoutes from './routes/member-reviews.js';
+import memberCheckInRoutes from './routes/member-check-in.js';
+
+// Member-App routes (Phase 8c)
+import memberWorkoutsRoutes from './routes/member-workouts.js';
+import memberGoalsRoutes from './routes/member-goals.js';
+import memberMeasurementsRoutes from './routes/member-measurements.js';
+import memberIssuesRoutes from './routes/member-issues.js';
+
 type Variables = AuthVariables & TenantVariables;
 
 const app = new Hono<{ Variables: Variables }>();
@@ -40,7 +58,7 @@ app.use('*', cors({
   origin: ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token'],
 }));
 
 app.use('*', secureHeaders());
@@ -83,6 +101,20 @@ app.route('/health', healthRoutes);
 
 // Admin routes
 app.route('/api/users', usersRoutes);
+
+// Member-App routes (authenticated via X-Member-Token)
+app.route('/api/member/otp', memberOtpRoutes);
+app.route('/api/member/auth', memberAuthRoutes);
+app.route('/api/member/me', memberProfileRoutes);
+app.route('/api/member/oauth', memberOAuthRoutes);
+app.route('/api/member/push', memberPushRoutes);
+app.route('/api/member/notifications', memberNotificationsRoutes);
+app.route('/api/member/reviews', memberReviewsRoutes);
+app.route('/api/member/check-in', memberCheckInRoutes);
+app.route('/api/member/workouts', memberWorkoutsRoutes);
+app.route('/api/member/goals', memberGoalsRoutes);
+app.route('/api/member/measurements', memberMeasurementsRoutes);
+app.route('/api/member/issues', memberIssuesRoutes);
 
 app.get('/', (c) => {
   return c.json({

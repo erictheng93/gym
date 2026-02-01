@@ -9,42 +9,51 @@ import type { Contract } from '@gym-nexus/shared/types'
 import { extractErrorMessage } from '../utils/apiHelpers'
 import type { CurrentMember, AuthResult, OtpSendResult, OAuthResult } from '../types/auth'
 
-interface MemberUser {
-  id: string
-  member_code: string
-  full_name: string
-  member_status: string
-  branch_id: string | null
-}
-
 interface OtpSendResponse {
   success: boolean
   message: string
-  expiresIn: number
-  otp?: string // Only in development
+  data?: {
+    expiresIn: number
+    otp?: string // Only in development
+  }
 }
 
 interface OtpVerifyResponse {
   success: boolean
   message: string
-  member: MemberUser
-  access_token: string
-  refresh_token: string
-  expires_in: number
+  data?: {
+    member: {
+      id: string
+      memberCode: string
+      fullName: string
+      branchId: string
+    }
+    accessToken: string
+    refreshToken: string
+    expiresIn: number
+  }
 }
 
 interface EmailLoginResponse {
   success: boolean
-  message: string
-  member: MemberUser
-  access_token: string
-  refresh_token: string
-  expires_in: number
+  message?: string
+  data?: {
+    accessToken: string
+    refreshToken: string
+    expiresIn: number
+    member: {
+      id: string
+      memberCode: string
+      fullName: string
+      branchId: string
+    }
+  }
+  error?: string
 }
 
 export const useAuthMethods = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
 
   const { setTokens, clearTokens, getAuthHeader } = useAuthTokens()
   const { fetchMember, clearSession, setLoading, member } = useAuthSession()
@@ -61,7 +70,7 @@ export const useAuthMethods = () => {
   const sendOtp = async (phone: string): Promise<OtpSendResult> => {
     otpLoading.value = true
     try {
-      const response = await $fetch<OtpSendResponse>(`${apiUrl}/gym/otp/send`, {
+      const response = await $fetch<OtpSendResponse>(`${apiUrl}/api/member/otp/send`, {
         method: 'POST',
         body: {
           identifier: phone,
@@ -72,7 +81,7 @@ export const useAuthMethods = () => {
       return {
         success: response.success,
         message: response.message,
-        otp: response.otp, // For development testing
+        otp: response.data?.otp, // For development testing
       }
     } catch (error: unknown) {
       return {
@@ -90,7 +99,7 @@ export const useAuthMethods = () => {
   const verifyOtp = async (phone: string, code: string): Promise<AuthResult> => {
     setLoading(true)
     try {
-      const response = await $fetch<OtpVerifyResponse>(`${apiUrl}/gym/otp/verify`, {
+      const response = await $fetch<OtpVerifyResponse>(`${apiUrl}/api/member/otp/verify`, {
         method: 'POST',
         body: {
           identifier: phone,
@@ -99,12 +108,12 @@ export const useAuthMethods = () => {
         },
       })
 
-      if (response.success) {
+      if (response.success && response.data) {
         // Store tokens
-        setTokens(response.access_token, response.refresh_token)
+        setTokens(response.data.accessToken, response.data.refreshToken)
 
         // Fetch full member profile with the token directly
-        await fetchMember(response.access_token)
+        await fetchMember(response.data.accessToken)
 
         return { success: true, message: response.message }
       }
@@ -137,22 +146,22 @@ export const useAuthMethods = () => {
   const login = async (email: string, password: string): Promise<AuthResult> => {
     setLoading(true)
     try {
-      const response = await $fetch<EmailLoginResponse>(`${apiUrl}/gym/auth/login`, {
+      const response = await $fetch<EmailLoginResponse>(`${apiUrl}/api/member/auth/login`, {
         method: 'POST',
         body: { email, password },
       })
 
-      if (response.success) {
+      if (response.success && response.data) {
         // Store tokens
-        setTokens(response.access_token, response.refresh_token)
+        setTokens(response.data.accessToken, response.data.refreshToken)
 
         // Fetch full member profile with the token directly
-        await fetchMember(response.access_token)
+        await fetchMember(response.data.accessToken)
 
-        return { success: true, message: response.message }
+        return { success: true, message: response.message || '登入成功' }
       }
 
-      return { success: false, message: response.message || '登入失敗' }
+      return { success: false, message: response.error || response.message || '登入失敗' }
     } catch (error: unknown) {
       return {
         success: false,
@@ -168,60 +177,53 @@ export const useAuthMethods = () => {
   // ============================================
 
   /**
-   * OAuth login - get member data via Directus session cookie
-   * Called after OAuth callback success
+   * OAuth login - initiate OAuth flow
+   */
+  const initiateOAuth = (provider: 'google' | 'line' | 'apple') => {
+    const { loginWithProvider } = useSocialAuth()
+    loginWithProvider(provider)
+  }
+
+  /**
+   * OAuth callback handler - process OAuth callback
+   * This is called from the callback page with the OAuth result
    */
   const loginWithOAuth = async (): Promise<OAuthResult> => {
     setLoading(true)
     try {
-      // Use Directus session cookie to get current user
-      const userResponse = await $fetch<{ data: { id: string; email: string; first_name: string | null; last_name: string | null } }>(`${apiUrl}/users/me`, {
-        credentials: 'include',
-      })
-
-      if (!userResponse.data?.id) {
-        return { success: false, error: '無法取得用戶資料' }
+      // After OAuth callback, tokens should be set via URL params or cookie
+      // This is handled by the OAuth callback page
+      // For now, fetch the member profile
+      const headers = getAuthHeader()
+      if (!headers['X-Member-Token']) {
+        return { success: false, error: '無法取得認證資訊' }
       }
 
-      const userId = userResponse.data.id
+      await fetchMember(headers['X-Member-Token'])
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '登入失敗'
+      return { success: false, error: message }
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      // Query member data by user_id
-      const membersResponse = await $fetch<{ data: (CurrentMember & { branch: { name: string } | null; contracts: Contract[] })[] }>(`${apiUrl}/items/members`, {
-        credentials: 'include',
-        params: {
-          'filter[user_id][_eq]': userId,
-          'fields': 'id,member_code,full_name,phone,email,branch_id,member_status,branch.name,contracts.id,contracts.contract_status,contracts.end_date,contracts.remaining_counts,contracts.plan_id.name,contracts.plan_id.plan_type',
-          'limit': 1,
-        },
-      })
+  /**
+   * Complete OAuth login with tokens from callback
+   * This is called after the OAuth callback page receives tokens
+   */
+  const completeOAuthLogin = async (
+    accessToken: string,
+    refreshToken: string,
+  ): Promise<OAuthResult> => {
+    setLoading(true)
+    try {
+      // Store tokens
+      setTokens(accessToken, refreshToken)
 
-      if (!membersResponse.data || membersResponse.data.length === 0) {
-        return {
-          success: false,
-          error: '找不到會員資料，請稍後再試',
-          needsRegistration: true,
-        }
-      }
-
-      const memberData = membersResponse.data[0]
-
-      // Find active contract
-      const activeContract = memberData.contracts?.find(
-        (c: Contract) => c.contract_status === 'ACTIVE'
-      ) || null
-
-      // Update member state
-      member.value = {
-        id: memberData.id,
-        member_code: memberData.member_code,
-        full_name: memberData.full_name,
-        phone: memberData.phone,
-        email: memberData.email,
-        branch_id: memberData.branch_id,
-        branch_name: memberData.branch?.name || null,
-        member_status: memberData.member_status,
-        activeContract,
-      }
+      // Fetch full member profile
+      await fetchMember(accessToken)
 
       return { success: true }
     } catch (error) {
@@ -241,7 +243,7 @@ export const useAuthMethods = () => {
    */
   const forgotPassword = async (email: string): Promise<AuthResult & { resetUrl?: string }> => {
     try {
-      const response = await $fetch<{ success: boolean; message: string; resetUrl?: string }>(`${apiUrl}/gym/auth/forgot-password`, {
+      const response = await $fetch<{ success: boolean; message: string; data?: { resetUrl?: string } }>(`${apiUrl}/api/member/auth/forgot-password`, {
         method: 'POST',
         body: { email },
       })
@@ -249,7 +251,7 @@ export const useAuthMethods = () => {
       return {
         success: response.success,
         message: response.message,
-        resetUrl: response.resetUrl, // Only in development
+        resetUrl: response.data?.resetUrl, // Only in development
       }
     } catch (error: unknown) {
       return {
@@ -264,11 +266,11 @@ export const useAuthMethods = () => {
    */
   const resetPassword = async (token: string, newPassword: string): Promise<AuthResult> => {
     try {
-      const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/auth/reset-password`, {
+      const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/api/member/auth/reset-password`, {
         method: 'POST',
         body: {
           token,
-          new_password: newPassword,
+          newPassword,
         },
       })
 
@@ -294,12 +296,12 @@ export const useAuthMethods = () => {
     }
 
     try {
-      const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/auth/change-password`, {
+      const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/api/member/auth/change-password`, {
         method: 'POST',
         headers,
         body: {
-          current_password: currentPassword,
-          new_password: newPassword,
+          currentPassword,
+          newPassword,
         },
       })
 
@@ -323,25 +325,27 @@ export const useAuthMethods = () => {
    * Complete member profile after social login
    */
   const completeProfile = async (data: {
-    full_name: string
+    fullName: string
     phone: string
     gender?: 'MALE' | 'FEMALE' | 'OTHER' | null
     birthday?: string
-    branch_id?: string
-    emergency_contact?: string
-    emergency_phone?: string
+    branchId?: string
+    emergencyContact?: string
+    emergencyPhone?: string
   }): Promise<AuthResult> => {
     setLoading(true)
+    const headers = getAuthHeader()
+
     try {
-      const response = await $fetch<{ success: boolean; message: string; member?: CurrentMember }>(`${apiUrl}/gym/member/complete-profile`, {
+      const response = await $fetch<{ success: boolean; message: string; data?: { member: CurrentMember } }>(`${apiUrl}/api/member/me/complete-profile`, {
         method: 'POST',
-        credentials: 'include',
+        headers,
         body: data,
       })
 
       if (response.success) {
         // Refresh member data
-        await loginWithOAuth()
+        await fetchMember(headers['X-Member-Token'] || '')
         return { success: true, message: response.message || '資料已更新' }
       }
 
@@ -382,7 +386,9 @@ export const useAuthMethods = () => {
     login,
 
     // OAuth methods
+    initiateOAuth,
     loginWithOAuth,
+    completeOAuthLogin,
 
     // Password management
     forgotPassword,

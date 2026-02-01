@@ -60,7 +60,7 @@ interface StatsResponse {
 
 export const useWorkouts = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, member } = useMemberAuth()
   const { isOnline, getCache, setCache } = useOfflineSync()
 
@@ -105,7 +105,7 @@ export const useWorkouts = () => {
       if (options?.limit) params.append('limit', String(options.limit))
       if (options?.offset) params.append('offset', String(options.offset))
 
-      const response = await $fetch<WorkoutsResponse>(`${apiUrl}/gym/workouts?${params}`, {
+      const response = await $fetch<WorkoutsResponse>(`${apiUrl}/api/member/workouts?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -137,7 +137,7 @@ export const useWorkouts = () => {
 
     try {
       const response = await $fetch<{ success: boolean; data: Workout }>(
-        `${apiUrl}/gym/workouts/${id}`,
+        `${apiUrl}/api/member/workouts/${id}`,
         { headers: getAuthHeader() }
       )
 
@@ -155,7 +155,7 @@ export const useWorkouts = () => {
 
     try {
       const response = await $fetch<StatsResponse>(
-        `${apiUrl}/gym/workouts/stats?period=${period}`,
+        `${apiUrl}/api/member/workouts/stats?period=${period}`,
         { headers: getAuthHeader() }
       )
 
@@ -184,7 +184,7 @@ export const useWorkouts = () => {
     }
 
     try {
-      const response = await $fetch<WorkoutResult>(`${apiUrl}/gym/workouts`, {
+      const response = await $fetch<WorkoutResult>(`${apiUrl}/api/member/workouts`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -222,7 +222,7 @@ export const useWorkouts = () => {
     }
 
     try {
-      const response = await $fetch<WorkoutResult>(`${apiUrl}/gym/workouts/${id}`, {
+      const response = await $fetch<WorkoutResult>(`${apiUrl}/api/member/workouts/${id}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,
@@ -253,7 +253,7 @@ export const useWorkouts = () => {
     }
 
     try {
-      const response = await $fetch<WorkoutResult>(`${apiUrl}/gym/workouts/${id}`, {
+      const response = await $fetch<WorkoutResult>(`${apiUrl}/api/member/workouts/${id}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

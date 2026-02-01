@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * OAuth Callback 頁面
+ * OAuth Callback 頁面 (Legacy)
  *
- * 處理社群登入 (Google, LINE, Apple, Facebook) 的 OAuth callback
- * Directus 會在 OAuth 完成後導向到這個頁面
+ * 處理舊版 OAuth callback，主要用於兼容性
+ * 新的 OAuth callback 使用 /auth/callback/[provider] 路由
  */
 
 // 不需要 auth middleware，這是 callback 頁面
@@ -12,7 +12,7 @@ definePageMeta({
   layout: false,
 })
 
-const { handleCallback } = useSocialAuth()
+const route = useRoute()
 const { loginWithOAuth } = useMemberAuth()
 
 // 狀態
@@ -21,20 +21,30 @@ const errorMessage = ref('')
 
 onMounted(async () => {
   try {
-    // 步驟 1: 處理 OAuth callback (刷新 session)
-    const callbackResult = await handleCallback()
+    // 檢查是否有 provider 從 sessionStorage
+    const provider = typeof window !== 'undefined'
+      ? sessionStorage.getItem('oauth_provider')
+      : null
 
-    if (!callbackResult.success) {
-      throw new Error(callbackResult.error || '登入失敗')
+    // 檢查是否有 code 參數 (新 OAuth 流程)
+    const code = route.query.code as string | undefined
+    const state = route.query.state as string | undefined
+
+    // 如果有 code 和 provider，導向到新的 callback 頁面
+    if (code && provider) {
+      const params = new URLSearchParams()
+      params.set('code', code)
+      if (state) params.set('state', state)
+      await navigateTo(`/auth/callback/${provider}?${params.toString()}`)
+      return
     }
 
-    // 步驟 2: 完成登入並取得會員資料
+    // Legacy 流程：嘗試從已有的 session 登入
     const loginResult = await loginWithOAuth()
 
     if (!loginResult.success) {
       // 特殊處理：需要完成註冊
       if (loginResult.needsRegistration) {
-        // TODO: 導向到完成資料頁面
         await navigateTo('/auth/complete-profile')
         return
       }

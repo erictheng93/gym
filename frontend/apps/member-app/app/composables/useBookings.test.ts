@@ -43,7 +43,7 @@ vi.stubGlobal('computed', (getter: () => unknown) => ({
 
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -108,7 +108,7 @@ describe('useBookings', () => {
       const result = await fetchMyBookings()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/bookings?',
+        'http://localhost:8056/api/member/bookings?',
         expect.objectContaining({
           headers: { 'X-Member-Token': 'test-token' },
         })
@@ -124,7 +124,7 @@ describe('useBookings', () => {
       await fetchMyBookings({ status: 'CONFIRMED', upcoming: true, limit: 10 })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/bookings?status=CONFIRMED&upcoming=true&limit=10',
+        'http://localhost:8056/api/member/bookings?status=CONFIRMED&upcoming=true&limit=10',
         expect.any(Object)
       )
     })
@@ -186,7 +186,7 @@ describe('useBookings', () => {
       const result = await bookSession('session-1', 'contract-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/bookings',
+        'http://localhost:8056/api/member/bookings',
         expect.objectContaining({
           method: 'POST',
           body: { session_id: 'session-1', contract_id: 'contract-1' },
@@ -242,7 +242,7 @@ describe('useBookings', () => {
       await cancelBooking('booking-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/bookings/booking-1',
+        'http://localhost:8056/api/member/bookings/booking-1',
         expect.objectContaining({
           method: 'DELETE',
         })
