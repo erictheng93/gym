@@ -16,13 +16,21 @@ const { hasBookedSession } = useBookings()
 // Generate dates for the week
 const weekDates = computed(() => {
   const today = new Date()
-  const dates = []
+  const dates: Array<{
+    date: string
+    dayOfWeek: number
+    dayName: string
+    dayNumber: number
+    isToday: boolean
+    month: number
+  }> = []
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(today)
     date.setDate(today.getDate() + i)
+    const dateStr = date.toISOString().split('T')[0] ?? ''
     dates.push({
-      date: date.toISOString().split('T')[0],
+      date: dateStr,
       dayOfWeek: date.getDay(),
       dayName: getDayName(date.getDay()),
       dayNumber: date.getDate(),

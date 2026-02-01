@@ -60,7 +60,7 @@ export const createMeasurementSchema = z.object({
     .optional()
     .default('MANUAL'),
   raw_data: z
-    .record(z.unknown())
+    .record(z.string(), z.unknown())
     .optional(),
 }).refine(
   data => data.weight || data.body_fat || data.muscle_mass || data.bmi,

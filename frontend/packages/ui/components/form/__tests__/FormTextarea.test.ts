@@ -4,6 +4,12 @@ import { computed as vueComputed } from 'vue'
 import FormTextarea from '../FormTextarea.vue'
 import FormField from '../FormField.vue'
 
+// Augment globalThis for Vue computed function
+declare global {
+  // eslint-disable-next-line no-var
+  var computed: typeof vueComputed | undefined
+}
+
 // Restore Vue's computed for component tests
 const originalComputed = globalThis.computed
 beforeAll(() => {

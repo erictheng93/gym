@@ -79,7 +79,7 @@ const icons: Record<string, { viewBox: string; paths: string[] }> = {
   }
 }
 
-const currentIcon = computed(() => icons[props.icon] || icons.inbox)
+const currentIcon = computed(() => icons[props.icon] ?? icons.inbox ?? { viewBox: '0 0 24 24', paths: [] })
 </script>
 
 <template>

@@ -58,46 +58,61 @@ const channelIcons = {
   sms: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
 }
 
+// Notification type keys
+type NotificationTypeKey =
+  | 'notify_booking_confirmation'
+  | 'notify_booking_reminder'
+  | 'notify_booking_cancelled'
+  | 'notify_contract_expiry'
+  | 'notify_payment_confirmation'
+  | 'notify_promotions'
+  | 'notify_system'
+
 // Notification types configuration
-const notificationTypes = [
+const notificationTypes: Array<{
+  key: NotificationTypeKey
+  label: string
+  description: string
+  icon: string
+}> = [
   {
-    key: 'notify_booking_confirmation' as const,
+    key: 'notify_booking_confirmation',
     label: '預約確認',
     description: '預約課程成功時通知',
     icon: 'calendar-check',
   },
   {
-    key: 'notify_booking_reminder' as const,
+    key: 'notify_booking_reminder',
     label: '課程提醒',
     description: '課程開始前 24 小時和 2 小時提醒',
     icon: 'clock',
   },
   {
-    key: 'notify_booking_cancelled' as const,
+    key: 'notify_booking_cancelled',
     label: '預約取消',
     description: '課程取消或您取消預約時通知',
     icon: 'calendar-x',
   },
   {
-    key: 'notify_contract_expiry' as const,
+    key: 'notify_contract_expiry',
     label: '會籍到期提醒',
     description: '會籍到期前 7 天、3 天、1 天提醒',
     icon: 'alert-circle',
   },
   {
-    key: 'notify_payment_confirmation' as const,
+    key: 'notify_payment_confirmation',
     label: '付款確認',
     description: '付款成功時通知',
     icon: 'credit-card',
   },
   {
-    key: 'notify_promotions' as const,
+    key: 'notify_promotions',
     label: '優惠活動',
     description: '接收最新優惠和活動資訊',
     icon: 'gift',
   },
   {
-    key: 'notify_system' as const,
+    key: 'notify_system',
     label: '系統通知',
     description: '重要系統公告和維護通知',
     icon: 'info',
@@ -147,16 +162,16 @@ const handleChannelToggle = async (channel: 'line' | 'push' | 'email' | 'sms') =
 }
 
 // Handle notification type toggle
-const handleTypeToggle = async (key: keyof typeof preferences.value) => {
+const handleTypeToggle = async (key: NotificationTypeKey) => {
   if (!preferences.value) return
 
   const newValue = !preferences.value[key]
 
   isSaving.value = true
-  const success = await togglePreference(key, newValue as boolean)
+  const toggleSuccess = await togglePreference(key, newValue)
   isSaving.value = false
 
-  if (success) {
+  if (toggleSuccess) {
     addToast({ message: '設定已儲存', type: 'success' })
   } else {
     addToast({ message: '更新失敗，請稍後再試', type: 'error' })

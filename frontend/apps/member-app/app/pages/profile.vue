@@ -11,7 +11,7 @@ definePageMeta({
 })
 
 const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl
+const apiUrl = config.public.apiBaseUrl
 const { member, logout, fetchMember, getAuthHeader } = useMemberAuth()
 const toast = useToast()
 const { handleError } = useApiError()
@@ -29,6 +29,24 @@ const editForm = reactive({
   emergency_contact: '',
   emergency_phone: '',
 })
+
+// API response type (from Directus)
+interface MemberApiResponse {
+  id: string
+  member_code: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | null
+  birthday: string | null
+  emergency_contact: string | null
+  emergency_phone: string | null
+  branch_id: string | null
+  branch: { name: string } | null
+  member_status: string
+  date_created: string
+  avatar: string | null
+}
 
 // 完整會員資料
 interface MemberDetail {
@@ -57,20 +75,15 @@ const loadMemberDetail = async () => {
 
   isLoadingDetail.value = true
   try {
-    const response = await $fetch<{ data: MemberDetail[] }>(`${apiUrl}/items/members`, {
+    const response = await $fetch<{ success: boolean; data: MemberApiResponse }>(`${apiUrl}/api/member/profile`, {
       headers: getAuthHeader(),
-      params: {
-        'filter[id][_eq]': member.value.id,
-        'fields': 'id,member_code,full_name,phone,email,gender,birthday,emergency_contact,emergency_phone,branch_id,branch.name,member_status,date_created,avatar',
-        'limit': 1,
-      },
     })
 
-    if (response.data && response.data.length > 0) {
+    if (response.success && response.data) {
       memberDetail.value = {
-        ...response.data[0],
-        created_at: response.data[0].date_created,
-      } as MemberDetail
+        ...response.data,
+        created_at: response.data.date_created,
+      }
     }
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入會員資料' })
@@ -118,7 +131,7 @@ const saveEdit = async () => {
 
   isSaving.value = true
   try {
-    await $fetch(`${apiUrl}/items/members/${member.value.id}`, {
+    await $fetch(`${apiUrl}/api/member/profile`, {
       method: 'PATCH',
       headers: getAuthHeader(),
       body: {
@@ -151,14 +164,14 @@ const handleLogout = async () => {
 }
 
 // 格式化日期
-const formatDate = (dateStr: string | null) => {
+const formatDate = (dateStr: string | null | undefined) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
   return date.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 // 格式化性別
-const formatGender = (gender: string | null) => {
+const formatGender = (gender: string | null | undefined) => {
   const genderMap: Record<string, string> = {
     MALE: '男',
     FEMALE: '女',

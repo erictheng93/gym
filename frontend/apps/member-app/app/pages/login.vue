@@ -60,7 +60,7 @@ const handleEmailLogin = async () => {
   emailLoading.value = true
 
   try {
-    const loginResult = await login(result.data.email, result.data.password)
+    const loginResult = await login(result.data.email as string, result.data.password as string)
 
     if (loginResult.success) {
       await navigateTo('/')
@@ -85,7 +85,7 @@ const sendOtp = async () => {
   }
 
   error.value = ''
-  const sendResult = await sendOtpApi(result.data.phone)
+  const sendResult = await sendOtpApi(result.data.phone as string)
 
   if (sendResult.success) {
     otpSent.value = true
@@ -119,7 +119,7 @@ const handleOtpLogin = async () => {
   }
 
   error.value = ''
-  const verifyResult = await verifyOtp(result.data.phone, result.data.code)
+  const verifyResult = await verifyOtp(result.data.phone as string, result.data.code as string)
 
   if (verifyResult.success) {
     await navigateTo('/')

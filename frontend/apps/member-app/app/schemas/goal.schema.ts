@@ -34,7 +34,7 @@ const NOTES_MAX_LENGTH = 500
 export const createGoalSchema = z.object({
   goal_type: z
     .enum(['WEIGHT_LOSS', 'MUSCLE_GAIN', 'BODY_SHAPE', 'HEALTH', 'OTHER'], {
-      errorMap: () => ({ message: '請選擇目標類型' }),
+      message: '請選擇目標類型',
     }),
   target_value: z
     .object({
@@ -42,14 +42,14 @@ export const createGoalSchema = z.object({
       value: z.number().optional(),
       unit: z.string().optional(),
     })
-    .or(z.record(z.unknown())),
+    .or(z.record(z.string(), z.unknown())),
   current_value: z
     .object({
       description: z.string().optional(),
       value: z.number().optional(),
       unit: z.string().optional(),
     })
-    .or(z.record(z.unknown()))
+    .or(z.record(z.string(), z.unknown()))
     .optional(),
   start_date: z
     .string()
@@ -76,7 +76,7 @@ export const updateGoalSchema = z.object({
       value: z.number().optional(),
       unit: z.string().optional(),
     })
-    .or(z.record(z.unknown()))
+    .or(z.record(z.string(), z.unknown()))
     .optional(),
   target_value: z
     .object({
@@ -84,7 +84,7 @@ export const updateGoalSchema = z.object({
       value: z.number().optional(),
       unit: z.string().optional(),
     })
-    .or(z.record(z.unknown()))
+    .or(z.record(z.string(), z.unknown()))
     .optional(),
   target_date: z
     .string()

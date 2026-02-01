@@ -99,21 +99,21 @@ export const useApiError = () => {
       // Check for status code
       if ('statusCode' in err || 'status' in err) {
         const status = (err.statusCode || err.status) as number
-        if (status === 401) return ERROR_MESSAGES.UNAUTHORIZED
-        if (status === 403) return ERROR_MESSAGES.FORBIDDEN
+        if (status === 401) return ERROR_MESSAGES.UNAUTHORIZED ?? '請先登入'
+        if (status === 403) return ERROR_MESSAGES.FORBIDDEN ?? '您沒有權限執行此操作'
         if (status === 404) return '找不到資源'
-        if (status === 422) return ERROR_MESSAGES.VALIDATION_ERROR
-        if (status >= 500) return ERROR_MESSAGES.SERVER_ERROR
+        if (status === 422) return ERROR_MESSAGES.VALIDATION_ERROR ?? '資料格式錯誤，請檢查後再試'
+        if (status >= 500) return ERROR_MESSAGES.SERVER_ERROR ?? '伺服器發生錯誤，請稍後再試'
       }
 
       // Check for network error
       if ('message' in err) {
         const msg = String(err.message).toLowerCase()
         if (msg.includes('network') || msg.includes('fetch')) {
-          return ERROR_MESSAGES.NETWORK_ERROR
+          return ERROR_MESSAGES.NETWORK_ERROR ?? '網路連線失敗，請檢查網路後再試'
         }
         if (msg.includes('timeout')) {
-          return ERROR_MESSAGES.TIMEOUT
+          return ERROR_MESSAGES.TIMEOUT ?? '請求逾時，請稍後再試'
         }
         return String(err.message)
       }

@@ -11,7 +11,7 @@ definePageMeta({
 })
 
 const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl
+const apiUrl = config.public.apiBaseUrl
 
 const { loginWithOAuth, sendOtp: sendOtpAuth } = useMemberAuth()
 const toast = useToast()
@@ -60,15 +60,14 @@ const branches = ref<{ id: string; name: string }[]>([])
 // 從 OAuth session 預填資料
 const prefillFromSession = async () => {
   try {
-    const userResponse = await $fetch<{ data: { first_name: string | null; last_name: string | null; email: string | null } }>(
-      `${apiUrl}/users/me`,
-      { credentials: 'include' }
-    )
-
-    if (userResponse.data) {
-      const { first_name, last_name } = userResponse.data
-      if (first_name || last_name) {
-        form.full_name = [last_name, first_name].filter(Boolean).join('')
+    // Try to get social info from sessionStorage (set by OAuth callback)
+    if (typeof window !== 'undefined') {
+      const socialInfoStr = sessionStorage.getItem('oauth_social_info')
+      if (socialInfoStr) {
+        const socialInfo = JSON.parse(socialInfoStr)
+        if (socialInfo.displayName) {
+          form.full_name = socialInfo.displayName
+        }
       }
     }
   }
@@ -80,18 +79,12 @@ const prefillFromSession = async () => {
 // 載入分店列表
 const fetchBranches = async () => {
   try {
-    const response = await $fetch<{ data: { id: string; name: string }[] }>(
-      `${apiUrl}/items/branches`,
-      {
-        credentials: 'include',
-        params: {
-          fields: 'id,name',
-          'filter[status][_eq]': 'active',
-          sort: 'name',
-        },
-      }
+    const response = await $fetch<{ success: boolean; data: { id: string; name: string }[] }>(
+      `${apiUrl}/api/branches`,
     )
-    branches.value = response.data || []
+    if (response.success) {
+      branches.value = response.data || []
+    }
   }
   catch {
     // 無法載入分店，使用空列表
@@ -162,7 +155,7 @@ const handleOtpInput = (index: number, event: Event) => {
 
   // 只接受數字
   if (!/^\d*$/.test(value)) {
-    input.value = otpDigits.value[index]
+    input.value = otpDigits.value[index] ?? ''
     return
   }
 
@@ -206,7 +199,7 @@ const verifyOtp = async () => {
 
   try {
     // 驗證 OTP（不登入，只驗證）
-    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/otp/verify-only`, {
+    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/api/member/otp/verify-only`, {
       method: 'POST',
       credentials: 'include',
       body: {
@@ -253,7 +246,7 @@ const handleSubmit = async () => {
     if (form.emergency_phone.trim()) submitData.emergency_phone = form.emergency_phone.replace(/[-\s]/g, '')
 
     // 提交到後端
-    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/gym/member/complete-profile`, {
+    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/api/member/me/complete-profile`, {
       method: 'POST',
       credentials: 'include',
       body: submitData,

@@ -50,7 +50,7 @@ const mockNavigateTo = vi.fn()
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -110,7 +110,7 @@ describe('useAuthMethods', () => {
       const result = await sendOtp('0912345678')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/otp/send',
+        'http://localhost:8056/api/member/otp/send',
         {
           method: 'POST',
           body: {
@@ -152,7 +152,7 @@ describe('useAuthMethods', () => {
       const result = await verifyOtp('0912345678', '123456')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/otp/verify',
+        'http://localhost:8056/api/member/otp/verify',
         {
           method: 'POST',
           body: {
@@ -226,7 +226,7 @@ describe('useAuthMethods', () => {
       const result = await login('test@example.com', 'password123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/auth/login',
+        'http://localhost:8056/api/member/auth/login',
         {
           method: 'POST',
           body: { email: 'test@example.com', password: 'password123' },
@@ -275,7 +275,7 @@ describe('useAuthMethods', () => {
       const result = await forgotPassword('test@example.com')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/auth/forgot-password',
+        'http://localhost:8056/api/member/auth/forgot-password',
         {
           method: 'POST',
           body: { email: 'test@example.com' },
@@ -308,7 +308,7 @@ describe('useAuthMethods', () => {
       const result = await resetPassword('valid-token', 'newPassword123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/auth/reset-password',
+        'http://localhost:8056/api/member/auth/reset-password',
         {
           method: 'POST',
           body: {
@@ -346,7 +346,7 @@ describe('useAuthMethods', () => {
       const result = await changePassword('oldPassword', 'newPassword123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/auth/change-password',
+        'http://localhost:8056/api/member/auth/change-password',
         {
           method: 'POST',
           headers: { 'X-Member-Token': 'valid-token' },
@@ -410,13 +410,13 @@ describe('useAuthMethods', () => {
 
       const { completeProfile } = useAuthMethods()
       const result = await completeProfile({
-        full_name: 'Test User',
+        fullName: 'Test User',
         phone: '0912345678',
         gender: 'MALE',
       })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/member/complete-profile',
+        'http://localhost:8056/api/member/complete-profile',
         {
           method: 'POST',
           credentials: 'include',
@@ -437,7 +437,7 @@ describe('useAuthMethods', () => {
 
       const { completeProfile } = useAuthMethods()
       const result = await completeProfile({
-        full_name: 'Test User',
+        fullName: 'Test User',
         phone: '0912345678',
       })
 
@@ -483,7 +483,7 @@ describe('useAuthMethods', () => {
       const result = await loginWithOAuth()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/users/me',
+        'http://localhost:8056/api/member/users/me',
         { credentials: 'include' }
       )
       expect(result.success).toBe(true)

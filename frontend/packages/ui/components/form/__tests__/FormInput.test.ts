@@ -1,8 +1,14 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { mount, shallowMount } from '@vue/test-utils'
 import { computed as vueComputed } from 'vue'
 import FormInput from '../FormInput.vue'
 import FormField from '../FormField.vue'
+
+// Augment globalThis for Vue computed function
+declare global {
+  // eslint-disable-next-line no-var
+  var computed: typeof vueComputed | undefined
+}
 
 // Restore Vue's computed for component tests
 const originalComputed = globalThis.computed

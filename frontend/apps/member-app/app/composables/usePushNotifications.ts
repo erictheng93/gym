@@ -7,7 +7,7 @@ import type { PushNotificationPreferences } from '../types/notification'
 
 export const usePushNotifications = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, isAuthenticated } = useMemberAuth()
 
   const isSupported = useState('push_supported', () => false)
@@ -39,7 +39,7 @@ export const usePushNotifications = () => {
   const getVapidKey = async (): Promise<string | null> => {
     try {
       const response = await $fetch<{ success: boolean; publicKey: string }>(
-        `${apiUrl}/gym/push/vapid-public-key`
+        `${apiUrl}/api/member/push/vapid-public-key`
       )
       return response.success ? response.publicKey : null
     } catch {
@@ -93,9 +93,10 @@ export const usePushNotifications = () => {
       const registration = await navigator.serviceWorker.ready
 
       // Subscribe to push
+      const applicationServerKey = urlBase64ToUint8Array(vapidKey)
       const pushSubscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        applicationServerKey: applicationServerKey as BufferSource,
       })
 
       // Send subscription to server
@@ -103,7 +104,7 @@ export const usePushNotifications = () => {
       const auth = arrayBufferToBase64(pushSubscription.getKey('auth'))
 
       const response = await $fetch<{ success: boolean; subscription_id: string }>(
-        `${apiUrl}/gym/push/subscribe`,
+        `${apiUrl}/api/member/push/subscribe`,
         {
           method: 'POST',
           headers: getAuthHeader(),
@@ -148,7 +149,7 @@ export const usePushNotifications = () => {
       await subscription.value.unsubscribe()
 
       // Notify server
-      await $fetch(`${apiUrl}/gym/push/unsubscribe`, {
+      await $fetch(`${apiUrl}/api/member/push/unsubscribe`, {
         method: 'DELETE',
         body: {
           endpoint: subscription.value.endpoint,
@@ -177,7 +178,7 @@ export const usePushNotifications = () => {
 
     try {
       const response = await $fetch<{ success: boolean }>(
-        `${apiUrl}/gym/push/preferences`,
+        `${apiUrl}/api/member/push/preferences`,
         {
           method: 'PATCH',
           headers: getAuthHeader(),
@@ -238,7 +239,7 @@ export const usePushNotifications = () => {
     const bytes = new Uint8Array(buffer)
     let binary = ''
     for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i])
+      binary += String.fromCharCode(bytes[i]!)
     }
     return btoa(binary)
   }

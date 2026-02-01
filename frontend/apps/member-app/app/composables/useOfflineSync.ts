@@ -208,7 +208,7 @@ export const useOfflineSync = () => {
       await $fetch(request.url, {
         method: request.method,
         headers: request.headers,
-        body: request.body,
+        body: request.body as Record<string, unknown> | undefined,
       })
       return true
     } catch {

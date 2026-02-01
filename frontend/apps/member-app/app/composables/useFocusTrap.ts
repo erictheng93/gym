@@ -64,6 +64,8 @@ export const useFocusTrap = () => {
     const firstElement = focusableElements[0]
     const lastElement = focusableElements[focusableElements.length - 1]
 
+    if (!firstElement || !lastElement) return
+
     // Shift + Tab at first element -> go to last
     if (event.shiftKey && document.activeElement === firstElement) {
       event.preventDefault()
@@ -118,8 +120,9 @@ export const useFocusTrap = () => {
         initialFocus.focus()
       } else {
         const focusableElements = getFocusableElements()
-        if (focusableElements.length > 0) {
-          focusableElements[0].focus()
+        const firstFocusable = focusableElements[0]
+        if (firstFocusable) {
+          firstFocusable.focus()
         } else {
           // If no focusable elements, focus the container itself
           trapElement.value?.focus()

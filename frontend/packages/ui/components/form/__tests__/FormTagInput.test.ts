@@ -4,6 +4,14 @@ import { computed as vueComputed, ref as vueRef } from 'vue'
 import FormTagInput from '../FormTagInput.vue'
 import FormField from '../FormField.vue'
 
+// Augment globalThis for Vue computed and ref functions
+declare global {
+  // eslint-disable-next-line no-var
+  var computed: typeof vueComputed | undefined
+  // eslint-disable-next-line no-var
+  var ref: typeof vueRef | undefined
+}
+
 // Restore Vue's computed and ref for component tests
 const originalComputed = globalThis.computed
 const originalRef = globalThis.ref

@@ -66,8 +66,14 @@ export const useToast = () => {
   const warning = (message: string, options?: ToastOptions) => addToast('warning', message, options)
   const info = (message: string, options?: ToastOptions) => addToast('info', message, options)
 
+  // Object-based method for easier usage
+  const show = (opts: { message: string; type: ToastType } & ToastOptions) => {
+    return addToast(opts.type, opts.message, opts)
+  }
+
   return {
     toasts: readonly(toasts),
+    addToast: show,
     success,
     error,
     warning,

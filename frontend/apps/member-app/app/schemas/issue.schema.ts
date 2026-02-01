@@ -43,7 +43,7 @@ const CONTENT_MAX_LENGTH = 2000
 export const createIssueSchema = z.object({
   type: z
     .enum(['EQUIPMENT', 'SERVICE', 'SUGGESTION', 'COMPLAINT'], {
-      errorMap: () => ({ message: '請選擇問題類型' }),
+      message: '請選擇問題類型',
     }),
   title: z
     .string()

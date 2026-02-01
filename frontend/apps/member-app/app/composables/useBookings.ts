@@ -34,6 +34,8 @@ export interface Booking {
   end_time?: string
   instructor_name?: string
   room?: string
+  // Review status
+  has_review?: boolean
 }
 
 interface BookingResult {
@@ -51,7 +53,7 @@ interface BookingsResponse {
 
 export const useBookings = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, member, accessToken } = useMemberAuth()
   const { isOnline, getCache, setCache, queueCancelBooking } = useOfflineSync()
 
@@ -111,7 +113,7 @@ export const useBookings = () => {
       if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
       if (options?.limit) params.append('limit', String(options.limit))
 
-      const response = await $fetch<BookingsResponse>(`${apiUrl}/gym/bookings?${params}`, {
+      const response = await $fetch<BookingsResponse>(`${apiUrl}/api/bookings?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -147,7 +149,7 @@ export const useBookings = () => {
     }
 
     try {
-      const response = await $fetch<BookingResult>(`${apiUrl}/gym/bookings`, {
+      const response = await $fetch<BookingResult>(`${apiUrl}/api/bookings`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: {
@@ -180,8 +182,9 @@ export const useBookings = () => {
     // Optimistically update local state
     const updateLocalState = () => {
       const index = myBookings.value.findIndex(b => b.id === bookingId)
-      if (index !== -1) {
-        myBookings.value[index].booking_status = 'CANCELLED'
+      const booking = myBookings.value[index]
+      if (index !== -1 && booking) {
+        booking.booking_status = 'CANCELLED'
       }
       upcomingBookings.value = upcomingBookings.value.filter(b => b.id !== bookingId)
     }
@@ -209,7 +212,7 @@ export const useBookings = () => {
     }
 
     try {
-      const response = await $fetch<BookingResult>(`${apiUrl}/gym/bookings/${bookingId}`, {
+      const response = await $fetch<BookingResult>(`${apiUrl}/api/bookings/${bookingId}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

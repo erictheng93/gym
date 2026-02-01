@@ -41,10 +41,10 @@ const validateForm = () => {
   })
 
   if (!result.success) {
-    result.error.errors.forEach(err => {
-      const field = err.path[0] as string
-      errors[field] = err.message
-    })
+    for (const issue of result.error.issues) {
+      const field = String(issue.path[0])
+      errors[field] = issue.message
+    }
     return false
   }
 

@@ -39,14 +39,16 @@ const range = computed(() => maxValue.value - minValue.value || 1)
 
 const latestValue = computed(() => {
   if (chartData.value.length === 0) return null
-  return chartData.value[chartData.value.length - 1].value
+  const lastItem = chartData.value[chartData.value.length - 1]
+  return lastItem?.value ?? null
 })
 
 const change = computed(() => {
   if (chartData.value.length < 2) return null
-  const first = chartData.value[0].value
-  const last = chartData.value[chartData.value.length - 1].value
-  return last - first
+  const firstItem = chartData.value[0]
+  const lastItem = chartData.value[chartData.value.length - 1]
+  if (!firstItem || !lastItem) return null
+  return lastItem.value - firstItem.value
 })
 
 const trendColor = computed(() => {
@@ -122,8 +124,8 @@ const formatDate = (dateStr: string) => {
         />
       </svg>
       <div class="chart-dates">
-        <span>{{ formatDate(chartData[0].date) }}</span>
-        <span>{{ formatDate(chartData[chartData.length - 1].date) }}</span>
+        <span>{{ chartData[0]?.date ? formatDate(chartData[0].date) : '' }}</span>
+        <span>{{ chartData.at(-1)?.date ? formatDate(chartData.at(-1)!.date) : '' }}</span>
       </div>
     </div>
 

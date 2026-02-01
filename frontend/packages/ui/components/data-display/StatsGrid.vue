@@ -74,6 +74,12 @@ const icons: Record<string, { paths: string[] }> = {
     ]
   }
 }
+
+// Helper function to get icon paths safely
+const getIconPaths = (iconName: string | undefined) => {
+  if (!iconName) return []
+  return icons[iconName]?.paths ?? []
+}
 </script>
 
 <template>
@@ -96,7 +102,7 @@ const icons: Record<string, { paths: string[] }> = {
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <path v-for="(d, i) in icons[stat.icon].paths" :key="i" :d="d" />
+          <path v-for="(d, i) in getIconPaths(stat.icon)" :key="i" :d="d" />
         </svg>
       </div>
       <div class="stat-content">
