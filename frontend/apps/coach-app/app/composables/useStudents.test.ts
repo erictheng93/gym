@@ -66,7 +66,7 @@ const mockNote = {
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -103,7 +103,7 @@ describe('useStudents', () => {
       await fetchStudents()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students',
+        'http://localhost:8056/api/coach/students',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -123,7 +123,7 @@ describe('useStudents', () => {
       await fetchStudents({ role: 'PRIMARY' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students',
+        'http://localhost:8056/api/coach/students',
         expect.objectContaining({
           query: { role: 'PRIMARY' },
         })
@@ -141,7 +141,7 @@ describe('useStudents', () => {
       await fetchStudents({ search: 'Student' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students',
+        'http://localhost:8056/api/coach/students',
         expect.objectContaining({
           query: { search: 'Student' },
         })
@@ -170,7 +170,7 @@ describe('useStudents', () => {
       const result = await getStudent('student-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students/student-1',
+        'http://localhost:8056/api/coach/students/student-1',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -199,7 +199,7 @@ describe('useStudents', () => {
       const result = await getStudentNotes('student-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students/student-1/notes',
+        'http://localhost:8056/api/coach/students/student-1/notes',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -217,7 +217,7 @@ describe('useStudents', () => {
       await getStudentNotes('student-1', { note_type: 'PROGRESS' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students/student-1/notes',
+        'http://localhost:8056/api/coach/students/student-1/notes',
         expect.objectContaining({
           query: { note_type: 'PROGRESS' },
         })
@@ -242,7 +242,7 @@ describe('useStudents', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students/student-1/notes',
+        'http://localhost:8056/api/coach/students/student-1/notes',
         expect.objectContaining({
           method: 'POST',
           body: {
@@ -284,7 +284,7 @@ describe('useStudents', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students/student-1/notes/note-1',
+        'http://localhost:8056/api/coach/students/student-1/notes/note-1',
         expect.objectContaining({
           method: 'PUT',
           body: { content: 'Updated content' },
@@ -305,7 +305,7 @@ describe('useStudents', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/students/student-1/notes/note-1',
+        'http://localhost:8056/api/coach/students/student-1/notes/note-1',
         expect.objectContaining({
           method: 'DELETE',
         })

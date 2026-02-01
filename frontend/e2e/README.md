@@ -38,8 +38,8 @@ docker-compose up -d
 ```
 
 确保以下服务正常运行：
-- Directus API: http://localhost:8055
-- PostgreSQL: localhost:5432
+- Backend API: http://localhost:8056
+- PostgreSQL: localhost:15432
 
 ### 4. 配置测试用户
 
@@ -176,7 +176,7 @@ test.setTimeout(60000) // 60秒
 
 确保：
 1. Docker 服务正在运行
-2. Directus API 可访问（http://localhost:8055）
+2. Backend API 可访问（http://localhost:8056）
 3. 数据库已正确初始化
 
 ### 测试数据不一致

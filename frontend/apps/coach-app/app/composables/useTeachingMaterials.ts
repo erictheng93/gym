@@ -37,7 +37,7 @@ interface MaterialDetailResponse {
 
 export const useTeachingMaterials = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader } = useCoachAuth()
 
   const materials = ref<TeachingMaterial[]>([])
@@ -62,7 +62,7 @@ export const useTeachingMaterials = () => {
   }): Promise<void> => {
     loading.value = true
     try {
-      const response = await $fetch<MaterialsResponse>(`${apiUrl}/gym/teaching-materials`, {
+      const response = await $fetch<MaterialsResponse>(`${apiUrl}/api/coach/teaching-materials`, {
         headers: getAuthHeader(),
         query: params,
       })
@@ -86,7 +86,7 @@ export const useTeachingMaterials = () => {
   const fetchCategories = async (): Promise<void> => {
     try {
       const response = await $fetch<CategoriesResponse>(
-        `${apiUrl}/gym/teaching-materials/categories`,
+        `${apiUrl}/api/coach/teaching-materials/categories`,
         {
           headers: getAuthHeader(),
         }
@@ -106,7 +106,7 @@ export const useTeachingMaterials = () => {
   const fetchMuscleGroups = async (): Promise<void> => {
     try {
       const response = await $fetch<{ success: boolean; data: string[] }>(
-        `${apiUrl}/gym/teaching-materials/muscle-groups`,
+        `${apiUrl}/api/coach/teaching-materials/muscle-groups`,
         {
           headers: getAuthHeader(),
         }
@@ -126,7 +126,7 @@ export const useTeachingMaterials = () => {
   const fetchEquipment = async (): Promise<void> => {
     try {
       const response = await $fetch<{ success: boolean; data: string[] }>(
-        `${apiUrl}/gym/teaching-materials/equipment`,
+        `${apiUrl}/api/coach/teaching-materials/equipment`,
         {
           headers: getAuthHeader(),
         }
@@ -153,7 +153,7 @@ export const useTeachingMaterials = () => {
   }): Promise<TeachingMaterial[]> => {
     try {
       const response = await $fetch<{ success: boolean; data: TeachingMaterial[] }>(
-        `${apiUrl}/gym/teaching-materials/search`,
+        `${apiUrl}/api/coach/teaching-materials/search`,
         {
           headers: getAuthHeader(),
           query: params,
@@ -173,7 +173,7 @@ export const useTeachingMaterials = () => {
   const getMaterial = async (id: string): Promise<MaterialDetailResponse['data'] | null> => {
     try {
       const response = await $fetch<MaterialDetailResponse>(
-        `${apiUrl}/gym/teaching-materials/${id}`,
+        `${apiUrl}/api/coach/teaching-materials/${id}`,
         {
           headers: getAuthHeader(),
         }
@@ -206,7 +206,7 @@ export const useTeachingMaterials = () => {
         success: boolean
         message: string
         data: { id: string; type: string; name: string }
-      }>(`${apiUrl}/gym/teaching-materials`, {
+      }>(`${apiUrl}/api/coach/teaching-materials`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -241,7 +241,7 @@ export const useTeachingMaterials = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/teaching-materials/${id}`, {
+      }>(`${apiUrl}/api/coach/teaching-materials/${id}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,
@@ -262,7 +262,7 @@ export const useTeachingMaterials = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/teaching-materials/${id}`, {
+      }>(`${apiUrl}/api/coach/teaching-materials/${id}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

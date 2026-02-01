@@ -154,7 +154,7 @@ export interface RevenueTarget {
 
 export const useDashboard = () => {
   const config = useRuntimeConfig()
-  const baseURL = config.public.directusUrl || 'http://localhost:8055'
+  const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
   const { handleError } = useErrorHandler()
   const { $directus } = useNuxtApp()
 
@@ -197,7 +197,7 @@ export const useDashboard = () => {
       params.append('period', period)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/gym/dashboard/kpis?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/dashboard/kpis?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const data = await response.json()
@@ -228,7 +228,7 @@ export const useDashboard = () => {
       if (branchId) params.append('branch_id', branchId)
       params.append('limit', limit.toString())
 
-      const response = await authFetch(`${baseURL}/gym/dashboard/contract-alerts?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/dashboard/contract-alerts?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const data = await response.json()
@@ -255,7 +255,7 @@ export const useDashboard = () => {
       if (year) params.append('year', year.toString())
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/gym/dashboard/revenue-targets?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/dashboard/revenue-targets?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const data = await response.json()
@@ -280,7 +280,7 @@ export const useDashboard = () => {
     targetAmount: number
   ): Promise<boolean> => {
     try {
-      const response = await authFetch(`${baseURL}/gym/dashboard/revenue-targets`, {
+      const response = await authFetch(`${baseURL}/api/admin/dashboard/revenue-targets`, {
         method: 'POST',
         body: JSON.stringify({
           branch_id: branchId,
@@ -331,7 +331,7 @@ export const useDashboard = () => {
     const startPolling = () => {
       const pollInterval = setInterval(async () => {
         try {
-          const response = await authFetch(`${baseURL}/gym/dashboard/kpis?period=today${branchId ? `&branch_id=${branchId}` : ''}`)
+          const response = await authFetch(`${baseURL}/api/admin/dashboard/kpis?period=today${branchId ? `&branch_id=${branchId}` : ''}`)
           if (response.ok) {
             const data = await response.json()
             liveMetrics.value = {
@@ -439,7 +439,7 @@ export const useDashboard = () => {
       params.append('days', days.toString())
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/gym/dashboard/export?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/dashboard/export?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
       const blob = await response.blob()

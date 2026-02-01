@@ -1,0 +1,61 @@
+# =============================================================================
+# Docker Ignore - Gym Nexus API v2
+# =============================================================================
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output (will be generated in container)
+dist/
+
+# Development
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Tests
+coverage/
+.nyc_output/
+*.test.ts
+*.spec.ts
+__tests__/
+
+# Documentation
+*.md
+!README.md
+
+# Docker files (don't need to copy into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Drizzle (migrations are run separately)
+drizzle/
+
+# NPM/PNPM
+npm-debug.log*
+pnpm-debug.log*

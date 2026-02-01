@@ -98,7 +98,7 @@ export const useClasses = () => {
         const params = new URLSearchParams()
         if (branchId) params.append('branch_id', branchId)
 
-        const response = await $fetch<ClassesResponse>(`${apiUrl}/api/classes?${params}`, {
+        const response = await $fetch<ClassesResponse>(`${apiUrl}/api/member/classes?${params}`, {
           headers: getAuthHeader(),
         })
 
@@ -126,7 +126,7 @@ export const useClasses = () => {
         const params = new URLSearchParams()
         if (branchId) params.append('branch_id', branchId)
 
-        const response = await $fetch<SchedulesResponse>(`${apiUrl}/api/classes/schedule?${params}`, {
+        const response = await $fetch<SchedulesResponse>(`${apiUrl}/api/member/classes/schedule?${params}`, {
           headers: getAuthHeader(),
         })
 
@@ -159,7 +159,7 @@ export const useClasses = () => {
       if (options?.endDate) params.append('end_date', options.endDate)
       if (options?.limit) params.append('limit', String(options.limit))
 
-      const response = await $fetch<SessionsResponse>(`${apiUrl}/api/classes/sessions?${params}`, {
+      const response = await $fetch<SessionsResponse>(`${apiUrl}/api/member/classes/sessions?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -180,7 +180,7 @@ export const useClasses = () => {
   const getSession = async (sessionId: string): Promise<ClassSession | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: ClassSession }>(
-        `${apiUrl}/api/classes/sessions/${sessionId}`,
+        `${apiUrl}/api/member/classes/sessions/${sessionId}`,
         { headers: getAuthHeader() }
       )
       return response.success ? response.data : null

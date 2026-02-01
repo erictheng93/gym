@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Member Analytics Page
- * 會員分析頁面 - 使用新的 /gym/analytics/* API
+ * 會員分析頁面 - 使用新的 /api/admin/analytics/* API
  */
 
 import { Chart, registerables } from 'chart.js'
@@ -63,7 +63,7 @@ const getDays = () => {
 }
 
 const apiCall = async (endpoint: string) => {
-  const baseURL = config.public.directusUrl || 'http://localhost:8055'
+  const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
   const token = await $directus.getToken()
 
   const response = await fetch(`${baseURL}${endpoint}`, {
@@ -87,7 +87,7 @@ const loadAnalytics = async () => {
 
   try {
     // Fetch member demographics (status, gender, age distribution)
-    const demographicsResponse = await apiCall(`/gym/analytics/member-demographics?days=${days}`)
+    const demographicsResponse = await apiCall(`/api/admin/analytics/member-demographics?days=${days}`)
     if (demographicsResponse.success) {
       const data = demographicsResponse.data
 
@@ -109,7 +109,7 @@ const loadAnalytics = async () => {
     }
 
     // Fetch contract analytics
-    const contractResponse = await apiCall(`/gym/analytics/contract-analytics?days=${days}`)
+    const contractResponse = await apiCall(`/api/admin/analytics/contract-analytics?days=${days}`)
     if (contractResponse.success) {
       const data = contractResponse.data
 
@@ -131,7 +131,7 @@ const loadAnalytics = async () => {
     }
 
     // Fetch revenue breakdown for trend
-    const revenueResponse = await apiCall(`/gym/analytics/revenue-breakdown?days=${days}`)
+    const revenueResponse = await apiCall(`/api/admin/analytics/revenue-breakdown?days=${days}`)
     if (revenueResponse.success) {
       const data = revenueResponse.data
 
@@ -143,7 +143,7 @@ const loadAnalytics = async () => {
     }
 
     // Fetch member growth from reports
-    const growthResponse = await apiCall(`/gym/reports/member-growth?days=${days}`)
+    const growthResponse = await apiCall(`/api/admin/reports/member-growth?days=${days}`)
     if (growthResponse.success) {
       memberGrowthData.value = growthResponse.data.growth || []
       summary.value.newMembers = growthResponse.data.newMembers || 0
@@ -322,11 +322,11 @@ const renderCharts = () => {
 
 const exportData = async (format: 'csv' | 'pdf' = 'csv') => {
   try {
-    const baseURL = config.public.directusUrl || 'http://localhost:8055'
+    const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
     const token = await $directus.getToken()
 
     const response = await fetch(
-      `${baseURL}/gym/dashboard/export?type=member-analytics&format=${format}&days=${getDays()}`,
+      `${baseURL}/api/admin/dashboard/export?type=member-analytics&format=${format}&days=${getDays()}`,
       {
         headers: {
           'Authorization': `Bearer ${token}`

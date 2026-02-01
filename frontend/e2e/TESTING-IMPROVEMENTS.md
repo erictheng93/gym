@@ -35,8 +35,8 @@
 # 應用 URL
 BASE_URL=http://localhost:3001
 
-# Directus API URL
-DIRECTUS_URL=http://localhost:8055
+# Backend API URL
+API_BASE_URL=http://localhost:8056
 
 # 測試用戶憑證
 TEST_ADMIN_EMAIL=eric@dacit.net

@@ -226,7 +226,7 @@ definePageMeta({
 
 const { addToast } = useToast()
 const runtimeConfig = useRuntimeConfig()
-const apiUrl = runtimeConfig.public.directusUrl
+const apiUrl = runtimeConfig.public.apiBaseUrl
 
 // State
 const isSystemAdmin = ref(false)
@@ -277,7 +277,7 @@ async function loadBranches() {
     isLoading.value = true
     const token = useCookie('directus_session_token')
 
-    const response = await $fetch<any>(`${apiUrl}/gym/admin/notification-config`, {
+    const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config`, {
       headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
@@ -306,7 +306,7 @@ async function loadBranchConfig() {
     isLoading.value = true
     const token = useCookie('directus_session_token')
 
-    const response = await $fetch<any>(`${apiUrl}/gym/admin/notification-config?branch_id=${selectedBranchId.value}`, {
+    const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config?branch_id=${selectedBranchId.value}`, {
       headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
@@ -335,7 +335,7 @@ async function saveLineConfig() {
     isSaving.value = true
     const token = useCookie('directus_session_token')
 
-    await $fetch(`${apiUrl}/gym/admin/notification-config`, {
+    await $fetch(`${apiUrl}/api/admin/notification-config`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token.value}`,
@@ -369,7 +369,7 @@ async function saveSmsConfig() {
     isSaving.value = true
     const token = useCookie('directus_session_token')
 
-    await $fetch(`${apiUrl}/gym/admin/notification-config`, {
+    await $fetch(`${apiUrl}/api/admin/notification-config`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token.value}`,
@@ -400,7 +400,7 @@ async function testLineConfig() {
     lineTestResult.value = null
     const token = useCookie('directus_session_token')
 
-    const response = await $fetch<any>(`${apiUrl}/gym/admin/notification-config/test`, {
+    const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config/test`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token.value}`,
@@ -427,7 +427,7 @@ async function testSmsConfig() {
     smsTestResult.value = null
     const token = useCookie('directus_session_token')
 
-    const response = await $fetch<any>(`${apiUrl}/gym/admin/notification-config/test`, {
+    const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config/test`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token.value}`,
@@ -452,7 +452,7 @@ async function toggleActive() {
   try {
     const token = useCookie('directus_session_token')
 
-    await $fetch(`${apiUrl}/gym/admin/notification-config`, {
+    await $fetch(`${apiUrl}/api/admin/notification-config`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token.value}`,

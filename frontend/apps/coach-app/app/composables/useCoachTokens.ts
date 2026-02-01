@@ -9,7 +9,7 @@ import type { TokenState } from '../types/coach'
 
 export const useCoachTokens = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
 
   // Token management - secure only in production (HTTPS)
   const isSecure = import.meta.env.PROD
@@ -64,7 +64,7 @@ export const useCoachTokens = () => {
         success: boolean
         access_token: string
         refresh_token: string
-      }>(`${apiUrl}/gym/coach/auth/refresh`, {
+      }>(`${apiUrl}/api/coach/auth/refresh`, {
         method: 'POST',
         body: {
           refresh_token: refreshToken.value,

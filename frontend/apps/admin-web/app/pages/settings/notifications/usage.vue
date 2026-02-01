@@ -262,7 +262,7 @@ definePageMeta({
 
 const { addToast } = useToast()
 const config = useRuntimeConfig()
-const apiUrl = config.public.directusUrl
+const apiUrl = config.public.apiBaseUrl
 
 // State
 const isSystemAdmin = ref(false)
@@ -357,7 +357,7 @@ async function loadUsage() {
       params.set('branch_id', filters.value.branchId)
     }
 
-    const response = await $fetch<any>(`${apiUrl}/gym/admin/notification-usage?${params}`, {
+    const response = await $fetch<any>(`${apiUrl}/api/admin/notification-usage?${params}`, {
       headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
@@ -389,7 +389,7 @@ async function exportCsv() {
     }
 
     // Fetch CSV and download
-    const response = await fetch(`${apiUrl}/gym/admin/notification-usage/export?${params}`, {
+    const response = await fetch(`${apiUrl}/api/admin/notification-usage/export?${params}`, {
       headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })

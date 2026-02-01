@@ -1146,3 +1146,483 @@ export const issueReports = pgTable('issue_reports', {
 // =============================================================================
 
 export const memberCheckIns = checkIns;
+
+// =============================================================================
+// COACH APP TABLES
+// =============================================================================
+
+export const COACH_ROLE = ['PRIMARY', 'SECONDARY'] as const;
+export const NOTE_TYPE = ['PROGRESS', 'INJURY', 'PREFERENCE', 'GOAL', 'OTHER'] as const;
+export const MATERIAL_TYPE = ['EXERCISE', 'VIDEO', 'DOCUMENT', 'TEMPLATE'] as const;
+
+// Coach-Member Assignments (which members are assigned to which coach)
+export const coachMemberAssignments = pgTable('coach_member_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  coachId: uuid('coach_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 20 }).notNull().default('PRIMARY').$type<typeof COACH_ROLE[number]>(),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }).defaultNow(),
+  unassignedAt: timestamp('unassigned_at', { withTimezone: true }),
+  notes: text('notes'),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_coach_member_assignments_coach').on(table.coachId),
+  index('idx_coach_member_assignments_member').on(table.memberId),
+  uniqueIndex('uq_coach_member_assignment').on(table.coachId, table.memberId),
+]);
+
+// Coach Notes about Students
+export const coachNotes = pgTable('coach_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  coachId: uuid('coach_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
+  noteType: varchar('note_type', { length: 20 }).notNull().$type<typeof NOTE_TYPE[number]>(),
+  content: text('content').notNull(),
+  isPrivate: boolean('is_private').default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_coach_notes_coach').on(table.coachId),
+  index('idx_coach_notes_member').on(table.memberId),
+  index('idx_coach_notes_type').on(table.noteType),
+]);
+
+// Lesson Plans
+export const lessonPlans = pgTable('lesson_plans', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  coachId: uuid('coach_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 255 }).notNull(),
+  objectives: jsonb('objectives').default([]),
+  warmupExercises: jsonb('warmup_exercises').default([]),
+  mainExercises: jsonb('main_exercises').default([]),
+  cooldownExercises: jsonb('cooldown_exercises').default([]),
+  notes: text('notes'),
+  isTemplate: boolean('is_template').default(false),
+  templateCategory: varchar('template_category', { length: 50 }),
+  difficulty: varchar('difficulty', { length: 20 }),
+  durationMinutes: integer('duration_minutes'),
+  sessionId: uuid('session_id').references(() => classSessions.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_lesson_plans_coach').on(table.coachId),
+  index('idx_lesson_plans_session').on(table.sessionId),
+  index('idx_lesson_plans_template').on(table.isTemplate, table.templateCategory),
+]);
+
+// Teaching Materials
+export const teachingMaterials = pgTable('teaching_materials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: varchar('type', { length: 20 }).notNull().$type<typeof MATERIAL_TYPE[number]>(),
+  category: varchar('category', { length: 50 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  fileId: uuid('file_id').references(() => files.id, { onDelete: 'set null' }),
+  videoUrl: varchar('video_url', { length: 500 }),
+  thumbnailUrl: varchar('thumbnail_url', { length: 500 }),
+  muscleGroups: jsonb('muscle_groups').default([]),
+  equipment: jsonb('equipment').default([]),
+  difficulty: varchar('difficulty', { length: 20 }),
+  instructions: jsonb('instructions').default([]),
+  tips: jsonb('tips').default([]),
+  commonMistakes: jsonb('common_mistakes').default([]),
+  isActive: boolean('is_active').default(true),
+  createdBy: uuid('created_by').references(() => employees.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_teaching_materials_type').on(table.type),
+  index('idx_teaching_materials_category').on(table.category),
+  index('idx_teaching_materials_tenant').on(table.tenantId),
+]);
+
+// Class Records (detailed session attendance/notes by coach)
+export const classRecords = pgTable('class_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  bookingId: uuid('booking_id').notNull().references(() => bookings.id, { onDelete: 'cascade' }),
+  coachId: uuid('coach_id').notNull().references(() => employees.id),
+  classDate: date('class_date').notNull(),
+  warmupContent: text('warmup_content'),
+  mainContent: jsonb('main_content'), // exercises performed
+  cooldownContent: text('cooldown_content'),
+  memberCondition: text('member_condition'),
+  coachNotes: text('coach_notes'),
+  nextPlan: text('next_plan'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_class_records_booking').on(table.bookingId),
+  index('idx_class_records_coach').on(table.coachId),
+  uniqueIndex('uq_class_record_booking').on(table.bookingId),
+]);
+
+// =============================================================================
+// COACH APP RELATIONS
+// =============================================================================
+
+export const coachMemberAssignmentsRelations = relations(coachMemberAssignments, ({ one }) => ({
+  coach: one(employees, {
+    fields: [coachMemberAssignments.coachId],
+    references: [employees.id],
+  }),
+  member: one(members, {
+    fields: [coachMemberAssignments.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const coachNotesRelations = relations(coachNotes, ({ one }) => ({
+  coach: one(employees, {
+    fields: [coachNotes.coachId],
+    references: [employees.id],
+  }),
+  member: one(members, {
+    fields: [coachNotes.memberId],
+    references: [members.id],
+  }),
+}));
+
+export const lessonPlansRelations = relations(lessonPlans, ({ one }) => ({
+  coach: one(employees, {
+    fields: [lessonPlans.coachId],
+    references: [employees.id],
+  }),
+  session: one(classSessions, {
+    fields: [lessonPlans.sessionId],
+    references: [classSessions.id],
+  }),
+}));
+
+export const teachingMaterialsRelations = relations(teachingMaterials, ({ one }) => ({
+  file: one(files, {
+    fields: [teachingMaterials.fileId],
+    references: [files.id],
+  }),
+  creator: one(employees, {
+    fields: [teachingMaterials.createdBy],
+    references: [employees.id],
+  }),
+}));
+
+export const classRecordsRelations = relations(classRecords, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [classRecords.bookingId],
+    references: [bookings.id],
+  }),
+  coach: one(employees, {
+    fields: [classRecords.coachId],
+    references: [employees.id],
+  }),
+}));
+
+// =============================================================================
+// NOTIFICATION SYSTEM TABLES
+// =============================================================================
+
+// Branch-specific notification configuration (multi-tenant support)
+export const branchNotificationConfig = pgTable('branch_notification_config', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
+  // LINE Configuration
+  lineEnabled: boolean('line_enabled').default(false),
+  lineChannelAccessToken: varchar('line_channel_access_token', { length: 500 }),
+  lineChannelSecret: varchar('line_channel_secret', { length: 255 }),
+  // SMS Configuration (Mitake)
+  smsEnabled: boolean('sms_enabled').default(false),
+  mitakeUsername: varchar('mitake_username', { length: 100 }),
+  mitakePassword: varchar('mitake_password', { length: 100 }),
+  mitakeApiUrl: varchar('mitake_api_url', { length: 255 }),
+  smsCostPerMessage: decimal('sms_cost_per_message', { precision: 6, scale: 2 }).default('0.50'),
+  // Email Configuration (SMTP)
+  emailEnabled: boolean('email_enabled').default(false),
+  smtpHost: varchar('smtp_host', { length: 255 }),
+  smtpPort: integer('smtp_port'),
+  smtpUser: varchar('smtp_user', { length: 255 }),
+  smtpPassword: varchar('smtp_password', { length: 255 }),
+  smtpFrom: varchar('smtp_from', { length: 255 }),
+  // Push Configuration
+  pushEnabled: boolean('push_enabled').default(false),
+  vapidPublicKey: text('vapid_public_key'),
+  vapidPrivateKey: text('vapid_private_key'),
+  // Timestamps
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  uniqueIndex('uq_branch_notification_config_branch').on(table.branchId),
+  index('idx_branch_notification_config_tenant').on(table.tenantId),
+]);
+
+export const branchNotificationConfigRelations = relations(branchNotificationConfig, ({ one }) => ({
+  branch: one(branches, {
+    fields: [branchNotificationConfig.branchId],
+    references: [branches.id],
+  }),
+}));
+
+// LINE Message Logs
+export const LINE_DELIVERY_STATUS = ['pending', 'sent', 'delivered', 'failed'] as const;
+
+export const lineMessageLogs = pgTable('line_message_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').references(() => members.id, { onDelete: 'set null' }),
+  branchId: uuid('branch_id').references(() => branches.id, { onDelete: 'set null' }),
+  lineUserId: varchar('line_user_id', { length: 255 }).notNull(),
+  messageType: varchar('message_type', { length: 50 }).notNull(), // text, flex, etc.
+  notificationType: varchar('notification_type', { length: 50 }).notNull(), // booking_confirmation, etc.
+  messagePayload: jsonb('message_payload'),
+  altText: varchar('alt_text', { length: 400 }),
+  requestId: varchar('request_id', { length: 255 }),
+  deliveryStatus: varchar('delivery_status', { length: 20 }).default('pending').$type<typeof LINE_DELIVERY_STATUS[number]>(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  failedAt: timestamp('failed_at', { withTimezone: true }),
+  errorMessage: text('error_message'),
+  referenceType: varchar('reference_type', { length: 50 }), // booking, contract, payment
+  referenceId: uuid('reference_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_line_message_logs_member').on(table.memberId),
+  index('idx_line_message_logs_branch').on(table.branchId),
+  index('idx_line_message_logs_line_user').on(table.lineUserId),
+  index('idx_line_message_logs_notification_type').on(table.notificationType),
+  index('idx_line_message_logs_sent_at').on(table.sentAt),
+  index('idx_line_message_logs_reference').on(table.referenceType, table.referenceId),
+]);
+
+export const lineMessageLogsRelations = relations(lineMessageLogs, ({ one }) => ({
+  member: one(members, {
+    fields: [lineMessageLogs.memberId],
+    references: [members.id],
+  }),
+  branch: one(branches, {
+    fields: [lineMessageLogs.branchId],
+    references: [branches.id],
+  }),
+}));
+
+// SMS Message Logs
+export const SMS_DELIVERY_STATUS = ['pending', 'submitted', 'delivered', 'failed'] as const;
+
+export const smsLogs = pgTable('sms_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').references(() => members.id, { onDelete: 'set null' }),
+  branchId: uuid('branch_id').references(() => branches.id, { onDelete: 'set null' }),
+  phoneNumber: varchar('phone_number', { length: 20 }).notNull(),
+  notificationType: varchar('notification_type', { length: 50 }).notNull(),
+  messageContent: text('message_content').notNull(),
+  characterCount: integer('character_count'),
+  segmentCount: integer('segment_count'),
+  mitakeMsgid: varchar('mitake_msgid', { length: 100 }),
+  mitakeStatuscode: varchar('mitake_statuscode', { length: 10 }),
+  deliveryStatus: varchar('delivery_status', { length: 20 }).default('pending').$type<typeof SMS_DELIVERY_STATUS[number]>(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  failedAt: timestamp('failed_at', { withTimezone: true }),
+  errorMessage: text('error_message'),
+  totalCost: decimal('total_cost', { precision: 10, scale: 2 }),
+  referenceType: varchar('reference_type', { length: 50 }),
+  referenceId: uuid('reference_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_sms_logs_member').on(table.memberId),
+  index('idx_sms_logs_branch').on(table.branchId),
+  index('idx_sms_logs_phone').on(table.phoneNumber),
+  index('idx_sms_logs_notification_type').on(table.notificationType),
+  index('idx_sms_logs_sent_at').on(table.sentAt),
+  index('idx_sms_logs_reference').on(table.referenceType, table.referenceId),
+]);
+
+export const smsLogsRelations = relations(smsLogs, ({ one }) => ({
+  member: one(members, {
+    fields: [smsLogs.memberId],
+    references: [members.id],
+  }),
+  branch: one(branches, {
+    fields: [smsLogs.branchId],
+    references: [branches.id],
+  }),
+}));
+
+// =============================================================================
+// HR MODULE - PAYROLL TABLES
+// =============================================================================
+
+export const SALARY_STATUS = ['PENDING', 'APPROVED', 'PAID'] as const;
+
+export const salaryRecords = pgTable('salary_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  employeeId: uuid('employee_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  branchId: uuid('branch_id').notNull().references(() => branches.id),
+  period: varchar('period', { length: 7 }).notNull(), // YYYY-MM format
+  baseSalary: decimal('base_salary', { precision: 12, scale: 2 }).notNull(),
+  overtimeHours: decimal('overtime_hours', { precision: 6, scale: 2 }).default('0'),
+  overtimePay: decimal('overtime_pay', { precision: 12, scale: 2 }).default('0'),
+  commission: decimal('commission', { precision: 12, scale: 2 }).default('0'),
+  bonus: decimal('bonus', { precision: 12, scale: 2 }).default('0'),
+  deductions: decimal('deductions', { precision: 12, scale: 2 }).default('0'),
+  netSalary: decimal('net_salary', { precision: 12, scale: 2 }).notNull(),
+  hourlyRate: decimal('hourly_rate', { precision: 8, scale: 2 }),
+  workDays: integer('work_days').default(0),
+  leaveDays: jsonb('leave_days'), // { annual: 2, sick: 1, ... }
+  notes: text('notes'),
+  status: varchar('status', { length: 20 }).default('PENDING').$type<typeof SALARY_STATUS[number]>(),
+  approvedBy: uuid('approved_by').references(() => employees.id),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_salary_records_employee').on(table.employeeId),
+  index('idx_salary_records_branch').on(table.branchId),
+  index('idx_salary_records_period').on(table.period),
+  index('idx_salary_records_status').on(table.status),
+  uniqueIndex('uq_salary_records_employee_period').on(table.employeeId, table.period),
+]);
+
+export const salaryRecordsRelations = relations(salaryRecords, ({ one }) => ({
+  employee: one(employees, {
+    fields: [salaryRecords.employeeId],
+    references: [employees.id],
+  }),
+  branch: one(branches, {
+    fields: [salaryRecords.branchId],
+    references: [branches.id],
+  }),
+  approver: one(employees, {
+    fields: [salaryRecords.approvedBy],
+    references: [employees.id],
+  }),
+}));
+
+// Promotion/Transfer Records
+export const PROMOTION_TYPE = ['PROMOTION', 'TRANSFER', 'DEMOTION'] as const;
+
+export const promotionRecords = pgTable('promotion_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  employeeId: uuid('employee_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  type: varchar('type', { length: 20 }).notNull().$type<typeof PROMOTION_TYPE[number]>(),
+  fromJobTitleId: uuid('from_job_title_id').references(() => jobTitles.id),
+  toJobTitleId: uuid('to_job_title_id').references(() => jobTitles.id),
+  fromBranchId: uuid('from_branch_id').references(() => branches.id),
+  toBranchId: uuid('to_branch_id').references(() => branches.id),
+  effectiveDate: date('effective_date').notNull(),
+  newBaseSalary: decimal('new_base_salary', { precision: 12, scale: 2 }),
+  reason: text('reason'),
+  createdBy: uuid('created_by').references(() => employees.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_promotion_records_employee').on(table.employeeId),
+  index('idx_promotion_records_type').on(table.type),
+  index('idx_promotion_records_effective_date').on(table.effectiveDate),
+]);
+
+export const promotionRecordsRelations = relations(promotionRecords, ({ one }) => ({
+  employee: one(employees, {
+    fields: [promotionRecords.employeeId],
+    references: [employees.id],
+  }),
+  fromJobTitle: one(jobTitles, {
+    fields: [promotionRecords.fromJobTitleId],
+    references: [jobTitles.id],
+  }),
+  toJobTitle: one(jobTitles, {
+    fields: [promotionRecords.toJobTitleId],
+    references: [jobTitles.id],
+  }),
+}));
+
+// =============================================================================
+// HR MODULE - PERFORMANCE REVIEW TABLES
+// =============================================================================
+
+export const REVIEW_STATUS = ['DRAFT', 'SUBMITTED', 'REVIEWED', 'APPROVED'] as const;
+
+export const performanceReviews = pgTable('performance_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  employeeId: uuid('employee_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  reviewerId: uuid('reviewer_id').references(() => employees.id),
+  reviewPeriod: varchar('review_period', { length: 20 }).notNull(), // e.g., "2024-Q1"
+  reviewType: varchar('review_type', { length: 20 }).default('MONTHLY'), // MONTHLY, QUARTERLY, ANNUAL
+  kpiData: jsonb('kpi_data').default([]), // [{ id, name, weight, target, actual, achievement, unit }]
+  scores: jsonb('scores').default({}), // { category1: 4, category2: 5, ... }
+  overallScore: decimal('overall_score', { precision: 4, scale: 2 }),
+  strengths: text('strengths'),
+  improvements: text('improvements'),
+  improvementPlan: text('improvement_plan'),
+  goals: jsonb('goals'), // [{ goal, deadline, status }]
+  selfAssessment: text('self_assessment'),
+  reviewerComments: text('reviewer_comments'),
+  status: varchar('status', { length: 20 }).default('DRAFT').$type<typeof REVIEW_STATUS[number]>(),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  approvedBy: uuid('approved_by').references(() => employees.id),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_performance_reviews_employee').on(table.employeeId),
+  index('idx_performance_reviews_reviewer').on(table.reviewerId),
+  index('idx_performance_reviews_period').on(table.reviewPeriod),
+  index('idx_performance_reviews_status').on(table.status),
+  index('idx_performance_reviews_type').on(table.reviewType),
+]);
+
+export const performanceReviewsRelations = relations(performanceReviews, ({ one }) => ({
+  employee: one(employees, {
+    fields: [performanceReviews.employeeId],
+    references: [employees.id],
+  }),
+  reviewer: one(employees, {
+    fields: [performanceReviews.reviewerId],
+    references: [employees.id],
+  }),
+  approver: one(employees, {
+    fields: [performanceReviews.approvedBy],
+    references: [employees.id],
+  }),
+}));
+
+// =============================================================================
+// KPI TEMPLATES
+// =============================================================================
+
+export const REVIEW_TYPE = ['MONTHLY', 'QUARTERLY', 'ANNUAL'] as const;
+
+export const kpiTemplates = pgTable('kpi_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  jobTitleId: uuid('job_title_id').references(() => jobTitles.id),
+  reviewType: varchar('review_type', { length: 20 }).notNull().$type<typeof REVIEW_TYPE[number]>(),
+  kpis: jsonb('kpis').default([]).notNull(), // [{ id, name, weight, target, unit }]
+  isDefault: boolean('is_default').default(false),
+  isActive: boolean('is_active').default(true),
+  createdBy: uuid('created_by').references(() => employees.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_kpi_templates_job_title').on(table.jobTitleId),
+  index('idx_kpi_templates_review_type').on(table.reviewType),
+  index('idx_kpi_templates_active').on(table.isActive),
+]);
+
+export const kpiTemplatesRelations = relations(kpiTemplates, ({ one }) => ({
+  jobTitle: one(jobTitles, {
+    fields: [kpiTemplates.jobTitleId],
+    references: [jobTitles.id],
+  }),
+  createdByEmployee: one(employees, {
+    fields: [kpiTemplates.createdBy],
+    references: [employees.id],
+  }),
+}));

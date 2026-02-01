@@ -76,7 +76,7 @@ export const useLeads = () => {
   const isLoading = useState('leads_loading', () => false)
   const totalCount = useState('leads_total', () => 0)
 
-  const apiBase = `${config.public.apiUrl}/gym`
+  const apiBase = config.public.apiUrl
 
   /**
    * Fetch leads with filters

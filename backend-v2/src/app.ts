@@ -50,15 +50,34 @@ import memberGoalsRoutes from './routes/member-goals.js';
 import memberMeasurementsRoutes from './routes/member-measurements.js';
 import memberIssuesRoutes from './routes/member-issues.js';
 
+// Coach-App routes
+import coachAuthRoutes from './routes/coach-auth.js';
+import coachProfileRoutes from './routes/coach-profile.js';
+import coachClassesRoutes from './routes/coach-classes.js';
+import coachScheduleRoutes from './routes/coach-schedule.js';
+import coachStudentsRoutes from './routes/coach-students.js';
+import coachLessonPlansRoutes from './routes/coach-lesson-plans.js';
+import coachTeachingMaterialsRoutes from './routes/coach-teaching-materials.js';
+
+// Payment webhooks
+import paymentWebhooksRoutes from './routes/payment-webhooks.js';
+
+// PDF generation
+import pdfRoutes from './routes/pdf.js';
+
+// HR routes
+import hrPayrollRoutes from './routes/hr-payroll.js';
+import hrPerformanceRoutes from './routes/hr-performance.js';
+
 type Variables = AuthVariables & TenantVariables;
 
 const app = new Hono<{ Variables: Variables }>();
 
 app.use('*', cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token', 'X-Coach-Token'],
 }));
 
 app.use('*', secureHeaders());
@@ -86,6 +105,7 @@ app.route('/api/check-ins', checkInsRoutes);
 
 // Payment routes
 app.route('/api/payments', paymentsRoutes);
+app.route('/api/payments/webhook', paymentWebhooksRoutes);
 
 // Marketing routes
 app.route('/api/leads', leadsRoutes);
@@ -97,10 +117,15 @@ app.route('/api/notifications', notificationsRoutes);
 app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/reports', reportsRoutes);
 app.route('/api/files', filesRoutes);
+app.route('/api/pdf', pdfRoutes);
 app.route('/health', healthRoutes);
 
 // Admin routes
 app.route('/api/users', usersRoutes);
+
+// HR routes
+app.route('/api/payroll', hrPayrollRoutes);
+app.route('/api/performance', hrPerformanceRoutes);
 
 // Member-App routes (authenticated via X-Member-Token)
 app.route('/api/member/otp', memberOtpRoutes);
@@ -115,6 +140,15 @@ app.route('/api/member/workouts', memberWorkoutsRoutes);
 app.route('/api/member/goals', memberGoalsRoutes);
 app.route('/api/member/measurements', memberMeasurementsRoutes);
 app.route('/api/member/issues', memberIssuesRoutes);
+
+// Coach-App routes (authenticated via X-Coach-Token)
+app.route('/api/coach/auth', coachAuthRoutes);
+app.route('/api/coach/me', coachProfileRoutes);
+app.route('/api/coach/classes', coachClassesRoutes);
+app.route('/api/coach/schedule', coachScheduleRoutes);
+app.route('/api/coach/students', coachStudentsRoutes);
+app.route('/api/coach/lesson-plans', coachLessonPlansRoutes);
+app.route('/api/coach/teaching-materials', coachTeachingMaterialsRoutes);
 
 app.get('/', (c) => {
   return c.json({

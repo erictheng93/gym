@@ -137,10 +137,10 @@ cd backend
 node test-tenant-management.js
 ```
 
-#### 方法 B: 使用 Directus 管理后台
-1. 访问 http://localhost:8055/admin
-2. 登录 Directus
-3. 直接在数据库中查看/修改租户数据
+#### 方法 B: 使用 Admin Web 管理后台
+1. 访问 http://localhost:3001/admin
+2. 登录 Admin Web
+3. 直接在管理界面中查看/修改租户数据
 
 #### 方法 C: 创建测试页面
 创建一个不需要登录的测试页面来验证 API 功能。

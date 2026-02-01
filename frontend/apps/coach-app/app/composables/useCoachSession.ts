@@ -13,7 +13,7 @@ interface CoachProfileResponse {
 
 export const useCoachSession = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader, refreshAccessToken, accessToken } = useCoachTokens()
 
   const coach = useState<Coach | null>('current_coach', () => null)
@@ -53,7 +53,7 @@ export const useCoachSession = () => {
     }
 
     try {
-      const response = await $fetch<CoachProfileResponse>(`${apiUrl}/gym/coach/me`, {
+      const response = await $fetch<CoachProfileResponse>(`${apiUrl}/api/coach/me`, {
         headers: {
           'X-Coach-Token': authToken,
         },

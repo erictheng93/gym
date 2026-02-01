@@ -50,6 +50,8 @@ export default defineNuxtConfig({
     public: {
       // Backend API URL (migrated from Directus to backend-v2)
       apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8056',
+      // API URL with /api prefix for composables (replaces old /gym prefix)
+      apiUrl: (process.env.API_BASE_URL || 'http://localhost:8056') + '/api',
       // Sentry error tracking configuration
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnvironment: process.env.NODE_ENV || 'development',

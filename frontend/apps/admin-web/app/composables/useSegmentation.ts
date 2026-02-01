@@ -60,7 +60,7 @@ export const useSegmentation = () => {
   const isLoading = useState('segmentation_loading', () => false)
   const totalCount = useState('segmentation_total', () => 0)
 
-  const apiBase = `${config.public.apiUrl}/gym`
+  const apiBase = config.public.apiUrl
 
   /**
    * Fetch RFM scores

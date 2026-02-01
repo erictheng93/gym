@@ -64,7 +64,7 @@ const loadData = async () => {
 const loadHeatmapData = async (branchId?: string) => {
   try {
     const config = useRuntimeConfig()
-    const baseURL = config.public.directusUrl || 'http://localhost:8055'
+    const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
     const { $directus } = useNuxtApp()
     const token = await $directus.getToken()
 
@@ -72,7 +72,7 @@ const loadHeatmapData = async (branchId?: string) => {
     params.append('weeks', '4')
     if (branchId) params.append('branch_id', branchId)
 
-    const response = await fetch(`${baseURL}/gym/analytics/checkin-heatmap?${params}`, {
+    const response = await fetch(`${baseURL}/api/admin/analytics/checkin-heatmap?${params}`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -119,7 +119,7 @@ const showExportMenu = ref(false)
 const exportData = async (type: 'kpis' | 'revenue' | 'contracts' | 'checkins', format: 'csv' | 'json' = 'csv') => {
   try {
     const config = useRuntimeConfig()
-    const baseURL = config.public.directusUrl || 'http://localhost:8055'
+    const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
     const { $directus } = useNuxtApp()
     const token = await $directus.getToken()
 
@@ -131,7 +131,7 @@ const exportData = async (type: 'kpis' | 'revenue' | 'contracts' | 'checkins', f
       params.append('branch_id', selectedBranch.value)
     }
 
-    const response = await fetch(`${baseURL}/gym/dashboard/export?${params}`, {
+    const response = await fetch(`${baseURL}/api/admin/dashboard/export?${params}`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

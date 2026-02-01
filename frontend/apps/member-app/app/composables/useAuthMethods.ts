@@ -270,7 +270,7 @@ export const useAuthMethods = () => {
         method: 'POST',
         body: {
           token,
-          newPassword,
+          password: newPassword,
         },
       })
 

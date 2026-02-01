@@ -117,12 +117,12 @@ const branchSelect = findSelect(page, { name: 'branch_id' })
 
 ```typescript
 // ❌ 舊代碼
-const DIRECTUS_URL = process.env.DIRECTUS_URL || 'http://localhost:8055'
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8056'
 await element.waitFor({ timeout: 5000 })
 
 // ✅ 新代碼
 import { TestEnv } from './config/test-env'
-const DIRECTUS_URL = TestEnv.directusUrl
+const API_BASE_URL = TestEnv.apiBaseUrl
 await element.waitFor({ timeout: TestEnv.timeouts.default })
 ```
 

@@ -1,0 +1,199 @@
+# =============================================================================
+# Gym Nexus API v2 - Docker Compose
+# =============================================================================
+# Usage:
+#   Development: docker compose up -d
+#   Production:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # ===========================================================================
+  # PostgreSQL + PostGIS Database
+  # ===========================================================================
+  database:
+    image: postgis/postgis:17-3.4
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-15432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: "${DB_USER:-gym_nexus}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-gym_nexus_dev}"
+      POSTGRES_DB: "${DB_DATABASE:-gym_nexus}"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+      LANG: "en_US.UTF-8"
+      LC_ALL: "en_US.UTF-8"
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=500"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=2GB"
+      - "-c"
+      - "work_mem=32MB"
+      - "-c"
+      - "maintenance_work_mem=256MB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "idle_in_transaction_session_timeout=30000"
+      - "-c"
+      - "statement_timeout=120000"
+      - "-c"
+      - "lock_timeout=10000"
+      - "-c"
+      - "log_min_duration_statement=1000"
+      - "-c"
+      - "log_checkpoints=on"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gym_nexus} -d ${DB_DATABASE:-gym_nexus}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ===========================================================================
+  # Redis Cache (optional, for rate limiting and caching)
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # ===========================================================================
+  # Gym Nexus API v2 (Hono.js)
+  # ===========================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gym-api:2.0
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8056}:8056"
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: "${NODE_ENV:-production}"
+      PORT: 8056
+
+      # Database
+      DATABASE_URL: "postgresql://${DB_USER:-gym_nexus}:${DB_PASSWORD:-gym_nexus_dev}@database:5432/${DB_DATABASE:-gym_nexus}"
+
+      # Redis
+      REDIS_URL: "redis://redis:6379"
+
+      # Auth
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      SESSION_SECRET: "${SESSION_SECRET:-change-me-in-production}"
+      MEMBER_JWT_SECRET: "${MEMBER_JWT_SECRET:-change-me-in-production}"
+      COACH_JWT_SECRET: "${COACH_JWT_SECRET:-change-me-in-production}"
+
+      # CORS
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002}"
+
+      # Email (SMTP)
+      EMAIL_TRANSPORT: "${EMAIL_TRANSPORT:-smtp}"
+      EMAIL_FROM: "${EMAIL_FROM:-Gym Nexus <noreply@gym-nexus.com>}"
+      EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-}"
+      EMAIL_SMTP_PORT: "${EMAIL_SMTP_PORT:-587}"
+      EMAIL_SMTP_USER: "${EMAIL_SMTP_USER:-}"
+      EMAIL_SMTP_PASSWORD: "${EMAIL_SMTP_PASSWORD:-}"
+      EMAIL_SMTP_SECURE: "${EMAIL_SMTP_SECURE:-false}"
+
+      # Push Notifications
+      VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
+      VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
+      VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:admin@gym-nexus.com}"
+
+      # LINE Messaging
+      LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
+      LINE_MESSAGING_CHANNEL_SECRET: "${LINE_MESSAGING_CHANNEL_SECRET:-}"
+
+      # SMS (Mitake)
+      MITAKE_USERNAME: "${MITAKE_USERNAME:-}"
+      MITAKE_PASSWORD: "${MITAKE_PASSWORD:-}"
+      MITAKE_API_URL: "${MITAKE_API_URL:-https://smsapi.mitake.com.tw/api/mtk/SmSend}"
+
+      # Payment Gateways
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+      ECPAY_MERCHANT_ID: "${ECPAY_MERCHANT_ID:-}"
+      ECPAY_HASH_KEY: "${ECPAY_HASH_KEY:-}"
+      ECPAY_HASH_IV: "${ECPAY_HASH_IV:-}"
+      LINEPAY_CHANNEL_ID: "${LINEPAY_CHANNEL_ID:-}"
+      LINEPAY_CHANNEL_SECRET: "${LINEPAY_CHANNEL_SECRET:-}"
+
+      # File Storage (S3/R2)
+      S3_BUCKET: "${S3_BUCKET:-}"
+      S3_REGION: "${S3_REGION:-auto}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-}"
+      S3_ENDPOINT: "${S3_ENDPOINT:-}"
+
+      # OAuth
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      LINE_CHANNEL_ID: "${LINE_CHANNEL_ID:-}"
+      LINE_CHANNEL_SECRET: "${LINE_CHANNEL_SECRET:-}"
+
+      # Cron Jobs
+      ENABLE_CRON: "${ENABLE_CRON:-true}"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8056/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+# =============================================================================
+# Named Volumes
+# =============================================================================
+volumes:
+  db_data:
+    driver: local
+    name: gym_v2_db_data
+  redis_data:
+    driver: local
+    name: gym_v2_redis_data

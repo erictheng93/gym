@@ -34,7 +34,7 @@ const mockCoach = {
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -180,7 +180,7 @@ describe('useCoachAuth', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/auth/login',
+        'http://localhost:8056/api/coach/auth/login',
         expect.objectContaining({
           method: 'POST',
           body: {
@@ -293,7 +293,7 @@ describe('useCoachAuth', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/auth/change-password',
+        'http://localhost:8056/api/coach/auth/change-password',
         expect.objectContaining({
           method: 'POST',
           body: {

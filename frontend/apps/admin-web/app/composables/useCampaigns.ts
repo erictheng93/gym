@@ -89,7 +89,7 @@ export const useCampaigns = () => {
   const isLoading = useState('campaigns_loading', () => false)
   const totalCount = useState('campaigns_total', () => 0)
 
-  const apiBase = `${config.public.apiUrl}/gym`
+  const apiBase = config.public.apiUrl
 
   /**
    * Fetch campaigns

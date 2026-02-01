@@ -113,7 +113,7 @@ export const useBookings = () => {
       if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
       if (options?.limit) params.append('limit', String(options.limit))
 
-      const response = await $fetch<BookingsResponse>(`${apiUrl}/api/bookings?${params}`, {
+      const response = await $fetch<BookingsResponse>(`${apiUrl}/api/member/bookings?${params}`, {
         headers: getAuthHeader(),
       })
 
@@ -149,7 +149,7 @@ export const useBookings = () => {
     }
 
     try {
-      const response = await $fetch<BookingResult>(`${apiUrl}/api/bookings`, {
+      const response = await $fetch<BookingResult>(`${apiUrl}/api/member/bookings`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: {
@@ -212,7 +212,7 @@ export const useBookings = () => {
     }
 
     try {
-      const response = await $fetch<BookingResult>(`${apiUrl}/api/bookings/${bookingId}`, {
+      const response = await $fetch<BookingResult>(`${apiUrl}/api/member/bookings/${bookingId}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

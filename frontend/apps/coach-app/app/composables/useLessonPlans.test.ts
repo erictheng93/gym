@@ -45,7 +45,7 @@ const mockTemplates = [
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -81,7 +81,7 @@ describe('useLessonPlans', () => {
       await fetchPlans()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans',
+        'http://localhost:8056/api/coach/lesson-plans',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -101,7 +101,7 @@ describe('useLessonPlans', () => {
       await fetchPlans({ is_template: false })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans',
+        'http://localhost:8056/api/coach/lesson-plans',
         expect.objectContaining({
           query: { is_template: false },
         })
@@ -119,7 +119,7 @@ describe('useLessonPlans', () => {
       await fetchPlans({ search: '上肢' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans',
+        'http://localhost:8056/api/coach/lesson-plans',
         expect.objectContaining({
           query: { search: '上肢' },
         })
@@ -149,7 +149,7 @@ describe('useLessonPlans', () => {
       await fetchTemplates()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/templates',
+        'http://localhost:8056/api/coach/lesson-plans/templates',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -169,7 +169,7 @@ describe('useLessonPlans', () => {
       await fetchTemplates({ category: '力量訓練' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/templates',
+        'http://localhost:8056/api/coach/lesson-plans/templates',
         expect.objectContaining({
           query: { category: '力量訓練' },
         })
@@ -188,7 +188,7 @@ describe('useLessonPlans', () => {
       const result = await getPlan('plan-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/plan-1',
+        'http://localhost:8056/api/coach/lesson-plans/plan-1',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -223,7 +223,7 @@ describe('useLessonPlans', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans',
+        'http://localhost:8056/api/coach/lesson-plans',
         expect.objectContaining({
           method: 'POST',
           body: {
@@ -263,7 +263,7 @@ describe('useLessonPlans', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/plan-1',
+        'http://localhost:8056/api/coach/lesson-plans/plan-1',
         expect.objectContaining({
           method: 'PUT',
           body: {
@@ -287,7 +287,7 @@ describe('useLessonPlans', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/plan-1',
+        'http://localhost:8056/api/coach/lesson-plans/plan-1',
         expect.objectContaining({
           method: 'DELETE',
         })
@@ -308,7 +308,7 @@ describe('useLessonPlans', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/plan-2/copy',
+        'http://localhost:8056/api/coach/lesson-plans/plan-2/copy',
         expect.objectContaining({
           method: 'POST',
         })
@@ -327,7 +327,7 @@ describe('useLessonPlans', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/lesson-plans/plan-2/copy',
+        'http://localhost:8056/api/coach/lesson-plans/plan-2/copy',
         expect.objectContaining({
           body: { title: 'Custom Title' },
         })

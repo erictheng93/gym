@@ -100,14 +100,14 @@ export const useClassBookings = () => {
         booking_status: string | null
         waitlist_position: number | null
         message: string
-      }>('/gym/classes/book', {
+      }>('/api/admin/classes/book', {
         method: 'POST',
         body: {
           session_id: sessionId,
           member_id: memberId,
           contract_id: contractId
         },
-        baseURL: config.public.directusUrl
+        baseURL: config.public.apiBaseUrl
       })
 
       return {
@@ -139,13 +139,13 @@ export const useClassBookings = () => {
         promoted_booking_id: string | null
         promoted_member_id: string | null
         message: string
-      }>('/gym/classes/cancel-booking', {
+      }>('/api/admin/classes/cancel-booking', {
         method: 'POST',
         body: {
           booking_id: bookingId,
           reason
         },
-        baseURL: config.public.directusUrl
+        baseURL: config.public.apiBaseUrl
       })
 
       return {
@@ -174,10 +174,10 @@ export const useClassBookings = () => {
         success: boolean
         remaining_counts: number | null
         message: string
-      }>('/gym/classes/attend', {
+      }>('/api/admin/classes/attend', {
         method: 'POST',
         body: { booking_id: bookingId },
-        baseURL: config.public.directusUrl
+        baseURL: config.public.apiBaseUrl
       })
 
       return {

@@ -141,7 +141,7 @@ export interface MemberActivityReport {
 
 export const useReports = () => {
   const config = useRuntimeConfig()
-  const baseURL = config.public.directusUrl || 'http://localhost:8055'
+  const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
   const { handleError } = useErrorHandler()
   const { $directus } = useNuxtApp()
 
@@ -175,7 +175,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/gym/reports/revenue?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/reports/revenue?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -201,7 +201,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/gym/reports/member-growth?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/reports/member-growth?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -227,7 +227,7 @@ export const useReports = () => {
       if (branchId) params.append('branch_id', branchId)
       params.append('limit', limit.toString())
 
-      const response = await authFetch(`${baseURL}/gym/reports/contract-expiry?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/reports/contract-expiry?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -253,7 +253,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/gym/reports/member-activity?${params}`)
+      const response = await authFetch(`${baseURL}/api/admin/reports/member-activity?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -270,7 +270,7 @@ export const useReports = () => {
    */
   const refreshReports = async (): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await authFetch(`${baseURL}/gym/reports/refresh`, {
+      const response = await authFetch(`${baseURL}/api/admin/reports/refresh`, {
         method: 'POST'
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)

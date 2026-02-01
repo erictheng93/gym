@@ -29,7 +29,7 @@ interface LessonPlanResponse {
 
 export const useLessonPlans = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader } = useCoachAuth()
 
   const plans = ref<LessonPlan[]>([])
@@ -51,7 +51,7 @@ export const useLessonPlans = () => {
   }): Promise<void> => {
     loading.value = true
     try {
-      const response = await $fetch<LessonPlansResponse>(`${apiUrl}/gym/lesson-plans`, {
+      const response = await $fetch<LessonPlansResponse>(`${apiUrl}/api/coach/lesson-plans`, {
         headers: getAuthHeader(),
         query: params,
       })
@@ -80,7 +80,7 @@ export const useLessonPlans = () => {
   }): Promise<void> => {
     loading.value = true
     try {
-      const response = await $fetch<TemplatesResponse>(`${apiUrl}/gym/lesson-plans/templates`, {
+      const response = await $fetch<TemplatesResponse>(`${apiUrl}/api/coach/lesson-plans/templates`, {
         headers: getAuthHeader(),
         query: params,
       })
@@ -103,7 +103,7 @@ export const useLessonPlans = () => {
   const getPlan = async (id: string): Promise<LessonPlan | null> => {
     try {
       const response = await $fetch<LessonPlanResponse>(
-        `${apiUrl}/gym/lesson-plans/${id}`,
+        `${apiUrl}/api/coach/lesson-plans/${id}`,
         {
           headers: getAuthHeader(),
         }
@@ -137,7 +137,7 @@ export const useLessonPlans = () => {
         success: boolean
         message: string
         data: { id: string; title: string }
-      }>(`${apiUrl}/gym/lesson-plans`, {
+      }>(`${apiUrl}/api/coach/lesson-plans`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -173,7 +173,7 @@ export const useLessonPlans = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/lesson-plans/${id}`, {
+      }>(`${apiUrl}/api/coach/lesson-plans/${id}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,
@@ -194,7 +194,7 @@ export const useLessonPlans = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/lesson-plans/${id}`, {
+      }>(`${apiUrl}/api/coach/lesson-plans/${id}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })
@@ -221,7 +221,7 @@ export const useLessonPlans = () => {
         success: boolean
         message: string
         data: { id: string; title: string }
-      }>(`${apiUrl}/gym/lesson-plans/${id}/copy`, {
+      }>(`${apiUrl}/api/coach/lesson-plans/${id}/copy`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data || {},

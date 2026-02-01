@@ -1,7 +1,7 @@
 import { APIRequestContext } from '@playwright/test'
 import { TestEnv } from '../config/test-env'
 
-const DIRECTUS_URL = TestEnv.directusUrl
+const API_BASE_URL = TestEnv.apiBaseUrl
 
 export interface DirectusAuthResponse {
   data: {
@@ -16,7 +16,7 @@ export async function getAuthToken(
   email: string,
   password: string
 ): Promise<string> {
-  const response = await request.post(`${DIRECTUS_URL}/auth/login`, {
+  const response = await request.post(`${API_BASE_URL}/auth/login`, {
     data: {
       email,
       password,
@@ -41,7 +41,7 @@ export async function createTestMember(
     branch_id: string
   }
 ) {
-  const response = await request.post(`${DIRECTUS_URL}/items/members`, {
+  const response = await request.post(`${API_BASE_URL}/items/members`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -66,7 +66,7 @@ export async function createTestContract(
     sales_person_id?: string
   }
 ) {
-  const response = await request.post(`${DIRECTUS_URL}/items/contracts`, {
+  const response = await request.post(`${API_BASE_URL}/items/contracts`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -87,7 +87,7 @@ export async function cleanupTestData(
   ids: string[]
 ) {
   for (const id of ids) {
-    await request.delete(`${DIRECTUS_URL}/items/${collection}/${id}`, {
+    await request.delete(`${API_BASE_URL}/items/${collection}/${id}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

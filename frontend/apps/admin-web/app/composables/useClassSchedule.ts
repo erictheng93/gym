@@ -222,11 +222,11 @@ export const useClassSchedule = () => {
    */
   const generateSessions = async (branchId: string, startDate: string, endDate: string): Promise<number> => {
     try {
-      // 調用 Directus 自訂端點或 PostgreSQL 函數
-      const response = await $fetch<{ created: number }>('/gym/classes/generate-sessions', {
+      // 調用後端 API
+      const response = await $fetch<{ created: number }>('/api/admin/classes/generate-sessions', {
         method: 'POST',
         body: { branch_id: branchId, start_date: startDate, end_date: endDate },
-        baseURL: config.public.directusUrl
+        baseURL: config.public.apiBaseUrl
       })
       return response?.created || 0
     } catch (error) {

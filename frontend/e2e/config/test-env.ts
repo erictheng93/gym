@@ -24,8 +24,8 @@ export const TestEnv = {
   // 應用 URL
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
 
-  // Directus API URL
-  directusUrl: process.env.DIRECTUS_URL || 'http://localhost:8055',
+  // Backend API URL
+  apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8056',
 
   // 測試用戶
   users: {
@@ -86,8 +86,8 @@ export function validateTestEnv(): { valid: boolean; errors: string[] } {
     errors.push('BASE_URL is not configured')
   }
 
-  if (!TestEnv.directusUrl) {
-    errors.push('DIRECTUS_URL is not configured')
+  if (!TestEnv.apiBaseUrl) {
+    errors.push('API_BASE_URL is not configured')
   }
 
   // 驗證測試用戶憑證
@@ -109,7 +109,7 @@ export function printTestEnv(): void {
   console.log('測試環境配置 / Test Environment Configuration')
   console.log('='.repeat(50))
   console.log(`Base URL: ${TestEnv.baseUrl}`)
-  console.log(`Directus URL: ${TestEnv.directusUrl}`)
+  console.log(`API Base URL: ${TestEnv.apiBaseUrl}`)
   console.log(`Admin Email: ${TestEnv.users.admin.email}`)
   console.log(`Manager Email: ${TestEnv.users.manager.email}`)
   console.log(`Coach Email: ${TestEnv.users.coach.email}`)

@@ -80,7 +80,7 @@ export const usePerformance = () => {
   const isLoading = useState('performance_loading', () => false)
   const totalCount = useState('performance_total', () => 0)
 
-  const apiBase = `${config.public.apiUrl}/gym`
+  const apiBase = config.public.apiUrl
 
   /**
    * Fetch reviews list

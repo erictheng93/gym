@@ -72,7 +72,7 @@ interface NotesResponse {
 
 export const useStudents = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader } = useCoachAuth()
 
   const students = ref<Student[]>([])
@@ -91,7 +91,7 @@ export const useStudents = () => {
   }): Promise<void> => {
     loading.value = true
     try {
-      const response = await $fetch<StudentsResponse>(`${apiUrl}/gym/coach/students`, {
+      const response = await $fetch<StudentsResponse>(`${apiUrl}/api/coach/students`, {
         headers: getAuthHeader(),
         query: params,
       })
@@ -115,7 +115,7 @@ export const useStudents = () => {
   const getStudent = async (id: string): Promise<StudentDetailResponse['data'] | null> => {
     try {
       const response = await $fetch<StudentDetailResponse>(
-        `${apiUrl}/gym/coach/students/${id}`,
+        `${apiUrl}/api/coach/students/${id}`,
         {
           headers: getAuthHeader(),
         }
@@ -141,7 +141,7 @@ export const useStudents = () => {
   ): Promise<NotesResponse['data']> => {
     try {
       const response = await $fetch<NotesResponse>(
-        `${apiUrl}/gym/coach/students/${studentId}/notes`,
+        `${apiUrl}/api/coach/students/${studentId}/notes`,
         {
           headers: getAuthHeader(),
           query: params,
@@ -171,7 +171,7 @@ export const useStudents = () => {
         success: boolean
         message: string
         data: StudentNote
-      }>(`${apiUrl}/gym/coach/students/${studentId}/notes`, {
+      }>(`${apiUrl}/api/coach/students/${studentId}/notes`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -200,7 +200,7 @@ export const useStudents = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/coach/students/${studentId}/notes/${noteId}`, {
+      }>(`${apiUrl}/api/coach/students/${studentId}/notes/${noteId}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,
@@ -224,7 +224,7 @@ export const useStudents = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/coach/students/${studentId}/notes/${noteId}`, {
+      }>(`${apiUrl}/api/coach/students/${studentId}/notes/${noteId}`, {
         method: 'DELETE',
         headers: getAuthHeader(),
       })

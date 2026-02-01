@@ -80,7 +80,7 @@ const mockSchedule = {
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    directusUrl: 'http://localhost:8055',
+    apiBaseUrl: 'http://localhost:8056',
   },
 }))
 
@@ -116,7 +116,7 @@ describe('useCoachClasses', () => {
       await fetchClasses()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes',
+        'http://localhost:8056/api/coach/classes',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -136,7 +136,7 @@ describe('useCoachClasses', () => {
       await fetchClasses({ date: '2024-01-20' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes',
+        'http://localhost:8056/api/coach/classes',
         expect.objectContaining({
           query: { date: '2024-01-20' },
         })
@@ -154,7 +154,7 @@ describe('useCoachClasses', () => {
       await fetchClasses({ status: 'BOOKED' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes',
+        'http://localhost:8056/api/coach/classes',
         expect.objectContaining({
           query: { status: 'BOOKED' },
         })
@@ -183,7 +183,7 @@ describe('useCoachClasses', () => {
       const result = await getClass('class-1')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes/class-1',
+        'http://localhost:8056/api/coach/classes/class-1',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
         })
@@ -212,7 +212,7 @@ describe('useCoachClasses', () => {
       await getSchedule({ start_date: '2024-01-15', end_date: '2024-01-21' })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/schedule',
+        'http://localhost:8056/api/coach/schedule',
         expect.objectContaining({
           headers: { 'X-Coach-Token': 'test-token' },
           query: { start_date: '2024-01-15', end_date: '2024-01-21' },
@@ -248,7 +248,7 @@ describe('useCoachClasses', () => {
       expect(result.success).toBe(true)
       expect(result.status).toBe('COMPLETED')
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes/class-1/attendance',
+        'http://localhost:8056/api/coach/classes/class-1/attendance',
         expect.objectContaining({
           method: 'POST',
           body: { attended: true },
@@ -284,7 +284,7 @@ describe('useCoachClasses', () => {
       })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes/class-1/attendance',
+        'http://localhost:8056/api/coach/classes/class-1/attendance',
         expect.objectContaining({
           body: {
             attended: true,
@@ -319,7 +319,7 @@ describe('useCoachClasses', () => {
 
       expect(result.success).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8055/gym/coach/classes/class-1/cancel',
+        'http://localhost:8056/api/coach/classes/class-1/cancel',
         expect.objectContaining({
           method: 'POST',
           body: { reason: '教練臨時有事' },

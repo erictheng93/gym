@@ -9,7 +9,8 @@ vi.stubGlobal('$fetch', mockFetch)
 // Mock useRuntimeConfig
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
-    apiUrl: 'http://localhost:8055'
+    apiBaseUrl: 'http://localhost:8056',
+    apiUrl: 'http://localhost:8056/api'
   }
 }))
 

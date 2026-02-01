@@ -17,7 +17,8 @@ global.fetch = mockFetch
 // Mock useRuntimeConfig
 const mockRuntimeConfig = {
   public: {
-    directusUrl: 'http://localhost:8055'
+    apiBaseUrl: 'http://localhost:8056',
+    apiUrl: 'http://localhost:8056/api'
   }
 }
 vi.stubGlobal('useRuntimeConfig', () => mockRuntimeConfig)
@@ -233,7 +234,7 @@ describe('useReports', () => {
       await getRevenueReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/reports/revenue?')
+      expect(calledUrl).toContain('/api/admin/reports/revenue?')
     })
 
     it('應該處理 API 錯誤並返回 null', async () => {
@@ -277,7 +278,7 @@ describe('useReports', () => {
       await getMemberGrowthReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/reports/member-growth')
+      expect(calledUrl).toContain('/api/admin/reports/member-growth')
     })
 
     it('應該支持分店篩選', async () => {
@@ -312,7 +313,7 @@ describe('useReports', () => {
       await getContractExpiryReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/reports/contract-expiry')
+      expect(calledUrl).toContain('/api/admin/reports/contract-expiry')
     })
 
     it('應該支持自定義 days_ahead 和 limit', async () => {
@@ -365,7 +366,7 @@ describe('useReports', () => {
       await getMemberActivityReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/reports/member-activity')
+      expect(calledUrl).toContain('/api/admin/reports/member-activity')
     })
   })
 
@@ -410,7 +411,7 @@ describe('useReports', () => {
       await refreshReports()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/reports/refresh')
+      expect(calledUrl).toContain('/api/admin/reports/refresh')
     })
 
     it('應該在失敗時返回錯誤訊息', async () => {
@@ -438,14 +439,14 @@ describe('useReports', () => {
   // URL 構建測試
   // ============================================
   describe('URL Construction', () => {
-    it('應該使用 runtimeConfig 中的 directusUrl', async () => {
+    it('應該使用 runtimeConfig 中的 apiBaseUrl', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockRevenueReport))
 
       const { getRevenueReport } = useReports()
       await getRevenueReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('http://localhost:8055')
+      expect(calledUrl).toContain('http://localhost:8056')
     })
 
     it('應該正確編碼查詢參數', async () => {

@@ -17,7 +17,8 @@ global.fetch = mockFetch
 // Mock useRuntimeConfig
 const mockRuntimeConfig = {
   public: {
-    directusUrl: 'http://localhost:8055'
+    apiBaseUrl: 'http://localhost:8056',
+    apiUrl: 'http://localhost:8056/api'
   }
 }
 vi.stubGlobal('useRuntimeConfig', () => mockRuntimeConfig)
@@ -344,7 +345,7 @@ describe('useDashboard', () => {
       await fetchKPIs()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/dashboard/kpis')
+      expect(calledUrl).toContain('/api/admin/dashboard/kpis')
     })
 
     it('應該處理 API 錯誤並返回 null', async () => {
@@ -425,7 +426,7 @@ describe('useDashboard', () => {
       await fetchContractAlerts()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/dashboard/contract-alerts')
+      expect(calledUrl).toContain('/api/admin/dashboard/contract-alerts')
     })
 
     it('應該處理 API 錯誤', async () => {
@@ -482,7 +483,7 @@ describe('useDashboard', () => {
       await fetchRevenueTargets()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/dashboard/revenue-targets')
+      expect(calledUrl).toContain('/api/admin/dashboard/revenue-targets')
     })
 
     it('應該處理空的目標列表', async () => {
@@ -677,7 +678,7 @@ describe('useDashboard', () => {
       await exportData('kpis')
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/gym/dashboard/export')
+      expect(calledUrl).toContain('/api/admin/dashboard/export')
     })
 
     it('應該處理匯出失敗', async () => {
@@ -851,14 +852,14 @@ describe('useDashboard', () => {
   // URL 構建測試
   // ============================================
   describe('URL Construction', () => {
-    it('應該使用 runtimeConfig 中的 directusUrl', async () => {
+    it('應該使用 runtimeConfig 中的 apiBaseUrl', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
 
       const { fetchKPIs } = useDashboard()
       await fetchKPIs()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('http://localhost:8055')
+      expect(calledUrl).toContain('http://localhost:8056')
     })
 
     it('應該正確編碼查詢參數', async () => {

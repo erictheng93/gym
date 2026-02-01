@@ -57,7 +57,7 @@ interface ScheduleResponse {
 
 export const useCoachClasses = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader } = useCoachAuth()
 
   const classes = ref<ClassBooking[]>([])
@@ -76,7 +76,7 @@ export const useCoachClasses = () => {
   }): Promise<void> => {
     loading.value = true
     try {
-      const response = await $fetch<ClassesResponse>(`${apiUrl}/gym/coach/classes`, {
+      const response = await $fetch<ClassesResponse>(`${apiUrl}/api/coach/classes`, {
         headers: getAuthHeader(),
         query: params,
       })
@@ -100,7 +100,7 @@ export const useCoachClasses = () => {
   const getClass = async (id: string): Promise<ClassDetailResponse['data'] | null> => {
     try {
       const response = await $fetch<ClassDetailResponse>(
-        `${apiUrl}/gym/coach/classes/${id}`,
+        `${apiUrl}/api/coach/classes/${id}`,
         {
           headers: getAuthHeader(),
         }
@@ -123,7 +123,7 @@ export const useCoachClasses = () => {
     loading.value = true
     try {
       const response = await $fetch<ScheduleResponse>(
-        `${apiUrl}/gym/coach/schedule`,
+        `${apiUrl}/api/coach/schedule`,
         {
           headers: getAuthHeader(),
           query: params,
@@ -170,7 +170,7 @@ export const useCoachClasses = () => {
         success: boolean
         message: string
         status: string
-      }>(`${apiUrl}/gym/coach/classes/${classId}/attendance`, {
+      }>(`${apiUrl}/api/coach/classes/${classId}/attendance`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
@@ -194,7 +194,7 @@ export const useCoachClasses = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/coach/classes/${classId}/cancel`, {
+      }>(`${apiUrl}/api/coach/classes/${classId}/cancel`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: { reason },

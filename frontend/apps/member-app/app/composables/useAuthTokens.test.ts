@@ -103,8 +103,10 @@ describe('useAuthTokens', () => {
 
       mockFetch.mockResolvedValueOnce({
         success: true,
-        access_token: 'new-access-token',
-        refresh_token: 'new-refresh-token',
+        data: {
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+        },
       })
 
       const { refreshAccessToken } = useAuthTokens()
@@ -115,7 +117,7 @@ describe('useAuthTokens', () => {
         'http://localhost:8056/api/member/otp/refresh',
         {
           method: 'POST',
-          body: { refresh_token: 'old-refresh-token' },
+          body: { refreshToken: 'old-refresh-token' },
         }
       )
       expect(cookieStore.get('member_access_token')?.value).toBe('new-access-token')

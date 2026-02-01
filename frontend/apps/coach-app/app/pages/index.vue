@@ -154,7 +154,7 @@ const fetchTodayClasses = async () => {
     const response = await $fetch<{
       success: boolean
       data: ClassBooking[]
-    }>(`${config.public.directusUrl}/gym/coach/classes`, {
+    }>(`${config.public.apiBaseUrl}/api/coach/classes`, {
       headers: getAuthHeader(),
       query: { date: today, limit: 10 },
     })

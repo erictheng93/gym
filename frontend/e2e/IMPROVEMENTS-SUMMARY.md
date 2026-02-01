@@ -68,7 +68,7 @@
 ```typescript
 TestEnv = {
   baseUrl: 'http://localhost:3001',
-  directusUrl: 'http://localhost:8055',
+  apiBaseUrl: 'http://localhost:8056',
   users: {
     admin: { email, password },
     manager: { email, password },
@@ -88,7 +88,7 @@ TestEnv = {
 #### 更新的文件
 - `playwright.config.ts` - 使用 TestEnv 配置
 - `e2e/fixtures/auth.ts` - 使用 TestEnv.users 和超時配置
-- `e2e/fixtures/api.ts` - 使用 TestEnv.directusUrl
+- `e2e/fixtures/api.ts` - 使用 TestEnv.apiBaseUrl
 
 ## 📁 新增文件
 

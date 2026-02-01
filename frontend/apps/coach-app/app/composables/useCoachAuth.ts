@@ -21,7 +21,7 @@
 
 export const useCoachAuth = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
 
   // Get instances of specialized composables
   const tokens = useCoachTokens()
@@ -51,7 +51,7 @@ export const useCoachAuth = () => {
         }
         access_token: string
         refresh_token: string
-      }>(`${apiUrl}/gym/coach/auth/login`, {
+      }>(`${apiUrl}/api/coach/auth/login`, {
         method: 'POST',
         body: isEmail
           ? { email: identifier, password }
@@ -119,7 +119,7 @@ export const useCoachAuth = () => {
       const response = await $fetch<{
         success: boolean
         message: string
-      }>(`${apiUrl}/gym/coach/auth/change-password`, {
+      }>(`${apiUrl}/api/coach/auth/change-password`, {
         method: 'POST',
         headers: tokens.getAuthHeader(),
         body: {

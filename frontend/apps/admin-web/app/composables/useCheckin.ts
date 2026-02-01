@@ -34,7 +34,7 @@ export interface QrCheckinResult {
 
 export const useCheckin = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.directusUrl
+  const apiUrl = config.public.apiBaseUrl
   const { readItems, createItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
   const todayCheckins = useState<CheckinRecord[]>('today_checkins', () => [])
@@ -285,7 +285,7 @@ export const useCheckin = () => {
     const { payload, branchId, verifiedBy } = options
 
     try {
-      const response = await $fetch<QrCheckinResult>(`${apiUrl}/gym/checkin/qr-verify`, {
+      const response = await $fetch<QrCheckinResult>(`${apiUrl}/api/admin/checkin/qr-verify`, {
         method: 'POST',
         body: {
           payload,

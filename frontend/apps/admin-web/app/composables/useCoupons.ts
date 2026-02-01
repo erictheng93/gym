@@ -67,7 +67,7 @@ export const useCoupons = () => {
   const isLoading = useState('coupons_loading', () => false)
   const totalCount = useState('coupons_total', () => 0)
 
-  const apiBase = `${config.public.apiUrl}/gym`
+  const apiBase = config.public.apiUrl
 
   /**
    * Fetch coupons

@@ -430,7 +430,7 @@ export const useOfflineSync = () => {
     headers: Record<string, string>
   ): Promise<string> => {
     return queueRequest({
-      url: `${apiUrl}/gym/bookings/${bookingId}`,
+      url: `${apiUrl}/api/member/bookings/${bookingId}`,
       method: 'DELETE',
       headers,
       maxRetries: 3,
@@ -448,7 +448,7 @@ export const useOfflineSync = () => {
     headers: Record<string, string>
   ): Promise<string> => {
     return queueRequest({
-      url: `${apiUrl}/gym/reviews`,
+      url: `${apiUrl}/api/member/reviews`,
       method: 'POST',
       headers,
       body: payload,

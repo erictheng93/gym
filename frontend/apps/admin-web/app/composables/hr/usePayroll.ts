@@ -88,7 +88,7 @@ export const usePayroll = () => {
   const isPromotionLoading = useState('promotion_loading', () => false)
   const totalCount = useState('payroll_total', () => 0)
 
-  const apiBase = `${config.public.apiUrl}/gym`
+  const apiBase = config.public.apiUrl
 
   /**
    * Fetch salary records

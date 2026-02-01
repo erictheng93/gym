@@ -125,8 +125,7 @@ export const mockNavigateTo = vi.fn().mockResolvedValue(undefined)
 // Mock useRuntimeConfig
 export const mockRuntimeConfig = {
   public: {
-    apiBaseUrl: 'http://localhost:8056',
-    directusUrl: 'http://localhost:8055'
+    apiBaseUrl: 'http://localhost:8056'
   }
 }
 

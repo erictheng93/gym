@@ -102,8 +102,10 @@ describe('useAuthMethods', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '驗證碼已發送',
-        expiresIn: 300,
-        otp: '123456',
+        data: {
+          expiresIn: 300,
+          otp: '123456',
+        },
       })
 
       const { sendOtp } = useAuthMethods()
@@ -142,10 +144,12 @@ describe('useAuthMethods', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '登入成功',
-        member: { id: 'member-1', full_name: 'Test' },
-        access_token: 'new-access-token',
-        refresh_token: 'new-refresh-token',
-        expires_in: 86400,
+        data: {
+          member: { id: 'member-1', fullName: 'Test' },
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+          expiresIn: 86400,
+        },
       })
 
       const { verifyOtp } = useAuthMethods()
@@ -198,10 +202,12 @@ describe('useAuthMethods', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '登入成功',
-        member: { id: 'member-1' },
-        access_token: 'token',
-        refresh_token: 'refresh',
-        expires_in: 86400,
+        data: {
+          member: { id: 'member-1' },
+          accessToken: 'token',
+          refreshToken: 'refresh',
+          expiresIn: 86400,
+        },
       })
 
       const { loginWithOtp } = useAuthMethods()
@@ -216,10 +222,12 @@ describe('useAuthMethods', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '登入成功',
-        member: { id: 'member-1', full_name: 'Test' },
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        expires_in: 86400,
+        data: {
+          member: { id: 'member-1', fullName: 'Test' },
+          accessToken: 'access-token',
+          refreshToken: 'refresh-token',
+          expiresIn: 86400,
+        },
       })
 
       const { login } = useAuthMethods()
@@ -268,7 +276,9 @@ describe('useAuthMethods', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '重設密碼郵件已發送',
-        resetUrl: 'http://localhost/reset?token=abc',
+        data: {
+          resetUrl: 'http://localhost/reset?token=abc',
+        },
       })
 
       const { forgotPassword } = useAuthMethods()
@@ -313,7 +323,7 @@ describe('useAuthMethods', () => {
           method: 'POST',
           body: {
             token: 'valid-token',
-            new_password: 'newPassword123',
+            password: 'newPassword123',
           },
         }
       )
@@ -351,8 +361,8 @@ describe('useAuthMethods', () => {
           method: 'POST',
           headers: { 'X-Member-Token': 'valid-token' },
           body: {
-            current_password: 'oldPassword',
-            new_password: 'newPassword123',
+            currentPassword: 'oldPassword',
+            newPassword: 'newPassword123',
           },
         }
       )
@@ -385,27 +395,19 @@ describe('useAuthMethods', () => {
 
   describe('completeProfile', () => {
     it('should complete profile successfully', async () => {
+      // Set up auth token
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '資料已更新',
-      })
-
-      // Mock loginWithOAuth (called after profile completion)
-      mockFetch.mockResolvedValueOnce({
-        data: { id: 'user-1', email: 'test@example.com' },
-      })
-      mockFetch.mockResolvedValueOnce({
-        data: [{
-          id: 'member-1',
-          member_code: 'M001',
-          full_name: 'Test User',
-          phone: '0912345678',
-          email: 'test@example.com',
-          branch_id: null,
-          member_status: 'ACTIVE',
-          branch: null,
-          contracts: [],
-        }],
+        data: {
+          member: {
+            id: 'member-1',
+            memberCode: 'M001',
+            fullName: 'Test User',
+          },
+        },
       })
 
       const { completeProfile } = useAuthMethods()
@@ -416,12 +418,12 @@ describe('useAuthMethods', () => {
       })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/member/complete-profile',
+        'http://localhost:8056/api/member/me/complete-profile',
         {
           method: 'POST',
-          credentials: 'include',
+          headers: { 'X-Member-Token': 'valid-token' },
           body: {
-            full_name: 'Test User',
+            fullName: 'Test User',
             phone: '0912345678',
             gender: 'MALE',
           },
@@ -431,6 +433,9 @@ describe('useAuthMethods', () => {
     })
 
     it('should handle profile completion error', async () => {
+      // Set up auth token
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+
       mockFetch.mockRejectedValueOnce({
         data: { message: '電話號碼已被使用' },
       })
@@ -459,66 +464,28 @@ describe('useAuthMethods', () => {
 
   describe('loginWithOAuth', () => {
     it('should login via OAuth session successfully', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          data: { id: 'user-1', email: 'test@example.com', first_name: 'Test', last_name: 'User' },
-        })
-        .mockResolvedValueOnce({
-          data: [{
-            id: 'member-1',
-            member_code: 'M001',
-            full_name: 'Test User',
-            phone: '0912345678',
-            email: 'test@example.com',
-            branch_id: 'branch-1',
-            member_status: 'ACTIVE',
-            branch: { name: 'Main Branch' },
-            contracts: [
-              { id: 'c1', contract_status: 'ACTIVE', end_date: '2024-12-31' },
-            ],
-          }],
-        })
+      // Set up auth token (simulating OAuth callback setting the token)
+      cookieStore.set('member_access_token', { value: 'oauth-token' })
 
       const { loginWithOAuth } = useAuthMethods()
       const result = await loginWithOAuth()
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/member/users/me',
-        { credentials: 'include' }
-      )
+      expect(mockFetchMember).toHaveBeenCalledWith('oauth-token')
       expect(result.success).toBe(true)
     })
 
-    it('should handle user not found', async () => {
-      mockFetch.mockResolvedValueOnce({
-        data: null,
-      })
-
+    it('should handle missing token', async () => {
+      // No token set - simulates OAuth callback failure
       const { loginWithOAuth } = useAuthMethods()
       const result = await loginWithOAuth()
 
       expect(result.success).toBe(false)
-      expect(result.error).toBe('無法取得用戶資料')
-    })
-
-    it('should return needsRegistration when member not found', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          data: { id: 'user-1', email: 'new@example.com' },
-        })
-        .mockResolvedValueOnce({
-          data: [],
-        })
-
-      const { loginWithOAuth } = useAuthMethods()
-      const result = await loginWithOAuth()
-
-      expect(result.success).toBe(false)
-      expect(result.needsRegistration).toBe(true)
+      expect(result.error).toBe('無法取得認證資訊')
     })
 
     it('should handle OAuth error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Session expired'))
+      cookieStore.set('member_access_token', { value: 'oauth-token' })
+      mockFetchMember.mockRejectedValueOnce(new Error('Session expired'))
 
       const { loginWithOAuth } = useAuthMethods()
       const result = await loginWithOAuth()
