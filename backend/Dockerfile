@@ -1,55 +1,76 @@
-# Gym Nexus Backend - Production Dockerfile
-# Based on Directus 11 with custom extensions
+# =============================================================================
+# Gym Nexus API v2 - Production Dockerfile
+# =============================================================================
+# Multi-stage build for optimized production image
 
-# ==============================================================================
-# Stage 1: Build extensions
-# ==============================================================================
-FROM node:20-alpine AS builder
+# -----------------------------------------------------------------------------
+# Stage 1: Build
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS builder
+
+WORKDIR /app
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Set working directory
-WORKDIR /build
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
 
-# Copy extension source files
-COPY extensions/ ./extensions/
+# Install dependencies
+RUN pnpm install --frozen-lockfile
 
-# Build gym-endpoints extension
-WORKDIR /build/extensions/directus-extension-gym-endpoints
-RUN pnpm install --frozen-lockfile || pnpm install
-RUN mkdir -p dist && cp -r src/* dist/
+# Copy source code
+COPY . .
 
-# Build gym-hooks extension
-WORKDIR /build/extensions/directus-extension-gym-hooks
-RUN pnpm install --frozen-lockfile || pnpm install
-RUN mkdir -p dist && cp -r src/* dist/
+# Build TypeScript
+RUN pnpm build
 
-# ==============================================================================
-# Stage 2: Production image
-# ==============================================================================
-FROM directus/directus:11
+# Prune dev dependencies
+RUN pnpm prune --prod
 
-# Copy built extensions with dependencies
-COPY --from=builder /build/extensions/directus-extension-gym-endpoints /directus/extensions/directus-extension-gym-endpoints
-COPY --from=builder /build/extensions/directus-extension-gym-hooks /directus/extensions/directus-extension-gym-hooks
+# -----------------------------------------------------------------------------
+# Stage 2: Production
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS production
 
-# Set environment defaults for production
-ENV NODE_ENV=production \
-    LOG_LEVEL=info \
-    CACHE_ENABLED=true \
-    CACHE_AUTO_PURGE=true \
-    RATE_LIMITER_ENABLED=true \
-    RATE_LIMITER_POINTS=100 \
-    RATE_LIMITER_DURATION=60
+# Install necessary packages for puppeteer (PDF generation)
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    && rm -rf /var/cache/apk/*
 
-# Health check configuration
-# Checks the /gym/health endpoint every 30 seconds
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8055/gym/health || exit 1
+# Set Puppeteer to use system Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Expose Directus default port
-EXPOSE 8055
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
-# Default command (inherited from base image)
-# CMD ["node", "cli.js", "start"]
+WORKDIR /app
+
+# Copy built files and production dependencies
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=8056
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 8056
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8056/health || exit 1
+
+# Start the application
+CMD ["node", "dist/app.js"]

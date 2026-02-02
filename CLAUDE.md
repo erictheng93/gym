@@ -5,8 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
-- **Backend v2:** Hono.js API on Node.js with Drizzle ORM (active development)
-- **Backend v1:** Directus (Headless CMS) - legacy, being phased out
+- **Backend:** Hono.js API on Node.js with Drizzle ORM
 - **Database:** PostgreSQL 17 + PostGIS 3.4
 - **Frontend:** Nuxt 3 (monorepo with member-app, admin-web, coach-app)
 - **Infrastructure:** Cloudflare (Pages, Workers, R2) + VPS (Coolify)
@@ -14,9 +13,9 @@ Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
 
 ## Development Commands
 
-### Backend v2 (Hono.js + Drizzle) - PREFERRED
+### Backend (Hono.js + Drizzle)
 ```bash
-cd backend-v2
+cd backend
 pnpm install
 pnpm dev                        # Development with hot reload (http://localhost:8056)
 pnpm build                      # Build for production
@@ -24,20 +23,14 @@ pnpm db:push                    # Push schema changes to database
 pnpm db:studio                  # Open Drizzle Studio
 ```
 
-### Backend v1 (Directus + PostgreSQL) - LEGACY
-```bash
-cd backend
-docker-compose up -d            # Directus at http://localhost:8055
-```
-
 ### Frontend (Nuxt 3)
 ```bash
 cd frontend
 pnpm install
 pnpm dev                        # All apps in parallel
-pnpm dev:admin                  # Admin web only (http://localhost:3000)
-pnpm dev:member                 # Member app only (http://localhost:3001)
-pnpm dev:coach                  # Coach app only (http://localhost:3002)
+pnpm dev:admin                  # Admin web only (http://localhost:3001)
+pnpm dev:member                 # Member app only (http://localhost:3002)
+pnpm dev:coach                  # Coach app only (http://localhost:3003)
 ```
 
 ## Architecture
@@ -45,7 +38,7 @@ pnpm dev:coach                  # Coach app only (http://localhost:3002)
 ### Project Structure
 ```
 gym-nexus/
-├── backend-v2/                 # NEW: Hono.js API (active development)
+├── backend/                    # Hono.js API
 │   ├── src/
 │   │   ├── routes/            # API route handlers
 │   │   ├── services/          # Business logic (email, sms, line, payment, pdf)
@@ -55,9 +48,6 @@ gym-nexus/
 │   │   └── cron/              # Scheduled jobs
 │   ├── docker-compose.yml     # Development environment
 │   └── Dockerfile             # Production build
-├── backend/                    # LEGACY: Directus (being phased out)
-│   ├── extensions/            # Custom Directus hooks/endpoints
-│   └── docker-compose.yml
 ├── frontend/
 │   ├── apps/
 │   │   ├── admin-web/         # Staff dashboard (e-contracts, reports, HR)
@@ -67,7 +57,7 @@ gym-nexus/
 └── docs/
 ```
 
-### Backend v2 Architecture
+### Backend Architecture
 
 **Tech Stack:**
 - Hono.js (web framework)
@@ -188,17 +178,16 @@ gym-nexus/
 ### Port Configuration
 | Service | Development | Production | Description |
 |---------|-------------|------------|-------------|
-| API v2 | localhost:8056 | :8056 | Hono.js API |
-| Directus | localhost:8055 | :8055 | Legacy API |
+| API | localhost:8056 | :8056 | Hono.js API |
 | PostgreSQL | localhost:15432 | :15432 | Database |
 | Redis | localhost:6379 | :6379 | Cache (optional) |
-| Admin Web | localhost:3000 | - | Staff dashboard |
-| Member App | localhost:3001 | - | Member PWA |
-| Coach App | localhost:3002 | - | Coach app |
+| Admin Web | localhost:3001 | - | Staff dashboard |
+| Member App | localhost:3002 | - | Member PWA |
+| Coach App | localhost:3003 | - | Coach app |
 
-### Docker (Backend v2)
+### Docker
 ```bash
-cd backend-v2
+cd backend
 
 # Development
 docker compose up -d
@@ -224,7 +213,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 3. For COUNT_BASED: decrement remaining count
 4. Log entry with optional class reference
 
-### Cron Jobs (backend-v2/src/cron/)
+### Cron Jobs (backend/src/cron/)
 - `billing.ts` - Monthly billing generation
 - `analytics.ts` - Daily analytics aggregation
 - `rfm.ts` - RFM segmentation calculation

@@ -1,12 +1,14 @@
-# ============================================
-# Gym Nexus - Docker Compose
-# ============================================
-# 使用方式: make up 或 docker-compose up -d
+# =============================================================================
+# Gym Nexus API v2 - Docker Compose
+# =============================================================================
+# Usage:
+#   Development: docker compose up -d
+#   Production:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 services:
-  # ============================================
-  # PostgreSQL + PostGIS
-  # ============================================
+  # ===========================================================================
+  # PostgreSQL + PostGIS Database
+  # ===========================================================================
   database:
     image: postgis/postgis:17-3.4
     restart: unless-stopped
@@ -14,10 +16,10 @@ services:
       - "${DB_PORT:-15432}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./schema/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./drizzle/schema/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     environment:
-      POSTGRES_USER: "${DB_USER:-directus}"
-      POSTGRES_PASSWORD: "${DB_PASSWORD:-directus}"
+      POSTGRES_USER: "${DB_USER:-gym_nexus}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-gym_nexus_dev}"
       POSTGRES_DB: "${DB_DATABASE:-gym_nexus}"
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
       LANG: "en_US.UTF-8"
@@ -53,7 +55,7 @@ services:
       - "-c"
       - "log_disconnections=on"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-directus} -d ${DB_DATABASE:-gym_nexus}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gym_nexus} -d ${DB_DATABASE:-gym_nexus}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,120 +68,46 @@ services:
           cpus: '1'
           memory: 1G
 
-  # ============================================
-  # Directus CMS
-  # ============================================
-  directus:
+  # ===========================================================================
+  # Gym Nexus API v2 (Hono.js)
+  # ===========================================================================
+  api:
     build:
       context: .
-      dockerfile: Dockerfile.directus
-    image: gym-directus:11
+      dockerfile: Dockerfile
+    image: gym-api:2.0
     restart: unless-stopped
     ports:
-      - "${DIRECTUS_PORT:-8055}:8055"
-    volumes:
-      - directus_uploads:/directus/uploads
-      - ./extensions:/directus/extensions
+      - "${API_PORT:-8056}:8056"
     depends_on:
       database:
         condition: service_healthy
     environment:
-      SECRET: "${SECRET:-replace-with-secure-random-string}"
-      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8055}"
+      NODE_ENV: "${NODE_ENV:-production}"
+      PORT: 8056
 
       # Database
-      DB_CLIENT: pg
-      DB_HOST: database
-      DB_PORT: 5432
-      DB_DATABASE: "${DB_DATABASE:-gym_nexus}"
-      DB_USER: "${DB_USER:-directus}"
-      DB_PASSWORD: "${DB_PASSWORD:-directus}"
-      DB_CHARSET: "utf8"
-      DB_POOL__MIN: "5"
-      DB_POOL__MAX: "100"
+      DATABASE_URL: "postgresql://${DB_USER:-gym_nexus}:${DB_PASSWORD:-gym_nexus_dev}@database:5432/${DB_DATABASE:-gym_nexus}"
 
-      # Cache
-      CACHE_ENABLED: "true"
-      CACHE_STORE: "memory"
-      CACHE_TTL: "${CACHE_TTL:-10m}"
-      CACHE_AUTO_PURGE: "true"
-
-      # Rate Limiting
-      RATE_LIMITER_ENABLED: "true"
-      RATE_LIMITER_STORE: "memory"
-      RATE_LIMITER_POINTS: "100"
-      RATE_LIMITER_DURATION: "60"
-
-      # Logging
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
-      LOG_STYLE: "${LOG_STYLE:-raw}"
-
-      # Admin
-      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@gym.com}"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
-
-      # Session
-      WEBSOCKETS_ENABLED: "true"
-      SESSION_COOKIE_SAME_SITE: "${SESSION_COOKIE_SAME_SITE:-lax}"
-      SESSION_COOKIE_SECURE: "${SESSION_COOKIE_SECURE:-false}"
-      SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
+      # Auth
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      SESSION_SECRET: "${SESSION_SECRET:-change-me-in-production}"
+      MEMBER_JWT_SECRET: "${MEMBER_JWT_SECRET:-change-me-in-production}"
+      COACH_JWT_SECRET: "${COACH_JWT_SECRET:-change-me-in-production}"
 
       # CORS
-      CORS_ENABLED: "true"
-      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
-      CORS_CREDENTIALS: "true"
-      CORS_ALLOWED_HEADERS: "Content-Type,Authorization,X-Member-Token"
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002}"
 
-      # OAuth
-      AUTH_PROVIDERS: "${AUTH_PROVIDERS:-}"
-      MEMBER_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
-
-      AUTH_GOOGLE_DRIVER: "openid"
-      AUTH_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
-      AUTH_GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
-      AUTH_GOOGLE_ISSUER_URL: "https://accounts.google.com/.well-known/openid-configuration"
-      AUTH_GOOGLE_IDENTIFIER_KEY: "email"
-      AUTH_GOOGLE_ICON: "google"
-      AUTH_GOOGLE_LABEL: "Google"
-      AUTH_GOOGLE_ALLOW_PUBLIC_REGISTRATION: "true"
-      AUTH_GOOGLE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
-
-      AUTH_LINE_DRIVER: "oauth2"
-      AUTH_LINE_CLIENT_ID: "${LINE_CHANNEL_ID:-}"
-      AUTH_LINE_CLIENT_SECRET: "${LINE_CHANNEL_SECRET:-}"
-      AUTH_LINE_AUTHORIZE_URL: "https://access.line.me/oauth2/v2.1/authorize"
-      AUTH_LINE_ACCESS_URL: "https://api.line.me/oauth2/v2.1/token"
-      AUTH_LINE_PROFILE_URL: "https://api.line.me/v2/profile"
-      AUTH_LINE_SCOPE: "profile openid email"
-      AUTH_LINE_IDENTIFIER_KEY: "email"
-      AUTH_LINE_ICON: "chat"
-      AUTH_LINE_LABEL: "LINE"
-      AUTH_LINE_ALLOW_PUBLIC_REGISTRATION: "true"
-      AUTH_LINE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
-
-      AUTH_APPLE_DRIVER: "openid"
-      AUTH_APPLE_CLIENT_ID: "${APPLE_CLIENT_ID:-}"
-      AUTH_APPLE_CLIENT_SECRET: "${APPLE_CLIENT_SECRET:-}"
-      AUTH_APPLE_ISSUER_URL: "https://appleid.apple.com/.well-known/openid-configuration"
-      AUTH_APPLE_SCOPE: "name email"
-      AUTH_APPLE_IDENTIFIER_KEY: "email"
-      AUTH_APPLE_ICON: "apple"
-      AUTH_APPLE_LABEL: "Apple"
-      AUTH_APPLE_PARAMS: '{"response_mode":"form_post"}'
-      AUTH_APPLE_ALLOW_PUBLIC_REGISTRATION: "true"
-      AUTH_APPLE_DEFAULT_ROLE_ID: "${MEMBER_ROLE_ID:-b1000000-0000-0000-0000-000000000001}"
-
-      # Email
+      # Email (SMTP)
       EMAIL_TRANSPORT: "${EMAIL_TRANSPORT:-smtp}"
       EMAIL_FROM: "${EMAIL_FROM:-Gym Nexus <noreply@gym-nexus.com>}"
-      EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-email-smtp.ap-northeast-1.amazonaws.com}"
+      EMAIL_SMTP_HOST: "${EMAIL_SMTP_HOST:-}"
       EMAIL_SMTP_PORT: "${EMAIL_SMTP_PORT:-587}"
       EMAIL_SMTP_USER: "${EMAIL_SMTP_USER:-}"
       EMAIL_SMTP_PASSWORD: "${EMAIL_SMTP_PASSWORD:-}"
       EMAIL_SMTP_SECURE: "${EMAIL_SMTP_SECURE:-false}"
-      EMAIL_SMTP_IGNORE_TLS: "${EMAIL_SMTP_IGNORE_TLS:-false}"
 
-      # Push Notification
+      # Push Notifications
       VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
       VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
       VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:admin@gym-nexus.com}"
@@ -188,20 +116,42 @@ services:
       LINE_CHANNEL_ACCESS_TOKEN: "${LINE_CHANNEL_ACCESS_TOKEN:-}"
       LINE_MESSAGING_CHANNEL_SECRET: "${LINE_MESSAGING_CHANNEL_SECRET:-}"
 
-      # SMS
+      # SMS (Mitake)
       MITAKE_USERNAME: "${MITAKE_USERNAME:-}"
       MITAKE_PASSWORD: "${MITAKE_PASSWORD:-}"
       MITAKE_API_URL: "${MITAKE_API_URL:-https://smsapi.mitake.com.tw/api/mtk/SmSend}"
-      MITAKE_COST_PER_SMS: "${MITAKE_COST_PER_SMS:-0.5}"
-      SMS_DAILY_LIMIT_PER_MEMBER: "${SMS_DAILY_LIMIT_PER_MEMBER:-5}"
-      SMS_OTP_ONLY: "${SMS_OTP_ONLY:-false}"
+
+      # Payment Gateways
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+      ECPAY_MERCHANT_ID: "${ECPAY_MERCHANT_ID:-}"
+      ECPAY_HASH_KEY: "${ECPAY_HASH_KEY:-}"
+      ECPAY_HASH_IV: "${ECPAY_HASH_IV:-}"
+      LINEPAY_CHANNEL_ID: "${LINEPAY_CHANNEL_ID:-}"
+      LINEPAY_CHANNEL_SECRET: "${LINEPAY_CHANNEL_SECRET:-}"
+
+      # File Storage (S3/R2)
+      S3_BUCKET: "${S3_BUCKET:-}"
+      S3_REGION: "${S3_REGION:-auto}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-}"
+      S3_ENDPOINT: "${S3_ENDPOINT:-}"
+
+      # OAuth
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      LINE_CHANNEL_ID: "${LINE_CHANNEL_ID:-}"
+      LINE_CHANNEL_SECRET: "${LINE_CHANNEL_SECRET:-}"
+
+      # Cron Jobs
+      ENABLE_CRON: "${ENABLE_CRON:-true}"
 
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8055/gym/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8056/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 30s
     deploy:
       resources:
         limits:
@@ -211,26 +161,10 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  # ============================================
-  # Cloudflare Tunnel
-  # ============================================
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
-    depends_on:
-      directus:
-        condition: service_healthy
-
-# ============================================
+# =============================================================================
 # Named Volumes
-# ============================================
+# =============================================================================
 volumes:
   db_data:
     driver: local
-    name: gym_db_data
-  directus_uploads:
-    driver: local
-    name: gym_directus_uploads
+    name: gym_v2_db_data
