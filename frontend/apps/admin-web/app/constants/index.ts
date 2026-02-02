@@ -233,6 +233,7 @@ export const MESSAGES = {
     CONTRACT_TRANSFER_FAILED: '轉讓合約失敗，請稍後再試',
     CONTRACT_TERMINATE_FAILED: '終止合約失敗，請稍後再試',
     CONTRACT_EXTEND_FAILED: '延期合約失敗，請稍後再試',
+    CONTRACT_RENEW_FAILED: '續約合約失敗，請稍後再試',
 
     // Payment
     PAYMENT_CREATE_FAILED: '建立付款紀錄失敗，請稍後再試',
@@ -320,6 +321,7 @@ export const MESSAGES = {
     CONTRACT_TRANSFERRED: '合約轉讓成功',
     CONTRACT_TERMINATED: '合約已終止',
     CONTRACT_EXTENDED: '合約延期成功',
+    CONTRACT_RENEWED: '合約續約成功',
 
     // Payment
     PAYMENT_CREATED: '付款紀錄建立成功',

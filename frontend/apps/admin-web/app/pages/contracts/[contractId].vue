@@ -74,7 +74,7 @@ const searchMembers = async (query: string) => {
       limit: 10
     })
     // 排除當前合約的會員
-    const currentMemberId = contract.value?.member_id?.id
+    const currentMemberId = contract.value?.member?.id
     memberSearchResults.value = currentMemberId
       ? result.data.filter(m => m.id !== currentMemberId)
       : result.data
@@ -219,7 +219,7 @@ const handlePause = async () => {
       days_affected: daysAffected,
       reason: pauseForm.reason,
       created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
+      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
     })
 
     // 計算新的結束日期
@@ -255,7 +255,7 @@ const handleResume = async () => {
       log_type: 'RESUME',
       reason: '合約恢復',
       created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
+      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
     })
 
     // 更新合約狀態
@@ -277,7 +277,7 @@ const handleResume = async () => {
 // 檢查是否可以暫停
 const canPause = computed(() => {
   if (!contract.value) return false
-  return contract.value.contract_status === 'ACTIVE' && contract.value.plan_id?.allow_pause
+  return contract.value.contract_status === 'ACTIVE' && contract.value.plan?.allow_pause
 })
 
 // 檢查是否可以恢復
@@ -289,7 +289,7 @@ const canResume = computed(() => {
 // 檢查是否可以轉讓
 const canTransfer = computed(() => {
   if (!contract.value) return false
-  return ['ACTIVE', 'PAUSED'].includes(contract.value.contract_status) && contract.value.plan_id?.allow_transfer
+  return ['ACTIVE', 'PAUSED'].includes(contract.value.contract_status) && contract.value.plan?.allow_transfer
 })
 
 // 檢查是否可以終止
@@ -329,11 +329,11 @@ const handleTransfer = async () => {
     await createItem<ContractLog>('contract_logs', {
       contract_id: contract.value.id,
       log_type: 'TRANSFER',
-      original_member_id: contract.value.member_id?.id,
+      original_member_id: contract.value.member?.id,
       target_member_id: transferForm.targetMemberId,
       reason: transferForm.reason || `轉讓給 ${selectedMember.value?.full_name}`,
       created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
+      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
     })
 
     showTransferModal.value = false
@@ -360,7 +360,7 @@ const handleTerminate = async () => {
       log_type: 'CANCEL',
       reason: terminateForm.reason || '合約終止',
       created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
+      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
     })
 
     // 更新合約狀態為終止
@@ -372,11 +372,11 @@ const handleTerminate = async () => {
     if (terminateForm.refundAmount > 0) {
       await createItem('payments', {
         contract_id: contract.value.id,
-        member_id: contract.value.member_id?.id,
+        member_id: contract.value.member?.id,
         amount: terminateForm.refundAmount,
         payment_type: 'REFUND',
         payment_date: new Date().toISOString().split('T')[0],
-        branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null,
+        branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null,
         received_by: currentEmployee.value?.id || null,
         notes: `合約終止退款 - ${terminateForm.reason}`
       })
@@ -408,7 +408,7 @@ const handleExtend = async () => {
       days_affected: extendForm.days,
       reason: extendForm.reason || `延期 ${extendForm.days} 天`,
       created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
+      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
     })
 
     // 更新合約結束日期
@@ -439,7 +439,7 @@ const handleRenew = async () => {
   try {
     // 計算新合約結束日期
     const startDate = new Date(renewForm.startDate)
-    const durationMonths = contract.value.plan_id?.duration_months || 0
+    const durationMonths = contract.value.plan?.duration_months || 0
     startDate.setMonth(startDate.getMonth() + durationMonths)
     const newEndDate = startDate.toISOString().split('T')[0]
 
@@ -449,23 +449,23 @@ const handleRenew = async () => {
       log_type: 'RENEWAL',
       reason: '續約',
       created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id?.id || null
+      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
     })
 
     // 建立新合約
     const newContract = await createContract({
-      member_id: contract.value.member_id?.id,
-      plan_id: contract.value.plan_id?.id,
-      branch_id: contract.value.branch_id?.id,
+      member_id: contract.value.member?.id,
+      plan_id: contract.value.plan_id,
+      branch_id: contract.value.branch_id,
       sales_person_id: currentEmployee.value?.id || contract.value.sales_person_id,
       start_date: renewForm.startDate,
       end_date: newEndDate,
       original_end_date: newEndDate,
       sign_date: new Date().toISOString().split('T')[0],
-      total_amount: renewForm.amount || contract.value.plan_id?.price || 0,
+      total_amount: renewForm.amount || contract.value.plan?.price || 0,
       contract_status: 'ACTIVE',
       payment_status: 'UNPAID',
-      remaining_counts: contract.value.plan_id?.class_counts || null,
+      remaining_counts: contract.value.plan?.class_counts || null,
       notes: `續約自合約 ${contract.value.contract_no}`
     })
 
@@ -588,7 +588,7 @@ const openRenewModal = () => {
                 {{ getStatusBadge(contract.contract_status).label }}
               </span>
             </div>
-            <h2 class="plan-name-large">{{ contract.plan_id?.name || '—' }}</h2>
+            <h2 class="plan-name-large">{{ contract.plan?.name || '—' }}</h2>
           </div>
         </div>
 
@@ -625,16 +625,16 @@ const openRenewModal = () => {
             {{ PAGES.CONTRACTS.MEMBER_INFO }}
           </h3>
           <div class="member-info-card">
-            <div class="member-avatar-large">{{ contract.member_id?.full_name?.[0] || '?' }}</div>
+            <div class="member-avatar-large">{{ contract.member?.full_name?.[0] || '?' }}</div>
             <div class="member-details">
-              <h4 class="member-name-large">{{ contract.member_id?.full_name }}</h4>
-              <code class="member-code">{{ contract.member_id?.member_code }}</code>
+              <h4 class="member-name-large">{{ contract.member?.full_name }}</h4>
+              <code class="member-code">{{ contract.member?.member_code }}</code>
               <div class="member-contact">
-                <span v-if="contract.member_id?.phone">{{ contract.member_id.phone }}</span>
-                <span v-if="contract.member_id?.email" class="text-tertiary">{{ contract.member_id.email }}</span>
+                <span v-if="contract.member?.phone">{{ contract.member.phone }}</span>
+                <span v-if="contract.member?.email" class="text-tertiary">{{ contract.member.email }}</span>
               </div>
             </div>
-            <NuxtLink :to="`/members/${contract.member_id?.id}`" class="view-member-btn btn btn-ghost btn-small">
+            <NuxtLink :to="`/members/${contract.member?.id}`" class="view-member-btn btn btn-ghost btn-small">
               {{ PAGES.CONTRACTS.VIEW_MEMBER }}
             </NuxtLink>
           </div>
@@ -651,27 +651,27 @@ const openRenewModal = () => {
           <div class="info-grid">
             <div class="info-item">
               <label>{{ PAGES.CONTRACTS.PLAN_TYPE }}</label>
-              <span>{{ getPlanTypeLabel(contract.plan_id?.plan_type || '') }}</span>
+              <span>{{ getPlanTypeLabel(contract.plan?.plan_type || '') }}</span>
             </div>
             <div class="info-item">
               <label>{{ PAGES.CONTRACTS.PLAN_DURATION }}</label>
-              <span>{{ contract.plan_id?.duration_months ? `${contract.plan_id.duration_months} ${PAGES.CONTRACTS.MONTHS}` : '—' }}</span>
+              <span>{{ contract.plan?.duration_months ? `${contract.plan.duration_months} ${PAGES.CONTRACTS.MONTHS}` : '—' }}</span>
             </div>
             <div class="info-item">
               <label>{{ PAGES.CONTRACTS.ALLOW_PAUSE }}</label>
-              <span :class="contract.plan_id?.allow_pause ? 'text-success' : 'text-error'">
-                {{ contract.plan_id?.allow_pause ? LABELS.YES : LABELS.NO }}
+              <span :class="contract.plan?.allow_pause ? 'text-success' : 'text-error'">
+                {{ contract.plan?.allow_pause ? LABELS.YES : LABELS.NO }}
               </span>
             </div>
             <div class="info-item">
               <label>{{ PAGES.CONTRACTS.ALLOW_TRANSFER }}</label>
-              <span :class="contract.plan_id?.allow_transfer ? 'text-success' : 'text-error'">
-                {{ contract.plan_id?.allow_transfer ? LABELS.YES : LABELS.NO }}
+              <span :class="contract.plan?.allow_transfer ? 'text-success' : 'text-error'">
+                {{ contract.plan?.allow_transfer ? LABELS.YES : LABELS.NO }}
               </span>
             </div>
-            <div v-if="contract.plan_id?.plan_type === 'COUNT_BASED'" class="info-item">
+            <div v-if="contract.plan?.plan_type === 'COUNT_BASED'" class="info-item">
               <label>{{ PAGES.CONTRACTS.REMAINING_COUNTS }}</label>
-              <span class="count-remaining">{{ contract.remaining_counts || 0 }} / {{ contract.plan_id?.class_counts || 0 }}</span>
+              <span class="count-remaining">{{ contract.remaining_counts || 0 }} / {{ contract.plan?.class_counts || 0 }}</span>
             </div>
           </div>
         </section>
@@ -695,11 +695,11 @@ const openRenewModal = () => {
             </div>
             <div class="info-item">
               <label>{{ PAGES.CONTRACTS.BRANCH }}</label>
-              <span>{{ contract.branch_id?.name || '—' }}</span>
+              <span>{{ contract.branch?.name || '—' }}</span>
             </div>
             <div class="info-item">
               <label>{{ PAGES.CONTRACTS.SALES_PERSON }}</label>
-              <span>{{ contract.sales_person_id?.full_name || '—' }}</span>
+              <span>{{ contract.sales_person?.full_name || '—' }}</span>
             </div>
           </div>
           <div v-if="contract.notes" class="notes-section">
@@ -733,11 +733,11 @@ const openRenewModal = () => {
             <div class="log-content">
               <!-- 轉讓特有資訊 -->
               <div v-if="log.log_type === 'TRANSFER'" class="log-transfer-info">
-                <span class="transfer-from">{{ log.original_member_id?.full_name || '—' }}</span>
+                <span class="transfer-from">{{ log.original_member?.full_name || '—' }}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
                 </svg>
-                <span class="transfer-to">{{ log.target_member_id?.full_name || '—' }}</span>
+                <span class="transfer-to">{{ log.target_member?.full_name || '—' }}</span>
               </div>
               <!-- 暫停/延期日期 -->
               <div v-else class="log-dates">
@@ -754,11 +754,11 @@ const openRenewModal = () => {
                   </svg>
                   {{ log.created_by_employee.full_name }}
                 </span>
-                <span v-if="log.branch_id?.name" class="log-branch">
+                <span v-if="log.branch?.name" class="log-branch">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
-                  {{ log.branch_id.name }}
+                  {{ log.branch.name }}
                 </span>
               </div>
             </div>
@@ -1079,11 +1079,11 @@ const openRenewModal = () => {
             <div class="renew-info">
               <div class="info-row">
                 <span class="info-label">{{ PAGES.CONTRACTS.PLAN_NAME }}</span>
-                <span class="info-value">{{ contract?.plan_id?.name }}</span>
+                <span class="info-value">{{ contract?.plan?.name }}</span>
               </div>
               <div class="info-row">
                 <span class="info-label">{{ PAGES.CONTRACTS.PLAN_DURATION }}</span>
-                <span class="info-value">{{ contract?.plan_id?.duration_months }} {{ PAGES.CONTRACTS.MONTHS }}</span>
+                <span class="info-value">{{ contract?.plan?.duration_months }} {{ PAGES.CONTRACTS.MONTHS }}</span>
               </div>
             </div>
             <div class="input-group">

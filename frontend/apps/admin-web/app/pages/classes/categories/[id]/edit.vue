@@ -152,7 +152,7 @@ onMounted(async () => {
             <FormInput
               v-model="form.name"
               :placeholder="PAGES.CLASS_CATEGORIES.CATEGORY_NAME_PLACEHOLDER"
-              :error="!!errors.name"
+              :error="errors.name"
             />
           </FormField>
 
@@ -175,7 +175,7 @@ onMounted(async () => {
             <FormInput
               v-model="form.code"
               :placeholder="PAGES.CLASS_CATEGORIES.CATEGORY_CODE_PLACEHOLDER"
-              :error="!!errors.code"
+              :error="errors.code"
             />
             <template #hint>
               <span class="hint-text">唯一識別碼，僅限小寫字母、數字和底線</span>

@@ -1,11 +1,12 @@
 # Gym Nexus - 智慧健身房管理系統 (CRM/ERP)
 
-[![Directus](https://img.shields.io/badge/Backend-Directus-6644FF?style=flat-square&logo=directus)](https://directus.io/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![Hono.js](https://img.shields.io/badge/Backend-Hono.js-E36002?style=flat-square&logo=hono)](https://hono.dev/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2017-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Nuxt](https://img.shields.io/badge/Frontend-Nuxt%203-00DC82?style=flat-square&logo=nuxt.js)](https://nuxt.com/)
+[![Drizzle](https://img.shields.io/badge/ORM-Drizzle-C5F74F?style=flat-square)](https://orm.drizzle.team/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)]()
 
-**Gym Nexus** 是一個基於現代化技術堆疊構建的健身房全方位管理系統。本專案旨在解決多場館管理、複雜會籍合約、HR 考勤以及數據報表分析等核心需求。系統架構採用 Headless CMS 搭配高效能前端框架，確保開發速度與系統擴充性。
+**Gym Nexus** 是一個基於現代化技術堆疊構建的健身房全方位管理系統。本專案採用 Hono.js + Drizzle ORM 後端架構，搭配 Nuxt 3 前端 Monorepo，確保開發效率與系統擴充性。
 
 ---
 
@@ -13,11 +14,9 @@
 
 | 文件 | 說明 | 適合讀者 |
 |------|------|----------|
-| **[PRD.md](./PRD.md)** | 產品需求文件 - 功能規格、使用者角色、驗收標準 | PM、利害關係人、QA |
-| **[健身房系統架構設計.md](./健身房系統架構設計.md)** | 技術架構文件 - 資料庫 Schema、欄位定義、權限實作 | 開發者、DBA |
-| **[backend/DATABASE_INDEXES.md](./backend/DATABASE_INDEXES.md)** | 資料庫索引優化文件 - 100+ 索引、性能基準 | DBA、後端開發者 |
-| **[backend/REPORTS_API.md](./backend/REPORTS_API.md)** | 報表 API 文件 - 營收、會員成長、合約到期提醒 | 前端開發者、API 使用者 |
 | **[CLAUDE.md](./CLAUDE.md)** | AI 開發助理指引 - 專案結構與開發命令 | AI 工具、新進開發者 |
+| **[backend/README.md](./backend/README.md)** | 後端 API 文件 - 路由、服務、架構 | 後端開發者 |
+| **[docs/](./docs/)** | 其他技術文件 | 各類開發者 |
 
 ---
 
@@ -30,11 +29,10 @@
 - 整合 HR 與財務模組，產出 **即時營運報表**
 
 ### 技術目標
-- 採用 Headless CMS 架構，前後端完全分離
-- 實現 Row-Level Security (RLS)，從資料庫層保障資料安全
-- 支援 PWA / Capacitor，一套代碼部署 Web + Mobile
-- **資料庫性能優化**：100+ 專業索引，查詢速度提升 40-50 倍
-- 預留 Wger 運動數據整合接口
+- 採用 Hono.js + Drizzle ORM，輕量高效能 API
+- 實現多租戶架構 (Multi-tenancy)
+- 支援 PWA，一套代碼部署 Web + Mobile
+- Type-safe 全端開發體驗
 
 ---
 
@@ -43,18 +41,18 @@
 ### Backend
 | 技術 | 用途 | 版本 |
 |------|------|------|
-| **Directus** | Headless CMS、API 自動生成、權限管理 | v11.x |
-| **PostgreSQL + PostGIS** | 核心資料庫 + 地理空間擴展 | v18 + 3.6 |
-| **Node.js** | Directus Runtime & Extensions | v20 LTS |
-| **Redis** | 快取與 Session 管理 | v7 Alpine |
+| **Hono.js** | 輕量 Web 框架 | v4.x |
+| **Drizzle ORM** | Type-safe 資料庫存取 | v0.30+ |
+| **Lucia Auth** | 員工認證 (Session-based) | v3 |
+| **PostgreSQL + PostGIS** | 核心資料庫 + 地理空間 | v17 + 3.4 |
+| **Node.js** | Runtime | v22 LTS |
 
 ### Frontend
 | 技術 | 用途 | 版本 |
 |------|------|------|
-| **Nuxt 3** | SSR/SSG 框架 | v3.x |
+| **Nuxt 3** | SSR/SSG 框架 | v4.x |
 | **Vue 3** | UI 框架 | v3.5 |
 | **Tailwind CSS** | 樣式系統 | v3.x |
-| **Pinia** | 狀態管理 | v2.x |
 
 ### Infrastructure
 | 服務 | 用途 |
@@ -81,27 +79,18 @@
 ### 3. 彈性合約引擎
 - **期限制** (TIME_BASED)：月費、年費會籍
 - **點數制** (COUNT_BASED)：私人教練課程包
-- 內建異動邏輯：
-  - 請假 (Pause) → 自動順延 `end_date`
-  - 轉讓 (Transfer) → 變更會員歸屬
-  - 延期 (Extension) → 手動展延
+- 內建異動邏輯：請假順延、轉讓、延期
 
-### 4. HR 與權限系統
-- 員工打卡 (GPS/IP 防弊)
-- 休假申請與審核流程
-- 三層權限架構：
-  ```
-  HQ Admin     → 全系統存取
-  Store Manager → branch_id = 自己分店
-  Coach        → sales_person_id = 自己
-  ```
+### 4. 三端應用程式
+- **Admin Web** (localhost:3001) - 員工後台管理
+- **Member App** (localhost:3002) - 會員端 PWA
+- **Coach App** (localhost:3003) - 教練端應用
 
-### 5. 財務與報表
-- 收款紀錄 (現金/刷卡/LinePay/匯款)
-- 應收帳款 (AR) 追蹤
-- 多維度報表：
-  - 總部：各分店營收比較、會員成長率
-  - 分店：日營收、新進會員數、教練課程數
+### 5. 通知系統
+- Email (SMTP)
+- Web Push Notifications (VAPID)
+- LINE Messaging API
+- SMS (Mitake 三竹簡訊)
 
 ---
 
@@ -109,52 +98,29 @@
 
 ```
 gym-nexus/
-├── backend/                    # Directus 後端
-│   ├── extensions/             # 自訂 Hooks & Endpoints
-│   │   ├── gym-hooks/          # 生命週期鉤子 (合約到期、Email 通知)
-│   │   │   ├── index.js        # 主要 Hook 邏輯
-│   │   │   ├── cache.js        # Redis 快取模組
-│   │   │   └── email-service.js # Email 模板與發送服務
-│   │   └── gym-endpoints/      # 自訂 API (報表、QR Code、Push)
-│   ├── migrations/             # 資料庫遷移腳本
-│   │   ├── 005_optimize_indexes.sql      # 索引優化（40+ 索引）
-│   │   └── 006_postgis_spatial_indexes.sql # PostGIS 空間索引
-│   ├── schema/                 # 資料庫 Schema 快照
-│   ├── uploads/                # 本地上傳檔案 (開發用)
-│   ├── DATABASE_INDEXES.md     # 📊 索引優化文件（100+ 索引）
-│   ├── REPORTS_API.md          # 📈 報表 API 文件
-│   ├── docker-compose.yml      # 開發環境容器配置
-│   └── .env.example            # 環境變數範本（含 SMTP、VAPID）
+├── backend/                    # Hono.js API
+│   ├── src/
+│   │   ├── routes/            # API 路由 (~35 個)
+│   │   ├── services/          # 業務邏輯 (email, sms, line, payment)
+│   │   ├── middleware/        # 認證、CSRF、Rate Limiting
+│   │   ├── db/                # Drizzle Schema
+│   │   ├── hooks/             # 業務事件鉤子
+│   │   └── cron/              # 排程任務
+│   ├── docker-compose.yml
+│   └── Dockerfile
 │
-├── frontend/                   # Nuxt 3 前端 (Monorepo)
+├── frontend/                   # Nuxt 3 Monorepo
 │   ├── apps/
-│   │   ├── member-app/         # 會員端 PWA
-│   │   │   ├── pages/          # 頁面路由
-│   │   │   ├── components/     # UI 元件
-│   │   │   └── composables/    # 組合式函數
-│   │   └── admin-web/          # 管理後台
-│   │       ├── pages/          # 管理頁面
-│   │       ├── components/     # 後台元件
-│   │       └── layouts/        # 版面配置
-│   ├── packages/               # 共用套件
-│   │   ├── ui/                 # 共用 UI 元件庫
-│   │   ├── api/                # Directus SDK 封裝
-│   │   └── types/              # TypeScript 型別定義
-│   ├── nuxt.config.ts
-│   └── package.json
+│   │   ├── admin-web/         # 員工後台 (Port 3001)
+│   │   ├── member-app/        # 會員 PWA (Port 3002)
+│   │   └── coach-app/         # 教練 App (Port 3003)
+│   └── packages/
+│       ├── ui/                # 共用 UI 元件
+│       └── shared/            # 共用型別與工具
 │
-├── docs/                       # 額外文件 (圖表、API 文件等)
-│
-├── PRD.md                      # 產品需求文件
-├── 健身房系統架構設計.md          # 技術架構文件
-├── CLAUDE.md                   # AI 開發助理指引 (含端口配置)
+├── docs/                       # 技術文件
+├── CLAUDE.md                   # AI 開發助理指引
 └── README.md                   # 本文件
-
-🔥 **性能亮點**:
-- PostgreSQL 18 + PostGIS 3.6 最新版本
-- 100+ 專業索引：B-tree、GIN、GiST、BRIN、Partial
-- 多租戶查詢性能提升 40-50 倍
-- 地理空間查詢支援（附近分店搜尋）
 ```
 
 ---
@@ -162,9 +128,9 @@ gym-nexus/
 ## ⚡ 快速開始 (Quick Start)
 
 ### 環境需求
-- Node.js >= 20.x
+- Node.js >= 22.x
 - Docker & Docker Compose
-- pnpm (建議) 或 npm
+- pnpm (必須使用 pnpm)
 
 ### 1. Clone 專案
 ```bash
@@ -172,40 +138,34 @@ git clone https://github.com/your-org/gym-nexus.git
 cd gym-nexus
 ```
 
-### 2. 啟動 Backend (Directus + PostgreSQL)
+### 2. 啟動 Backend
 ```bash
 cd backend
 
 # 複製環境變數
 cp .env.example .env
 
-# 啟動 Docker 容器
-docker-compose up -d
+# 啟動 PostgreSQL
+docker compose up database -d
 
-# Directus Admin Panel: http://localhost:8055
-# 預設帳號: admin@example.com / password (請於 .env 設定)
+# 安裝依賴並啟動
+pnpm install
+pnpm dev
+
+# API: http://localhost:8056
 ```
 
-### 3. 啟動 Frontend (Nuxt 3)
+### 3. 啟動 Frontend
 ```bash
 cd frontend
 
 # 安裝依賴
 pnpm install
 
-# 啟動開發伺服器
-pnpm run dev
-
-# 開發伺服器: http://localhost:3000
-```
-
-### 4. 資料庫初始化 (首次)
-```bash
-# 進入 backend 目錄
-cd backend
-
-# 匯入初始 Schema (若有提供)
-docker-compose exec database psql -U directus -d gym_nexus -f /schema/init.sql
+# 啟動所有應用 (或選擇單一應用)
+pnpm dev:admin    # Admin Web - http://localhost:3001
+pnpm dev:member   # Member App - http://localhost:3002
+pnpm dev:coach    # Coach App  - http://localhost:3003
 ```
 
 ---
@@ -215,95 +175,75 @@ docker-compose exec database psql -U directus -d gym_nexus -f /schema/init.sql
 ### Backend (.env)
 ```env
 # Database
-DB_CLIENT=pg
-DB_HOST=database
-DB_PORT=5432
-DB_DATABASE=gym_nexus
-DB_USER=directus
-DB_PASSWORD=your_secure_password
+DATABASE_URL=postgresql://postgres:postgres@localhost:15432/gym_nexus
 
-# Directus
-KEY=your-random-key
-SECRET=your-random-secret
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
+# Auth Secrets
+SESSION_SECRET=your-session-secret
+MEMBER_JWT_SECRET=your-member-jwt-secret
+COACH_JWT_SECRET=your-coach-jwt-secret
 
-# Storage (R2)
-STORAGE_LOCATIONS=cloudflare
-STORAGE_CLOUDFLARE_DRIVER=cloudflare-r2
-STORAGE_CLOUDFLARE_KEY=your_r2_key
-STORAGE_CLOUDFLARE_SECRET=your_r2_secret
-STORAGE_CLOUDFLARE_BUCKET=gym-nexus-files
-STORAGE_CLOUDFLARE_ENDPOINT=https://xxx.r2.cloudflarestorage.com
+# Email (SMTP)
+EMAIL_SMTP_HOST=smtp.example.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_USER=your-email
+EMAIL_SMTP_PASSWORD=your-password
+EMAIL_FROM=noreply@example.com
+
+# Push Notifications
+VAPID_PUBLIC_KEY=your-vapid-public-key
+VAPID_PRIVATE_KEY=your-vapid-private-key
+
+# LINE Messaging API
+LINE_CHANNEL_ACCESS_TOKEN=your-line-token
+LINE_CHANNEL_SECRET=your-line-secret
+
+# Payment
+STRIPE_SECRET_KEY=sk_test_xxx
+ECPAY_MERCHANT_ID=your-ecpay-merchant
 ```
 
 ### Frontend (.env)
 ```env
-NUXT_PUBLIC_API_URL=http://localhost:8055
-NUXT_PUBLIC_APP_NAME=Gym Nexus
+API_BASE_URL=http://localhost:8056
 ```
 
 ---
 
-## 📊 資料庫核心實體 (Database Entities)
+## 📊 API 概覽
 
-> 詳細欄位定義請參考 [健身房系統架構設計.md](./健身房系統架構設計.md)
+### 認證方式
+| 應用 | 認證方式 | Header/Cookie |
+|------|---------|---------------|
+| Admin Web | Lucia Session | Cookie (自動) |
+| Member App | JWT | `X-Member-Token` |
+| Coach App | JWT | `X-Coach-Token` |
 
+### 主要端點
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  branches   │────<│  employees  │     │ job_titles  │
-│  (分店)     │     │  (員工)     │>────│  (職位)     │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                   │
-       │                   │ sales_person_id
-       ▼                   ▼
-┌─────────────┐     ┌─────────────┐     ┌──────────────────┐
-│   members   │────<│  contracts  │>────│ membership_plans │
-│   (會員)    │     │  (合約)     │     │ (會籍方案)       │
-└─────────────┘     └─────────────┘     └──────────────────┘
-                           │
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-       ┌───────────┐ ┌───────────┐ ┌───────────┐
-       │ payments  │ │contract_  │ │ (未來)    │
-       │ (收款)    │ │   logs    │ │appointments│
-       └───────────┘ │ (異動紀錄)│ │ (預約)    │
-                     └───────────┘ └───────────┘
+# 員工認證
+POST /api/auth/login
+POST /api/auth/logout
+
+# 會員 App
+POST /api/member/otp/send
+POST /api/member/auth/verify
+GET  /api/member/me
+GET  /api/member/check-in/history
+
+# 教練 App
+POST /api/coach/auth/login
+GET  /api/coach/me
+GET  /api/coach/classes
+GET  /api/coach/students
+
+# 管理 API (需認證)
+GET  /api/members
+GET  /api/contracts
+GET  /api/payments
+GET  /api/reports/*
 ```
 
----
-
-## 🗺️ 開發路線圖 (Roadmap)
-
-> 詳細功能規格請參考 [PRD.md](./PRD.md)
-
-### ✅ Phase 1: MVP 核心 (已完成)
-- [x] Directus 環境架設與 Docker 配置
-- [x] 核心 Schema 設計 (branches, employees, members, contracts)
-- [x] 基礎權限設定 (Role-based + Row-level)
-- [x] 會員 CRUD 與標籤系統
-
-### ✅ Phase 2: 營運深化 (已完成)
-- [x] HR 打卡與休假系統 (GPS/IP 驗證、補打卡申請)
-- [x] 合約異動邏輯 (請假順延自動計算)
-- [x] 財務收款紀錄 (多元支付方式)
-- [x] 基礎報表 (日/月營收、會員成長、活躍度分析)
-- [x] 報表 API 快取 (Redis 10 分鐘 TTL)
-
-### ✅ Phase 3: 會員端 & 進階功能 (已完成)
-- [x] Nuxt 會員端 App (PWA)
-- [x] 入場條碼 / QR Code 掃描
-- [x] 總部戰情室 Dashboard
-- [x] 通知系統 (Email + Push Notifications)
-- [x] 合約到期 Email 提醒 (7/3/1 天)
-- [x] 表單驗證組件 (useFormValidation)
-
-### 🚧 Phase 4: 擴充功能 (進行中)
-- [ ] Wger 運動數據整合 (身體數據、訓練日誌)
-- [ ] 課程預約系統
-- [x] 進階報表與數據分析 (Looker Studio 整合)
-- [ ] Mobile App (Capacitor)
+詳細 API 文件請參考 [backend/README.md](./backend/README.md)
 
 ---
 
@@ -312,13 +252,13 @@ NUXT_PUBLIC_APP_NAME=Gym Nexus
 ```bash
 # Frontend 單元測試
 cd frontend
-pnpm run test
+pnpm test
 
 # Frontend E2E 測試
-pnpm run test:e2e
+pnpm test:e2e
 
 # 型別檢查
-pnpm run type-check
+pnpm typecheck
 ```
 
 ---
@@ -328,31 +268,20 @@ pnpm run type-check
 ### 命名慣例
 - **資料庫表/欄位**: snake_case (`member_code`, `branch_id`)
 - **TypeScript/Vue**: camelCase (`memberCode`, `branchId`)
-- **元件檔名**: PascalCase (`MemberCard.vue`, `ContractForm.vue`)
+- **元件檔名**: PascalCase (`MemberCard.vue`)
 
 ### Git Commit 格式
 ```
 <type>(<scope>): <subject>
 
-feat(contract): add pause functionality with auto-extension
-fix(member): resolve status update on contract expiry
-docs(readme): update project structure section
+feat(contract): add pause functionality
+fix(member): resolve status update issue
+docs(readme): update project structure
 ```
 
 ### 語言慣例
 - **文件/UI**: 繁體中文 (Traditional Chinese)
 - **程式碼/註解**: 英文 (English)
-- **資料庫欄位**: 英文 (English)
-
----
-
-## 🤝 貢獻指南 (Contributing)
-
-1. Fork 本專案
-2. 建立功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交變更 (`git commit -m 'feat: add amazing feature'`)
-4. 推送分支 (`git push origin feature/amazing-feature`)
-5. 開啟 Pull Request
 
 ---
 
@@ -364,6 +293,4 @@ docs(readme): update project structure section
 
 ## 📞 聯絡方式 (Contact)
 
-- **專案負責人**: [Your Name]
-- **Email**: your.email@example.com
 - **Issue Tracker**: [GitHub Issues](https://github.com/your-org/gym-nexus/issues)

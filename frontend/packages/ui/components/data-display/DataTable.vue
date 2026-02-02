@@ -68,7 +68,7 @@ interface Props {
   /** 空狀態描述 */
   emptyDescription?: string
   /** 空狀態圖標 */
-  emptyIcon?: 'users' | 'files' | 'inbox' | 'search' | 'calendar' | 'dollar'
+  emptyIcon?: 'users' | 'files' | 'inbox' | 'search' | 'calendar' | 'dollar' | 'grid' | 'bookmark' | 'folder' | 'check'
   /** 空狀態操作按鈕文字 */
   emptyActionLabel?: string
   /** 空狀態操作按鈕連結 */

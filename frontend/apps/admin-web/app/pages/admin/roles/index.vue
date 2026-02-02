@@ -127,6 +127,15 @@ const selectRole = (roleId: string) => {
 const getSelectedRole = computed(() => {
   return roles.value.find(r => r.id === selectedRole.value)
 })
+
+// Helper to safely check permission
+const hasPermission = (moduleKey: string, permKey: string): boolean => {
+  const role = getSelectedRole.value
+  if (!role) return false
+  const modulePerms = role.permissions[moduleKey]
+  if (!modulePerms) return false
+  return modulePerms[permKey as keyof PermissionSet] ?? false
+}
 </script>
 
 <template>
@@ -218,9 +227,9 @@ const getSelectedRole = computed(() => {
                   <td v-for="perm in permissionTypes" :key="perm.key">
                     <span
                       class="permission-badge"
-                      :class="getSelectedRole.permissions[module.key][perm.key] ? 'allowed' : 'denied'"
+                      :class="hasPermission(module.key, perm.key) ? 'allowed' : 'denied'"
                     >
-                      <svg v-if="getSelectedRole.permissions[module.key][perm.key]" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                      <svg v-if="hasPermission(module.key, perm.key)" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                         <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                       </svg>
                       <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">

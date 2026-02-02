@@ -136,7 +136,7 @@ onMounted(async () => {
             <FormInput
               v-model="form.name"
               :placeholder="PAGES.CLASSES.CLASS_NAME_PLACEHOLDER"
-              :error="!!errors.name"
+              :error="errors.name"
             />
           </FormField>
 
@@ -148,12 +148,9 @@ onMounted(async () => {
             <FormSelect
               v-model="form.branch_id"
               placeholder="選擇分店"
-              :error="!!errors.branch_id"
-            >
-              <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                {{ branch.name }}
-              </option>
-            </FormSelect>
+              :error="errors.branch_id"
+              :options="branches.map(branch => ({ value: branch.id, label: branch.name }))"
+            />
           </FormField>
         </div>
 
@@ -162,24 +159,22 @@ onMounted(async () => {
             <FormSelect
               v-model="form.category_id"
               :placeholder="PAGES.CLASSES.SELECT_CATEGORY"
-            >
-              <option :value="null">無類別</option>
-              <option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </FormSelect>
+              :options="[
+                { value: '', label: '無類別' },
+                ...categories.map(cat => ({ value: cat.id, label: cat.name }))
+              ]"
+            />
           </FormField>
 
           <FormField :label="PAGES.CLASSES.INSTRUCTOR">
             <FormSelect
               v-model="form.instructor_id"
               :placeholder="PAGES.CLASSES.SELECT_INSTRUCTOR"
-            >
-              <option :value="null">未指定</option>
-              <option v-for="instructor in instructors" :key="instructor.id" :value="instructor.id">
-                {{ instructor.full_name }}
-              </option>
-            </FormSelect>
+              :options="[
+                { value: '', label: '未指定' },
+                ...instructors.map(instructor => ({ value: instructor.id, label: instructor.full_name }))
+              ]"
+            />
           </FormField>
         </div>
 
@@ -205,9 +200,9 @@ onMounted(async () => {
               <FormInput
                 v-model.number="form.duration_minutes"
                 type="number"
-                min="1"
-                max="480"
-                :error="!!errors.duration_minutes"
+                :min="1"
+                :max="480"
+                :error="errors.duration_minutes"
               />
               <span class="input-suffix">{{ PAGES.CLASSES.DURATION_MINUTES }}</span>
             </div>
@@ -222,9 +217,9 @@ onMounted(async () => {
               <FormInput
                 v-model.number="form.max_capacity"
                 type="number"
-                min="1"
-                max="999"
-                :error="!!errors.max_capacity"
+                :min="1"
+                :max="999"
+                :error="errors.max_capacity"
               />
               <span class="input-suffix">人</span>
             </div>
@@ -233,11 +228,10 @@ onMounted(async () => {
 
         <div class="form-grid">
           <FormField :label="PAGES.CLASSES.DIFFICULTY">
-            <FormSelect v-model="form.difficulty_level">
-              <option v-for="opt in difficultyOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </FormSelect>
+            <FormSelect
+              v-model="form.difficulty_level"
+              :options="difficultyOptions"
+            />
           </FormField>
 
           <FormField :label="PAGES.CLASSES.IMAGE_URL">
@@ -265,8 +259,8 @@ onMounted(async () => {
               <FormInput
                 v-model.number="form.count_deduction"
                 type="number"
-                min="1"
-                max="10"
+                :min="1"
+                :max="10"
               />
               <span class="input-suffix">堂</span>
             </div>
