@@ -9,6 +9,7 @@ interface ConfirmOptions {
   confirmText?: string
   cancelText?: string
   type?: 'danger' | 'warning' | 'info'
+  confirmVariant?: 'danger' | 'warning' | 'primary' | 'success' | 'error'
 }
 
 interface ConfirmState {

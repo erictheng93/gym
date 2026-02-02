@@ -158,8 +158,8 @@ const isSubmenuActive = (item: typeof menuItems[0]) => {
 }
 
 const userInitial = computed(() => {
-  if (user.value?.first_name) return user.value.first_name[0].toUpperCase()
-  if (user.value?.email) return user.value.email[0].toUpperCase()
+  if (user.value?.first_name) return user.value.first_name[0]?.toUpperCase() ?? '?'
+  if (user.value?.email) return user.value.email[0]?.toUpperCase() ?? '?'
   return '?'
 })
 

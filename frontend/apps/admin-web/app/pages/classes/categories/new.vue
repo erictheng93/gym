@@ -162,12 +162,11 @@ onMounted(async () => {
             <FormSelect
               v-model="form.parent_id"
               :placeholder="PAGES.CLASS_CATEGORIES.SELECT_PARENT_PLACEHOLDER"
-            >
-              <option :value="null">無（主類別）</option>
-              <option v-for="cat in rootCategories" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </FormSelect>
+              :options="[
+                { value: '', label: '無（主類別）' },
+                ...rootCategories.map(cat => ({ value: cat.id, label: cat.name }))
+              ]"
+            />
           </FormField>
         </div>
 
@@ -231,10 +230,13 @@ onMounted(async () => {
 
         <div class="form-grid">
           <FormField :label="PAGES.CLASS_CATEGORIES.VISIBILITY">
-            <FormSelect v-model="form.visibility">
-              <option value="shared">{{ PAGES.CLASS_CATEGORIES.VISIBILITY_SHARED }}</option>
-              <option value="owner_only">{{ PAGES.CLASS_CATEGORIES.VISIBILITY_OWNER_ONLY }}</option>
-            </FormSelect>
+            <FormSelect
+              v-model="form.visibility"
+              :options="[
+                { value: 'shared', label: PAGES.CLASS_CATEGORIES.VISIBILITY_SHARED },
+                { value: 'owner_only', label: PAGES.CLASS_CATEGORIES.VISIBILITY_OWNER_ONLY }
+              ]"
+            />
           </FormField>
 
           <FormField
@@ -244,11 +246,8 @@ onMounted(async () => {
             <FormSelect
               v-model="form.owner_branch_id"
               placeholder="選擇擁有者分店"
-            >
-              <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                {{ branch.name }}
-              </option>
-            </FormSelect>
+              :options="branches.map(branch => ({ value: branch.id, label: branch.name }))"
+            />
           </FormField>
         </div>
       </div>

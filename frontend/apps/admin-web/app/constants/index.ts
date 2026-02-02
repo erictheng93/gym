@@ -219,12 +219,15 @@ export const MESSAGES = {
     MEMBER_UPDATE_FAILED: '更新會員資料失敗，請稍後再試',
     MEMBER_DELETE_FAILED: '刪除會員失敗，該會員可能有關聯的合約',
     MEMBER_FETCH_FAILED: '載入會員資料失敗，請稍後再試',
+    MEMBER_SEARCH_FAILED: '搜尋會員失敗，請稍後再試',
+    MEMBER_LOAD_FAILED: '載入會員資料失敗，請稍後再試',
 
     // Contract
     CONTRACT_CREATE_FAILED: '建立合約失敗，請稍後再試',
     CONTRACT_UPDATE_FAILED: '更新合約失敗，請稍後再試',
     CONTRACT_DELETE_FAILED: '刪除合約失敗，請稍後再試',
     CONTRACT_FETCH_FAILED: '載入合約資料失敗，請稍後再試',
+    CONTRACT_LOAD_FAILED: '載入合約資料失敗，請稍後再試',
     CONTRACT_PAUSE_FAILED: '暫停合約失敗，請稍後再試',
     CONTRACT_RESUME_FAILED: '恢復合約失敗，請稍後再試',
     CONTRACT_TRANSFER_FAILED: '轉讓合約失敗，請稍後再試',
@@ -254,6 +257,8 @@ export const MESSAGES = {
     BRANCH_UPDATE_FAILED: '更新分店資料失敗，請稍後再試',
     BRANCH_DELETE_FAILED: '刪除分店失敗，請稍後再試',
     BRANCH_FETCH_FAILED: '載入分店資料失敗，請稍後再試',
+    BRANCH_LOAD_FAILED: '載入分店資料失敗，請稍後再試',
+    BRANCH_UPDATE_STATUS_FAILED: '更新分店狀態失敗，請稍後再試',
 
     // Job Title
     JOB_TITLE_CREATE_FAILED: '建立職位失敗，請稍後再試',
@@ -335,6 +340,8 @@ export const MESSAGES = {
     BRANCH_CREATED: '分店建立成功',
     BRANCH_UPDATED: '分店資料更新成功',
     BRANCH_DELETED: '分店刪除成功',
+    BRANCH_ACTIVATED: '分店已啟用',
+    BRANCH_ARCHIVED: '分店已停用',
 
     // Job Title
     JOB_TITLE_CREATED: '職位建立成功',

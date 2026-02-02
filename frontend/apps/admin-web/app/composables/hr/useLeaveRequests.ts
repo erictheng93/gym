@@ -205,8 +205,8 @@ export const useLeaveRequests = () => {
         limit: 1
       })
 
-      if (balancesResult.data.length > 0) {
-        const balance = balancesResult.data[0]
+      const balance = balancesResult.data[0]
+      if (balance) {
         await updateItem<LeaveBalance>('leave_balances', balance.id, {
           used_days: balance.used_days + leaveRequest.days_requested,
           pending_days: Math.max(0, balance.pending_days - leaveRequest.days_requested)

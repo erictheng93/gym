@@ -134,10 +134,11 @@ export const createEmptyPermissions = (): Record<string, Record<PermissionAction
   const permissions: Record<string, Record<string, boolean>> = {}
 
   PERMISSION_MODULES.forEach(module => {
-    permissions[module.key] = {}
+    const modulePerms: Record<string, boolean> = {}
     module.actions.forEach(action => {
-      permissions[module.key][action.key] = false
+      modulePerms[action.key] = false
     })
+    permissions[module.key] = modulePerms
   })
 
   return permissions
@@ -150,10 +151,11 @@ export const createFullPermissions = (): Record<string, Record<PermissionAction,
   const permissions: Record<string, Record<string, boolean>> = {}
 
   PERMISSION_MODULES.forEach(module => {
-    permissions[module.key] = {}
+    const modulePerms: Record<string, boolean> = {}
     module.actions.forEach(action => {
-      permissions[module.key][action.key] = true
+      modulePerms[action.key] = true
     })
+    permissions[module.key] = modulePerms
   })
 
   return permissions

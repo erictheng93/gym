@@ -11,7 +11,7 @@ interface Props {
   /** 描述 */
   description?: string
   /** 圖標類型 */
-  icon?: 'users' | 'files' | 'inbox' | 'search' | 'calendar' | 'dollar'
+  icon?: 'users' | 'files' | 'inbox' | 'search' | 'calendar' | 'dollar' | 'grid' | 'bookmark' | 'folder' | 'check'
   /** 操作按鈕文字 */
   actionLabel?: string
   /** 操作按鈕連結 */
@@ -75,6 +75,34 @@ const icons: Record<string, { viewBox: string; paths: string[] }> = {
     paths: [
       'M12 2v20',
       'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'
+    ]
+  },
+  grid: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M3 3h7v7H3z',
+      'M14 3h7v7h-7z',
+      'M14 14h7v7h-7z',
+      'M3 14h7v7H3z'
+    ]
+  },
+  bookmark: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'
+    ]
+  },
+  folder: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'
+    ]
+  },
+  check: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M22 11.08V12a10 10 0 1 1-5.93-9.14',
+      'M22 4 12 14.01l-3-3'
     ]
   }
 }

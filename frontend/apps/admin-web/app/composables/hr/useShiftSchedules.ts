@@ -115,7 +115,7 @@ export const useShiftSchedules = () => {
 
       // Filter for active shifts (end_date is null or >= today)
       if (activeOnly) {
-        const today = new Date().toISOString().split('T')[0]
+        const today = new Date().toISOString().split('T')[0]!
         filtered = filtered.filter(es =>
           !es.end_date || es.end_date >= today
         )
@@ -141,7 +141,7 @@ export const useShiftSchedules = () => {
    * 取得班表的指派員工
    */
   const fetchShiftEmployees = async (shiftScheduleId: string) => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0]!
 
     const result = await readItems<EmployeeShift>('employee_shifts', {
       filter: {
@@ -163,7 +163,7 @@ export const useShiftSchedules = () => {
    * 取得員工的當前班表
    */
   const getEmployeeCurrentShift = async (employeeId: string) => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0]!
 
     const result = await readItems<EmployeeShift>('employee_shifts', {
       filter: {

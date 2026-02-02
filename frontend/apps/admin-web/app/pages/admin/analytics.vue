@@ -7,10 +7,12 @@ definePageMeta({
 })
 
 // Check if user has admin/manager role
-const { user, apiCall } = useAuth()
+const { user } = useAuth()
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 const hasAccess = computed(() => {
-  const role = user.value?.role?.name
-  return role === 'Administrator' || role === 'Manager'
+  const role = user.value?.role
+  return role === 'admin' || role === 'manager'
 })
 
 const {
@@ -50,7 +52,10 @@ onMounted(async () => {
 // 獲取 API 使用統計
 const fetchApiStats = async () => {
   try {
-    const response = await apiCall(`/gym/analytics/api-stats?timeRange=${statsTimeRange.value}`)
+    const response = await fetch(`${apiBaseUrl}/api/gym/analytics/api-stats?timeRange=${statsTimeRange.value}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(r => r.json())
     if (response.success && response.data) {
       apiStats.value = {
         totalRequests: response.data.totalRequests || 0,

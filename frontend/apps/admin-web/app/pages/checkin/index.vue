@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS } from '~/constants'
 import type { VerificationMethod } from '~/components/VerificationMethodSelector.vue'
+import { useAttendance } from '~/composables/hr/useAttendance'
 
 // Tab state
 const activeTab = ref<'member' | 'staff'>('member')

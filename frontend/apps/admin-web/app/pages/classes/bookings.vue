@@ -187,7 +187,8 @@ const handleMarkNoShow = async (booking: Booking) => {
 }
 
 // View member detail
-const viewMember = (memberId: string) => {
+const viewMember = (memberId: string | undefined) => {
+  if (!memberId) return
   navigateTo(`/members/${memberId}`)
 }
 </script>

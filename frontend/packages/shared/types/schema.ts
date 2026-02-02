@@ -40,6 +40,8 @@ export interface Employee extends BaseFields {
   employment_type: 'FULL_TIME' | 'PART_TIME' | 'FREELANCE'
   basic_salary: number | null
   custom_permissions: Record<string, boolean> | null
+  phone: string | null
+  email: string | null
   // Relations
   branch?: Branch
   job_title?: JobTitle

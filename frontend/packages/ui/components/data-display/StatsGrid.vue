@@ -18,9 +18,9 @@ interface StatItem {
   /** 統計數值 */
   value: number
   /** 圖標類型 */
-  icon?: 'check' | 'alert' | 'file' | 'dollar' | 'users' | 'calendar'
+  icon?: 'check' | 'alert' | 'file' | 'dollar' | 'users' | 'calendar' | 'grid' | 'folder'
   /** 顏色變體 */
-  variant?: 'default' | 'success' | 'warning' | 'error'
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'info'
 }
 
 interface Props {
@@ -71,6 +71,19 @@ const icons: Record<string, { paths: string[] }> = {
       'M16 2v4',
       'M3 10h18',
       'M21 6v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'
+    ]
+  },
+  grid: {
+    paths: [
+      'M3 3h7v7H3z',
+      'M14 3h7v7h-7z',
+      'M14 14h7v7h-7z',
+      'M3 14h7v7H3z'
+    ]
+  },
+  folder: {
+    paths: [
+      'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'
     ]
   }
 }
@@ -162,6 +175,11 @@ const getIconPaths = (iconName: string | undefined) => {
 .stat-error .stat-icon {
   background: rgba(255, 59, 48, 0.15);
   color: var(--color-error);
+}
+
+.stat-info .stat-icon {
+  background: rgba(0, 122, 255, 0.15);
+  color: #007aff;
 }
 
 .stat-content {

@@ -8,8 +8,28 @@ definePageMeta({
   middleware: 'auth'
 })
 
+interface PermissionSet {
+  read: boolean
+  create: boolean
+  update: boolean
+  delete: boolean
+}
+
+interface RolePermissions {
+  [module: string]: PermissionSet
+}
+
+interface Role {
+  id: string
+  name: string
+  description: string
+  userCount: number
+  color: string
+  permissions: RolePermissions
+}
+
 // Predefined roles with permissions
-const roles = ref([
+const roles = ref<Role[]>([
   {
     id: 'admin',
     name: '管理員',

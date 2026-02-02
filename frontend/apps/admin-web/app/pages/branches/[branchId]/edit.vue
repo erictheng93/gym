@@ -39,6 +39,9 @@ const loadBranch = async () => {
   isLoading.value = true
   try {
     const data = await fetchBranch(branchId.value)
+    if (!data) {
+      throw new Error('Branch not found')
+    }
     branch.value = data
     // 填充表單
     form.name = data.name

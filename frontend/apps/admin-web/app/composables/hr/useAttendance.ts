@@ -122,9 +122,9 @@ export const useAttendance = () => {
         limit: 1
       })
 
-      if (result.data.length === 0) return null
-
       const att = result.data[0]
+      if (!att) return null
+
       const record: AttendanceRecord = {
         id: att.id,
         employee: att.employee as Employee,

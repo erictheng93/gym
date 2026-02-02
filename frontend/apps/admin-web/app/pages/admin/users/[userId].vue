@@ -62,7 +62,7 @@ const loadUser = async () => {
     user.value = result.data
     formData.value = {
       email: result.data.email,
-      role: result.data.role,
+      role: result.data.role as 'admin' | 'manager' | 'coach' | 'staff',
       isActive: result.data.isActive,
       employeeId: result.data.employeeId
     }
