@@ -506,11 +506,11 @@ const openRenewModal = () => {
   if (contract.value?.end_date) {
     const nextDay = new Date(contract.value.end_date)
     nextDay.setDate(nextDay.getDate() + 1)
-    renewForm.startDate = nextDay.toISOString().split('T')[0]
+    renewForm.startDate = nextDay.toISOString().split('T')[0]!
   } else {
-    renewForm.startDate = new Date().toISOString().split('T')[0]
+    renewForm.startDate = new Date().toISOString().split('T')[0]!
   }
-  renewForm.amount = contract.value?.plan_id?.price || 0
+  renewForm.amount = contract.value?.plan?.price || 0
   showRenewModal.value = true
 }
 </script>
@@ -1030,7 +1030,7 @@ const openRenewModal = () => {
             <div v-if="extendedEndDate" class="extend-preview">
               <div class="preview-row">
                 <span class="preview-label">{{ PAGES.CONTRACTS.ORIGINAL_END_DATE }}</span>
-                <span class="preview-value">{{ formatDate(contract?.end_date) }}</span>
+                <span class="preview-value">{{ formatDate(contract?.end_date ?? null) }}</span>
               </div>
               <div class="preview-arrow">→</div>
               <div class="preview-row">

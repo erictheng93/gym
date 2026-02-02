@@ -95,7 +95,7 @@ const handleRowClick = (contract: typeof contracts.value[0]) => {
 }
 
 // Batch action handlers
-const handleBatchStatusUpdate = async (status: string) => {
+const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'PAUSED' | 'TERMINATED') => {
   if (selectedIds.value.length === 0) return
 
   const statusLabel = status === 'ACTIVE' ? '有效' : status === 'PAUSED' ? '暫停' : '終止'
@@ -128,8 +128,8 @@ const handleExportSelected = () => {
   const headers = ['合約編號', '會員', '方案', '開始日期', '結束日期', '金額', '付款狀態', '合約狀態']
   const rows = selectedContracts.map(c => [
     c.contract_no,
-    c.member_id?.full_name || '',
-    c.plan_id?.name || '',
+    c.member?.full_name || '',
+    c.plan?.name || '',
     c.start_date ? new Date(c.start_date).toLocaleDateString('zh-TW') : '',
     c.end_date ? new Date(c.end_date).toLocaleDateString('zh-TW') : '',
     c.total_amount,
