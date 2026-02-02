@@ -1,5 +1,7 @@
 # Gym Nexus Deployment Runbook
 
+> **Updated for Hono.js + Drizzle ORM architecture**
+
 This document provides step-by-step procedures for deploying Gym Nexus to production and staging environments.
 
 ## Table of Contents
@@ -18,10 +20,10 @@ This document provides step-by-step procedures for deploying Gym Nexus to produc
 ## Pre-deployment Checklist
 
 ### Code Quality
-- [ ] All tests passing in CI (`pnpm test`)
+- [ ] All tests passing (`pnpm test`)
 - [ ] TypeScript compilation successful (`pnpm typecheck`)
 - [ ] ESLint passing (`pnpm lint`)
-- [ ] E2E tests passing (for PRs)
+- [ ] Backend builds successfully (`cd backend && pnpm build`)
 
 ### Database
 - [ ] Database migrations reviewed and tested locally
@@ -30,13 +32,13 @@ This document provides step-by-step procedures for deploying Gym Nexus to produc
 
 ### Configuration
 - [ ] Environment variables configured for target environment
-- [ ] Secrets rotated if required (API keys, passwords)
-- [ ] CORS origins updated for new domains (if any)
+- [ ] Secrets rotated if required (SESSION_SECRET, JWT secrets)
+- [ ] CORS origins updated for production domains
 
 ### Infrastructure
 - [ ] Docker images built and tested locally
 - [ ] Sufficient disk space on target servers
-- [ ] Redis and PostgreSQL services healthy
+- [ ] PostgreSQL services healthy
 
 ### Communication
 - [ ] Deployment window communicated to stakeholders
@@ -49,405 +51,365 @@ This document provides step-by-step procedures for deploying Gym Nexus to produc
 
 ### Required Environment Variables
 
-Copy from `backend/.env.example` and configure:
+Create `/backend/.env` from `.env.example`:
 
 ```bash
-# Critical - Must be set in production
-SECRET=<random-64-char-string>
-DB_PASSWORD=<secure-database-password>
+# Database (Required)
+DATABASE_URL=postgresql://gym_nexus:SECURE_PASSWORD@db.example.com:5432/gym_nexus
 
-# CORS - Configure for your domains
-CORS_ORIGIN=https://member.gym-nexus.com,https://admin.gym-nexus.com
+# Server
+PORT=8056
+NODE_ENV=production
+ENABLE_CRON=true
 
-# OAuth Providers (if using social login)
-AUTH_PROVIDERS=google,line
-GOOGLE_CLIENT_ID=<your-google-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-client-secret>
-LINE_CHANNEL_ID=<your-line-channel-id>
-LINE_CHANNEL_SECRET=<your-line-channel-secret>
+# Auth Secrets (Required - generate with: openssl rand -hex 32)
+SESSION_SECRET=<64-char-random-string>
+MEMBER_JWT_SECRET=<64-char-random-string>
+COACH_JWT_SECRET=<64-char-random-string>
+
+# CORS (Required - your production domains)
+CORS_ORIGIN=https://admin.gym-nexus.com,https://member.gym-nexus.com,https://coach.gym-nexus.com
 
 # Email (Amazon SES recommended)
+EMAIL_TRANSPORT=smtp
+EMAIL_FROM=Gym Nexus <noreply@gym-nexus.com>
 EMAIL_SMTP_HOST=email-smtp.ap-northeast-1.amazonaws.com
+EMAIL_SMTP_PORT=587
 EMAIL_SMTP_USER=<ses-smtp-username>
 EMAIL_SMTP_PASSWORD=<ses-smtp-password>
 
 # Push Notifications
 VAPID_PUBLIC_KEY=<generated-vapid-public-key>
 VAPID_PRIVATE_KEY=<generated-vapid-private-key>
+VAPID_SUBJECT=mailto:admin@gym-nexus.com
+
+# LINE Messaging
+LINE_CHANNEL_ACCESS_TOKEN=<your-line-token>
+LINE_MESSAGING_CHANNEL_SECRET=<your-line-secret>
+
+# SMS (Mitake)
+MITAKE_USERNAME=<username>
+MITAKE_PASSWORD=<password>
+
+# File Storage (Cloudflare R2)
+S3_BUCKET=gym-nexus-files
+S3_REGION=auto
+S3_ACCESS_KEY=<r2-access-key>
+S3_SECRET_KEY=<r2-secret-key>
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_PUBLIC_URL=https://files.gym-nexus.com
+
+# Payment (if using)
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
 ```
 
-### Generate VAPID Keys
+### Generate Secrets
 
 ```bash
-npx web-push generate-vapid-keys
-```
-
-### Generate Secret Key
-
-```bash
+# Generate random secrets
 openssl rand -hex 32
+
+# Generate VAPID keys
+npx web-push generate-vapid-keys
 ```
 
 ---
 
 ## Backend Deployment
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Docker Deployment (Recommended)
 
 ```bash
-# Navigate to backend directory
-cd backend
-
-# Pull latest code
-git pull origin main
-
 # Build production image
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
-
-# Stop existing containers (with grace period)
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml stop -t 30
-
-# Start new containers
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# Verify containers are running
-docker-compose ps
-
-# Check logs for errors
-docker-compose logs -f --tail=100 directus
-```
-
-### Option 2: Manual Docker Build
-
-```bash
-# Build the image
-docker build -t gym-nexus-backend:$(git rev-parse --short HEAD) .
-
-# Tag as latest
-docker tag gym-nexus-backend:$(git rev-parse --short HEAD) gym-nexus-backend:latest
+cd backend
+docker build -t gym-nexus-api:latest .
 
 # Run container
 docker run -d \
-  --name gym-nexus-backend \
-  --restart unless-stopped \
-  -p 8055:8055 \
+  --name gym-nexus-api \
   --env-file .env \
-  gym-nexus-backend:latest
+  -p 8056:8056 \
+  --restart unless-stopped \
+  gym-nexus-api:latest
 ```
 
-### Health Check Verification
+### Option 2: Direct Node.js
 
 ```bash
-# Liveness probe
-curl -f http://localhost:8055/gym/health
+cd backend
 
-# Readiness probe (checks database)
-curl -f http://localhost:8055/gym/ready
+# Install dependencies
+pnpm install --frozen-lockfile
 
-# Detailed status
-curl http://localhost:8055/gym/status
+# Build
+pnpm build
+
+# Start with PM2
+pm2 start dist/app.js --name gym-nexus-api
+
+# Or start directly
+NODE_ENV=production node dist/app.js
 ```
 
-Expected responses:
-```json
-// /gym/health
-{"status":"ok","timestamp":"2024-01-01T00:00:00.000Z","service":"gym-api"}
+### Docker Compose (with database)
 
-// /gym/ready
-{"status":"ready","database":"connected","redis":"connected"}
+```bash
+cd backend
+
+# Production deployment
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+### Verify Backend
+
+```bash
+# Health check
+curl https://api.gym-nexus.com/health
+
+# Expected response:
+# {"status":"healthy","services":{"api":"up","database":"up"},"version":"2.0.0"}
 ```
 
 ---
 
 ## Frontend Deployment
 
-### Member App (Nuxt 3 SSR)
+### Cloudflare Pages (Recommended)
 
-```bash
-cd frontend/apps/member-app
+1. Connect GitHub repository to Cloudflare Pages
+2. Configure build settings:
 
-# Install dependencies
-pnpm install --frozen-lockfile
+```yaml
+# Admin Web
+Build command: cd frontend && pnpm install && pnpm build:admin
+Build output directory: frontend/apps/admin-web/.output/public
+Root directory: /
 
-# Build for production
-pnpm build
+# Member App
+Build command: cd frontend && pnpm install && pnpm build:member
+Build output directory: frontend/apps/member-app/.output/public
 
-# Start production server
-node .output/server/index.mjs
+# Coach App
+Build command: cd frontend && pnpm install && pnpm build:coach
+Build output directory: frontend/apps/coach-app/.output/public
 ```
 
-### Admin Web (Nuxt 3 SSR)
-
-```bash
-cd frontend/apps/admin-web
-
-# Install dependencies
-pnpm install --frozen-lockfile
-
-# Build for production
-pnpm build
-
-# Start production server
-node .output/server/index.mjs
+3. Set environment variables:
+```
+API_BASE_URL=https://api.gym-nexus.com
 ```
 
-### Cloudflare Pages Deployment
+### Manual Build
 
 ```bash
-# Install Wrangler CLI
-npm install -g wrangler
+cd frontend
 
-# Login to Cloudflare
-wrangler login
+# Install dependencies
+pnpm install
 
-# Deploy member-app
-cd frontend/apps/member-app
+# Build all apps
 pnpm build
-wrangler pages deploy .output/public --project-name=gym-nexus-member
 
-# Deploy admin-web
-cd frontend/apps/admin-web
-pnpm build
-wrangler pages deploy .output/public --project-name=gym-nexus-admin
+# Or build specific app
+pnpm build:admin
+pnpm build:member
+pnpm build:coach
 ```
 
 ---
 
 ## Database Migrations
 
-### Running Migrations
-
-Migrations are automatically applied when Directus starts. For manual control:
+### Using Drizzle
 
 ```bash
-# Apply pending migrations
-docker-compose exec directus npx directus database migrate:latest
+cd backend
 
-# Check migration status
-docker-compose exec directus npx directus database migrate:status
+# Generate migration from schema changes
+pnpm db:generate
+
+# Apply migrations
+pnpm db:push
+
+# Or run migrations manually
+pnpm db:migrate
 ```
 
-### Custom SQL Migrations
-
-Located in `backend/migrations/`. Run manually:
+### Manual Migration
 
 ```bash
 # Connect to database
-docker-compose exec database psql -U directus -d gym_nexus
+docker compose exec database psql -U gym_nexus -d gym_nexus
 
-# Run migration file
+# Run SQL file
 \i /path/to/migration.sql
 ```
 
-### Index Optimization
+### Backup Before Migration
 
-After major data imports, run:
-
-```sql
--- Analyze tables for query optimization
-ANALYZE;
-
--- Reindex if needed (during low traffic)
-REINDEX DATABASE gym_nexus;
+```bash
+# Create backup
+docker compose exec database pg_dump \
+  -U gym_nexus \
+  -d gym_nexus \
+  -Fc \
+  > backup_$(date +%Y%m%d_%H%M%S).dump
 ```
 
 ---
 
 ## Post-deployment Verification
 
-### Functional Tests
-
-1. **Authentication**
-   - [ ] Admin login works
-   - [ ] Member login works (email/password)
-   - [ ] OAuth login works (Google, LINE)
-   - [ ] OTP login works
-
-2. **Core Features**
-   - [ ] Member can view dashboard
-   - [ ] Member can make bookings
-   - [ ] Admin can view reports
-   - [ ] Admin can manage members
-
-3. **Integrations**
-   - [ ] Push notifications sending
-   - [ ] Email notifications sending
-   - [ ] SMS gateway responding (if configured)
-
-### Performance Verification
+### Health Checks
 
 ```bash
-# Check response times
-curl -w "@curl-format.txt" -o /dev/null -s http://localhost:8055/gym/health
+# Backend API
+curl -f https://api.gym-nexus.com/health
 
-# Check database connections
-docker-compose exec database psql -U directus -d gym_nexus -c "SELECT count(*) FROM pg_stat_activity;"
+# Admin Web
+curl -f https://admin.gym-nexus.com
 
-# Check Redis connections
-docker-compose exec redis redis-cli info clients
+# Member App
+curl -f https://member.gym-nexus.com
+
+# Coach App
+curl -f https://coach.gym-nexus.com
 ```
 
-### Log Verification
+### Functional Tests
+
+1. **Admin Login**
+   - Navigate to admin.gym-nexus.com
+   - Login with admin credentials
+   - Verify dashboard loads
+
+2. **Member Login**
+   - Navigate to member.gym-nexus.com
+   - Request OTP
+   - Verify OTP received and login works
+
+3. **Coach Login**
+   - Navigate to coach.gym-nexus.com
+   - Login with coach credentials
+   - Verify schedule loads
+
+### Monitor Logs
 
 ```bash
-# Check for errors in last hour
-docker-compose logs --since 1h directus | grep -i error
+# Docker logs
+docker logs -f gym-nexus-api
 
-# Check application logs
-docker-compose logs --since 1h directus | grep -E '"level":"(error|fatal)"'
+# PM2 logs
+pm2 logs gym-nexus-api
 ```
 
 ---
 
 ## Rollback Procedures
 
-### Quick Rollback (Docker)
+### Backend Rollback
 
 ```bash
-# Stop current containers
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml stop
-
-# Start previous version
+# Docker - rollback to previous image
+docker stop gym-nexus-api
 docker run -d \
-  --name gym-nexus-backend \
-  gym-nexus-backend:<previous-tag>
+  --name gym-nexus-api \
+  --env-file .env \
+  -p 8056:8056 \
+  gym-nexus-api:previous-tag
 
-# Or revert docker-compose
-git checkout <previous-commit> -- docker-compose.yml docker-compose.prod.yml
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# PM2 - rollback to previous version
+pm2 deploy production revert
 ```
 
 ### Database Rollback
 
-**WARNING: Only if migration caused data issues**
-
 ```bash
 # Restore from backup
-docker-compose exec database pg_restore \
-  -U directus \
+docker compose exec -T database pg_restore \
+  -U gym_nexus \
   -d gym_nexus \
   -c \
-  /backups/gym_nexus_<timestamp>.dump
-
-# Or run rollback migration
-docker-compose exec database psql -U directus -d gym_nexus \
-  -f /migrations/rollback/<migration-name>.sql
+  < backup_YYYYMMDD_HHMMSS.dump
 ```
 
 ### Frontend Rollback
 
-```bash
-# Cloudflare Pages - rollback to previous deployment
-wrangler pages deployment list --project-name=gym-nexus-member
-wrangler pages deployment rollback <deployment-id> --project-name=gym-nexus-member
-```
+Cloudflare Pages:
+1. Go to Deployments
+2. Find previous successful deployment
+3. Click "Rollback to this deployment"
 
 ---
 
 ## Troubleshooting
 
-### Container Won't Start
+### Common Issues
 
+#### API returns 500 error
 ```bash
 # Check logs
-docker-compose logs directus
+docker logs gym-nexus-api --tail 100
 
-# Common issues:
-# 1. Database not ready - wait for health check
-# 2. Environment variable missing - check .env file
-# 3. Port already in use - check with `netstat -tlnp`
+# Check database connection
+docker compose exec database pg_isready -U gym_nexus
 ```
 
-### Database Connection Failed
-
+#### Database connection failed
 ```bash
-# Check database is running
-docker-compose exec database pg_isready -U directus
+# Verify DATABASE_URL
+echo $DATABASE_URL
 
-# Check connection from Directus container
-docker-compose exec directus nc -zv database 5432
-
-# Verify credentials
-docker-compose exec database psql -U directus -d gym_nexus -c "SELECT 1;"
+# Test connection
+psql $DATABASE_URL -c "SELECT 1"
 ```
 
-### Redis Connection Failed
-
+#### CORS errors
 ```bash
-# Check Redis is running
-docker-compose exec redis redis-cli ping
-
-# Check from Directus container
-docker-compose exec directus nc -zv redis 6379
+# Verify CORS_ORIGIN includes your frontend domains
+# Must match exactly (including https://)
 ```
 
-### High Memory Usage
-
+#### Auth not working
 ```bash
-# Check container resources
-docker stats
+# Verify secrets are set
+echo $SESSION_SECRET | wc -c  # Should be 64+
 
-# Restart with memory limits
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# Clear Redis cache if needed
-docker-compose exec redis redis-cli FLUSHDB
+# Check cookie settings match domain
 ```
 
-### SSL/TLS Issues
+### Useful Commands
 
 ```bash
-# Verify certificate
-openssl s_client -connect api.gym-nexus.com:443 -servername api.gym-nexus.com
+# View running containers
+docker ps
 
-# Check certificate expiry
-echo | openssl s_client -connect api.gym-nexus.com:443 2>/dev/null | openssl x509 -noout -dates
+# Restart API
+docker restart gym-nexus-api
+
+# Check disk space
+df -h
+
+# Check memory
+free -h
+
+# Database connections
+docker compose exec database psql -U gym_nexus -c "SELECT count(*) FROM pg_stat_activity"
 ```
 
 ---
 
-## Emergency Contacts
+## Deployment Schedule
 
-| Role | Contact | Availability |
-|------|---------|--------------|
-| DevOps Lead | devops@gym-nexus.com | 24/7 |
-| Database Admin | dba@gym-nexus.com | Business hours |
-| Security Team | security@gym-nexus.com | 24/7 |
+| Environment | Branch | Auto-deploy | Approval Required |
+|-------------|--------|-------------|-------------------|
+| Development | `develop` | Yes | No |
+| Staging | `staging` | Yes | No |
+| Production | `main` | No | Yes |
 
----
+## Contact
 
-## Appendix
-
-### Useful Commands Reference
-
-```bash
-# View all containers
-docker-compose ps -a
-
-# View container resource usage
-docker stats --no-stream
-
-# Export database backup
-docker-compose exec database pg_dump -U directus gym_nexus > backup.sql
-
-# Import database backup
-docker-compose exec -T database psql -U directus gym_nexus < backup.sql
-
-# Clear Directus cache
-docker-compose exec directus npx directus cache:clear
-
-# Restart single service
-docker-compose restart directus
-
-# View real-time logs
-docker-compose logs -f --tail=50
-```
-
-### Health Check URLs
-
-| Endpoint | Purpose | Expected Response |
-|----------|---------|-------------------|
-| `/gym/health` | Liveness probe | `{"status":"ok"}` |
-| `/gym/ready` | Readiness probe | `{"status":"ready"}` |
-| `/gym/status` | Detailed status | Full system status |
-| `/server/health` | Directus health | `{"status":"ok"}` |
+- **DevOps Lead**: [Contact Info]
+- **On-call Engineer**: [Contact Info]
+- **Escalation**: [Contact Info]

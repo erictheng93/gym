@@ -1,5 +1,7 @@
 # Gym Nexus Disaster Recovery Plan
 
+> **Updated for Hono.js + Drizzle ORM architecture**
+
 This document outlines procedures for recovering from various disaster scenarios affecting the Gym Nexus platform.
 
 ## Table of Contents
@@ -29,7 +31,7 @@ This document outlines procedures for recovering from various disaster scenarios
 | Data Type | Target RPO | Backup Frequency |
 |-----------|------------|------------------|
 | Database | 1 hour | Continuous WAL + hourly snapshots |
-| File uploads | 24 hours | Daily sync to R2/S3 |
+| File uploads | 24 hours | Daily sync to R2 |
 | Configuration | Real-time | Git version control |
 | Logs | 7 days | Retained for 30 days |
 
@@ -52,8 +54,8 @@ BACKUP_DIR=/backups/database
 RETENTION_DAYS=30
 
 # Create backup
-docker-compose exec -T database pg_dump \
-  -U directus \
+docker compose exec -T database pg_dump \
+  -U gym_nexus \
   -d gym_nexus \
   -Fc \
   > ${BACKUP_DIR}/gym_nexus_${TIMESTAMP}.dump
@@ -61,9 +63,9 @@ docker-compose exec -T database pg_dump \
 # Compress
 gzip ${BACKUP_DIR}/gym_nexus_${TIMESTAMP}.dump
 
-# Upload to S3/R2
-aws s3 cp ${BACKUP_DIR}/gym_nexus_${TIMESTAMP}.dump.gz \
-  s3://gym-nexus-backups/database/
+# Upload to Cloudflare R2
+rclone copy ${BACKUP_DIR}/gym_nexus_${TIMESTAMP}.dump.gz \
+  r2:gym-nexus-backups/database/
 
 # Clean old backups
 find ${BACKUP_DIR} -name "*.dump.gz" -mtime +${RETENTION_DAYS} -delete
@@ -94,7 +96,7 @@ database:
 
 ```bash
 # Sync uploads to Cloudflare R2 (daily)
-rclone sync /directus/uploads r2:gym-nexus-uploads \
+rclone sync /app/uploads r2:gym-nexus-uploads \
   --transfers 10 \
   --checkers 20 \
   --log-file=/var/log/rclone-uploads.log
@@ -109,6 +111,8 @@ All configuration is version controlled in Git:
 backend/.env.example
 backend/docker-compose.yml
 backend/docker-compose.prod.yml
+backend/src/db/schema.ts      # Drizzle schema
+backend/drizzle/              # Migration files
 .github/workflows/
 ```
 
@@ -128,8 +132,11 @@ backend/docker-compose.prod.yml
 **Detection:**
 ```bash
 # Check for corruption
-docker-compose exec database pg_dumpall -U directus > /dev/null
+docker compose exec database pg_dumpall -U gym_nexus > /dev/null
 echo $?  # Non-zero indicates corruption
+
+# Check database health
+curl https://api.gym-nexus.com/health | jq '.services.database'
 ```
 
 ### Scenario 2: Complete Server Failure
@@ -141,14 +148,26 @@ echo $?  # Non-zero indicates corruption
 
 **Impact:** Critical - Complete outage
 
-### Scenario 3: Redis Cache Failure
+### Scenario 3: API Service Failure
 
 **Symptoms:**
-- Slow response times
-- Session issues
-- Cache miss errors
+- API endpoints returning 500 errors
+- Health check failing
+- High response times
 
-**Impact:** Medium - Degraded performance
+**Impact:** High - All frontends affected
+
+**Detection:**
+```bash
+# Check health endpoint
+curl -f https://api.gym-nexus.com/health
+
+# Check container status
+docker ps | grep gym-nexus-api
+
+# Check logs
+docker logs gym-nexus-api --tail 100
+```
 
 ### Scenario 4: File Storage Loss
 
@@ -178,35 +197,38 @@ echo $?  # Non-zero indicates corruption
 
 ```bash
 # 1. Stop application
-docker-compose stop directus
+docker stop gym-nexus-api
 
 # 2. Drop and recreate database
-docker-compose exec database psql -U postgres -c "DROP DATABASE gym_nexus;"
-docker-compose exec database psql -U postgres -c "CREATE DATABASE gym_nexus OWNER directus;"
+docker compose exec database psql -U postgres -c "DROP DATABASE gym_nexus;"
+docker compose exec database psql -U postgres -c "CREATE DATABASE gym_nexus OWNER gym_nexus;"
 
 # 3. Restore from backup
 gunzip -c /backups/database/gym_nexus_YYYYMMDD.dump.gz | \
-  docker-compose exec -T database pg_restore \
-    -U directus \
+  docker compose exec -T database pg_restore \
+    -U gym_nexus \
     -d gym_nexus \
     -c
 
-# 4. Verify restoration
-docker-compose exec database psql -U directus -d gym_nexus \
+# 4. Run any pending migrations
+cd backend && pnpm db:migrate
+
+# 5. Verify restoration
+docker compose exec database psql -U gym_nexus -d gym_nexus \
   -c "SELECT COUNT(*) FROM members;"
 
-# 5. Restart application
-docker-compose start directus
+# 6. Restart application
+docker start gym-nexus-api
 
-# 6. Clear cache
-docker-compose exec redis redis-cli FLUSHALL
+# 7. Verify health
+curl https://api.gym-nexus.com/health
 ```
 
 #### Point-in-Time Recovery
 
 ```bash
 # 1. Stop PostgreSQL
-docker-compose stop database
+docker compose stop database
 
 # 2. Clear data directory
 rm -rf ./data/database/*
@@ -214,18 +236,19 @@ rm -rf ./data/database/*
 # 3. Restore base backup
 pg_restore -D ./data/database /backups/base/latest.tar
 
-# 4. Create recovery.conf
-cat > ./data/database/recovery.conf << EOF
+# 4. Create recovery.signal and postgresql.auto.conf
+cat > ./data/database/postgresql.auto.conf << EOF
 restore_command = 'gunzip < /backups/wal/%f.gz > %p'
 recovery_target_time = '2024-01-15 14:30:00 UTC'
-recovery_target_action = 'promote'
 EOF
 
+touch ./data/database/recovery.signal
+
 # 5. Start PostgreSQL (will replay WAL)
-docker-compose start database
+docker compose start database
 
 # 6. Monitor recovery
-docker-compose logs -f database | grep recovery
+docker compose logs -f database | grep recovery
 ```
 
 ### Procedure 2: Complete Server Recovery
@@ -237,7 +260,6 @@ docker-compose logs -f database | grep recovery
 
 # 2. Install Docker and dependencies
 curl -fsSL https://get.docker.com | sh
-apt install docker-compose-plugin
 
 # 3. Clone repository
 git clone https://github.com/your-org/gym-nexus.git
@@ -249,62 +271,79 @@ scp backup-server:/secure/gym-nexus/.env .
 
 # 5. Restore database backup
 mkdir -p ./data/database
-# Download latest backup from S3/R2
-aws s3 cp s3://gym-nexus-backups/database/latest.dump.gz .
+# Download latest backup from R2
+rclone copy r2:gym-nexus-backups/database/latest.dump.gz .
 
 # 6. Start services
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # 7. Restore database
-gunzip -c latest.dump.gz | docker-compose exec -T database \
-  pg_restore -U directus -d gym_nexus -c
+gunzip -c latest.dump.gz | docker compose exec -T database \
+  pg_restore -U gym_nexus -d gym_nexus -c
 
-# 8. Restore uploads
-aws s3 sync s3://gym-nexus-uploads ./uploads
+# 8. Run migrations to ensure schema is current
+pnpm db:migrate
 
-# 9. Update DNS
+# 9. Restore uploads
+rclone sync r2:gym-nexus-uploads ./uploads
+
+# 10. Update DNS
 # Point api.gym-nexus.com to new server IP
 
-# 10. Verify all services
-curl http://localhost:8055/gym/health
-curl http://localhost:8055/gym/ready
+# 11. Verify all services
+curl https://api.gym-nexus.com/health
 ```
 
-### Procedure 3: Redis Recovery
+### Procedure 3: API Service Recovery
 
 ```bash
-# Option A: Restart Redis (clears cache)
-docker-compose restart redis
+# Option A: Restart container
+docker restart gym-nexus-api
 
-# Verify connection
-docker-compose exec redis redis-cli ping
+# Verify health
+curl http://localhost:8056/health
 
-# Option B: Restore from RDB (if persistence enabled)
-docker-compose stop redis
-cp /backups/redis/dump.rdb ./data/redis/
-docker-compose start redis
+# Option B: Rebuild and redeploy
+cd backend
+docker build -t gym-nexus-api:latest .
+docker stop gym-nexus-api
+docker rm gym-nexus-api
+docker run -d \
+  --name gym-nexus-api \
+  --env-file .env \
+  -p 8056:8056 \
+  --restart unless-stopped \
+  gym-nexus-api:latest
+
+# Option C: Rollback to previous version
+docker stop gym-nexus-api
+docker run -d \
+  --name gym-nexus-api \
+  --env-file .env \
+  -p 8056:8056 \
+  gym-nexus-api:previous-tag
 ```
 
 ### Procedure 4: File Storage Recovery
 
 ```bash
-# 1. Stop Directus
-docker-compose stop directus
+# 1. Stop API
+docker stop gym-nexus-api
 
 # 2. Clear corrupted uploads
 rm -rf ./uploads/*
 
-# 3. Restore from R2/S3
+# 3. Restore from R2
 rclone sync r2:gym-nexus-uploads ./uploads
 
 # 4. Fix permissions
 chown -R 1000:1000 ./uploads
 
-# 5. Start Directus
-docker-compose start directus
+# 5. Start API
+docker start gym-nexus-api
 
-# 6. Regenerate thumbnails
-docker-compose exec directus npx directus files:refresh
+# 6. Verify files accessible
+curl https://api.gym-nexus.com/health
 ```
 
 ### Procedure 5: Security Breach Response
@@ -312,28 +351,30 @@ docker-compose exec directus npx directus files:refresh
 ```bash
 # IMMEDIATE ACTIONS (within 15 minutes)
 
-# 1. Revoke all access tokens
-docker-compose exec redis redis-cli FLUSHDB
-
-# 2. Rotate secrets
-# Generate new SECRET
+# 1. Invalidate all sessions by rotating SESSION_SECRET
 openssl rand -hex 32
+# Update .env with new SESSION_SECRET and JWT secrets
 
-# Update .env with new SECRET
-# This invalidates all existing sessions
+# 2. Rotate all secrets
+SESSION_SECRET=$(openssl rand -hex 32)
+MEMBER_JWT_SECRET=$(openssl rand -hex 32)
+COACH_JWT_SECRET=$(openssl rand -hex 32)
 
-# 3. Reset admin passwords
-docker-compose exec directus npx directus users:passwd admin@gym.com
+# 3. Reset admin passwords via database
+docker compose exec database psql -U gym_nexus -d gym_nexus -c "
+  UPDATE users SET password_hash = NULL WHERE role = 'admin';
+"
+# Admin users will need to use password reset flow
 
 # 4. Block suspicious IPs (if identified)
 # Add to firewall/WAF
 
 # 5. Take forensic snapshot
-docker-compose exec database pg_dump -U directus gym_nexus > forensic_$(date +%s).sql
+docker compose exec database pg_dump -U gym_nexus gym_nexus > forensic_$(date +%s).sql
 
 # 6. Restart all services with new secrets
-docker-compose down
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose down
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # POST-INCIDENT
 # - Review access logs
@@ -351,7 +392,7 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 | Test | Procedure | Success Criteria |
 |------|-----------|------------------|
 | Backup Verification | Restore to test environment | All data present |
-| Failover Test | Switch to standby | < 5 min downtime |
+| Health Check Monitoring | Verify alerts fire | Notifications received |
 | Recovery Drill | Full DR procedure | Meet RTO targets |
 
 ### Quarterly Tests
@@ -406,13 +447,13 @@ fi
 # 3. Test restore to temporary database
 echo
 echo "Testing restore..."
-docker-compose exec -T database psql -U postgres \
+docker compose exec -T database psql -U postgres \
   -c "DROP DATABASE IF EXISTS gym_nexus_test;"
-docker-compose exec -T database psql -U postgres \
-  -c "CREATE DATABASE gym_nexus_test OWNER directus;"
+docker compose exec -T database psql -U postgres \
+  -c "CREATE DATABASE gym_nexus_test OWNER gym_nexus;"
 
-gunzip -c $LATEST_DB | docker-compose exec -T database \
-  pg_restore -U directus -d gym_nexus_test 2>&1
+gunzip -c $LATEST_DB | docker compose exec -T database \
+  pg_restore -U gym_nexus -d gym_nexus_test 2>&1
 
 if [ $? -eq 0 ]; then
   echo "Restore test: OK"
@@ -423,7 +464,7 @@ fi
 # 4. Verify data counts
 echo
 echo "Data verification:"
-docker-compose exec -T database psql -U directus -d gym_nexus_test \
+docker compose exec -T database psql -U gym_nexus -d gym_nexus_test \
   -c "SELECT 'members' as table_name, COUNT(*) as count FROM members
       UNION ALL
       SELECT 'contracts', COUNT(*) FROM contracts
@@ -431,7 +472,7 @@ docker-compose exec -T database psql -U directus -d gym_nexus_test \
       SELECT 'bookings', COUNT(*) FROM bookings;"
 
 # 5. Cleanup
-docker-compose exec -T database psql -U postgres \
+docker compose exec -T database psql -U postgres \
   -c "DROP DATABASE gym_nexus_test;"
 
 echo
@@ -456,7 +497,6 @@ echo "=== Verification Complete ==="
 | Service | Support URL | Account ID |
 |---------|-------------|------------|
 | Cloudflare | support.cloudflare.com | TBD |
-| AWS | aws.amazon.com/support | TBD |
 | Sentry | sentry.io/support | TBD |
 
 ### Escalation Path
@@ -473,6 +513,7 @@ echo "=== Verification Complete ==="
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2024-01-15 | DevOps Team | Initial version |
+| 2.0 | 2024-12-XX | DevOps Team | Updated for Hono.js architecture |
 
 **Review Schedule:** Quarterly
 **Next Review:** TBD
