@@ -10,6 +10,7 @@ import { useErrorHandler } from '~/composables/core'
 // Types
 // ============================================
 
+
 export interface DashboardPeriod {
   type: 'today' | 'week' | 'month' | 'year'
   start_date: string
@@ -156,7 +157,6 @@ export const useDashboard = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
   const { handleError } = useErrorHandler()
-  const { $directus } = useNuxtApp()
 
   // State
   const isLoading = ref(false)
@@ -169,16 +169,14 @@ export const useDashboard = () => {
   let eventSource: EventSource | null = null
 
   /**
-   * 帶認證的 fetch 請求
+   * 帶認證的 fetch 請求 (使用 session cookies)
    */
   const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
-    const token = await $directus.getToken()
-
     return fetch(url, {
       ...options,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers
       }
     })
@@ -316,12 +314,6 @@ export const useDashboard = () => {
     // 先關閉現有連線
     stopLiveUpdates()
     reconnectAttempts = 0
-
-    const token = $directus.getToken()
-    if (!token) {
-      console.warn('[Dashboard] No token available for SSE')
-      return
-    }
 
     const params = new URLSearchParams()
     if (branchId) params.append('branch_id', branchId)

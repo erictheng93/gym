@@ -23,15 +23,6 @@ const mockRuntimeConfig = {
 }
 vi.stubGlobal('useRuntimeConfig', () => mockRuntimeConfig)
 
-// Mock useNuxtApp with Directus
-const mockGetToken = vi.fn()
-const mockDirectus = {
-  getToken: mockGetToken
-}
-vi.stubGlobal('useNuxtApp', () => ({
-  $directus: mockDirectus
-}))
-
 // Mock MESSAGES constant
 vi.mock('~/constants', () => ({
   MESSAGES: {
@@ -150,37 +141,17 @@ describe('useReports', () => {
       )
     })
 
-    it('應該調用 directus.getToken() 獲取令牌', async () => {
+    it('應該使用 credentials: include 發送請求', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockRevenueReport))
 
       const { getRevenueReport } = useReports()
       await getRevenueReport()
 
-      expect(mockGetToken).toHaveBeenCalled()
-    })
-
-    it('應該在沒有令牌時仍然發送請求（不包含 Authorization）', async () => {
-      mockGetToken.mockResolvedValueOnce(null)
-      mockFetch.mockResolvedValueOnce(createMockResponse(mockRevenueReport))
-
-      const { getRevenueReport } = useReports()
-      await getRevenueReport()
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json'
-          })
-        })
-      )
-
-      // 確認沒有 Authorization header
       const callArgs = mockFetch.mock.calls[0][1]
-      expect(callArgs.headers.Authorization).toBeUndefined()
+      expect(callArgs.credentials).toBe('include')
     })
 
-    it('應該為所有報表 API 都添加認證令牌', async () => {
+    it('應該為所有報表 API 都使用 session cookies 認證', async () => {
       mockFetch.mockResolvedValue(createMockResponse({ success: true }))
 
       const reports = useReports()
@@ -193,9 +164,9 @@ describe('useReports', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(5)
 
-      // 檢查每個請求都有 Authorization header
+      // 檢查每個請求都有 credentials: include
       mockFetch.mock.calls.forEach(call => {
-        expect(call[1].headers.Authorization).toBe('Bearer test-token-123')
+        expect(call[1].credentials).toBe('include')
       })
     })
   })

@@ -143,19 +143,16 @@ export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
   const { handleError } = useErrorHandler()
-  const { $directus } = useNuxtApp()
 
   /**
-   * 帶認證的 fetch 請求
+   * 帶認證的 fetch 請求 (使用 session cookies)
    */
   const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
-    const token = await $directus.getToken()
-
     return fetch(url, {
       ...options,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers
       }
     })

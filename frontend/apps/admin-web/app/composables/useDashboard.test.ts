@@ -23,15 +23,6 @@ const mockRuntimeConfig = {
 }
 vi.stubGlobal('useRuntimeConfig', () => mockRuntimeConfig)
 
-// Mock useNuxtApp with Directus
-const mockGetToken = vi.fn()
-const mockDirectus = {
-  getToken: mockGetToken
-}
-vi.stubGlobal('useNuxtApp', () => ({
-  $directus: mockDirectus
-}))
-
 // Mock ref and onUnmounted from Vue
 const mockRef = (initial: any) => ({ value: initial })
 vi.stubGlobal('ref', mockRef)
@@ -255,24 +246,14 @@ describe('useDashboard', () => {
       )
     })
 
-    it('應該調用 directus.getToken() 獲取令牌', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
-
-      const { fetchKPIs } = useDashboard()
-      await fetchKPIs()
-
-      expect(mockGetToken).toHaveBeenCalled()
-    })
-
-    it('應該在沒有令牌時仍然發送請求（不包含 Authorization）', async () => {
-      mockGetToken.mockResolvedValueOnce(null)
+    it('應該使用 credentials: include 發送請求', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
 
       const { fetchKPIs } = useDashboard()
       await fetchKPIs()
 
       const callArgs = mockFetch.mock.calls[0][1]
-      expect(callArgs.headers.Authorization).toBeUndefined()
+      expect(callArgs.credentials).toBe('include')
     })
   })
 
