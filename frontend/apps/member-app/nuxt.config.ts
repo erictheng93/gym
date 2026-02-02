@@ -193,6 +193,8 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    // Cloudflare Pages deployment
+    preset: 'cloudflare-pages',
     // Additional security headers for Nitro server
     routeRules: {
       '/**': {

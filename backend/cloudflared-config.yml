@@ -1,0 +1,49 @@
+# =============================================================================
+# Cloudflare Tunnel Configuration - Gym Nexus
+# =============================================================================
+# Place this file at: ~/.cloudflared/config.yml (on the server)
+# Or mount it in Docker container
+#
+# Usage:
+#   cloudflared tunnel --config cloudflared-config.yml run gym-nexus
+
+tunnel: <YOUR_TUNNEL_ID>  # Replace with your tunnel ID
+credentials-file: /etc/cloudflared/<YOUR_TUNNEL_ID>.json
+
+ingress:
+  # ===========================================================================
+  # API (Hono.js Backend)
+  # ===========================================================================
+  - hostname: api.imfinethankyouandyou.com
+    service: http://api:8056
+    originRequest:
+      noTLSVerify: true
+
+  # ===========================================================================
+  # Admin Web (Staff Dashboard)
+  # ===========================================================================
+  - hostname: admin.imfinethankyouandyou.com
+    service: http://admin-web:3001
+    originRequest:
+      noTLSVerify: true
+
+  # ===========================================================================
+  # Member App (PWA)
+  # ===========================================================================
+  - hostname: app.imfinethankyouandyou.com
+    service: http://member-app:3002
+    originRequest:
+      noTLSVerify: true
+
+  # ===========================================================================
+  # Coach App
+  # ===========================================================================
+  - hostname: coach.imfinethankyouandyou.com
+    service: http://coach-app:3003
+    originRequest:
+      noTLSVerify: true
+
+  # ===========================================================================
+  # Catch-all (required)
+  # ===========================================================================
+  - service: http_status:404

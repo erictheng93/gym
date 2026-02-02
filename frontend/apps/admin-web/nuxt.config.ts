@@ -8,6 +8,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-12-01',
   devtools: { enabled: false },
 
+  // Cloudflare Pages deployment
+  nitro: {
+    preset: 'cloudflare-pages'
+  },
+
   // Extend from UI package layer
   extends: ['../../packages/ui'],
 

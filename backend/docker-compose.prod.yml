@@ -9,13 +9,16 @@ services:
   # ===========================================================================
   api:
     restart: always
+    environment:
+      NODE_ENV: production
+      # CORS for Cloudflare Pages domains
+      CORS_ORIGIN: "https://admin.imfinethankyouandyou.com,https://app.imfinethankyouandyou.com,https://coach.imfinethankyouandyou.com"
     logging:
       driver: "json-file"
       options:
         max-size: "100m"
         max-file: "5"
     deploy:
-      replicas: 2
       resources:
         limits:
           cpus: '4'
@@ -23,18 +26,14 @@ services:
         reservations:
           cpus: '1'
           memory: 1G
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
 
   # ===========================================================================
   # Database Production Settings
   # ===========================================================================
   database:
     restart: always
+    # Production: Do NOT expose port externally
+    ports: !override []
     logging:
       driver: "json-file"
       options:
@@ -42,17 +41,19 @@ services:
         max-file: "5"
 
   # ===========================================================================
-  # Cloudflare Tunnel (Production)
+  # Cloudflare Tunnel (API Only)
   # ===========================================================================
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: always
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
     depends_on:
       api:
         condition: service_healthy
+    networks:
+      - default
     logging:
       driver: "json-file"
       options:
