@@ -69,7 +69,7 @@ onMounted(async () => {
     fetchJobTitles(),
     fetchEmployees({ limit: 100, status: 'ACTIVE' })
   ])
-  if (branches.value.length > 0 && !form.branch_id) {
+  if (branches.value.length > 0 && !form.branch_id && branches.value[0]) {
     form.branch_id = branches.value[0].id
   }
 })

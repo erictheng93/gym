@@ -37,6 +37,7 @@ export interface Student {
   avatar?: string
   gender?: string
   birthday?: string
+  join_date?: string
   coach_role: 'PRIMARY' | 'SECONDARY'
   assigned_at: string
   branch_name: string

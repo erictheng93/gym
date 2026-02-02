@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { PAGES } from '~/constants'
+import { useAttendance, useLeaveRequests } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

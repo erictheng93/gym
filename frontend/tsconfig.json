@@ -12,9 +12,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "references": [
-    { "path": "./apps/admin-web" },
-    { "path": "./apps/member-app" }
-  ],
-  "exclude": ["node_modules", ".nuxt", "dist", ".output"]
+  "exclude": ["node_modules", ".nuxt", "dist", ".output", "apps", "packages"]
 }

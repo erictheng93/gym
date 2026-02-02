@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { PERMISSION_MODULES, createEmptyPermissions } from '~/constants/permissions'
+import { MESSAGES } from '~/constants'
 import type { JobTitle } from '~/types/schema'
 
 definePageMeta({
@@ -70,6 +71,9 @@ const loadEmployee = async () => {
   isLoading.value = true
   try {
     const employee = await getEmployee(employeeId.value)
+    if (!employee) {
+      throw new Error('Employee not found')
+    }
     form.full_name = employee.full_name
     form.employee_code = employee.employee_code || ''
     form.phone = employee.phone || ''
@@ -95,7 +99,7 @@ const loadEmployee = async () => {
     }
   } catch (error) {
     console.error('Failed to load employee:', error)
-    useToast().error(MESSAGES.ERRORS.EMPLOYEE_LOAD_FAILED)
+    useToast().error(MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED)
   } finally {
     isLoading.value = false
   }

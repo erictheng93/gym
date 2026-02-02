@@ -52,7 +52,8 @@ const isConverting = ref(false)
 
 // Status update modal
 const showStatusModal = ref(false)
-const newStatus = ref('')
+type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
+const newStatus = ref<LeadStatus | ''>('')
 const isUpdatingStatus = ref(false)
 
 // Assign modal
@@ -76,7 +77,7 @@ onMounted(async () => {
   await Promise.all([loadLead(), fetchEmployees()])
 })
 
-const formatDate = (dateStr: string | null) => {
+const formatDate = (dateStr: string | null | undefined) => {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',
@@ -85,7 +86,7 @@ const formatDate = (dateStr: string | null) => {
   })
 }
 
-const formatDateTime = (dateStr: string | null) => {
+const formatDateTime = (dateStr: string | null | undefined) => {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleString('zh-TW', {
     year: 'numeric',
@@ -170,7 +171,7 @@ const handleUpdateStatus = async () => {
 
   isUpdatingStatus.value = true
   try {
-    await updateLead(leadId.value, { status: newStatus.value })
+    await updateLead(leadId.value, { status: newStatus.value as LeadStatus })
     toast.success('狀態已更新')
     showStatusModal.value = false
     await loadLead()
@@ -334,7 +335,7 @@ const openAssignModal = () => {
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
               </svg>
-              {{ formatDate(lead.date_created) }} 建立
+              {{ formatDate(lead.date_created || lead.created_at || null) }} 建立
             </span>
           </div>
         </div>
@@ -371,7 +372,7 @@ const openAssignModal = () => {
             負責人
           </h3>
           <div class="assignee-section">
-            <div v-if="lead.assigned_to" class="assignee-display">
+            <div v-if="lead.assigned_to && typeof lead.assigned_to === 'object'" class="assignee-display">
               <AppAvatar :name="lead.assigned_to.full_name" size="lg" variant="blue" />
               <div class="assignee-info">
                 <span class="assignee-name">{{ lead.assigned_to.full_name }}</span>
@@ -459,7 +460,7 @@ const openAssignModal = () => {
                 <span class="activity-type" :style="{ color: getActivityTypeColor(activity.activity_type) }">
                   {{ getActivityTypeLabel(activity.activity_type) }}
                 </span>
-                <span class="timeline-time">{{ formatDateTime(activity.date_created) }}</span>
+                <span class="timeline-time">{{ formatDateTime(activity.date_created || activity.created_at || null) }}</span>
               </div>
               <p class="activity-content">{{ activity.content }}</p>
               <div v-if="activity.result" class="activity-result">
@@ -471,7 +472,7 @@ const openAssignModal = () => {
                   ({{ formatDate(activity.next_action_date) }})
                 </span>
               </div>
-              <div v-if="activity.created_by" class="activity-author">
+              <div v-if="activity.created_by && typeof activity.created_by === 'object'" class="activity-author">
                 {{ activity.created_by.full_name }}
               </div>
             </div>

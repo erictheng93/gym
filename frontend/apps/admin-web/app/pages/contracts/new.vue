@@ -60,7 +60,7 @@ onMounted(async () => {
 
   // 預設選擇第一個分店
   if (branches.value.length > 0 && !form.branch_id) {
-    form.branch_id = branches.value[0].id
+    form.branch_id = branches.value[0]!.id
   }
 
   isLoading.value = false
@@ -109,7 +109,7 @@ const prevStep = () => {
   }
 }
 
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr: string | undefined) => {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',

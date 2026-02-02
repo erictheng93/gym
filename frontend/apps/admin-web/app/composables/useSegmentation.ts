@@ -309,12 +309,36 @@ export const useSegmentation = () => {
     return 'text-red-600'
   }
 
+  const getSegmentDescription = (segment: RFMSegment): string => {
+    const descriptions: Record<RFMSegment, string> = {
+      CHAMPIONS: '高頻率消費、高金額、最近有消費的最佳客戶',
+      LOYAL: '穩定消費、忠誠度高的重要客戶',
+      POTENTIAL_LOYAL: '近期有消費、有發展潛力的客戶',
+      NEW_CUSTOMERS: '最近加入、尚待培養的新客戶',
+      PROMISING: '有消費紀錄、具有發展前景的客戶',
+      NEED_ATTENTION: '消費頻率下降、需要關注的客戶',
+      ABOUT_TO_SLEEP: '消費間隔拉長、即將流失的客戶',
+      AT_RISK: '曾經活躍、目前有流失風險的客戶',
+      HIBERNATING: '長時間未消費的休眠客戶',
+      LOST: '已經流失、很久未消費的客戶'
+    }
+    return descriptions[segment] || ''
+  }
+
+  // Aliases for backward compatibility
+  const segmentMembers = rfmScores
+  const segmentMemberCount = totalCount
+  const autoTagSegment = autoApplyTags
+
   return {
     // State
     rfmScores,
     segments,
     isLoading,
     totalCount,
+    // Aliases
+    segmentMembers,
+    segmentMemberCount,
     // Actions
     fetchRFMScores,
     getMemberRFM,
@@ -322,12 +346,14 @@ export const useSegmentation = () => {
     fetchSegments,
     fetchSegmentMembers,
     autoApplyTags,
+    autoTagSegment,
     exportSegment,
     // Helpers
     getSegmentLabel,
     getSegmentColor,
     getSegmentIcon,
-    getScoreColor
+    getScoreColor,
+    getSegmentDescription
   }
 }
 

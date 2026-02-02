@@ -10,6 +10,9 @@ definePageMeta({
   middleware: 'auth'
 })
 
+type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
+type LeadSource = 'FB_AD' | 'IG_AD' | 'GOOGLE_AD' | 'WEBSITE' | 'WALK_IN' | 'REFERRAL'
+
 const router = useRouter()
 const { fetchAnalytics, getSourceLabel, getStatusLabel } = useLeads()
 
@@ -63,13 +66,13 @@ const conversionRate = computed(() => {
 // Get max count for bar chart scaling
 const maxSourceCount = computed(() => {
   if (!analytics.value?.by_source) return 1
-  return Math.max(...analytics.value.by_source.map(s => s.count), 1)
+  return Math.max(...analytics.value.by_source.map(s => s.count ?? s.total ?? 1), 1)
 })
 
 // Status funnel data
 const funnelData = computed(() => {
   if (!analytics.value?.by_status) return []
-  const statusOrder = ['NEW', 'CONTACTED', 'TRIAL_BOOKED', 'VISITED', 'CONVERTED']
+  const statusOrder: LeadStatus[] = ['NEW', 'CONTACTED', 'TRIAL_BOOKED', 'VISITED', 'CONVERTED']
   return statusOrder
     .map(status => {
       const item = analytics.value!.by_status.find(s => s.status === status)
@@ -191,18 +194,18 @@ const maxFunnelCount = computed(() => {
                   class="source-dot"
                   :style="{ background: sourceColors[source.source] || '#8e8e93' }"
                 ></span>
-                <span>{{ getSourceLabel(source.source) }}</span>
+                <span>{{ getSourceLabel(source.source as LeadSource) }}</span>
               </div>
               <div class="source-bar">
                 <div
                   class="source-bar-fill"
                   :style="{
-                    width: `${(source.count / maxSourceCount) * 100}%`,
+                    width: `${((source.count ?? source.total ?? 0) / maxSourceCount) * 100}%`,
                     background: sourceColors[source.source] || '#8e8e93'
                   }"
                 ></div>
               </div>
-              <span class="source-count">{{ source.count }}</span>
+              <span class="source-count">{{ source.count ?? source.total ?? 0 }}</span>
             </div>
           </div>
           <EmptyState v-else title="暫無資料" icon="chart" />
@@ -268,7 +271,7 @@ const maxFunnelCount = computed(() => {
                   class="source-badge"
                   :style="{ background: `${sourceColors[item.source] || '#8e8e93'}20`, color: sourceColors[item.source] || '#8e8e93' }"
                 >
-                  {{ getSourceLabel(item.source) }}
+                  {{ getSourceLabel(item.source as LeadSource) }}
                 </span>
               </div>
               <div class="table-cell">{{ item.total }}</div>
@@ -278,7 +281,7 @@ const maxFunnelCount = computed(() => {
                   {{ item.conversion_rate?.toFixed(1) || 0 }}%
                 </span>
               </div>
-              <div class="table-cell">{{ item.avg_days?.toFixed(1) || '—' }} 天</div>
+              <div class="table-cell">{{ (item as any).avg_days?.toFixed(1) || '—' }} 天</div>
             </div>
           </div>
           <EmptyState v-else title="暫無資料" icon="chart" />

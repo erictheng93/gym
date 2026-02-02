@@ -108,7 +108,7 @@ describe('useOfflineSync with IndexedDB', () => {
       const pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
 
-      const request = pending[0]
+      const request = pending[0]!
       expect(request.url).toBe('http://localhost:8056/api/member/test')
       expect(request.method).toBe('POST')
       expect(request.body).toEqual(testData)
@@ -299,7 +299,7 @@ describe('useOfflineSync with IndexedDB', () => {
       // Request should still be in queue with incremented retry count
       const pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
-      expect(pending[0].retryCount).toBe(1)
+      expect(pending[0]!.retryCount).toBe(1)
     })
 
     it('should remove request after max retries', async () => {
@@ -321,7 +321,7 @@ describe('useOfflineSync with IndexedDB', () => {
       // After reaching maxRetries, request should be removed on next sync
       let pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
-      expect(pending[0].retryCount).toBe(1)
+      expect(pending[0]!.retryCount).toBe(1)
 
       // Second sync - should be removed due to max retries reached
       const result = await syncPendingRequests()
@@ -383,10 +383,10 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
-      expect(pending[0].url).toBe('http://localhost:8056/api/member/bookings/booking-123')
-      expect(pending[0].method).toBe('DELETE')
-      expect(pending[0].type).toBe('booking')
-      expect(pending[0].optimisticId).toBe('booking-123')
+      expect(pending[0]!.url).toBe('http://localhost:8056/api/member/bookings/booking-123')
+      expect(pending[0]!.method).toBe('DELETE')
+      expect(pending[0]!.type).toBe('booking')
+      expect(pending[0]!.optimisticId).toBe('booking-123')
     })
 
     it('should queue review submission', async () => {
@@ -408,11 +408,11 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const pending = await getPendingRequests()
       expect(pending).toHaveLength(1)
-      expect(pending[0].url).toBe('http://localhost:8056/api/member/reviews')
-      expect(pending[0].method).toBe('POST')
-      expect(pending[0].body).toEqual(reviewPayload)
-      expect(pending[0].type).toBe('review')
-      expect(pending[0].optimisticId).toBe('b123')
+      expect(pending[0]!.url).toBe('http://localhost:8056/api/member/reviews')
+      expect(pending[0]!.method).toBe('POST')
+      expect(pending[0]!.body).toEqual(reviewPayload)
+      expect(pending[0]!.type).toBe('review')
+      expect(pending[0]!.optimisticId).toBe('b123')
     })
   })
 

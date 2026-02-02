@@ -230,7 +230,7 @@ const getStatusBadge = (status: string) => {
     </section>
 
     <!-- Tenant Quota Section (for admins) -->
-    <section v-if="user?.role?.name === 'Administrator' || user?.role?.name === 'Manager'" class="quota-section">
+    <section v-if="user?.role === 'Administrator' || user?.role === 'Manager'" class="quota-section">
       <TenantQuotaCard />
     </section>
 

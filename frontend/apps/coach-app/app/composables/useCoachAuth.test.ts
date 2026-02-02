@@ -87,11 +87,13 @@ const mockTokens = {
   },
 }
 
+type CoachData = typeof mockCoach | null
+
 const mockSession = {
   coach: stateStore.get('coach') || { value: null },
   isAuthenticated: { get value() { return !!stateStore.get('coach')?.value } },
   isLoading: { value: false },
-  displayName: { get value() { return stateStore.get('coach')?.value?.full_name ?? '教練' } },
+  displayName: { get value() { return (stateStore.get('coach')?.value as CoachData)?.full_name ?? '教練' } },
   fetchCoach: vi.fn().mockResolvedValue(true),
   clearSession: vi.fn(),
   setLoading: vi.fn(),
@@ -106,7 +108,7 @@ vi.stubGlobal('useCoachSession', () => {
     ...mockSession,
     coach: stateStore.get('coach')!,
     isAuthenticated: { get value() { return !!stateStore.get('coach')?.value } },
-    displayName: { get value() { return stateStore.get('coach')?.value?.full_name ?? '教練' } },
+    displayName: { get value() { return (stateStore.get('coach')?.value as CoachData)?.full_name ?? '教練' } },
   }
 })
 

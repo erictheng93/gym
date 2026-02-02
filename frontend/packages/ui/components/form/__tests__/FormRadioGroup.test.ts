@@ -4,19 +4,13 @@ import { computed as vueComputed } from 'vue'
 import FormRadioGroup from '../FormRadioGroup.vue'
 import FormField from '../FormField.vue'
 
-// Augment globalThis for Vue computed function
-declare global {
-  // eslint-disable-next-line no-var
-  var computed: typeof vueComputed | undefined
-}
-
 // Restore Vue's computed for component tests
-const originalComputed = globalThis.computed
+const originalComputed = (globalThis as Record<string, unknown>).computed
 beforeAll(() => {
-  globalThis.computed = vueComputed
+  (globalThis as Record<string, unknown>).computed = vueComputed
 })
 afterAll(() => {
-  globalThis.computed = originalComputed
+  (globalThis as Record<string, unknown>).computed = originalComputed
 })
 
 describe('FormRadioGroup', () => {
@@ -61,9 +55,9 @@ describe('FormRadioGroup', () => {
       const radioOptions = wrapper.findAll('.radio-option')
 
       expect(radioOptions.length).toBe(3)
-      expect(radioOptions[0].text()).toBe('男')
-      expect(radioOptions[1].text()).toBe('女')
-      expect(radioOptions[2].text()).toBe('其他')
+      expect(radioOptions[0]!.text()).toBe('男')
+      expect(radioOptions[1]!.text()).toBe('女')
+      expect(radioOptions[2]!.text()).toBe('其他')
     })
 
     it('應該使用 pill 變體作為預設', () => {
@@ -93,7 +87,7 @@ describe('FormRadioGroup', () => {
     it('應該在選擇時發出 update:modelValue 事件', async () => {
       const wrapper = mountFormRadioGroup({ modelValue: '' })
 
-      await wrapper.findAll('.radio-option')[1].trigger('click')
+      await wrapper.findAll('.radio-option')[1]!.trigger('click')
 
       expect(wrapper.emitted('update:modelValue')).toBeTruthy()
       expect(wrapper.emitted('update:modelValue')![0]).toEqual(['F'])
@@ -124,7 +118,7 @@ describe('FormRadioGroup', () => {
       })
 
       // Click the already selected option to deselect
-      await wrapper.findAll('.radio-option')[0].trigger('click')
+      await wrapper.findAll('.radio-option')[0]!.trigger('click')
 
       expect(wrapper.emitted('update:modelValue')).toBeTruthy()
       expect(wrapper.emitted('update:modelValue')![0]).toEqual([''])
@@ -137,7 +131,7 @@ describe('FormRadioGroup', () => {
       })
 
       // Click the already selected option
-      await wrapper.findAll('.radio-option')[0].trigger('click')
+      await wrapper.findAll('.radio-option')[0]!.trigger('click')
 
       // Should emit the same value again (not deselect)
       expect(wrapper.emitted('update:modelValue')).toBeTruthy()
@@ -192,7 +186,7 @@ describe('FormRadioGroup', () => {
         modelValue: ''
       })
 
-      await wrapper.findAll('.radio-option')[0].trigger('click')
+      await wrapper.findAll('.radio-option')[0]!.trigger('click')
 
       expect(wrapper.emitted('update:modelValue')).toBeFalsy()
     })
@@ -228,9 +222,9 @@ describe('FormRadioGroup', () => {
       })
 
       const options = wrapper.findAll('.radio-option')
-      expect(options[0].classes()).not.toContain('disabled')
-      expect(options[1].classes()).toContain('disabled')
-      expect(options[2].classes()).not.toContain('disabled')
+      expect(options[0]!.classes()).not.toContain('disabled')
+      expect(options[1]!.classes()).toContain('disabled')
+      expect(options[2]!.classes()).not.toContain('disabled')
     })
   })
 
@@ -251,16 +245,16 @@ describe('FormRadioGroup', () => {
       })
 
       const inputs = wrapper.findAll('input[type="radio"]')
-      expect((inputs[0].element as HTMLInputElement).checked).toBe(false)
-      expect((inputs[1].element as HTMLInputElement).checked).toBe(true)
-      expect((inputs[2].element as HTMLInputElement).checked).toBe(false)
+      expect((inputs[0]!.element as HTMLInputElement).checked).toBe(false)
+      expect((inputs[1]!.element as HTMLInputElement).checked).toBe(true)
+      expect((inputs[2]!.element as HTMLInputElement).checked).toBe(false)
     })
 
     it('應該使用唯一的 name 屬性', () => {
       const wrapper = mountFormRadioGroup()
       const inputs = wrapper.findAll('input[type="radio"]')
 
-      const name = inputs[0].attributes('name')
+      const name = inputs[0]!.attributes('name')
       expect(name).toBeTruthy()
       expect(name).toMatch(/^radio-group-/)
 

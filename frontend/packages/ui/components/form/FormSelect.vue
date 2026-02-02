@@ -24,8 +24,8 @@ interface Props {
   modelValue?: string | number | null
   /** 欄位標籤 */
   label?: string
-  /** 選項列表 */
-  options: SelectOption[]
+  /** 選項列表 (可選，也可使用 slot 傳入 option 元素) */
+  options?: SelectOption[]
   /** 佔位文字 */
   placeholder?: string
   /** 是否必填 */
@@ -69,14 +69,19 @@ const selectValue = computed({
       <option v-if="placeholder" value="" disabled>
         {{ placeholder }}
       </option>
-      <option
-        v-for="option in options"
-        :key="option.value"
-        :value="option.value"
-        :disabled="option.disabled"
-      >
-        {{ option.label }}
-      </option>
+      <!-- Use options prop if provided -->
+      <template v-if="options && options.length > 0">
+        <option
+          v-for="option in options"
+          :key="option.value"
+          :value="option.value"
+          :disabled="option.disabled"
+        >
+          {{ option.label }}
+        </option>
+      </template>
+      <!-- Otherwise use slot for custom options -->
+      <slot v-else />
     </select>
   </FormField>
 </template>

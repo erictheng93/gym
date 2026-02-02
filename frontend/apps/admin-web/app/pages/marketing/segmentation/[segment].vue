@@ -3,6 +3,7 @@
  * 特定分群會員列表頁面
  */
 import { MESSAGES, PAGINATION } from '~/constants'
+import type { RFMSegment } from '~/composables/useSegmentation'
 
 definePageMeta({
   middleware: 'auth'
@@ -24,7 +25,7 @@ const {
   getSegmentDescription
 } = useSegmentation()
 
-const segment = computed(() => (route.params.segment as string).toUpperCase())
+const segment = computed(() => (route.params.segment as string).toUpperCase() as RFMSegment)
 const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
@@ -173,10 +174,10 @@ const columns = [
       <!-- Member Cell -->
       <template #member="{ row }">
         <div class="member-cell">
-          <AppAvatar :name="row.member?.full_name || '?'" size="md" variant="blue" />
+          <AppAvatar :name="row.member_name || '?'" size="md" variant="blue" />
           <div class="member-info">
-            <span class="member-name">{{ row.member?.full_name }}</span>
-            <span class="member-code text-caption text-tertiary">{{ row.member?.member_code }}</span>
+            <span class="member-name">{{ row.member_name }}</span>
+            <span class="member-code text-caption text-tertiary">{{ row.member_code }}</span>
           </div>
         </div>
       </template>
@@ -192,7 +193,7 @@ const columns = [
 
       <!-- Amount Cell -->
       <template #amount="{ row }">
-        <span class="amount">{{ formatCurrency(row.total_amount || 0) }}</span>
+        <span class="amount">{{ formatCurrency(row.total_payments_12m || 0) }}</span>
       </template>
 
       <!-- Pagination -->

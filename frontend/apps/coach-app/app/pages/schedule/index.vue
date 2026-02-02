@@ -140,7 +140,7 @@ const weekDays = computed(() => {
     const date = new Date(start)
     date.setDate(start.getDate() + i)
     days.push({
-      date: date.toISOString().split('T')[0],
+      date: date.toISOString().split('T')[0]!,
       dayOfWeek: date.getDay(),
     })
   }
@@ -209,13 +209,13 @@ function formatDayHeader(dateStr: string) {
 }
 
 function isToday(dateStr: string) {
-  return dateStr === new Date().toISOString().split('T')[0]
+  return dateStr === new Date().toISOString().split('T')[0]!
 }
 
 function getClassesForDay(dateStr: string): ClassBooking[] {
   if (!schedule.value?.classes) return []
   return schedule.value.classes.filter(c => {
-    const classDate = new Date(c.scheduled_at).toISOString().split('T')[0]
+    const classDate = new Date(c.scheduled_at).toISOString().split('T')[0]!
     return classDate === dateStr
   })
 }

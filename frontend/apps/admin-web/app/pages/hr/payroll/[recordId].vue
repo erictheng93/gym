@@ -3,6 +3,7 @@
  * 薪資明細頁面
  */
 import { MESSAGES } from '~/constants'
+import { usePayroll } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

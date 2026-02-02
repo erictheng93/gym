@@ -27,28 +27,31 @@ const { errors, validate, clearErrors } = useFormValidation<typeof form>()
 // Permission helpers
 const toggleModuleAll = (moduleKey: string, value: boolean) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
-  if (!module || !form.permissions_config[moduleKey]) return
+  const modulePerms = form.permissions_config[moduleKey]
+  if (!module || !modulePerms) return
 
   module.actions.forEach(action => {
-    form.permissions_config[moduleKey][action.key] = value
+    modulePerms[action.key] = value
   })
 }
 
 const isModuleFullyEnabled = (moduleKey: string) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
-  if (!module || !form.permissions_config[moduleKey]) return false
+  const modulePerms = form.permissions_config[moduleKey]
+  if (!module || !modulePerms) return false
 
   return module.actions.every(action =>
-    form.permissions_config[moduleKey][action.key] === true
+    modulePerms[action.key] === true
   )
 }
 
 const isModulePartiallyEnabled = (moduleKey: string) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
-  if (!module || !form.permissions_config[moduleKey]) return false
+  const modulePerms = form.permissions_config[moduleKey]
+  if (!module || !modulePerms) return false
 
   const enabledCount = module.actions.filter(action =>
-    form.permissions_config[moduleKey][action.key] === true
+    modulePerms[action.key] === true
   ).length
 
   return enabledCount > 0 && enabledCount < module.actions.length
@@ -63,8 +66,9 @@ const applyReadOnly = () => {
   form.permissions_config = createEmptyPermissions()
   PERMISSION_MODULES.forEach(module => {
     const readAction = module.actions.find(a => a.key === 'read')
-    if (readAction && form.permissions_config[module.key]) {
-      form.permissions_config[module.key].read = true
+    const modulePerms = form.permissions_config[module.key]
+    if (readAction && modulePerms) {
+      modulePerms.read = true
     }
   })
 }

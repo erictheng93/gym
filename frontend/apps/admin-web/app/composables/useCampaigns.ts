@@ -30,6 +30,14 @@ export interface Campaign {
     discount_value: number
     used_count: number
   }>
+  associated_coupons?: Array<{
+    id: string
+    code: string
+    name: string
+    discount_type: string
+    discount_value: number
+    used_count: number
+  }>
   assets?: Array<{
     id: string
     name: string
@@ -43,9 +51,11 @@ export interface CampaignMetrics {
   clicks: number
   conversions: number
   revenue: number
+  total_revenue?: number // Alias for revenue
   leads_generated?: number
   contracts_created?: number
   revenue_generated?: number
+  coupon_usages?: number
   roi?: string | null
   conversion_rate?: string | null
   updated_at?: string
@@ -86,6 +96,8 @@ export const useCampaigns = () => {
 
   // State
   const campaigns = useState<Campaign[]>('campaigns', () => [])
+  const currentCampaign = useState<Campaign | null>('current_campaign', () => null)
+  const campaignMetrics = useState<CampaignMetrics | null>('campaign_metrics', () => null)
   const isLoading = useState('campaigns_loading', () => false)
   const totalCount = useState('campaigns_total', () => 0)
 
@@ -153,6 +165,19 @@ export const useCampaigns = () => {
   }
 
   /**
+   * Fetch single campaign and store in state
+   */
+  const fetchCampaign = async (id: string): Promise<void> => {
+    isLoading.value = true
+    try {
+      const campaign = await getCampaign(id)
+      currentCampaign.value = campaign
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
    * Create campaign
    */
   const createCampaign = async (data: Partial<Campaign>): Promise<Campaign | null> => {
@@ -212,6 +237,11 @@ export const useCampaigns = () => {
   }
 
   /**
+   * Delete campaign (alias for cancelCampaign)
+   */
+  const deleteCampaign = cancelCampaign
+
+  /**
    * Get campaign metrics
    */
   const getCampaignMetrics = async (id: string): Promise<CampaignMetrics | null> => {
@@ -234,6 +264,18 @@ export const useCampaigns = () => {
         customMessage: '取得活動指標失敗'
       })
       return null
+    }
+  }
+
+  /**
+   * Fetch campaign metrics and store in state
+   */
+  const fetchCampaignMetrics = async (id: string): Promise<void> => {
+    try {
+      const metrics = await getCampaignMetrics(id)
+      campaignMetrics.value = metrics
+    } catch {
+      campaignMetrics.value = null
     }
   }
 
@@ -325,6 +367,11 @@ export const useCampaigns = () => {
     }
   }
 
+  /**
+   * Fetch ROI report (alias for getROIReport)
+   */
+  const fetchROIReport = getROIReport
+
   // Helpers
   const getTypeLabel = (type: Campaign['type']): string => {
     const labels: Record<Campaign['type'], string> = {
@@ -366,6 +413,16 @@ export const useCampaigns = () => {
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
+  const getStatusVariant = (status: Campaign['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<Campaign['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+      DRAFT: 'default',
+      ACTIVE: 'success',
+      ENDED: 'info',
+      CANCELLED: 'error'
+    }
+    return variants[status] || 'default'
+  }
+
   const formatROI = (roi: number | null): string => {
     if (roi === null) return '-'
     return `${roi >= 0 ? '+' : ''}${roi}%`
@@ -382,23 +439,30 @@ export const useCampaigns = () => {
   return {
     // State
     campaigns,
+    currentCampaign,
+    campaignMetrics,
     isLoading,
     totalCount,
     // Actions
     fetchCampaigns,
+    fetchCampaign,
     getCampaign,
     createCampaign,
     updateCampaign,
     cancelCampaign,
+    deleteCampaign,
     getCampaignMetrics,
+    fetchCampaignMetrics,
     updateCampaignMetrics,
     addAsset,
     getROIReport,
+    fetchROIReport,
     // Helpers
     getTypeLabel,
     getTypeColor,
     getStatusLabel,
     getStatusColor,
+    getStatusVariant,
     formatROI,
     getROIColor
   }

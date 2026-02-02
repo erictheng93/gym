@@ -128,14 +128,15 @@ export const useAuthV2 = () => {
       }
 
       toast.success('登入成功')
-      return { success: true }
+      return { success: true as const }
     } catch (error: unknown) {
       handleError(error, {
         context: 'useAuthV2.login',
         customMessage: MESSAGES.AUTH.LOGIN_ERROR,
         redirectOnAuth: false
       })
-      return { success: false }
+      const errorMessage = error instanceof Error ? error.message : MESSAGES.AUTH.LOGIN_ERROR
+      return { success: false as const, error: errorMessage }
     } finally {
       isLoading.value = false
     }

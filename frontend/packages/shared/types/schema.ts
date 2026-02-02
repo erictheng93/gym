@@ -26,7 +26,7 @@ export interface Branch extends BaseFields {
 // 職位
 export interface JobTitle extends BaseFields {
   name: string
-  permissions_config: Record<string, boolean> | null
+  permissions_config: Record<string, Record<string, boolean>> | null
 }
 
 // 員工
@@ -36,6 +36,8 @@ export interface Employee extends BaseFields {
   user_id: string | null
   branch_id: string | null
   job_title_id: string | null
+  supervisor_id: string | null
+  hire_date: string | null
   employment_status: 'ACTIVE' | 'RESIGNED' | 'LEAVE'
   employment_type: 'FULL_TIME' | 'PART_TIME' | 'FREELANCE'
   basic_salary: number | null
@@ -45,6 +47,7 @@ export interface Employee extends BaseFields {
   // Relations
   branch?: Branch
   job_title?: JobTitle
+  supervisor?: Employee
 }
 
 // 會員

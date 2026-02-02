@@ -36,8 +36,8 @@ const heatmapData = ref<number[][] | undefined>(undefined)
 // 權限檢查 - 是否為 HQ
 const isHeadquarter = computed(() => {
   // 管理員或總部用戶
-  return user.value?.role?.name === 'Administrator' ||
-         user.value?.role?.name === 'Manager'
+  return user.value?.role === 'Administrator' ||
+         user.value?.role === 'Manager'
 })
 
 // 期間選項

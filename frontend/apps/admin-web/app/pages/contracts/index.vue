@@ -247,10 +247,10 @@ const handleExportSelected = () => {
       <!-- Member Cell -->
       <template #member="{ row }">
         <div class="member-cell">
-          <AppAvatar :name="row.member_id?.full_name" size="md" variant="blue" />
+          <AppAvatar :name="row.member?.full_name" size="md" variant="blue" />
           <div class="member-info">
-            <span class="member-name">{{ row.member_id?.full_name || '—' }}</span>
-            <span class="member-code text-caption text-tertiary">{{ row.member_id?.member_code }}</span>
+            <span class="member-name">{{ row.member?.full_name || '—' }}</span>
+            <span class="member-code text-caption text-tertiary">{{ row.member?.member_code }}</span>
           </div>
         </div>
       </template>

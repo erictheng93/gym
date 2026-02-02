@@ -11,7 +11,7 @@ interface Props {
   /** 描述 */
   description?: string
   /** 圖標類型 */
-  icon?: 'users' | 'files' | 'inbox' | 'search' | 'calendar' | 'dollar' | 'grid' | 'bookmark' | 'folder' | 'check'
+  icon?: 'users' | 'files' | 'inbox' | 'search' | 'calendar' | 'dollar' | 'grid' | 'bookmark' | 'folder' | 'check' | 'clipboard' | 'clock' | 'chart' | 'megaphone' | 'ticket' | 'alert-circle' | 'file-text' | 'dollar-sign' | 'bar-chart-2'
   /** 操作按鈕文字 */
   actionLabel?: string
   /** 操作按鈕連結 */
@@ -103,6 +103,78 @@ const icons: Record<string, { viewBox: string; paths: string[] }> = {
     paths: [
       'M22 11.08V12a10 10 0 1 1-5.93-9.14',
       'M22 4 12 14.01l-3-3'
+    ]
+  },
+  clipboard: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2',
+      'M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z'
+    ]
+  },
+  clock: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z',
+      'M12 6v6l4 2'
+    ]
+  },
+  chart: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M3 3v18h18',
+      'M18 17V9',
+      'M13 17V5',
+      'M8 17v-3'
+    ]
+  },
+  megaphone: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M3 11l18-5v12L3 13v-2z',
+      'M11.6 16.8a3 3 0 1 1-5.8-1.6'
+    ]
+  },
+  ticket: {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z',
+      'M13 5v2',
+      'M13 17v2',
+      'M13 11v2'
+    ]
+  },
+  'alert-circle': {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z',
+      'M12 8v4',
+      'M12 16h.01'
+    ]
+  },
+  'file-text': {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z',
+      'M14 2v4a2 2 0 0 0 2 2h4',
+      'M10 9H8',
+      'M16 13H8',
+      'M16 17H8'
+    ]
+  },
+  'dollar-sign': {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M12 2v20',
+      'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'
+    ]
+  },
+  'bar-chart-2': {
+    viewBox: '0 0 24 24',
+    paths: [
+      'M18 20V10',
+      'M12 20V4',
+      'M6 20v-6'
     ]
   }
 }

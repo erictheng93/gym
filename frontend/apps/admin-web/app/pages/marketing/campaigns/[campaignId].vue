@@ -28,10 +28,11 @@ const {
 } = useCampaigns()
 
 const isEditing = ref(false)
+type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'ENDED' | 'CANCELLED'
 const editForm = ref({
   name: '',
   description: '',
-  status: '',
+  status: 'DRAFT' as CampaignStatus,
   budget: null as number | null
 })
 

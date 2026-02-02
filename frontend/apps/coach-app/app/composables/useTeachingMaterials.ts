@@ -191,7 +191,7 @@ export const useTeachingMaterials = () => {
    */
   const createMaterial = async (data: {
     type: string
-    category: string
+    category?: string
     name: string
     description?: string
     file_id?: string

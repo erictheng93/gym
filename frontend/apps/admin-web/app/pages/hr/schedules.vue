@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
 import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
+import { useShiftSchedules } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
@@ -140,11 +141,11 @@ const handleSubmit = async () => {
     }
 
     showModal.value = false
-    useToast().success(isEdit.value ? MESSAGES.SUCCESS.SCHEDULE_UPDATED : MESSAGES.SUCCESS.SCHEDULE_CREATED)
+    useToast().success(isEditing.value ? MESSAGES.SUCCESS.SCHEDULE_UPDATED : MESSAGES.SUCCESS.SCHEDULE_CREATED)
     await fetchShiftSchedules(selectedBranch.value || undefined)
   } catch (error) {
     console.error('Failed to save shift schedule:', error)
-    useToast().error(isEdit.value ? MESSAGES.ERRORS.SCHEDULE_UPDATE_FAILED : MESSAGES.ERRORS.SCHEDULE_CREATE_FAILED)
+    useToast().error(isEditing.value ? MESSAGES.ERRORS.SCHEDULE_UPDATE_FAILED : MESSAGES.ERRORS.SCHEDULE_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }

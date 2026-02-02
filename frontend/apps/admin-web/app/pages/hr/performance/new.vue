@@ -3,6 +3,7 @@
  * 新增績效考核頁面
  */
 import { MESSAGES } from '~/constants'
+import { usePerformance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

@@ -237,8 +237,8 @@ describe('useClasses', () => {
       const mondaySchedules = getSchedulesByDay(1)
 
       expect(mondaySchedules).toHaveLength(2)
-      expect(mondaySchedules[0].id).toBe('s2') // 09:00 first
-      expect(mondaySchedules[1].id).toBe('s1') // 14:00 second
+      expect(mondaySchedules[0]!.id).toBe('s2') // 09:00 first
+      expect(mondaySchedules[1]!.id).toBe('s1') // 14:00 second
     })
 
     it('should return empty array for day with no schedules', () => {
@@ -291,8 +291,8 @@ describe('useClasses', () => {
       const sessions = getSessionsByDate('2024-01-15')
 
       expect(sessions).toHaveLength(2)
-      expect(sessions[0].id).toBe('sess2') // 09:00 first
-      expect(sessions[1].id).toBe('sess1') // 14:00 second
+      expect(sessions[0]!.id).toBe('sess2') // 09:00 first
+      expect(sessions[1]!.id).toBe('sess1') // 14:00 second
     })
   })
 

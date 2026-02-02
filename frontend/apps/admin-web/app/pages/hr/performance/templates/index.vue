@@ -3,6 +3,7 @@
  * KPI 範本管理頁面
  */
 import { MESSAGES, PAGINATION } from '~/constants'
+import { usePerformance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

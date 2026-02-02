@@ -3,6 +3,7 @@
  * 績效考核列表頁面
  */
 import { MESSAGES, PAGINATION, TIMING } from '~/constants'
+import { usePerformance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

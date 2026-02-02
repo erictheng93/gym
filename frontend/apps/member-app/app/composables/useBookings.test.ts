@@ -148,9 +148,9 @@ describe('useBookings', () => {
       await fetchMyBookings()
 
       expect(upcomingBookings.value).toHaveLength(1)
-      expect(upcomingBookings.value[0].id).toBe('upcoming-1')
+      expect(upcomingBookings.value[0]!.id).toBe('upcoming-1')
       expect(pastBookings.value).toHaveLength(1)
-      expect(pastBookings.value[0].id).toBe('past-1')
+      expect(pastBookings.value[0]!.id).toBe('past-1')
     })
 
     it('should return empty array on error', async () => {
@@ -206,7 +206,7 @@ describe('useBookings', () => {
       const { bookSession, myBookings } = useBookings()
       await bookSession('session-1')
 
-      expect(myBookings.value[0].id).toBe('booking-new')
+      expect(myBookings.value[0]!.id).toBe('booking-new')
     })
 
     it('should extract error message on failure', async () => {
@@ -263,14 +263,14 @@ describe('useBookings', () => {
       const { fetchMyBookings, cancelBooking, myBookings, upcomingBookings } = useBookings()
       await fetchMyBookings()
 
-      expect(myBookings.value[0].booking_status).toBe('CONFIRMED')
+      expect(myBookings.value[0]!.booking_status).toBe('CONFIRMED')
       expect(upcomingBookings.value).toHaveLength(1)
 
       // Now cancel
       mockFetch.mockResolvedValueOnce({ success: true, message: '取消成功' })
       await cancelBooking('booking-1')
 
-      expect(myBookings.value[0].booking_status).toBe('CANCELLED')
+      expect(myBookings.value[0]!.booking_status).toBe('CANCELLED')
       expect(upcomingBookings.value).toHaveLength(0)
     })
 

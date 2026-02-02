@@ -2,6 +2,8 @@
 /**
  * 薪資匯出頁面
  */
+import { usePayroll } from '~/composables/hr'
+
 definePageMeta({
   middleware: 'auth'
 })

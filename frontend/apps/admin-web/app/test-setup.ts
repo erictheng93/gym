@@ -3,7 +3,7 @@
  * 为 Nuxt composables 测试提供必要的全局 mocks
  */
 
-import { vi } from 'vitest'
+import { vi, beforeEach } from 'vitest'
 
 // State management mock
 const stateStore = new Map<string, { value: any }>()

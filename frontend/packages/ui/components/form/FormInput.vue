@@ -21,7 +21,7 @@ interface Props {
   /** 欄位標籤 */
   label?: string
   /** 輸入類型 */
-  type?: 'text' | 'email' | 'tel' | 'number' | 'password'
+  type?: 'text' | 'email' | 'tel' | 'number' | 'password' | 'date' | 'time' | 'datetime-local'
   /** 佔位文字 */
   placeholder?: string
   /** 是否必填 */

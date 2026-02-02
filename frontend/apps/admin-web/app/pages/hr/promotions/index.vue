@@ -3,6 +3,7 @@
  * 員工異動紀錄頁面
  */
 import { MESSAGES, PAGINATION } from '~/constants'
+import { usePayroll } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

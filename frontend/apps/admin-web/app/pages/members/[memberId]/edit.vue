@@ -70,6 +70,10 @@ const loadMember = async () => {
   isLoading.value = true
   try {
     const member = await getMember(memberId.value)
+    if (!member) {
+      useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
+      return
+    }
     setFormData({
       full_name: member.full_name,
       phone: member.phone || '',
@@ -120,7 +124,7 @@ const handleSubmit = async () => {
     {
       successMessage: MESSAGES.SUCCESS.MEMBER_UPDATED,
       errorMessage: MESSAGES.ERRORS.MEMBER_UPDATE_FAILED,
-      onSuccess: () => router.push(`/members/${memberId.value}`),
+      onSuccess: async () => { await router.push(`/members/${memberId.value}`) },
       onError: (error) => setError('submit', error.message)
     }
   )
@@ -185,9 +189,10 @@ const handleSubmit = async () => {
             />
 
             <FormRadioGroup
-              v-model="form.gender"
+              :model-value="form.gender ?? undefined"
               label="性別"
               :options="genderOptions"
+              @update:model-value="(v: string | number | undefined) => form.gender = (v as 'M' | 'F' | 'O' | null) ?? null"
             />
 
             <FormDatePicker
@@ -267,10 +272,11 @@ const handleSubmit = async () => {
           </h2>
 
           <FormTagInput
-            v-model="form.tags"
+            :model-value="form.tags ?? undefined"
             placeholder="輸入標籤..."
             :max-tags="10"
             :error="errors.tags"
+            @update:model-value="(v: string[] | undefined) => form.tags = v ?? []"
           />
         </section>
 

@@ -52,14 +52,15 @@ const formatDateDisplay = (date: Date) => {
 }
 
 // Format date for API
-const formatDateApi = (date: Date) => {
-  return date.toISOString().split('T')[0]
+const formatDateApi = (date: Date): string => {
+  return date.toISOString().split('T')[0]!
 }
 
 // Week label
 const weekLabel = computed(() => {
   const start = weekDates.value[0]
   const end = weekDates.value[6]
+  if (!start || !end) return ''
   return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`
 })
 
@@ -67,21 +68,22 @@ const weekLabel = computed(() => {
 const sessionsByDate = computed(() => {
   const grouped: Record<string, ClassSession[]> = {}
 
-  weekDates.value.forEach(date => {
+  for (const date of weekDates.value) {
     const dateStr = formatDateApi(date)
     grouped[dateStr] = []
-  })
+  }
 
-  sessions.value.forEach(session => {
-    if (grouped[session.session_date]) {
-      grouped[session.session_date].push(session)
+  for (const session of sessions.value) {
+    const dateGroup = grouped[session.session_date]
+    if (dateGroup) {
+      dateGroup.push(session)
     }
-  })
+  }
 
   // Sort sessions by start time
-  Object.keys(grouped).forEach(date => {
-    grouped[date].sort((a, b) => a.start_time.localeCompare(b.start_time))
-  })
+  for (const date of Object.keys(grouped)) {
+    grouped[date]?.sort((a, b) => a.start_time.localeCompare(b.start_time))
+  }
 
   return grouped
 })
@@ -111,8 +113,11 @@ const goToCurrentWeek = () => {
 
 // Load sessions
 const loadSessions = async () => {
-  const startDate = formatDateApi(weekDates.value[0])
-  const endDate = formatDateApi(weekDates.value[6])
+  const firstDate = weekDates.value[0]
+  const lastDate = weekDates.value[6]
+  if (!firstDate || !lastDate) return
+  const startDate = formatDateApi(firstDate)
+  const endDate = formatDateApi(lastDate)
 
   await fetchSessions({
     branchId: selectedBranch.value || undefined,

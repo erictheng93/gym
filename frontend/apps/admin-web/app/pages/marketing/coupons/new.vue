@@ -91,7 +91,7 @@ const handleSubmit = async () => {
     {
       successMessage: '已成功建立優惠券',
       errorMessage: '建立優惠券失敗',
-      onSuccess: () => router.push('/marketing/coupons'),
+      onSuccess: async () => { await router.push('/marketing/coupons') },
       onError: (error) => setError('submit', error.message)
     }
   )

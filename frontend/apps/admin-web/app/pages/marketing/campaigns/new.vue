@@ -4,6 +4,7 @@
  */
 import { MESSAGES } from '~/constants'
 import { campaignSchema } from '~/schemas/campaign.schema'
+import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 
 definePageMeta({
   middleware: 'auth'
@@ -19,19 +20,23 @@ const {
   formData,
   errors,
   validateField,
-  validateForm,
-  resetForm
+  validate,
+  reset
 } = useZodFormValidation(campaignSchema, {
   name: '',
   description: '',
-  type: 'PROMOTION',
-  status: 'DRAFT',
+  type: 'PROMOTION' as const,
   start_date: '',
   end_date: '',
-  budget: null,
+  budget: null
+})
+
+// Additional form fields not in schema
+const additionalData = ref({
+  status: 'DRAFT' as 'DRAFT' | 'ACTIVE' | 'ENDED' | 'CANCELLED',
   target_segment: '',
-  associated_coupons: [],
-  target_branches: []
+  associated_coupons: [] as string[],
+  target_branches: [] as string[]
 })
 
 const typeOptions = [
@@ -54,16 +59,20 @@ onMounted(async () => {
 })
 
 const handleSubmit = async () => {
-  if (!validateForm()) {
+  if (!validate()) {
     toast.error(MESSAGES.COMMON.VALIDATION_ERROR)
     return
   }
 
   try {
     const result = await createCampaign({
-      ...formData.value,
-      budget: formData.value.budget ? Number(formData.value.budget) : null
+      ...formData,
+      ...additionalData.value,
+      budget: formData.budget ? Number(formData.budget) : null
     })
+    if (!result) {
+      throw new Error('建立活動失敗')
+    }
     toast.success('活動建立成功')
     navigateTo(`/marketing/campaigns/${result.id}`)
   } catch (error) {
@@ -146,11 +155,9 @@ const handleSubmit = async () => {
         <h2 class="form-section-title">目標設定</h2>
 
         <FormSelect
-          v-model="formData.target_segment"
+          v-model="additionalData.target_segment"
           label="目標會員分群"
           :options="segmentOptions"
-          :error="errors.target_segment"
-          @blur="validateField('target_segment')"
         />
 
         <div class="form-field">
@@ -158,7 +165,7 @@ const handleSubmit = async () => {
           <div class="checkbox-group">
             <label v-for="branch in branches" :key="branch.id" class="checkbox-item">
               <input
-                v-model="formData.target_branches"
+                v-model="additionalData.target_branches"
                 type="checkbox"
                 :value="branch.id"
               />
@@ -177,7 +184,7 @@ const handleSubmit = async () => {
           <div class="checkbox-group">
             <label v-for="coupon in coupons" :key="coupon.id" class="checkbox-item">
               <input
-                v-model="formData.associated_coupons"
+                v-model="additionalData.associated_coupons"
                 type="checkbox"
                 :value="coupon.id"
               />

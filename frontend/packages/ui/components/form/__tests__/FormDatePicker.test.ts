@@ -4,19 +4,13 @@ import { computed as vueComputed } from 'vue'
 import FormDatePicker from '../FormDatePicker.vue'
 import FormField from '../FormField.vue'
 
-// Augment globalThis for Vue computed function
-declare global {
-  // eslint-disable-next-line no-var
-  var computed: typeof vueComputed | undefined
-}
-
 // Restore Vue's computed for component tests
-const originalComputed = globalThis.computed
+const originalComputed = (globalThis as Record<string, unknown>).computed
 beforeAll(() => {
-  globalThis.computed = vueComputed
+  (globalThis as Record<string, unknown>).computed = vueComputed
 })
 afterAll(() => {
-  globalThis.computed = originalComputed
+  (globalThis as Record<string, unknown>).computed = originalComputed
 })
 
 describe('FormDatePicker', () => {

@@ -80,10 +80,10 @@ const loadLeads = async () => {
     page: currentPage.value,
     limit: pageSize,
     search: search.value || undefined,
-    branch_id: selectedBranch.value || undefined,
+    branchId: selectedBranch.value || undefined,
     status: selectedStatus.value || undefined,
     source: selectedSource.value || undefined,
-    assigned_to: selectedAssignee.value || undefined
+    assignedTo: selectedAssignee.value || undefined
   })
 }
 
@@ -358,7 +358,7 @@ const confirmAssign = async () => {
 
       <!-- Assignee Cell -->
       <template #assignee="{ row }">
-        <div v-if="row.assigned_to" class="assignee-cell">
+        <div v-if="row.assigned_to && typeof row.assigned_to === 'object'" class="assignee-cell">
           <AppAvatar :name="row.assigned_to.full_name" size="sm" variant="blue" />
           <span>{{ row.assigned_to.full_name }}</span>
         </div>

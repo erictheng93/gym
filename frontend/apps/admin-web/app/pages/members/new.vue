@@ -64,8 +64,9 @@ onMounted(async () => {
     fetchTenantQuota()
   ])
 
-  if (branches.value.length > 0 && !form.branch_id) {
-    form.branch_id = branches.value[0].id
+  const firstBranch = branches.value[0]
+  if (firstBranch && !form.branch_id) {
+    form.branch_id = firstBranch.id
   }
 })
 
@@ -103,7 +104,7 @@ const handleSubmit = async () => {
     {
       successMessage: MESSAGES.SUCCESS.MEMBER_CREATED,
       errorMessage: MESSAGES.ERRORS.MEMBER_CREATE_FAILED,
-      onSuccess: () => router.push('/members'),
+      onSuccess: async () => { await router.push('/members') },
       onError: (error) => setError('submit', error.message)
     }
   )
@@ -167,16 +168,18 @@ const handleSubmit = async () => {
           />
 
           <FormRadioGroup
-            v-model="form.gender"
+            :model-value="form.gender ?? undefined"
             :label="MESSAGES.FORM.GENDER"
             :options="genderOptions"
             allow-empty
+            @update:model-value="(v: string | number | undefined) => form.gender = (v as 'M' | 'F' | 'O' | null) ?? null"
           />
 
           <FormDatePicker
-            v-model="form.birthday"
+            :model-value="form.birthday ?? undefined"
             :label="MESSAGES.FORM.BIRTHDAY"
             :error="errors.birthday"
+            @update:model-value="(v: string | undefined) => form.birthday = v ?? null"
           />
 
           <FormInput
@@ -250,11 +253,12 @@ const handleSubmit = async () => {
         </h2>
 
         <FormTagInput
-          v-model="form.tags"
+          :model-value="form.tags ?? undefined"
           placeholder="輸入標籤..."
           :add-button-text="MESSAGES.FORM.ADD"
           :max-tags="10"
           :error="errors.tags"
+          @update:model-value="(v: string[] | undefined) => form.tags = v ?? []"
         />
       </section>
 

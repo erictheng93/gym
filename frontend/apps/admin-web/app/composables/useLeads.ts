@@ -17,7 +17,7 @@ export interface Lead {
   utm_medium: string | null
   utm_campaign: string | null
   branch_id: string
-  assigned_to: string | null
+  assigned_to: string | { id: string; full_name: string; employee_code?: string } | null
   status: 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
   interest: Record<string, unknown> | null
   notes: string | null
@@ -25,9 +25,11 @@ export interface Lead {
   converted_at: string | null
   created_at: string
   updated_at: string
+  date_created?: string // Alias for created_at
   // Joined fields
   assigned_to_name?: string
   branch_name?: string
+  branch?: { id: string; name: string }
   converted_member_name?: string
   activities?: LeadActivity[]
 }
@@ -40,15 +42,19 @@ export interface LeadActivity {
   result: string | null
   next_action: string | null
   next_action_date: string | null
-  created_by: string | null
+  created_by: string | { id: string; full_name: string } | null
   created_at: string
+  date_created?: string // Alias for created_at
   created_by_name?: string
 }
 
 export interface LeadAnalytics {
+  total_leads?: number
+  converted_leads?: number
   by_source: Array<{
     source: string
     total: number
+    count?: number // Alias for total
     converted: number
     conversion_rate: number
   }>
@@ -57,6 +63,13 @@ export interface LeadAnalytics {
     count: number
   }>
   average_conversion_days: number
+  avg_conversion_days?: number // Alias for average_conversion_days
+  source_conversion?: Array<{
+    source: string
+    total: number
+    converted: number
+    conversion_rate: number
+  }>
   top_performers: Array<{
     id: string
     full_name: string
@@ -239,11 +252,11 @@ export const useLeads = () => {
   const convertToMember = async (
     leadId: string,
     convertedBy?: string
-  ): Promise<{ lead: Lead; member: unknown; is_new_member: boolean } | null> => {
+  ): Promise<{ lead: Lead; member: { id: string; [key: string]: unknown }; is_new_member: boolean; member_id?: string } | null> => {
     try {
       const response = await $fetch<{
         success: boolean
-        data: { lead: Lead; member: unknown; is_new_member: boolean }
+        data: { lead: Lead; member: { id: string; [key: string]: unknown }; is_new_member: boolean; member_id?: string }
       }>(`${apiBase}/leads/${leadId}/convert`, {
         method: 'POST',
         body: { converted_by: convertedBy }
@@ -295,12 +308,14 @@ export const useLeads = () => {
     branchId?: string
     startDate?: string
     endDate?: string
+    period?: string
   }): Promise<LeadAnalytics | null> => {
     try {
       const params = new URLSearchParams()
       if (options?.branchId) params.append('branch_id', options.branchId)
       if (options?.startDate) params.append('start_date', options.startDate)
       if (options?.endDate) params.append('end_date', options.endDate)
+      if (options?.period) params.append('period', options.period)
 
       const response = await $fetch<{ success: boolean; data: LeadAnalytics }>(
         `${apiBase}/leads/analytics?${params}`
@@ -338,6 +353,18 @@ export const useLeads = () => {
       LOST: 'bg-gray-100 text-gray-800'
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  const getStatusVariant = (status: Lead['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<Lead['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+      NEW: 'info',
+      CONTACTED: 'warning',
+      TRIAL_BOOKED: 'accent',
+      VISITED: 'success',
+      CONVERTED: 'success',
+      LOST: 'default'
+    }
+    return variants[status] || 'default'
   }
 
   const getSourceLabel = (source: Lead['source']): string => {
@@ -381,6 +408,7 @@ export const useLeads = () => {
     // Helpers
     getStatusLabel,
     getStatusColor,
+    getStatusVariant,
     getSourceLabel,
     getActivityTypeLabel
   }

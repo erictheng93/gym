@@ -26,7 +26,7 @@ const {
 } = useCoupons()
 
 const coupon = ref<Awaited<ReturnType<typeof getCoupon>> | null>(null)
-const usages = ref<Awaited<ReturnType<typeof getCouponUsages>>>([])
+const usages = ref<Awaited<ReturnType<typeof getCouponUsages>>>({ data: [], total: 0 })
 const isLoading = ref(true)
 
 const couponId = computed(() => route.params.couponId as string)
@@ -277,8 +277,8 @@ const usagePercentage = computed(() => {
           <div v-if="coupon.applicable_plans && coupon.applicable_plans.length > 0" class="applicable-plans">
             <label>適用方案</label>
             <div class="plans-tags">
-              <span v-for="plan in coupon.applicable_plans" :key="plan.id" class="plan-tag">
-                {{ plan.name }}
+              <span v-for="planId in coupon.applicable_plans" :key="planId" class="plan-tag">
+                {{ planId }}
               </span>
             </div>
           </div>
@@ -295,24 +295,24 @@ const usagePercentage = computed(() => {
           使用紀錄
         </h2>
 
-        <div v-if="usages.length > 0" class="usage-list">
+        <div v-if="usages.data.length > 0" class="usage-list">
           <div
-            v-for="usage in usages"
+            v-for="usage in usages.data"
             :key="usage.id"
             class="usage-item"
           >
             <div class="usage-member">
-              <AppAvatar :name="usage.member?.full_name || '?'" size="sm" variant="blue" />
-              <span>{{ usage.member?.full_name }}</span>
+              <AppAvatar :name="usage.member_name || '?'" size="sm" variant="blue" />
+              <span>{{ usage.member_name }}</span>
             </div>
             <div class="usage-contract">
-              {{ usage.contract?.plan?.name || '—' }}
+              {{ usage.contract_no || '—' }}
             </div>
             <div class="usage-amount">
               折抵 {{ formatCurrency(usage.discount_amount || 0) }}
             </div>
             <div class="usage-time">
-              {{ formatDateTime(usage.date_created) }}
+              {{ formatDateTime(usage.used_at) }}
             </div>
           </div>
         </div>

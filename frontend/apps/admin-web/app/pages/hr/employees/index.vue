@@ -205,11 +205,11 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
       <div class="detail-grid">
         <div class="detail-item">
           <span class="detail-label">職位</span>
-          <span class="detail-value">{{ selectedEmployee?.job_title_id?.name || '—' }}</span>
+          <span class="detail-value">{{ selectedEmployee?.job_title?.name || '—' }}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">分店</span>
-          <span class="detail-value">{{ selectedEmployee?.branch_id?.name || '—' }}</span>
+          <span class="detail-value">{{ selectedEmployee?.branch?.name || '—' }}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">聘用類型</span>

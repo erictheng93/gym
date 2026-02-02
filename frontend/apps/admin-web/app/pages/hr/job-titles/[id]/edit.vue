@@ -33,8 +33,11 @@ const loadJobTitle = async () => {
   isLoading.value = true
   try {
     const jobTitle = await getJobTitle(jobTitleId.value)
+    if (!jobTitle) {
+      throw new Error('Job title not found')
+    }
     form.name = jobTitle.name
-    form.permissions_config = jobTitle.permissions_config || createEmptyPermissions()
+    form.permissions_config = (jobTitle.permissions_config as typeof form.permissions_config) || createEmptyPermissions()
   } catch (error) {
     console.error('Failed to load job title:', error)
     useToast().error(MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED)
@@ -47,28 +50,31 @@ const loadJobTitle = async () => {
 // Permission helpers
 const toggleModuleAll = (moduleKey: string, value: boolean) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
-  if (!module || !form.permissions_config[moduleKey]) return
+  const modulePerms = form.permissions_config[moduleKey]
+  if (!module || !modulePerms) return
 
   module.actions.forEach(action => {
-    form.permissions_config[moduleKey][action.key] = value
+    modulePerms[action.key] = value
   })
 }
 
 const isModuleFullyEnabled = (moduleKey: string) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
-  if (!module || !form.permissions_config[moduleKey]) return false
+  const modulePerms = form.permissions_config[moduleKey]
+  if (!module || !modulePerms) return false
 
   return module.actions.every(action =>
-    form.permissions_config[moduleKey][action.key] === true
+    modulePerms[action.key] === true
   )
 }
 
 const isModulePartiallyEnabled = (moduleKey: string) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
-  if (!module || !form.permissions_config[moduleKey]) return false
+  const modulePerms = form.permissions_config[moduleKey]
+  if (!module || !modulePerms) return false
 
   const enabledCount = module.actions.filter(action =>
-    form.permissions_config[moduleKey][action.key] === true
+    modulePerms[action.key] === true
   ).length
 
   return enabledCount > 0 && enabledCount < module.actions.length
@@ -83,8 +89,9 @@ const applyReadOnly = () => {
   form.permissions_config = createEmptyPermissions()
   PERMISSION_MODULES.forEach(module => {
     const readAction = module.actions.find(a => a.key === 'read')
-    if (readAction && form.permissions_config[module.key]) {
-      form.permissions_config[module.key].read = true
+    const modulePerms = form.permissions_config[module.key]
+    if (readAction && modulePerms) {
+      modulePerms.read = true
     }
   })
 }

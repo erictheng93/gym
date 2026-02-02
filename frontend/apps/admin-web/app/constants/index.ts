@@ -423,6 +423,7 @@ export const MESSAGES = {
     BASIC_INFO: '基本資料',
     CONTACT_INFO: '聯絡資訊',
     PERSONAL_INFO: '個人資料',
+    VALIDATION_ERROR: '請檢查輸入資料',
   },
 
   // Confirmation

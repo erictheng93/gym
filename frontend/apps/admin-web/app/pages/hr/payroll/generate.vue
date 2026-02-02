@@ -6,6 +6,7 @@ import { MESSAGES } from '~/constants'
 import { generatePayrollSchema, type GeneratePayrollInput } from '~/schemas/payroll.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
+import { usePayroll } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
@@ -96,7 +97,7 @@ const handleSubmit = async () => {
     {
       successMessage: '已成功產生薪資紀錄',
       errorMessage: '產生薪資失敗',
-      onSuccess: () => router.push('/hr/payroll'),
+      onSuccess: async () => { await router.push('/hr/payroll') },
       onError: (error) => setError('submit', error.message)
     }
   )

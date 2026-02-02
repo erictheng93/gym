@@ -337,13 +337,13 @@ export const usePerformance = () => {
     return labels[status] || status
   }
 
-  const getStatusVariant = (status: PerformanceReview['status']): string => {
-    const variants: Record<PerformanceReview['status'], string> = {
-      DRAFT: 'secondary',
+  const getStatusVariant = (status: PerformanceReview['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<PerformanceReview['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+      DRAFT: 'default',
       SUBMITTED: 'warning',
       APPROVED: 'success'
     }
-    return variants[status] || 'secondary'
+    return variants[status] || 'default'
   }
 
   return {

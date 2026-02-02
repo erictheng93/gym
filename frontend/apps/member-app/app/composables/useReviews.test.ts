@@ -202,7 +202,7 @@ describe('useReviews', () => {
 
       expect(result.success).toBe(true)
       expect(myReviews.value).toHaveLength(1)
-      expect(myReviews.value[0].id).toBe('review-456')
+      expect(myReviews.value[0]!.id).toBe('review-456')
     })
 
     it('should not update local state on failed delete', async () => {

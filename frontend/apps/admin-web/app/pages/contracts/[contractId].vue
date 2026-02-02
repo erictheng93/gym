@@ -748,11 +748,11 @@ const openRenewModal = () => {
               <p v-if="log.reason" class="log-reason text-secondary">{{ log.reason }}</p>
               <!-- 經辦資訊 -->
               <div class="log-meta">
-                <span v-if="log.created_by_employee?.full_name" class="log-operator">
+                <span v-if="log.created_by?.full_name" class="log-operator">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
                   </svg>
-                  {{ log.created_by_employee.full_name }}
+                  {{ log.created_by.full_name }}
                 </span>
                 <span v-if="log.branch?.name" class="log-branch">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -64,8 +64,9 @@ const employeeOptions = computed(() =>
 // Initial load
 onMounted(async () => {
   await Promise.all([fetchBranches(), fetchEmployees()])
-  if (branches.value.length > 0 && !form.branch_id) {
-    form.branch_id = branches.value[0].id
+  const firstBranch = branches.value[0]
+  if (firstBranch && !form.branch_id) {
+    form.branch_id = firstBranch.id
   }
 })
 
@@ -96,7 +97,7 @@ const handleSubmit = async () => {
     {
       successMessage: '已成功建立潛在客戶',
       errorMessage: '建立潛在客戶失敗',
-      onSuccess: () => router.push('/leads'),
+      onSuccess: async () => { await router.push('/leads') },
       onError: (error) => setError('submit', error.message)
     }
   )

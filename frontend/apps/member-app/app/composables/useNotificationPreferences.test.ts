@@ -240,7 +240,7 @@ describe('useNotificationPreferences', () => {
       mockIsAuthenticated.value = false
 
       const { updatePreferences } = useNotificationPreferences()
-      const result = await updatePreferences({ enable_promotions: true })
+      const result = await updatePreferences({ notify_promotions: true })
 
       expect(result).toBe(false)
     })

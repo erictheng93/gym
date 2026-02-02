@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
+import { MESSAGES } from '~/constants'
 
 definePageMeta({
   middleware: 'auth',
@@ -23,7 +24,7 @@ const loadEmployee = async () => {
     employee.value = await getEmployee(employeeId.value)
   } catch (error) {
     console.error('Failed to load employee:', error)
-    useToast().error(MESSAGES.ERRORS.EMPLOYEE_LOAD_FAILED)
+    useToast().error(MESSAGES.ERRORS.GENERIC)
   } finally {
     isLoading.value = false
   }

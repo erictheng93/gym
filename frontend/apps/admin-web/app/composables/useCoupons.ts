@@ -345,6 +345,20 @@ export const useCoupons = () => {
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
+  const getStatusVariant = (status: Coupon['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<Coupon['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+      ACTIVE: 'success',
+      INACTIVE: 'default',
+      EXPIRED: 'error'
+    }
+    return variants[status] || 'default'
+  }
+
+  /**
+   * Delete coupon (alias for deactivateCoupon)
+   */
+  const deleteCoupon = deactivateCoupon
+
   return {
     // State
     coupons,
@@ -356,6 +370,7 @@ export const useCoupons = () => {
     createCoupon,
     updateCoupon,
     deactivateCoupon,
+    deleteCoupon,
     validateCoupon,
     getCouponUsages,
     generateBatch,
@@ -364,7 +379,8 @@ export const useCoupons = () => {
     getDiscountTypeLabel,
     formatDiscount,
     getStatusLabel,
-    getStatusColor
+    getStatusColor,
+    getStatusVariant
   }
 }
 

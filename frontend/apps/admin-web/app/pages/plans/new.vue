@@ -74,7 +74,7 @@ const handleSubmit = async () => {
     {
       successMessage: MESSAGES.SUCCESS.PLAN_CREATED,
       errorMessage: MESSAGES.ERRORS.PLAN_CREATE_FAILED,
-      onSuccess: () => router.push('/plans'),
+      onSuccess: async () => { await router.push('/plans') },
       onError: (error) => setError('submit', PAGES.PLANS.ERROR_CREATE_FAILED)
     }
   )

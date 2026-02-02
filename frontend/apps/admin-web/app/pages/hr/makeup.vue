@@ -2,7 +2,8 @@
 /**
  * 補打卡申請頁面
  */
-import { PAGES } from '~/constants'
+import { PAGES, MESSAGES } from '~/constants'
+import { useMakeupRequests } from '~/composables/hr'
 import type { MakeupRequest, MakeupApprovalLog } from '~/types/schema'
 
 definePageMeta({

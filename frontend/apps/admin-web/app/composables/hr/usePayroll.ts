@@ -346,13 +346,13 @@ export const usePayroll = () => {
     return labels[status] || status
   }
 
-  const getStatusVariant = (status: SalaryRecord['status']): string => {
-    const variants: Record<SalaryRecord['status'], string> = {
+  const getStatusVariant = (status: SalaryRecord['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<SalaryRecord['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
       PENDING: 'warning',
       APPROVED: 'info',
       PAID: 'success'
     }
-    return variants[status] || 'secondary'
+    return variants[status] || 'default'
   }
 
   const getPromotionTypeLabel = (type: PromotionRecord['type']): string => {
@@ -372,6 +372,9 @@ export const usePayroll = () => {
     }).format(amount)
   }
 
+  // Alias for generateSalaryRecords
+  const generatePayroll = generateSalaryRecords
+
   return {
     // State
     salaryRecords,
@@ -385,6 +388,7 @@ export const usePayroll = () => {
     fetchSalaryRecords,
     fetchSalaryRecord,
     generateSalaryRecords,
+    generatePayroll,
     updateSalaryRecord,
     approveSalary,
     batchApproveSalary,

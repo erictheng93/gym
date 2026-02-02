@@ -5,6 +5,7 @@
  * 使用 @gym-nexus/ui 組件庫重構
  */
 import { PAGES, MESSAGES } from '~/constants'
+import { useLeaveRequests } from '~/composables/hr'
 import type { LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/schema'
 
 definePageMeta({
@@ -33,8 +34,9 @@ const currentPage = ref(1)
 const pageSize = 10
 
 // 申請表單
+type LeaveType = 'SICK' | 'ANNUAL' | 'PERSONAL' | 'MATERNITY' | 'BEREAVEMENT' | 'OTHER'
 const applyForm = ref({
-  leaveType: 'ANNUAL',
+  leaveType: 'ANNUAL' as LeaveType,
   startDate: '',
   endDate: '',
   reason: '',
@@ -188,12 +190,12 @@ const handleApply = async () => {
 
     // 重置表單
     applyForm.value = {
-      leaveType: 'ANNUAL',
+      leaveType: 'ANNUAL' as LeaveType,
       startDate: '',
       endDate: '',
       reason: '',
       isHalfDay: false,
-      halfDayType: 'AM'
+      halfDayType: 'AM' as 'AM' | 'PM'
     }
 
     useToast().success(MESSAGES.SUCCESS.LEAVE_CREATED)
@@ -683,7 +685,7 @@ const getActionLabel = (action: string) => {
                     :key="option.value"
                     :class="['type-option', { active: applyForm.leaveType === option.value }]"
                     :style="{ '--type-color': option.color }"
-                    @click="applyForm.leaveType = option.value"
+                    @click="applyForm.leaveType = option.value as LeaveType"
                   >
                     {{ option.label }}
                   </button>

@@ -221,7 +221,7 @@ const loadMaterials = async () => {
   await fetchMaterials({
     search: searchQuery.value || undefined,
     category: selectedCategory.value || undefined,
-    muscle_group: selectedMuscle.value || undefined,
+    muscle_groups: selectedMuscle.value || undefined,
     difficulty: selectedDifficulty.value || undefined,
     type: selectedType.value || undefined,
     limit,
@@ -234,7 +234,7 @@ const loadMore = async () => {
   await fetchMaterials({
     search: searchQuery.value || undefined,
     category: selectedCategory.value || undefined,
-    muscle_group: selectedMuscle.value || undefined,
+    muscle_groups: selectedMuscle.value || undefined,
     difficulty: selectedDifficulty.value || undefined,
     type: selectedType.value || undefined,
     limit,

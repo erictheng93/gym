@@ -51,7 +51,7 @@ const handleRecalculate = async () => {
 
 // Total members count
 const totalMembers = computed(() => {
-  return segments.value.reduce((sum, s) => sum + (s.count || 0), 0)
+  return segments.value.reduce((sum, s) => sum + (s.member_count || 0), 0)
 })
 
 // Calculate percentage
@@ -158,13 +158,13 @@ const sortedSegments = computed(() => {
               {{ getSegmentIcon(segment.segment) }}
             </div>
             <div class="segment-badge" :style="{ background: getSegmentColor(segment.segment) }">
-              {{ getPercentage(segment.count) }}%
+              {{ getPercentage(segment.member_count) }}%
             </div>
           </div>
           <h3 class="segment-title">{{ getSegmentLabel(segment.segment) }}</h3>
           <p class="segment-description">{{ getSegmentDescription(segment.segment) }}</p>
           <div class="segment-stats">
-            <span class="segment-count">{{ segment.count }} 人</span>
+            <span class="segment-count">{{ segment.member_count }} 人</span>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m9 18 6-6-6-6" />
             </svg>

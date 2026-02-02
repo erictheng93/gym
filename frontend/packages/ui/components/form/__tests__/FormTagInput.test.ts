@@ -4,24 +4,16 @@ import { computed as vueComputed, ref as vueRef } from 'vue'
 import FormTagInput from '../FormTagInput.vue'
 import FormField from '../FormField.vue'
 
-// Augment globalThis for Vue computed and ref functions
-declare global {
-  // eslint-disable-next-line no-var
-  var computed: typeof vueComputed | undefined
-  // eslint-disable-next-line no-var
-  var ref: typeof vueRef | undefined
-}
-
 // Restore Vue's computed and ref for component tests
-const originalComputed = globalThis.computed
-const originalRef = globalThis.ref
+const originalComputed = (globalThis as Record<string, unknown>).computed
+const originalRef = (globalThis as Record<string, unknown>).ref
 beforeAll(() => {
-  globalThis.computed = vueComputed
-  globalThis.ref = vueRef
+  (globalThis as Record<string, unknown>).computed = vueComputed
+  ;(globalThis as Record<string, unknown>).ref = vueRef
 })
 afterAll(() => {
-  globalThis.computed = originalComputed
-  globalThis.ref = originalRef
+  (globalThis as Record<string, unknown>).computed = originalComputed
+  ;(globalThis as Record<string, unknown>).ref = originalRef
 })
 
 describe('FormTagInput', () => {
@@ -90,9 +82,9 @@ describe('FormTagInput', () => {
 
       const tags = wrapper.findAll('.tag')
       expect(tags.length).toBe(3)
-      expect(tags[0].text()).toContain('VIP')
-      expect(tags[1].text()).toContain('優先')
-      expect(tags[2].text()).toContain('新會員')
+      expect(tags[0]!.text()).toContain('VIP')
+      expect(tags[1]!.text()).toContain('優先')
+      expect(tags[2]!.text()).toContain('新會員')
     })
 
     it('應該在沒有標籤時不顯示標籤列表', () => {

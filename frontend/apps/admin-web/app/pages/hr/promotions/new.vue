@@ -3,6 +3,7 @@
  * 新增員工異動頁面
  */
 import { MESSAGES } from '~/constants'
+import { usePayroll } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
@@ -122,7 +123,7 @@ const handleSubmit = async () => {
           </div>
           <div class="info-row">
             <span class="info-label">目前底薪</span>
-            <span class="info-value">{{ selectedEmployee.base_salary ? `NT$ ${selectedEmployee.base_salary.toLocaleString()}` : '—' }}</span>
+            <span class="info-value">{{ selectedEmployee.basic_salary ? `NT$ ${Number(selectedEmployee.basic_salary).toLocaleString()}` : '—' }}</span>
           </div>
         </div>
 

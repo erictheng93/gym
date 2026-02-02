@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
+import { useAttendance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'

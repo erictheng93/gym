@@ -2,6 +2,8 @@
 /**
  * 團隊績效儀表板
  */
+import { usePerformance } from '~/composables/hr'
+
 definePageMeta({
   middleware: 'auth'
 })

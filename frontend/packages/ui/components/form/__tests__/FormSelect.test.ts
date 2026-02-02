@@ -4,19 +4,13 @@ import { computed as vueComputed } from 'vue'
 import FormSelect from '../FormSelect.vue'
 import FormField from '../FormField.vue'
 
-// Augment globalThis for Vue computed function
-declare global {
-  // eslint-disable-next-line no-var
-  var computed: typeof vueComputed | undefined
-}
-
 // Restore Vue's computed for component tests
-const originalComputed = globalThis.computed
+const originalComputed = (globalThis as Record<string, unknown>).computed
 beforeAll(() => {
-  globalThis.computed = vueComputed
+  (globalThis as Record<string, unknown>).computed = vueComputed
 })
 afterAll(() => {
-  globalThis.computed = originalComputed
+  (globalThis as Record<string, unknown>).computed = originalComputed
 })
 
 describe('FormSelect', () => {
@@ -62,9 +56,9 @@ describe('FormSelect', () => {
 
       // 3 options (no placeholder)
       expect(options.length).toBe(3)
-      expect(options[0].text()).toBe('選項一')
-      expect(options[1].text()).toBe('選項二')
-      expect(options[2].text()).toBe('選項三')
+      expect(options[0]!.text()).toBe('選項一')
+      expect(options[1]!.text()).toBe('選項二')
+      expect(options[2]!.text()).toBe('選項三')
     })
 
     it('應該渲染佔位選項', () => {
@@ -75,9 +69,9 @@ describe('FormSelect', () => {
 
       // placeholder + 3 options
       expect(options.length).toBe(4)
-      expect(options[0].text()).toBe('請選擇...')
-      expect(options[0].attributes('disabled')).toBeDefined()
-      expect(options[0].attributes('value')).toBe('')
+      expect(options[0]!.text()).toBe('請選擇...')
+      expect(options[0]!.attributes('disabled')).toBeDefined()
+      expect(options[0]!.attributes('value')).toBe('')
     })
   })
 
@@ -195,7 +189,7 @@ describe('FormSelect', () => {
       })
 
       const options = wrapper.findAll('option')
-      expect(options[1].attributes('disabled')).toBeDefined()
+      expect(options[1]!.attributes('disabled')).toBeDefined()
     })
 
     it('應該處理空選項列表', () => {
@@ -206,7 +200,7 @@ describe('FormSelect', () => {
 
       const options = wrapper.findAll('option')
       expect(options.length).toBe(1) // Only placeholder
-      expect(options[0].text()).toBe('無可用選項')
+      expect(options[0]!.text()).toBe('無可用選項')
     })
 
     it('應該支援動態選項更新', async () => {

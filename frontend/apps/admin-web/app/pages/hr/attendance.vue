@@ -5,6 +5,7 @@
  * 使用 @gym-nexus/ui 組件庫重構
  */
 import { PAGES } from '~/constants'
+import { useAttendance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
@@ -13,14 +14,16 @@ definePageMeta({
 const { currentEmployee, checkAuth } = useAuth()
 const { branches, fetchBranches } = useBranches()
 const {
-  todayAttendances: todayAttendance,
   recentAttendances,
   isLoading: isAttendanceLoading,
-  getTodayAttendance: fetchTodayAttendance,
+  getTodayAttendance,
   fetchRecentAttendances,
   performCheckIn: checkIn,
   performCheckOut: checkOut
 } = useAttendance()
+
+// 當前員工今日考勤記錄
+const todayAttendance = ref<Awaited<ReturnType<typeof getTodayAttendance>> | null>(null)
 
 const currentTime = ref(new Date())
 const isProcessing = ref(false)
@@ -51,10 +54,11 @@ onUnmounted(() => {
 const loadAttendanceData = async () => {
   if (!currentEmployee.value?.id) return
 
-  await Promise.all([
-    fetchTodayAttendance(currentEmployee.value.id),
+  const [attendance] = await Promise.all([
+    getTodayAttendance(currentEmployee.value.id),
     fetchRecentAttendances(currentEmployee.value.id, 7)
   ])
+  todayAttendance.value = attendance
 }
 
 // 取得位置資訊
@@ -149,11 +153,11 @@ const handleCheckIn = async () => {
 
   isProcessing.value = true
   try {
-    await checkIn(
-      currentEmployee.value.id,
-      currentEmployee.value.branch_id,
-      locationInfo.value
-    )
+    const result = await checkIn({
+      employeeId: currentEmployee.value.id,
+      branchId: currentEmployee.value.branch_id
+    })
+    todayAttendance.value = result
     successMessage.value = PAGES.HR.ATTENDANCE.CHECK_IN + '成功'
     showSuccessAnimation.value = true
     setTimeout(() => {
@@ -168,18 +172,21 @@ const handleCheckIn = async () => {
 }
 
 const handleCheckOut = async () => {
-  if (!currentEmployee.value?.id || isProcessing.value) return
+  if (!todayAttendance.value?.id || isProcessing.value) return
 
   isProcessing.value = true
   try {
-    await checkOut()
+    const result = await checkOut(todayAttendance.value.id)
+    todayAttendance.value = result
     successMessage.value = PAGES.HR.ATTENDANCE.CHECK_OUT + '成功'
     showSuccessAnimation.value = true
     setTimeout(() => {
       showSuccessAnimation.value = false
     }, 2000)
     // 重新取得紀錄
-    await fetchRecentAttendances(currentEmployee.value.id, 7)
+    if (currentEmployee.value?.id) {
+      await fetchRecentAttendances(currentEmployee.value.id, 7)
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : '打卡失敗'
     alert(errorMessage)
