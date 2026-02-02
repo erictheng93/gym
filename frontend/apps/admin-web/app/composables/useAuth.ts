@@ -1,8 +1,7 @@
 /**
- * useAuth - Authentication composable (migrated to backend-v2)
+ * useAuth - Authentication composable
  *
- * This composable has been migrated from Directus to backend-v2.
- * All auth operations now go through the new Hono.js backend.
+ * All auth operations go through the Hono.js backend (backend-v2).
  *
  * For types, import from useAuthV2:
  * import type { User, Employee, CurrentEmployee } from '~/composables/useAuthV2'

@@ -20,7 +20,7 @@ export type {
   ClassCategory,
   ClassCategoryBranch,
   Payment,
-  DirectusSchema
+  DatabaseSchema
 } from './types'
 
 // Composables

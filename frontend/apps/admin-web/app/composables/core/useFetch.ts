@@ -1,6 +1,5 @@
 /**
  * Backend-v2 API Fetch Utility
- * Replaces @directus/sdk for all API operations
  */
 
 interface ApiResponse<T> {

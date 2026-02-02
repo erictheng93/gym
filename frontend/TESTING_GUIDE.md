@@ -98,7 +98,6 @@ export default defineConfig({
 #### 2. 依赖项检查
 
 确保已安装：
-- ✅ `@directus/sdk` - 已安装
 - ✅ `vitest` - 已安装
 - ✅ `@vue/test-utils` - 已安装
 - ✅ `@nuxt/test-utils` - 已安装（但版本警告）
@@ -108,12 +107,12 @@ export default defineConfig({
 每个测试文件遵循统一的 mock 模式：
 
 ```typescript
-// 1. Mock Directus 请求
+// 1. Mock API 请求
 const mockRequest = vi.fn()
 
-// 2. Mock useDirectus composable
-vi.mock('./useDirectus', () => ({
-  useDirectus: () => ({ request: mockRequest })
+// 2. Mock useApi composable
+vi.mock('./useApi', () => ({
+  useApi: () => ({ request: mockRequest })
 }))
 
 // 3. Mock Nuxt globals

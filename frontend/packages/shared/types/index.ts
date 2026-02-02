@@ -24,6 +24,6 @@ export type {
   Booking,
   Payment,
   /** @deprecated Use DbSchema instead */
-  DirectusSchema,
-  DirectusSchema as DbSchema,
+  DatabaseSchema,
+  DatabaseSchema as DbSchema,
 } from './schema'

@@ -1,7 +1,6 @@
 /**
  * Leads Hooks
  * Handles lead auto-assignment, status changes, and notifications
- * Migrated from Directus hooks
  */
 
 import { db, leads, employees, jobTitles, leadActivities, notifications } from '../db/index.js';

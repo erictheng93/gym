@@ -87,7 +87,7 @@ export const useAuthTokens = () => {
 
   /**
    * Get authorization headers for API calls
-   * Uses X-Member-Token to avoid Directus intercepting the token
+   * Uses X-Member-Token header for member authentication
    */
   const getAuthHeader = (): Record<string, string> => {
     if (!accessToken.value) return {}

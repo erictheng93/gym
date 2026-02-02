@@ -1,6 +1,5 @@
 /**
  * Shared Utilities for Business Logic Hooks
- * Migrated from Directus hooks to standalone TypeScript
  */
 
 import { db, contracts, members } from '../db/index.js';

@@ -1,6 +1,6 @@
 /**
  * 通用數據適配器接口
- * 抽象底層數據源（Directus、REST API、GraphQL 等）
+ * 抽象底層數據源（REST API、GraphQL 等）
  */
 
 /**

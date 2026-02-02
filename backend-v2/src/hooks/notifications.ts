@@ -1,7 +1,6 @@
 /**
  * Notifications Hooks
  * Handles push notification queue processing and scheduled notifications
- * Migrated from Directus hooks
  */
 
 import { db, bookings, classSessions, classes, pushSubscriptions, notifications } from '../db/index.js';

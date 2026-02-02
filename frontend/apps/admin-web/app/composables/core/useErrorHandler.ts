@@ -17,8 +17,8 @@ export interface AppError {
   retryable: boolean
 }
 
-// Directus SDK 錯誤結構
-interface DirectusErrorResponse {
+// API 錯誤結構
+interface ApiErrorResponse {
   errors?: Array<{
     message: string
     extensions?: {
@@ -46,7 +46,7 @@ function isNetworkError(error: unknown): boolean {
  */
 function isAuthError(error: unknown): boolean {
   if (typeof error === 'object' && error !== null) {
-    const err = error as DirectusErrorResponse
+    const err = error as ApiErrorResponse
     if (err.errors?.[0]?.extensions?.code) {
       const code = err.errors[0].extensions.code
       return ['INVALID_CREDENTIALS', 'INVALID_TOKEN', 'TOKEN_EXPIRED', 'FORBIDDEN'].includes(code)
@@ -56,11 +56,11 @@ function isAuthError(error: unknown): boolean {
 }
 
 /**
- * 從 Directus 錯誤中提取訊息
+ * 從 API 錯誤中提取訊息
  */
-function extractDirectusMessage(error: unknown): string | null {
+function extractApiMessage(error: unknown): string | null {
   if (typeof error === 'object' && error !== null) {
-    const err = error as DirectusErrorResponse
+    const err = error as ApiErrorResponse
     if (err.errors?.[0]?.message) {
       return err.errors[0].message
     }
@@ -84,22 +84,22 @@ function parseError(error: unknown, context?: string): AppError {
 
   // 認證錯誤
   if (isAuthError(error)) {
-    const directusMessage = extractDirectusMessage(error)
+    const apiMessage = extractApiMessage(error)
     return {
       type: 'auth',
-      message: directusMessage || MESSAGES.ERRORS.UNAUTHORIZED,
+      message: apiMessage || MESSAGES.ERRORS.UNAUTHORIZED,
       code: 'AUTH_ERROR',
       retryable: false,
       details: error
     }
   }
 
-  // Directus 業務錯誤
-  const directusMessage = extractDirectusMessage(error)
-  if (directusMessage) {
+  // API 業務錯誤
+  const apiMessage = extractApiMessage(error)
+  if (apiMessage) {
     return {
       type: 'business',
-      message: directusMessage,
+      message: apiMessage,
       retryable: false,
       details: error
     }
@@ -259,4 +259,4 @@ export function useErrorHandler() {
 }
 
 // 導出類型供其他模組使用
-export type { DirectusErrorResponse }
+export type { ApiErrorResponse }

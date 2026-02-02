@@ -30,7 +30,7 @@ const editForm = reactive({
   emergency_phone: '',
 })
 
-// API response type (from Directus)
+// API response type
 interface MemberApiResponse {
   id: string
   member_code: string

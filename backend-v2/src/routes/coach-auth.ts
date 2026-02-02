@@ -12,12 +12,12 @@ import { coachJwtService } from '../services/coach-jwt.js';
 // COACH AUTH ROUTES
 // =============================================================================
 // Authentication endpoints for coach-app
-// Uses X-Coach-Token header for auth (separate from Directus/Admin auth)
+// Uses X-Coach-Token header for auth (separate from Admin auth)
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
 // -----------------------------------------------------------------------------
-// Password Hashing Config (Argon2id - compatible with Directus)
+// Password Hashing Config (Argon2id)
 // -----------------------------------------------------------------------------
 
 const ARGON2_OPTIONS = {

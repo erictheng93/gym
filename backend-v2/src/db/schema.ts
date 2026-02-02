@@ -49,7 +49,7 @@ export const AUDIT_ACTION = ['create', 'read', 'update', 'delete', 'login', 'log
 export const AUDIT_SEVERITY = ['debug', 'info', 'warning', 'error', 'critical'] as const;
 
 // =============================================================================
-// AUTH TABLES (New - replacing Directus auth)
+// AUTH TABLES
 // =============================================================================
 
 export const users = pgTable('users', {
@@ -740,7 +740,7 @@ export const auditLogs = pgTable('audit_logs', {
 ]);
 
 // =============================================================================
-// FILES TABLE (replacing directus_files)
+// FILES TABLE
 // =============================================================================
 
 export const files = pgTable('files', {

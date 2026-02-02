@@ -1,6 +1,5 @@
 /**
- * useAuthV2 - New authentication composable for backend-v2
- * Replaces Directus SDK authentication with custom API
+ * useAuthV2 - Authentication composable for backend-v2
  */
 import * as Sentry from '@sentry/vue'
 import { MESSAGES } from '~/constants'

@@ -124,14 +124,14 @@ See `.env.example` for all available options. Key variables:
 | `STRIPE_*` | Stripe payment keys |
 | `ECPAY_*` | ECPay (Taiwan) keys |
 
-## Migration from Directus
+## Architecture
 
-This API is designed to replace the legacy Directus backend. Key differences:
+This API uses a modern stack with improved performance:
 
-| Feature | Directus | Backend v2 |
-|---------|----------|------------|
-| Auth | Directus users | Lucia + JWT |
-| ORM | Directus SDK | Drizzle |
-| Hooks | Directus extensions | Native hooks |
-| File storage | Directus assets | S3/R2 |
-| Performance | ~200ms | ~50ms |
+| Feature | Stack |
+|---------|-------|
+| Auth | Lucia + JWT |
+| ORM | Drizzle |
+| Hooks | Native TypeScript |
+| File storage | S3/R2 |
+| Avg latency | ~50ms |

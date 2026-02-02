@@ -8,7 +8,7 @@ import { vi } from 'vitest'
 const stateStore = new Map()
 
 // Mock functions
-export const mockDirectus = {
+export const mockApi = {
   login: vi.fn(),
   logout: vi.fn(),
   request: vi.fn()

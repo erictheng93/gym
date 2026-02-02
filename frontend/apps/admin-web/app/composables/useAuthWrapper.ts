@@ -1,8 +1,7 @@
 /**
- * useAuthWrapper - Authentication wrapper (fully migrated to backend-v2)
+ * useAuthWrapper - Authentication wrapper
  *
- * This wrapper previously allowed switching between Directus and backend-v2 auth.
- * Now that migration is complete, it always uses backend-v2 auth.
+ * Uses backend-v2 auth.
  *
  * Usage:
  *   const { login, logout, user, isAuthenticated, checkAuth } = useAuthWrapper()

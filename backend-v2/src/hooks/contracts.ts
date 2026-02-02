@@ -1,7 +1,6 @@
 /**
  * Contracts Hooks
  * Handles contract status changes and member status synchronization
- * Migrated from Directus hooks
  */
 
 import { db, contracts, members } from '../db/index.js';

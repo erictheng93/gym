@@ -236,4 +236,3 @@ pnpm exec playwright show-report
 
 - [Playwright 文档](https://playwright.dev/)
 - [Nuxt 测试指南](https://nuxt.com/docs/getting-started/testing)
-- [Directus API 文档](https://docs.directus.io/reference/introduction.html)

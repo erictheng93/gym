@@ -1,7 +1,6 @@
 /**
  * Check-ins Hooks
  * Handles member check-in validation and session deduction
- * Migrated from Directus hooks
  */
 
 import { db, contracts, members, membershipPlans, memberCheckIns } from '../db/index.js';

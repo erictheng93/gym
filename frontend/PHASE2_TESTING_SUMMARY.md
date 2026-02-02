@@ -190,12 +190,12 @@ statuses.forEach(status => {
 
 所有测试遵循统一的 mock 模式：
 ```typescript
-// 1. Mock Directus SDK
+// 1. Mock API
 const mockRequest = vi.fn()
 
-// 2. Mock useDirectus composable
-vi.mock('./useDirectus', () => ({
-  useDirectus: () => ({ request: mockRequest })
+// 2. Mock useApi composable
+vi.mock('./useApi', () => ({
+  useApi: () => ({ request: mockRequest })
 }))
 
 // 3. Mock Nuxt globals
@@ -248,7 +248,7 @@ describe('考勤功能 - Attendance', () => {
    import { mockNuxtImport } from '@nuxt/test-utils/runtime'
 
    mockNuxtImport('useState', () => mockUseState)
-   mockNuxtImport('useDirectus', () => mockDirectus)
+   mockNuxtImport('useApi', () => mockApi)
    ```
 
    **选项 B：集成测试替代**

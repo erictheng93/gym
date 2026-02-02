@@ -1,6 +1,5 @@
 /**
  * API Client for backend-v2
- * Replaces Directus SDK for authentication and data fetching
  */
 
 interface ApiResponse<T> {

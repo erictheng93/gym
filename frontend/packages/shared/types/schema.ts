@@ -52,7 +52,7 @@ export interface Member extends BaseFields {
   phone: string | null
   email: string | null
   branch_id: string | null
-  user_id: string | null // 連結到 directus_users (for OAuth)
+  user_id: string | null // 連結到 users (for OAuth)
   member_status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE'
   join_date: string | null
   sales_person_id: string | null
@@ -484,8 +484,8 @@ export interface Payment extends BaseFields {
   receiver?: Employee
 }
 
-// Directus Schema
-export interface DirectusSchema {
+// Database Schema
+export interface DatabaseSchema {
   branches: Branch[]
   job_titles: JobTitle[]
   employees: Employee[]

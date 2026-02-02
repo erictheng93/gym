@@ -33,7 +33,7 @@ export const useMemberAuth = () => {
    * 1. If member already loaded, return true
    * 2. If access token exists, fetch member profile
    * 3. If refresh token exists, refresh access token then fetch profile
-   * 4. Try OAuth session (Directus cookie-based auth)
+   * 4. Try OAuth session (cookie-based auth)
    */
   const checkAuth = async (): Promise<boolean> => {
     // Already authenticated
@@ -56,7 +56,7 @@ export const useMemberAuth = () => {
       }
     }
 
-    // Try OAuth session (Directus cookie-based auth)
+    // Try OAuth session (cookie-based auth)
     try {
       const oauthResult = await methods.loginWithOAuth()
       if (oauthResult.success) {

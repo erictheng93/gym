@@ -25,10 +25,9 @@
 ### 1. 测试环境配置
 - ✅ 配置 `vitest.config.ts` 使用 happy-dom 环境
 - ✅ 创建 `vitest.setup.ts` 提供全局 mocks
-- ✅ 安装 @directus/sdk 依赖
 
 ### 2. Mock 策略统一
-- ✅ 所有测试文件使用统一的 `mockDirectusInstance`
+- ✅ 所有测试文件使用统一的 `mockApiInstance`
 - ✅ 移除重复的本地 mock 定义
 - ✅ 使用 `vitest.setup.ts` 中的全局 mocks
 

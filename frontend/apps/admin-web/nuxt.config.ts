@@ -48,7 +48,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      // Backend API URL (migrated from Directus to backend-v2)
+      // Backend API URL
       apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8056',
       // API URL with /api prefix for composables (replaces old /gym prefix)
       apiUrl: (process.env.API_BASE_URL || 'http://localhost:8056') + '/api',
@@ -71,7 +71,7 @@ export default defineNuxtConfig({
         'X-XSS-Protection': '1; mode=block',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-        // CSP - Allow Directus API, Google APIs, Sentry
+        // CSP - Allow Backend API, Google APIs, Sentry
         'Content-Security-Policy': [
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://*.sentry.io",

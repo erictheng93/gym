@@ -1,9 +1,8 @@
 /**
  * useTenant - DEPRECATED
  *
- * This composable has been deprecated as part of the Directus migration.
- * Tenant information is now retrieved from the authenticated user's context
- * via backend-v2 APIs.
+ * This composable has been deprecated. Tenant information is now retrieved
+ * from the authenticated user's context via backend-v2 APIs.
  *
  * @deprecated Use useAuthV2 to get tenant context from authenticated user
  */

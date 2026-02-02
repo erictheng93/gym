@@ -84,7 +84,7 @@ export interface FilterConfig {
  * 建構過濾器物件
  *
  * @param configs 過濾器配置陣列
- * @returns Directus 過濾器物件
+ * @returns API 過濾器物件
  *
  * @example
  * const filter = buildFilter([
@@ -120,7 +120,7 @@ export function buildFilter(
  * @param search 搜尋關鍵字
  * @param fields 要搜尋的欄位列表
  * @param operator 運算子（預設 _icontains，不區分大小寫）
- * @returns Directus OR 過濾器物件，如果 search 為空則返回 undefined
+ * @returns OR 過濾器物件，如果 search 為空則返回 undefined
  *
  * @example
  * const searchFilter = buildSearchFilter('john', ['full_name', 'email', 'phone'])
@@ -256,7 +256,7 @@ export type SortDirection = 'asc' | 'desc'
  *
  * @param field 排序欄位
  * @param direction 排序方向
- * @returns Directus 排序字串
+ * @returns 排序字串
  */
 export function buildSortParam(
   field: string,
@@ -269,7 +269,7 @@ export function buildSortParam(
  * 建構多欄位排序參數
  *
  * @param sorts 排序配置陣列
- * @returns Directus 排序字串陣列
+ * @returns 排序字串陣列
  */
 export function buildMultiSortParams(
   sorts: Array<{ field: string; direction?: SortDirection }>

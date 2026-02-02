@@ -3,7 +3,7 @@ import { TestEnv } from '../config/test-env'
 
 const API_BASE_URL = TestEnv.apiBaseUrl
 
-export interface DirectusAuthResponse {
+export interface AuthResponse {
   data: {
     access_token: string
     refresh_token: string
@@ -27,7 +27,7 @@ export async function getAuthToken(
     throw new Error(`Authentication failed: ${response.status()}`)
   }
 
-  const data: DirectusAuthResponse = await response.json()
+  const data: AuthResponse = await response.json()
   return data.data.access_token
 }
 

@@ -1,7 +1,6 @@
 /**
  * Contract Logs Hooks
  * Handles contract log events: PAUSE, RESUME, CLASS_USED, TRANSFER, EXTEND
- * Migrated from Directus hooks
  */
 
 import { db, contracts, contractLogs, members } from '../db/index.js';

@@ -1,7 +1,6 @@
 /**
  * Payments Hooks
  * Handles payment status calculation for contracts
- * Migrated from Directus hooks
  */
 
 import { db, contracts, payments } from '../db/index.js';

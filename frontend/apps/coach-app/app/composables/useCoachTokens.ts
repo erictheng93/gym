@@ -85,7 +85,7 @@ export const useCoachTokens = () => {
 
   /**
    * Get authorization headers for API calls
-   * Uses X-Coach-Token to avoid Directus intercepting the token
+   * Uses X-Coach-Token header for coach authentication
    */
   const getAuthHeader = (): Record<string, string> => {
     if (!accessToken.value) return {}

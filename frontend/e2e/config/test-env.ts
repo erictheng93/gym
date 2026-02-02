@@ -63,8 +63,8 @@ export const TestEnv = {
     host: process.env.TEST_DB_HOST || 'localhost',
     port: parseInt(process.env.TEST_DB_PORT || '5432', 10),
     name: process.env.TEST_DB_NAME || 'gym_nexus_test',
-    user: process.env.TEST_DB_USER || 'directus',
-    password: process.env.TEST_DB_PASSWORD || 'directus',
+    user: process.env.TEST_DB_USER || 'postgres',
+    password: process.env.TEST_DB_PASSWORD || 'postgres',
   },
 
   // 測試環境標識

@@ -1,8 +1,6 @@
 /**
  * Business Logic Hooks Index
  * Exports all hook functions for use in routes and services
- *
- * Migrated from Directus hooks (15 modules) to TypeScript
  */
 
 // Utility functions
