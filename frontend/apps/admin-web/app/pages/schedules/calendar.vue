@@ -254,7 +254,8 @@ const batchAssignData = ref({
   shift_schedule_id: '',
 })
 
-const API_BASE = 'http://localhost:8056'
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 const currentMonthYear = computed(() => {
   const year = currentDate.value.getFullYear()
@@ -401,12 +402,11 @@ async function handleDrop(event: DragEvent, date: string) {
 
 async function assignShift(employeeId: string, shiftId: string, date: string) {
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/employee_shifts`, {
+    const response = await fetch(`${apiBaseUrl}/api/hr/employee-shifts`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         employee_id: employeeId,
@@ -415,7 +415,8 @@ async function assignShift(employeeId: string, shiftId: string, date: string) {
       }),
     })
 
-    if (response.ok) {
+    const result = await response.json()
+    if (response.ok && result.success) {
       await fetchEmployeeShifts()
     }
   } catch (error) {
@@ -425,8 +426,6 @@ async function assignShift(employeeId: string, shiftId: string, date: string) {
 
 async function batchAssignShifts() {
   try {
-    const token = localStorage.getItem('auth_token')
-
     // Create assignments for all selected dates
     const assignments = selectedDates.value.map(date => ({
       employee_id: batchAssignData.value.employee_id,
@@ -436,11 +435,11 @@ async function batchAssignShifts() {
 
     await Promise.all(
       assignments.map(assignment =>
-        fetch(`${API_BASE}/items/employee_shifts`, {
+        fetch(`${apiBaseUrl}/api/hr/employee-shifts`, {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(assignment),
         })
@@ -469,17 +468,20 @@ async function removeAssignment(id: string) {
   if (!confirmed) return
 
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/employee_shifts/${id}`, {
+    const response = await fetch(`${apiBaseUrl}/api/hr/employee-shifts/${id}`, {
       method: 'DELETE',
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     })
 
-    if (response.ok) {
+    const result = await response.json()
+    if (response.ok && result.success) {
       useToast().success('排班已移除')
       await fetchEmployeeShifts()
+    } else {
+      useToast().error(result.error || '移除排班失敗，請稍後再試')
     }
   } catch (error) {
     console.error('Failed to remove assignment:', error)
@@ -489,14 +491,15 @@ async function removeAssignment(id: string) {
 
 async function fetchEmployees() {
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/employees?fields=id,name,job_title.name`, {
+    const response = await fetch(`${apiBaseUrl}/api/employees`, {
+      method: 'GET',
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     })
-    const data = await response.json()
-    employees.value = data.data || []
+    const result = await response.json()
+    employees.value = result.success ? (result.data || []) : []
   } catch (error) {
     console.error('Failed to fetch employees:', error)
   }
@@ -504,14 +507,15 @@ async function fetchEmployees() {
 
 async function fetchShifts() {
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/shift_schedules?filter[status][_eq]=active`, {
+    const response = await fetch(`${apiBaseUrl}/api/hr/shift-schedules?status=active`, {
+      method: 'GET',
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     })
-    const data = await response.json()
-    availableShifts.value = data.data || []
+    const result = await response.json()
+    availableShifts.value = result.success ? (result.data || []) : []
   } catch (error) {
     console.error('Failed to fetch shifts:', error)
   }
@@ -519,22 +523,23 @@ async function fetchShifts() {
 
 async function fetchEmployeeShifts() {
   try {
-    const token = localStorage.getItem('auth_token')
     const year = currentDate.value.getFullYear()
     const month = currentDate.value.getMonth()
     const startDate = new Date(year, month, 1).toISOString().split('T')[0]
     const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0]
 
     const response = await fetch(
-      `${API_BASE}/items/employee_shifts?filter[effective_date][_between]=[${startDate},${endDate}]`,
+      `${apiBaseUrl}/api/hr/employee-shifts?startDate=${startDate}&endDate=${endDate}`,
       {
+        method: 'GET',
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       }
     )
-    const data = await response.json()
-    employeeShifts.value = data.data || []
+    const result = await response.json()
+    employeeShifts.value = result.success ? (result.data || []) : []
   } catch (error) {
     console.error('Failed to fetch employee shifts:', error)
   }

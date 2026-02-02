@@ -2,6 +2,7 @@
  * 權限管理 Composable
  *
  * 提供當前使用者權限檢查功能
+ * 使用 backend-v2 API (/api/auth/me/permissions)
  */
 import type { PermissionAction } from '~/constants/permissions'
 import { getDefaultReadOnlyPermissions } from '~/utils/default-permissions'
@@ -30,8 +31,9 @@ const state = reactive<PermissionState>({
 })
 
 export const usePermissions = () => {
-  const directus = useDirectus()
+  const config = useRuntimeConfig()
   const { user } = useAuth()
+  const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
   /**
    * 取得當前使用者的有效權限
@@ -49,36 +51,36 @@ export const usePermissions = () => {
     state.error = null
 
     try {
-      // 查詢員工資料（包含 custom_permissions 和 job_title.permissions_config）
-      const employees = await directus.request(
-        readItems('employees', {
-          filter: {
-            user_id: { _eq: user.value.id },
-          },
-          fields: [
-            'id',
-            'status',
-            'custom_permissions',
-            'job_title_id',
-            { job_title_id: ['id', 'name', 'permissions_config'] }
-          ],
-          limit: 1
-        })
-      )
+      const response = await fetch(`${apiBaseUrl}/api/auth/me/permissions`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
 
-      if (employees.length === 0) {
-        // No employee record found - apply default read-only permissions
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch permissions')
+      }
+
+      const data = result.data
+
+      // Handle employee status
+      if (data.employeeStatus === 'no_employee') {
         console.warn('[usePermissions] No employee record found for user - using read-only mode')
         state.employeeStatus = 'no_employee'
         state.permissions = getDefaultReadOnlyPermissions()
         return
       }
 
-      const employee = employees[0]
-
-      // Check employee status
-      if (employee.status !== 'active') {
-        console.warn('[usePermissions] Employee record is not active:', employee.status)
+      if (data.employeeStatus === 'inactive') {
+        console.warn('[usePermissions] Employee record is not active')
         state.employeeStatus = 'inactive'
         state.permissions = getDefaultReadOnlyPermissions()
         return
@@ -86,23 +88,11 @@ export const usePermissions = () => {
 
       state.employeeStatus = 'active'
 
-      // 決定使用哪一個權限配置
-      let permissions: EffectivePermissions = {}
-
-      if (employee.custom_permissions && typeof employee.custom_permissions === 'object') {
-        // 使用自訂權限
-        permissions = employee.custom_permissions as EffectivePermissions
-        console.log('[usePermissions] Using custom permissions')
-      } else if (employee.job_title_id?.permissions_config && typeof employee.job_title_id.permissions_config === 'object') {
-        // 使用職位預設權限
-        permissions = employee.job_title_id.permissions_config as EffectivePermissions
-        console.log('[usePermissions] Using job title permissions:', employee.job_title_id.name)
-      } else {
-        console.warn('[usePermissions] No permissions configured')
-        permissions = {}
+      if (data.jobTitleName) {
+        console.log('[usePermissions] Using job title permissions:', data.jobTitleName)
       }
 
-      state.permissions = permissions
+      state.permissions = data.permissions || {}
     } catch (error) {
       console.error('[usePermissions] Failed to fetch permissions:', error)
       state.error = error as Error

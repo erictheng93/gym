@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
-import type { Branch, Employee } from '~/types/directus'
+import type { Branch, Employee } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth',

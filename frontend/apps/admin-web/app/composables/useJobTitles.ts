@@ -1,6 +1,6 @@
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
-import type { JobTitle } from '~/types/directus'
+import type { JobTitle } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
 export const useJobTitles = () => {

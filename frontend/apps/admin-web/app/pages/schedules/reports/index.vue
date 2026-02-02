@@ -304,7 +304,8 @@ interface DailyTrend {
   overtime: number
 }
 
-const API_BASE = 'http://localhost:8056'
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 const dateRange = ref({
   start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -463,14 +464,15 @@ function getRankingUnit(): string {
 
 async function fetchEmployees() {
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/employees?fields=id,name`, {
+    const response = await fetch(`${apiBaseUrl}/api/employees`, {
+      method: 'GET',
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     })
-    const data = await response.json()
-    employees.value = data.data || []
+    const result = await response.json()
+    employees.value = result.success ? (result.data || []) : []
   } catch (error) {
     console.error('Failed to fetch employees:', error)
   }
@@ -478,17 +480,18 @@ async function fetchEmployees() {
 
 async function fetchReports() {
   try {
-    const token = localStorage.getItem('auth_token')
     const response = await fetch(
-      `${API_BASE}/items/attendances?filter[attendance_date][_between]=[${dateRange.value.start},${dateRange.value.end}]&limit=-1`,
+      `${apiBaseUrl}/api/hr/attendances?startDate=${dateRange.value.start}&endDate=${dateRange.value.end}`,
       {
+        method: 'GET',
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       }
     )
-    const data = await response.json()
-    attendances.value = data.data || []
+    const result = await response.json()
+    attendances.value = result.success ? (result.data || []) : []
   } catch (error) {
     console.error('Failed to fetch reports:', error)
   }

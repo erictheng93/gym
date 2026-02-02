@@ -9,7 +9,8 @@ definePageMeta({
 })
 
 const router = useRouter()
-const directus = useDirectus()
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 const isLoading = ref(false)
 const form = ref({
@@ -123,17 +124,27 @@ const handleSubmit = async () => {
 
   isLoading.value = true
   try {
-    const response = await directus.request({
+    const response = await fetch(`${apiBaseUrl}/api/admin/tenants`, {
       method: 'POST',
-      path: '/gym/admin/tenants',
-      body: form.value
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(form.value),
     })
 
-    if (response.success) {
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (result.success) {
       useToast().success('租户创建成功')
       router.push('/admin/tenants')
     } else {
-      useToast().error(response.message || '创建租户失败')
+      useToast().error(result.message || '创建租户失败')
     }
   } catch (error: any) {
     console.error('Failed to create tenant:', error)

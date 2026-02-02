@@ -1,5 +1,5 @@
 /**
- * Directus Schema Types
+ * Database Schema Types
  * 根據健身房系統架構設計生成
  */
 

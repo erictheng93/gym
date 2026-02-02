@@ -3,7 +3,7 @@
  * 新增課程頁面
  */
 import { MESSAGES, PAGES } from '~/constants'
-import type { ClassCategory, Employee } from '~/types/directus'
+import type { ClassCategory, Employee } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

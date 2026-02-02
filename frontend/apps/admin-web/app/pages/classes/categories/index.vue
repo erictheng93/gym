@@ -4,7 +4,7 @@
  * 顯示所有課程類別，支援層級結構顯示
  */
 import { MESSAGES, PAGES } from '~/constants'
-import type { ClassCategory } from '~/types/directus'
+import type { ClassCategory } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

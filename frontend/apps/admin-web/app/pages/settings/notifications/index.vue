@@ -275,10 +275,8 @@ onMounted(async () => {
 async function loadBranches() {
   try {
     isLoading.value = true
-    const token = useCookie('directus_session_token')
 
     const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config`, {
-      headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
 
@@ -304,10 +302,8 @@ async function loadBranchConfig() {
 
   try {
     isLoading.value = true
-    const token = useCookie('directus_session_token')
 
     const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config?branch_id=${selectedBranchId.value}`, {
-      headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
 
@@ -333,12 +329,10 @@ async function saveLineConfig() {
 
   try {
     isSaving.value = true
-    const token = useCookie('directus_session_token')
 
     await $fetch(`${apiUrl}/api/admin/notification-config`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token.value}`,
         'Content-Type': 'application/json',
       },
       credentials: 'include',
@@ -367,12 +361,10 @@ async function saveSmsConfig() {
 
   try {
     isSaving.value = true
-    const token = useCookie('directus_session_token')
 
     await $fetch(`${apiUrl}/api/admin/notification-config`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token.value}`,
         'Content-Type': 'application/json',
       },
       credentials: 'include',
@@ -398,12 +390,10 @@ async function testLineConfig() {
   try {
     isTesting.value = true
     lineTestResult.value = null
-    const token = useCookie('directus_session_token')
 
     const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config/test`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token.value}`,
         'Content-Type': 'application/json',
       },
       credentials: 'include',
@@ -425,12 +415,10 @@ async function testSmsConfig() {
   try {
     isTesting.value = true
     smsTestResult.value = null
-    const token = useCookie('directus_session_token')
 
     const response = await $fetch<any>(`${apiUrl}/api/admin/notification-config/test`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token.value}`,
         'Content-Type': 'application/json',
       },
       credentials: 'include',
@@ -450,12 +438,9 @@ async function testSmsConfig() {
 
 async function toggleActive() {
   try {
-    const token = useCookie('directus_session_token')
-
     await $fetch(`${apiUrl}/api/admin/notification-config`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${token.value}`,
         'Content-Type': 'application/json',
       },
       credentials: 'include',

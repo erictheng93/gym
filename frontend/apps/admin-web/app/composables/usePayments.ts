@@ -1,5 +1,5 @@
 import { useFetch } from '~/composables/core/useFetch'
-import type { Payment } from '~/types/directus'
+import type { Payment } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'

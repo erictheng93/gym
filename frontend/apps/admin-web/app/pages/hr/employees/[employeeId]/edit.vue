@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { PERMISSION_MODULES, createEmptyPermissions } from '~/constants/permissions'
-import type { JobTitle } from '~/types/directus'
+import type { JobTitle } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth',

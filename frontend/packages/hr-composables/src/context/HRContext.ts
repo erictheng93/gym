@@ -45,11 +45,11 @@ export const HR_CONTEXT_KEY: InjectionKey<IHRContext> = Symbol('hr-context')
  * ```ts
  * // 在 app.vue 或 plugins 中
  * import { provideHRContext } from '@gym-nexus/hr-composables'
- * import { createHRAdapters } from '@gym-nexus/hr-directus-adapter'
+ * import { createHRAdapters } from './adapters/hr-api-adapter'
  *
- * const directus = useDirectus()
- * const authData = { ... }
- * const adapters = createHRAdapters(directus, authData)
+ * const apiBaseUrl = useRuntimeConfig().public.apiBaseUrl
+ * const authToken = useAuthToken()
+ * const adapters = createHRAdapters(apiBaseUrl, authToken)
  *
  * provideHRContext({
  *   attendanceAdapter: adapters.attendance,

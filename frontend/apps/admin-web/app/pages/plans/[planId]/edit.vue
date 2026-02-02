@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
-import type { MembershipPlan } from '~/types/directus'
+import type { MembershipPlan } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth',

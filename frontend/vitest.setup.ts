@@ -138,14 +138,6 @@ export const mockGlobalFetch = vi.fn().mockResolvedValue({
 // Mock defineNuxtRouteMiddleware
 export const mockDefineNuxtRouteMiddleware = (middleware: any) => middleware
 
-// Mock Directus instance (global) - DEPRECATED, use mockFetchInstance instead
-export const mockDirectusInstance = {
-  login: vi.fn(),
-  logout: vi.fn(),
-  request: vi.fn()
-}
-
-
 // Mock useAuth (global) - for useHR tests
 export const mockAuthUser = mockUseState('auth-user', () => ({ id: 'user-1' }))
 export const mockAuthInstance = {
@@ -177,7 +169,6 @@ globalThis.onMounted = mockOnMounted as any
 globalThis.navigateTo = mockNavigateTo as any
 globalThis.defineNuxtRouteMiddleware = mockDefineNuxtRouteMiddleware as any
 globalThis.useRuntimeConfig = vi.fn(() => mockRuntimeConfig) as any
-globalThis.useDirectus = vi.fn(() => mockDirectusInstance) as any
 globalThis.useAuth = vi.fn(() => mockAuthInstance) as any
 globalThis.useToast = vi.fn(() => mockToast) as any
 globalThis.useErrorHandler = vi.fn(() => mockErrorHandlerInstance) as any
@@ -189,9 +180,6 @@ export function clearGlobalMocks() {
   mockNavigateTo.mockClear()
   mockWatch.mockClear()
   mockOnMounted.mockClear()
-  mockDirectusInstance.login.mockClear()
-  mockDirectusInstance.logout.mockClear()
-  mockDirectusInstance.request.mockClear()
   // Clear useFetch mocks
   mockFetchInstance.apiFetch.mockClear()
   mockFetchInstance.readItems.mockClear().mockResolvedValue({ data: [], total: 0 })

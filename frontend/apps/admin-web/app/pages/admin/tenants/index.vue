@@ -8,7 +8,8 @@ definePageMeta({
   middleware: 'auth'
 })
 
-const directus = useDirectus()
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 interface TenantStats {
   totalTenants: number
@@ -62,14 +63,23 @@ const filterStatus = ref<string>('all')
 const fetchTenants = async () => {
   isLoading.value = true
   try {
-    const response = await directus.request({
+    const response = await fetch(`${apiBaseUrl}/api/admin/tenants`, {
       method: 'GET',
-      path: '/gym/admin/tenants'
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     })
 
-    if (response.success) {
-      stats.value = response.stats
-      tenants.value = response.tenants
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (result.success) {
+      stats.value = result.stats
+      tenants.value = result.tenants
     }
   } catch (error) {
     console.error('Failed to fetch tenants:', error)

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useMembers } from './useMembers'
-import type { Member } from '~/types/directus'
+import type { Member } from '~/types/schema'
 
 describe('useMembers', () => {
   beforeEach(() => {

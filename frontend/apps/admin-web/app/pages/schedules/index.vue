@@ -273,18 +273,20 @@ const formData = ref({
   status: 'active' as 'active' | 'inactive',
 })
 
-const API_BASE = 'http://localhost:8056'
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 async function fetchShifts() {
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/shift_schedules`, {
+    const response = await fetch(`${apiBaseUrl}/api/hr/shift-schedules`, {
+      method: 'GET',
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     })
-    const data = await response.json()
-    shifts.value = data.data || []
+    const result = await response.json()
+    shifts.value = result.success ? (result.data || []) : []
   } catch (error) {
     console.error('Failed to fetch shifts:', error)
   }
@@ -340,24 +342,27 @@ function toggleDay(day: string) {
 
 async function saveShift() {
   try {
-    const token = localStorage.getItem('auth_token')
     const url = editingShift.value
-      ? `${API_BASE}/items/shift_schedules/${editingShift.value.id}`
-      : `${API_BASE}/items/shift_schedules`
+      ? `${apiBaseUrl}/api/hr/shift-schedules/${editingShift.value.id}`
+      : `${apiBaseUrl}/api/hr/shift-schedules`
 
     const response = await fetch(url, {
       method: editingShift.value ? 'PATCH' : 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(formData.value),
     })
 
-    if (response.ok) {
+    const result = await response.json()
+
+    if (response.ok && result.success) {
       useToast().success(editingShift.value ? MESSAGES.SUCCESS.SCHEDULE_UPDATED : MESSAGES.SUCCESS.SCHEDULE_CREATED)
       await fetchShifts()
       closeModal()
+    } else {
+      useToast().error(result.error || (editingShift.value ? MESSAGES.ERRORS.SCHEDULE_UPDATE_FAILED : MESSAGES.ERRORS.SCHEDULE_CREATE_FAILED))
     }
   } catch (error) {
     console.error('Failed to save shift:', error)
@@ -376,17 +381,21 @@ async function deleteShift(id: string) {
   if (!confirmed) return
 
   try {
-    const token = localStorage.getItem('auth_token')
-    const response = await fetch(`${API_BASE}/items/shift_schedules/${id}`, {
+    const response = await fetch(`${apiBaseUrl}/api/hr/shift-schedules/${id}`, {
       method: 'DELETE',
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
     })
 
-    if (response.ok) {
+    const result = await response.json()
+
+    if (response.ok && result.success) {
       useToast().success(MESSAGES.SUCCESS.SCHEDULE_DELETED)
       await fetchShifts()
+    } else {
+      useToast().error(result.error || MESSAGES.ERRORS.SCHEDULE_DELETE_FAILED)
     }
   } catch (error) {
     console.error('Failed to delete shift:', error)

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
-import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/directus'
+import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

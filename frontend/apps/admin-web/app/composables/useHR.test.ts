@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mockFetchInstance } from '@test/setup'
 import { useHR } from './useHR'
-import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/directus'
+import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/schema'
 
 describe('useHR', () => {
   beforeEach(() => {

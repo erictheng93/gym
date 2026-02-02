@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTenant } from '@gym-nexus/shared'
+import { useTenant } from '~/composables/useTenant'
 
 const {
   tenantInfo,

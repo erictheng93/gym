@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useBranches } from './useBranches'
-import type { Branch, Employee } from '~/types/directus'
+import type { Branch, Employee } from '~/types/schema'
 
 describe('useBranches', () => {
   beforeEach(() => {

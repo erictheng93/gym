@@ -10,7 +10,8 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const directus = useDirectus()
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 const tenantId = route.params.tenantId as string
 
@@ -37,13 +38,22 @@ const editForm = ref({
 const fetchTenantDetails = async () => {
   isLoading.value = true
   try {
-    const response = await directus.request({
+    const response = await fetch(`${apiBaseUrl}/api/admin/tenants/${tenantId}`, {
       method: 'GET',
-      path: `/gym/admin/tenants/${tenantId}`
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     })
 
-    if (response.success) {
-      tenant.value = response.tenant
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (result.success) {
+      tenant.value = result.tenant
     }
   } catch (error) {
     console.error('Failed to fetch tenant details:', error)
@@ -133,18 +143,27 @@ const cancelEdit = () => {
 const saveEdit = async () => {
   isSaving.value = true
   try {
-    const response = await directus.request({
+    const response = await fetch(`${apiBaseUrl}/api/admin/tenants/${tenantId}`, {
       method: 'PATCH',
-      path: `/gym/admin/tenants/${tenantId}`,
-      body: editForm.value
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(editForm.value),
     })
 
-    if (response.success) {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (result.success) {
       useToast().success('租户信息已更新')
       isEditing.value = false
       await fetchTenantDetails()
     } else {
-      useToast().error(response.message || '更新失败')
+      useToast().error(result.message || '更新失败')
     }
   } catch (error) {
     console.error('Failed to update tenant:', error)
@@ -166,18 +185,27 @@ const changeStatus = async () => {
 
   isChangingStatus.value = true
   try {
-    const response = await directus.request({
+    const response = await fetch(`${apiBaseUrl}/api/admin/tenants/${tenantId}/status`, {
       method: 'PATCH',
-      path: `/gym/admin/tenants/${tenantId}/status`,
-      body: { status: newStatus.value }
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: newStatus.value }),
     })
 
-    if (response.success) {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (result.success) {
       useToast().success('租户状态已更新')
       showStatusDialog.value = false
       await fetchTenantDetails()
     } else {
-      useToast().error(response.message || '状态更新失败')
+      useToast().error(result.message || '状态更新失败')
     }
   } catch (error) {
     console.error('Failed to change tenant status:', error)

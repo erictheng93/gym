@@ -18,6 +18,12 @@ export type {
   MemberCheckin,
   ClassCategory,
   ClassCategoryBranch,
+  Class,
+  ClassSchedule,
+  ClassSession,
+  Booking,
   Payment,
-  DirectusSchema
-} from './directus'
+  /** @deprecated Use DbSchema instead */
+  DirectusSchema,
+  DirectusSchema as DbSchema,
+} from './schema'

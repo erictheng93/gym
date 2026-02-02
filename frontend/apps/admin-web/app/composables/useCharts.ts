@@ -99,8 +99,8 @@ export interface HeatmapOptions {
 // ============================================
 
 export const useCharts = () => {
-  // Chart instances map
-  const charts = new Map<string, Chart>()
+  // Chart instances map - use any to accept all chart types
+  const charts = new Map<string, Chart<any>>()
 
   // Default colors
   const colors: ChartColors = {
@@ -211,8 +211,8 @@ export const useCharts = () => {
         pointHoverRadius: 6
       }))
 
-      const config: ChartConfiguration<'line'> = {
-        type: 'line',
+      const config = {
+        type: 'line' as const,
         data: {
           labels: options.labels,
           datasets
@@ -230,7 +230,7 @@ export const useCharts = () => {
               text: options.title,
               font: {
                 size: 16,
-                weight: '600' as const
+                weight: 600
               }
             } : undefined
           },
@@ -251,8 +251,8 @@ export const useCharts = () => {
         }
       }
 
-      const chart = new Chart(ctx, config)
-      charts.set(chartId, chart)
+      const chart = new Chart(ctx, config as ChartConfiguration<'line'>)
+      charts.set(chartId, chart as Chart<any>)
       return chart
     } catch (error) {
       console.error('[useCharts] createLineChart error:', error)
@@ -283,15 +283,15 @@ export const useCharts = () => {
         maxBarThickness: 50
       }))
 
-      const config: ChartConfiguration<'bar'> = {
-        type: 'bar',
+      const config = {
+        type: 'bar' as const,
         data: {
           labels: options.labels,
           datasets
         },
         options: {
           ...getDefaultOptions(),
-          indexAxis: options.horizontal ? 'y' : 'x',
+          indexAxis: options.horizontal ? 'y' as const : 'x' as const,
           plugins: {
             ...getDefaultOptions().plugins,
             legend: {
@@ -303,7 +303,7 @@ export const useCharts = () => {
               text: options.title,
               font: {
                 size: 16,
-                weight: '600' as const
+                weight: 600
               }
             } : undefined
           },
@@ -322,8 +322,8 @@ export const useCharts = () => {
         }
       }
 
-      const chart = new Chart(ctx, config)
-      charts.set(chartId, chart)
+      const chart = new Chart(ctx, config as ChartConfiguration<'bar'>)
+      charts.set(chartId, chart as Chart<any>)
       return chart
     } catch (error) {
       console.error('[useCharts] createBarChart error:', error)
@@ -347,8 +347,8 @@ export const useCharts = () => {
 
       const chartColors = options.colors || colorPalette.slice(0, options.labels.length)
 
-      const config: ChartConfiguration<'doughnut'> = {
-        type: 'doughnut',
+      const config = {
+        type: 'doughnut' as const,
         data: {
           labels: options.labels,
           datasets: [{
@@ -373,15 +373,15 @@ export const useCharts = () => {
               text: options.title,
               font: {
                 size: 16,
-                weight: '600' as const
+                weight: 600
               }
             } : undefined
           }
         }
       }
 
-      const chart = new Chart(ctx, config)
-      charts.set(chartId, chart)
+      const chart = new Chart(ctx, config as ChartConfiguration<'doughnut'>)
+      charts.set(chartId, chart as Chart<any>)
       return chart
     } catch (error) {
       console.error('[useCharts] createDoughnutChart error:', error)

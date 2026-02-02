@@ -4,7 +4,7 @@
  */
 
 import { useFetch } from '~/composables/core/useFetch'
-import type { LeaveRequest, LeaveBalance, LeaveApprovalLog, Employee } from '~/types/directus'
+import type { LeaveRequest, LeaveBalance, LeaveApprovalLog, Employee } from '~/types/schema'
 
 export const useLeaveRequests = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
@@ -123,7 +123,7 @@ export const useLeaveRequests = () => {
    */
   const applyLeave = async (leaveData: {
     employeeId: string
-    leaveType: string
+    leaveType: LeaveRequest['leave_type']
     startDate: string
     endDate: string
     reason?: string

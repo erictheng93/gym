@@ -4,7 +4,7 @@
  */
 
 import { useFetch } from '~/composables/core/useFetch'
-import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/directus'
+import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
 
 export const useShiftSchedules = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()

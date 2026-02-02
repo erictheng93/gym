@@ -13,7 +13,6 @@ definePageMeta({
 // Register Chart.js components
 Chart.register(...registerables)
 
-const { $directus } = useNuxtApp()
 const config = useRuntimeConfig()
 const { formatNumber, formatCurrency, getHeatmapColor } = useCharts()
 
@@ -64,11 +63,10 @@ const getDays = () => {
 
 const apiCall = async (endpoint: string) => {
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
-  const token = await $directus.getToken()
 
   const response = await fetch(`${baseURL}${endpoint}`, {
+    credentials: 'include',
     headers: {
-      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     }
   })
@@ -323,13 +321,13 @@ const renderCharts = () => {
 const exportData = async (format: 'csv' | 'pdf' = 'csv') => {
   try {
     const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
-    const token = await $directus.getToken()
 
     const response = await fetch(
       `${baseURL}/api/admin/dashboard/export?type=member-analytics&format=${format}&days=${getDays()}`,
       {
+        credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         }
       }
     )

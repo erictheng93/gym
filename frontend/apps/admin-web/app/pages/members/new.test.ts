@@ -94,21 +94,19 @@ vi.mock('~/composables/useFormSubmit', () => ({
   })
 }))
 
-// Mock useTenant from @gym-nexus/shared
+// Mock useTenant (auto-imported from ~/composables/useTenant)
 const mockCanCreate = vi.fn().mockReturnValue(true)
 const mockFetchTenantInfo = vi.fn().mockResolvedValue(undefined)
 const mockFetchTenantQuota = vi.fn().mockResolvedValue(undefined)
 const mockIsQuotaNearLimit = vi.fn().mockReturnValue(false)
 const mockGetQuotaUsagePercent = vi.fn().mockReturnValue(50)
 
-vi.mock('@gym-nexus/shared', () => ({
-  useTenant: () => ({
-    canCreate: mockCanCreate,
-    fetchTenantInfo: mockFetchTenantInfo,
-    fetchTenantQuota: mockFetchTenantQuota,
-    isQuotaNearLimit: mockIsQuotaNearLimit,
-    getQuotaUsagePercent: mockGetQuotaUsagePercent
-  })
+vi.stubGlobal('useTenant', () => ({
+  canCreate: mockCanCreate,
+  fetchTenantInfo: mockFetchTenantInfo,
+  fetchTenantQuota: mockFetchTenantQuota,
+  isQuotaNearLimit: mockIsQuotaNearLimit,
+  getQuotaUsagePercent: mockGetQuotaUsagePercent
 }))
 
 // Mock FormInput, FormSelect, FormRadioGroup, FormDatePicker, FormTagInput components

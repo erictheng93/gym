@@ -3,7 +3,7 @@
  * 管理課程定義的 CRUD 操作
  */
 
-import type { Class } from '~/types/directus'
+import type { Class } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 

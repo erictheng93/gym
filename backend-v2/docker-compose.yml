@@ -16,6 +16,7 @@ services:
       - "${DB_PORT:-15432}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./drizzle/schema/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     environment:
       POSTGRES_USER: "${DB_USER:-gym_nexus}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:-gym_nexus_dev}"
@@ -68,28 +69,6 @@ services:
           memory: 1G
 
   # ===========================================================================
-  # Redis Cache (optional, for rate limiting and caching)
-  # ===========================================================================
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-
-  # ===========================================================================
   # Gym Nexus API v2 (Hono.js)
   # ===========================================================================
   api:
@@ -103,17 +82,12 @@ services:
     depends_on:
       database:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
       NODE_ENV: "${NODE_ENV:-production}"
       PORT: 8056
 
       # Database
       DATABASE_URL: "postgresql://${DB_USER:-gym_nexus}:${DB_PASSWORD:-gym_nexus_dev}@database:5432/${DB_DATABASE:-gym_nexus}"
-
-      # Redis
-      REDIS_URL: "redis://redis:6379"
 
       # Auth
       JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
@@ -194,6 +168,3 @@ volumes:
   db_data:
     driver: local
     name: gym_v2_db_data
-  redis_data:
-    driver: local
-    name: gym_v2_redis_data

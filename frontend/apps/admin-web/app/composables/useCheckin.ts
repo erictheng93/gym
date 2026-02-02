@@ -1,6 +1,6 @@
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
-import type { MemberCheckin, Member, Contract, ContractLog } from '~/types/directus'
+import type { MemberCheckin, Member, Contract, ContractLog } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
 export interface CheckinRecord {

@@ -4,7 +4,7 @@
  */
 
 import { useFetch } from '~/composables/core/useFetch'
-import type { Attendance, Employee } from '~/types/directus'
+import type { Attendance, Employee } from '~/types/schema'
 
 // ============================================
 // 類型定義
@@ -88,12 +88,12 @@ export const useAttendance = () => {
         limit: 50
       })
 
-      todayAttendances.value = result.data.map(att => ({
+      todayAttendances.value = result.data.map((att): AttendanceRecord => ({
         id: att.id,
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
-        attendance_date: att.attendance_date || today,
+        attendance_date: (att.attendance_date || today) as string,
         check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
         attendance_status: (att.attendance_status as AttendanceRecord['attendance_status']) || 'PRESENT',
         late_minutes: att.late_minutes || 0,
@@ -125,12 +125,12 @@ export const useAttendance = () => {
       if (result.data.length === 0) return null
 
       const att = result.data[0]
-      return {
+      const record: AttendanceRecord = {
         id: att.id,
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
-        attendance_date: att.attendance_date || today,
+        attendance_date: (att.attendance_date || today) as string,
         check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
         attendance_status: (att.attendance_status as AttendanceRecord['attendance_status']) || 'PRESENT',
         late_minutes: att.late_minutes || 0,
@@ -138,6 +138,7 @@ export const useAttendance = () => {
         work_hours: att.work_hours || null,
         notes: att.notes || undefined
       }
+      return record
     } catch (error) {
       console.error('Failed to get today attendance:', error)
       return null
@@ -225,9 +226,9 @@ export const useAttendance = () => {
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: null,
-        attendance_date: today,
+        attendance_date: today as string,
         check_type: checkType,
-        attendance_status: attendanceStatus,
+        attendance_status: attendanceStatus as AttendanceRecord['attendance_status'],
         late_minutes: lateMinutes,
         early_leave_minutes: 0,
         work_hours: null,
@@ -292,7 +293,7 @@ export const useAttendance = () => {
         employee: att.employee as Employee,
         check_in: att.check_in || null,
         check_out: att.check_out || null,
-        attendance_date: att.attendance_date || getTodayDate(),
+        attendance_date: (att.attendance_date || getTodayDate()) as string,
         check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
         attendance_status: attendanceStatus as AttendanceRecord['attendance_status'],
         late_minutes: att.late_minutes || 0,

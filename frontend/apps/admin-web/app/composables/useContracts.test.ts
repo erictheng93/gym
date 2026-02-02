@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useContracts } from './useContracts'
-import type { Contract } from '~/types/directus'
+import type { Contract } from '~/types/schema'
 
 describe('useContracts', () => {
   beforeEach(() => {

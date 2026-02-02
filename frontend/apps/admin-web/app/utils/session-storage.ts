@@ -9,9 +9,11 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 interface User {
   id: string
   email: string
-  first_name: string | null
-  last_name: string | null
-  role: string | null
+  role: string
+  employeeId: string | null
+  tenantId: string | null
+  first_name?: string | null
+  last_name?: string | null
 }
 
 interface CurrentEmployee {

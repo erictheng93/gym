@@ -313,7 +313,7 @@ export function useApi() {
    * @example
    * // 創建會員並失效會員列表緩存
    * const result = await mutate(
-   *   () => directus.request(createItem('members', data)),
+   *   () => fetch(`${apiBaseUrl}/api/members`, { method: 'POST', body: JSON.stringify(data) }),
    *   [CACHE_KEYS.MEMBERS],
    *   { context: 'createMember' }
    * )

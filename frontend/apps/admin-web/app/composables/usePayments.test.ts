@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { usePayments } from './usePayments'
-import type { Payment } from '~/types/directus'
+import type { Payment } from '~/types/schema'
 
 describe('usePayments', () => {
   beforeEach(() => {

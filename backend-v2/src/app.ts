@@ -69,6 +69,9 @@ import pdfRoutes from './routes/pdf.js';
 import hrPayrollRoutes from './routes/hr-payroll.js';
 import hrPerformanceRoutes from './routes/hr-performance.js';
 
+// Tenant routes
+import tenantRoutes from './routes/tenant.js';
+
 type Variables = AuthVariables & TenantVariables;
 
 const app = new Hono<{ Variables: Variables }>();
@@ -126,6 +129,9 @@ app.route('/api/users', usersRoutes);
 // HR routes
 app.route('/api/payroll', hrPayrollRoutes);
 app.route('/api/performance', hrPerformanceRoutes);
+
+// Tenant routes
+app.route('/api/tenant', tenantRoutes);
 
 // Member-App routes (authenticated via X-Member-Token)
 app.route('/api/member/otp', memberOtpRoutes);

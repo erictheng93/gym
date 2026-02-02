@@ -11,7 +11,7 @@
  * )
  */
 
-import { ref, reactive, watch, computed, type UnwrapRef } from 'vue'
+import { ref, reactive, watch, computed, type UnwrapRef, type ComputedRef, type Ref } from 'vue'
 import { z } from 'zod'
 import { formatZodErrors } from '~/schemas/common.schema'
 
@@ -26,11 +26,11 @@ export interface ZodFormReturn<T> {
   /** 表單資料（reactive） */
   formData: UnwrapRef<T>
   /** 錯誤訊息（以欄位名稱為 key） */
-  errors: ReturnType<typeof ref<Record<string, string>>>
+  errors: Ref<Record<string, string>>
   /** 表單是否有效 */
-  isValid: ReturnType<typeof computed<boolean>>
+  isValid: ComputedRef<boolean>
   /** 是否有任何錯誤 */
-  hasErrors: ReturnType<typeof computed<boolean>>
+  hasErrors: ComputedRef<boolean>
   /** 驗證整個表單 */
   validate: () => boolean
   /** 驗證單一欄位 */
@@ -62,10 +62,10 @@ export function useZodFormValidation<T extends z.ZodType>(
   const { validateOnChange = false, debounceMs = 300 } = options
 
   // 儲存初始值以供重置使用
-  const _initialData = JSON.parse(JSON.stringify(initialData))
+  const _initialData = JSON.parse(JSON.stringify(initialData)) as z.infer<T>
 
   // 表單資料（reactive）
-  const formData = reactive({ ...initialData }) as UnwrapRef<z.infer<T>>
+  const formData = reactive(JSON.parse(JSON.stringify(initialData))) as UnwrapRef<z.infer<T>>
 
   // 錯誤訊息
   const errors = ref<Record<string, string>>({})
@@ -161,7 +161,7 @@ export function useZodFormValidation<T extends z.ZodType>(
    * 重置表單到初始值
    */
   const reset = (): void => {
-    Object.assign(formData, JSON.parse(JSON.stringify(_initialData)))
+    Object.assign(formData as object, JSON.parse(JSON.stringify(_initialData)))
     clearErrors()
   }
 
@@ -169,7 +169,7 @@ export function useZodFormValidation<T extends z.ZodType>(
    * 更新表單資料
    */
   const setFormData = (data: Partial<z.infer<T>>): void => {
-    Object.assign(formData, data)
+    Object.assign(formData as object, data)
   }
 
   // 設置 validateOnChange
@@ -177,7 +177,7 @@ export function useZodFormValidation<T extends z.ZodType>(
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     watch(
-      formData,
+      () => formData as object,
       () => {
         if (debounceTimer) {
           clearTimeout(debounceTimer)
@@ -208,31 +208,40 @@ export function useZodFormValidation<T extends z.ZodType>(
 /**
  * 從 Zod Schema 中提取單一欄位的 Schema
  * 支援 ZodObject, ZodEffects (refine/transform), ZodOptional, ZodNullable 等
+ * Zod v4 compatible
  */
 function getFieldSchema(schema: z.ZodType, fieldName: string): z.ZodType | undefined {
-  // 如果是 ZodObject，直接從 shape 中獲取
-  if (schema instanceof z.ZodObject) {
-    return schema.shape[fieldName]
+  // Use duck typing for Zod v4 compatibility
+  const schemaDef = schema as unknown as { _zod?: { def?: { shape?: Record<string, z.ZodType>; schema?: z.ZodType; innerType?: z.ZodType } }; shape?: Record<string, z.ZodType>; _def?: { shape?: Record<string, z.ZodType>; schema?: z.ZodType; innerType?: z.ZodType } }
+
+  // ZodObject - check for shape property (works in both Zod v3 and v4)
+  if ('shape' in schema && typeof schema.shape === 'object' && schema.shape !== null) {
+    return (schema.shape as Record<string, z.ZodType>)[fieldName]
   }
 
-  // 如果是 ZodEffects（例如使用了 refine 或 transform）
-  if (schema instanceof z.ZodEffects) {
-    return getFieldSchema(schema._def.schema, fieldName)
+  // Try _def.shape for some Zod versions
+  if (schemaDef._def?.shape) {
+    return schemaDef._def.shape[fieldName]
   }
 
-  // 如果是 ZodOptional
-  if (schema instanceof z.ZodOptional) {
-    return getFieldSchema(schema._def.innerType, fieldName)
+  // ZodEffects - unwrap inner schema
+  if (schemaDef._def?.schema) {
+    return getFieldSchema(schemaDef._def.schema as z.ZodType, fieldName)
   }
 
-  // 如果是 ZodNullable
-  if (schema instanceof z.ZodNullable) {
-    return getFieldSchema(schema._def.innerType, fieldName)
+  // Zod v4 _zod structure
+  if (schemaDef._zod?.def?.schema) {
+    return getFieldSchema(schemaDef._zod.def.schema as z.ZodType, fieldName)
   }
 
-  // 如果是 ZodDefault
-  if (schema instanceof z.ZodDefault) {
-    return getFieldSchema(schema._def.innerType, fieldName)
+  // ZodOptional, ZodNullable, ZodDefault - unwrap inner type
+  if (schemaDef._def?.innerType) {
+    return getFieldSchema(schemaDef._def.innerType as z.ZodType, fieldName)
+  }
+
+  // Zod v4 _zod structure for wrapped types
+  if (schemaDef._zod?.def?.innerType) {
+    return getFieldSchema(schemaDef._zod.def.innerType as z.ZodType, fieldName)
   }
 
   return undefined

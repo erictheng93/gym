@@ -90,7 +90,6 @@ export default tseslint.config(
         useAuth: 'readonly',
         useMemberAuth: 'readonly',
         useApiError: 'readonly',
-        useDirectus: 'readonly',
         useFormValidation: 'readonly',
         useDebounce: 'readonly',
         usePagination: 'readonly',

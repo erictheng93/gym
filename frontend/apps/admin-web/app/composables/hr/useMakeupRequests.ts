@@ -4,7 +4,7 @@
  */
 
 import { useFetch } from '~/composables/core/useFetch'
-import type { MakeupRequest, MakeupApprovalLog, Attendance, Employee } from '~/types/directus'
+import type { MakeupRequest, MakeupApprovalLog, Attendance, Employee } from '~/types/schema'
 
 export const useMakeupRequests = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
@@ -204,8 +204,9 @@ export const useMakeupRequests = () => {
       }
     }
 
-    if (existingResult.data.length > 0) {
-      await updateItem<Attendance>('attendances', existingResult.data[0].id, updateData)
+    const existingAttendance = existingResult.data[0]
+    if (existingAttendance) {
+      await updateItem<Attendance>('attendances', existingAttendance.id, updateData)
     } else {
       await createItem<Attendance>('attendances', {
         employee_id: makeupRequest.employee_id,

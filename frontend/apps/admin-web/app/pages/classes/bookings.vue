@@ -6,7 +6,7 @@
  */
 import { MESSAGES, PAGES, PAGINATION, TIMING } from '~/constants'
 import { getBookingStatusBadge, formatDate } from '@gym-nexus/shared'
-import type { Booking } from '~/types/directus'
+import type { Booking } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

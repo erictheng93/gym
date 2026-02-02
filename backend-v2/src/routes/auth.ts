@@ -211,4 +211,78 @@ app.post('/refresh', async (c) => {
   });
 });
 
+// Get current user's effective permissions
+app.get('/me/permissions', requireAuth, async (c) => {
+  const user = c.get('user');
+
+  if (!user) {
+    return c.json({ success: false, error: '未授權' }, 401);
+  }
+
+  if (!user.employeeId) {
+    // User has no employee record - return empty permissions
+    return c.json({
+      success: true,
+      data: {
+        employeeStatus: 'no_employee',
+        permissions: {},
+      },
+    });
+  }
+
+  // Get employee with job title permissions
+  const [result] = await db
+    .select({
+      id: employees.id,
+      status: employees.status,
+      customPermissions: employees.customPermissions,
+      jobTitleId: employees.jobTitleId,
+      jobTitleName: jobTitles.name,
+      permissionsConfig: jobTitles.permissionsConfig,
+    })
+    .from(employees)
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+    .where(eq(employees.id, user.employeeId))
+    .limit(1);
+
+  if (!result) {
+    return c.json({
+      success: true,
+      data: {
+        employeeStatus: 'no_employee',
+        permissions: {},
+      },
+    });
+  }
+
+  // Check employee status
+  if (result.status !== 'active') {
+    return c.json({
+      success: true,
+      data: {
+        employeeStatus: 'inactive',
+        permissions: {},
+      },
+    });
+  }
+
+  // Determine effective permissions (custom > job title default)
+  let permissions = {};
+
+  if (result.customPermissions && typeof result.customPermissions === 'object') {
+    permissions = result.customPermissions;
+  } else if (result.permissionsConfig && typeof result.permissionsConfig === 'object') {
+    permissions = result.permissionsConfig;
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      employeeStatus: 'active',
+      jobTitleName: result.jobTitleName,
+      permissions,
+    },
+  });
+});
+
 export default app;

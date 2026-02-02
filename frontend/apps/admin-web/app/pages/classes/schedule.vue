@@ -6,7 +6,7 @@
  */
 import { MESSAGES, PAGES } from '~/constants'
 import { getSessionStatusBadge, formatDate } from '@gym-nexus/shared'
-import type { ClassSession } from '~/types/directus'
+import type { ClassSession } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

@@ -60,9 +60,10 @@ const getCoordinates = (e: MouseEvent | TouchEvent) => {
     }
   }
 
+  const mouseEvent = e as MouseEvent
   return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top
+    x: mouseEvent.clientX - rect.left,
+    y: mouseEvent.clientY - rect.top
   }
 }
 
@@ -128,6 +129,14 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+})
+
+// Expose for testing
+defineExpose({
+  canvasRef,
+  isDrawing,
+  hasSignature,
+  clearSignature
 })
 </script>
 

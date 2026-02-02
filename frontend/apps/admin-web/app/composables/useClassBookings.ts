@@ -3,7 +3,7 @@
  * 管理會員課程預約
  */
 
-import type { Booking, ClassSession, Member } from '~/types/directus'
+import type { Booking, ClassSession, Member } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 

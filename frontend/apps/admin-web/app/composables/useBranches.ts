@@ -1,5 +1,5 @@
 import { useFetch } from '~/composables/core/useFetch'
-import type { Branch, Employee } from '~/types/directus'
+import type { Branch, Employee } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 

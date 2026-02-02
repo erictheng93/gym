@@ -210,9 +210,6 @@ importers:
       '@gym-nexus/hr-core':
         specifier: workspace:*
         version: link:../hr-core
-      '@gym-nexus/hr-directus-adapter':
-        specifier: workspace:*
-        version: link:../hr-directus-adapter
     devDependencies:
       typescript:
         specifier: ^5.9.3
@@ -222,16 +219,6 @@ importers:
         version: 3.5.26(typescript@5.9.3)
 
   packages/hr-core:
-    devDependencies:
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  packages/hr-directus-adapter:
-    dependencies:
-      '@gym-nexus/hr-core':
-        specifier: workspace:*
-        version: link:../hr-core
     devDependencies:
       typescript:
         specifier: ^5.9.3

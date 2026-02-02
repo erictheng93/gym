@@ -5,7 +5,6 @@
  * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
 import { MESSAGES, PAGES, LABELS } from '~/constants'
-import { useTenant } from '@gym-nexus/shared'
 import { createMemberSchema, type CreateMemberInput } from '~/schemas/member.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'

@@ -298,15 +298,12 @@ onMounted(async () => {
 
 async function loadBranches() {
   try {
-    const token = useCookie('directus_session_token')
-
     // Check if admin by trying to get all branches
-    const response = await $fetch<any>(`${apiUrl}/items/branches?filter[status][_eq]=active&fields=id,name`, {
-      headers: { Authorization: `Bearer ${token.value}` },
+    const response = await $fetch<any>(`${apiUrl}/api/branches?status=active`, {
       credentials: 'include',
     })
 
-    if (response.data && response.data.length > 1) {
+    if (response.success && response.data && response.data.length > 1) {
       isSystemAdmin.value = true
       branches.value = response.data
     }
@@ -345,7 +342,6 @@ function applyPreset() {
 async function loadUsage() {
   try {
     isLoading.value = true
-    const token = useCookie('directus_session_token')
 
     const params = new URLSearchParams({
       start_date: filters.value.startDate,
@@ -358,7 +354,6 @@ async function loadUsage() {
     }
 
     const response = await $fetch<any>(`${apiUrl}/api/admin/notification-usage?${params}`, {
-      headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
 
@@ -376,7 +371,6 @@ async function loadUsage() {
 async function exportCsv() {
   try {
     isExporting.value = true
-    const token = useCookie('directus_session_token')
 
     const params = new URLSearchParams({
       start_date: filters.value.startDate,
@@ -390,7 +384,6 @@ async function exportCsv() {
 
     // Fetch CSV and download
     const response = await fetch(`${apiUrl}/api/admin/notification-usage/export?${params}`, {
-      headers: { Authorization: `Bearer ${token.value}` },
       credentials: 'include',
     })
 

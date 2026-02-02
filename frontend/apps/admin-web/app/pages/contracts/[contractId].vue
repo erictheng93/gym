@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ContractLog, Member } from '~/types/directus'
+import type { ContractLog, Member } from '~/types/schema'
 import { MESSAGES, PAGES, STATUS, LABELS, TIMING } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
 import { useFetch } from '~/composables/core/useFetch'

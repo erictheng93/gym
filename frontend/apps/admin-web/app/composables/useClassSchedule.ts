@@ -3,7 +3,7 @@
  * 管理課程排程和場次
  */
 
-import type { ClassSchedule, ClassSession } from '~/types/directus'
+import type { ClassSchedule, ClassSession } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 

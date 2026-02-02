@@ -127,12 +127,13 @@ Configure the HR context in your Nuxt app:
 // plugins/hr-context.client.ts
 import { defineNuxtPlugin } from '#app'
 import { createHRContext, provideHRContext } from '@gym-nexus/hr-composables'
-import { createHRAdapters } from '@gym-nexus/hr-directus-adapter'
+import { createHRAdapters } from '~/adapters/hr-api-adapter'
 
 export default defineNuxtPlugin((nuxtApp) => {
-  const { $directus, $auth } = useNuxtApp()
+  const config = useRuntimeConfig()
+  const auth = useAuth()
 
-  const adapters = createHRAdapters($directus, $auth.data.value)
+  const adapters = createHRAdapters(config.public.apiBaseUrl, auth.token.value)
   const context = createHRContext(adapters)
 
   nuxtApp.vueApp.runWithContext(() => {

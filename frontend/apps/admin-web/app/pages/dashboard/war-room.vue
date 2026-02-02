@@ -65,16 +65,15 @@ const loadHeatmapData = async (branchId?: string) => {
   try {
     const config = useRuntimeConfig()
     const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
-    const { $directus } = useNuxtApp()
-    const token = await $directus.getToken()
 
     const params = new URLSearchParams()
     params.append('weeks', '4')
     if (branchId) params.append('branch_id', branchId)
 
     const response = await fetch(`${baseURL}/api/admin/analytics/checkin-heatmap?${params}`, {
+      credentials: 'include',
       headers: {
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       }
     })
 
@@ -120,8 +119,6 @@ const exportData = async (type: 'kpis' | 'revenue' | 'contracts' | 'checkins', f
   try {
     const config = useRuntimeConfig()
     const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
-    const { $directus } = useNuxtApp()
-    const token = await $directus.getToken()
 
     const params = new URLSearchParams()
     params.append('type', type)
@@ -132,8 +129,9 @@ const exportData = async (type: 'kpis' | 'revenue' | 'contracts' | 'checkins', f
     }
 
     const response = await fetch(`${baseURL}/api/admin/dashboard/export?${params}`, {
+      credentials: 'include',
       headers: {
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       }
     })
 

@@ -9,9 +9,9 @@
  * ```ts
  * // 1. 在應用根組件中提供 HR 上下文
  * import { provideHRContext } from '@gym-nexus/hr-composables'
- * import { createHRAdapters } from '@gym-nexus/hr-directus-adapter'
+ * import { createHRAdapters } from './adapters/hr-api-adapter'
  *
- * const adapters = createHRAdapters(directus, authData)
+ * const adapters = createHRAdapters(apiBaseUrl, authToken)
  * provideHRContext({
  *   attendanceAdapter: adapters.attendance,
  *   leaveAdapter: adapters.leave,

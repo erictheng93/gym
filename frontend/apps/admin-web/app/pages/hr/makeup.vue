@@ -3,7 +3,7 @@
  * 補打卡申請頁面
  */
 import { PAGES } from '~/constants'
-import type { MakeupRequest, MakeupApprovalLog } from '~/types/directus'
+import type { MakeupRequest, MakeupApprovalLog } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

@@ -1,4 +1,4 @@
-import type { Member } from '~/types/directus'
+import type { Member } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'

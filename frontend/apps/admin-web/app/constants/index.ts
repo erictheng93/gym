@@ -1178,17 +1178,24 @@ export const VALIDATION = {
 // ============================================
 export const API = {
   AUTH: {
-    LOGIN: '/auth/login',
-    LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh',
-    ME: '/users/me',
+    LOGIN: '/api/auth/login',
+    LOGOUT: '/api/auth/logout',
+    REFRESH: '/api/auth/refresh',
+    ME: '/api/auth/me',
   },
-  ITEMS: {
-    MEMBERS: '/items/members',
-    CONTRACTS: '/items/contracts',
-    BRANCHES: '/items/branches',
-    EMPLOYEES: '/items/employees',
-    PLANS: '/items/membership_plans',
-    PAYMENTS: '/items/payments',
+  /**
+   * Backend-v2 API endpoints
+   * All endpoints use session cookie authentication (credentials: 'include')
+   */
+  API: {
+    MEMBERS: '/api/members',
+    CONTRACTS: '/api/contracts',
+    BRANCHES: '/api/branches',
+    EMPLOYEES: '/api/employees',
+    PLANS: '/api/membership-plans',
+    PAYMENTS: '/api/payments',
+    SHIFT_SCHEDULES: '/api/hr/shift-schedules',
+    EMPLOYEE_SHIFTS: '/api/hr/employee-shifts',
+    ATTENDANCES: '/api/hr/attendances',
   },
 } as const
