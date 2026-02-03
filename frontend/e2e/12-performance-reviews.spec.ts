@@ -93,10 +93,6 @@ test.describe('績效考核 E2E', () => {
     await page.goto('/hr/performance')
     await page.waitForLoadState('networkidle')
 
-    // 嘗試點擊第一個考核連結
-    const reviewLink = page.locator('a[href*="/performance/"], tr, .review-item').first()
-    const hasReviewLink = await reviewLink.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
-
     // 頁面載入成功即可
     expect(true).toBe(true)
   })
@@ -104,10 +100,6 @@ test.describe('績效考核 E2E', () => {
   test('應該能夠篩選績效考核狀態', async ({ page }) => {
     await page.goto('/hr/performance')
     await page.waitForLoadState('networkidle')
-
-    // 尋找狀態篩選器（待審核/已完成 分頁）
-    const statusFilter = page.locator('button, [role="tab"]').filter({ hasText: /待審核|已完成|PENDING|APPROVED/i }).first()
-    const hasStatusFilter = await statusFilter.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
 
     // 頁面載入成功即可
     expect(true).toBe(true)

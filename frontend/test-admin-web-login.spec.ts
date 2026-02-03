@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Admin Web - 立即行動清單驗證', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     // 設置較長的超時時間
     test.setTimeout(60000)
   })

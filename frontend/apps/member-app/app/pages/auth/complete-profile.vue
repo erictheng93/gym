@@ -43,7 +43,6 @@ const form = reactive<CompleteProfileForm>({
 })
 
 // OTP 相關
-const otpCode = ref('')
 const otpDigits = ref(['', '', '', '', '', ''])
 const otpInputRefs = ref<HTMLInputElement[]>([])
 const isOtpSending = ref(false)

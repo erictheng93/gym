@@ -28,7 +28,7 @@ interface Props {
   /** 欄位標籤 */
   label?: string
   /** 選項列表 */
-  options: RadioOption[]
+  options?: RadioOption[]
   /** 是否必填 */
   required?: boolean
   /** 錯誤訊息 */

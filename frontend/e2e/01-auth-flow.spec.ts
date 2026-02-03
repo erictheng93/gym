@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { TEST_USERS, login, logout } from './fixtures/auth'
 import { TestEnv } from './config/test-env'
-import { waitForElementStable, waitForFormSubmission } from './helpers/wait-helpers'
-import { findButton, findInput, TEST_IDS } from './helpers/selector-helpers'
+import { waitForElementStable } from './helpers/wait-helpers'
+import { findButton, findInput } from './helpers/selector-helpers'
 
 test.describe('登录流程 E2E', () => {
   test.beforeEach(async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe('登录流程 E2E', () => {
 
   test('应该在空字段时显示错误信息', async ({ page }) => {
     // 等待表單元素穩定
-    const submitButton = findButton(page, 'submit', '登')
+    const submitButton = findButton(page, { testId: 'submit', text: /登/ })
     await waitForElementStable(submitButton)
 
     // 不填写任何字段直接提交
@@ -44,15 +44,15 @@ test.describe('登录流程 E2E', () => {
 
   test('应该在错误的凭证时显示错误信息', async ({ page }) => {
     // 等待表單元素穩定
-    const emailInput = findInput(page, 'email', 'email')
+    const emailInput = findInput(page, { name: 'email', type: 'email' })
     await waitForElementStable(emailInput)
 
     // 填写错误的凭证
     await emailInput.fill('wrong@example.com')
-    await findInput(page, 'password', 'password').fill('wrongpassword')
+    await findInput(page, { name: 'password', type: 'password' }).fill('wrongpassword')
 
     // 点击登录按钮
-    await findButton(page, 'submit', '登').click()
+    await findButton(page, { testId: 'submit', text: /登/ }).click()
 
     // 等待错误消息显示
     const errorBanner = page.locator('.error-banner')
@@ -64,12 +64,12 @@ test.describe('登录流程 E2E', () => {
 
   test('应该在邮箱格式无效时进行前端验证', async ({ page }) => {
     // 等待表單元素穩定
-    const emailInput = findInput(page, 'email', 'email')
+    const emailInput = findInput(page, { name: 'email', type: 'email' })
     await waitForElementStable(emailInput)
 
     // 填写无效的邮箱
     await emailInput.fill('invalid-email')
-    await findInput(page, 'password', 'password').fill('password123')
+    await findInput(page, { name: 'password', type: 'password' }).fill('password123')
 
     // HTML5验证应该阻止表单提交
     const validationMessage = await emailInput.evaluate((el: HTMLInputElement) => el.validationMessage)
@@ -89,21 +89,21 @@ test.describe('登录流程 E2E', () => {
     await expect(page).toHaveURL('/login')
 
     // 验证登录表单可见
-    const emailInput = findInput(page, 'email', 'email')
+    const emailInput = findInput(page, { name: 'email', type: 'email' })
     await expect(emailInput).toBeVisible()
   })
 
   test('应该在加载时显示加载状态', async ({ page }) => {
     // 等待表單元素穩定
-    const emailInput = findInput(page, 'email', 'email')
+    const emailInput = findInput(page, { name: 'email', type: 'email' })
     await waitForElementStable(emailInput)
 
     // 填写登录表单
     await emailInput.fill(TEST_USERS.admin.email)
-    await findInput(page, 'password', 'password').fill(TEST_USERS.admin.password)
+    await findInput(page, { name: 'password', type: 'password' }).fill(TEST_USERS.admin.password)
 
     // 使用 Promise.all 同時點擊按鈕並檢測加載狀態
-    const submitButton = findButton(page, 'submit', '登')
+    const submitButton = findButton(page, { testId: 'submit', text: /登/ })
 
     // 點擊按鈕後立即檢查
     await submitButton.click()

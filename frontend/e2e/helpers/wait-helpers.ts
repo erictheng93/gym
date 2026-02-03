@@ -138,7 +138,11 @@ export async function waitForFormSubmission(
 ): Promise<void> {
   // 等待按鈕變為禁用狀態（提交中）
   try {
-    await submitButton.waitFor({ state: 'disabled', timeout: 1000 })
+    await submitButton.page().waitForFunction(
+      (btn) => btn?.hasAttribute('disabled'),
+      await submitButton.elementHandle(),
+      { timeout: 1000 }
+    )
   } catch {
     // 按鈕可能沒有禁用狀態，繼續執行
   }
@@ -210,7 +214,8 @@ export async function waitForSelectOptions(
     { selector: await selectLocator.evaluate(el => {
       // 獲取元素的唯一選擇器
       if (el.id) return `#${el.id}`
-      if (el.name) return `[name="${el.name}"]`
+      const htmlEl = el as HTMLSelectElement
+      if (htmlEl.name) return `[name="${htmlEl.name}"]`
       return el.tagName
     }), min: minOptions },
     { timeout }

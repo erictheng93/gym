@@ -3,7 +3,7 @@
  * New Goal Page
  * Create a new fitness goal
  */
-import { createGoalSchema, GOAL_TYPES } from '../../../schemas/goal.schema'
+import { GOAL_TYPES } from '../../../schemas/goal.schema'
 import type { GoalType } from '../../../schemas/goal.schema'
 
 definePageMeta({

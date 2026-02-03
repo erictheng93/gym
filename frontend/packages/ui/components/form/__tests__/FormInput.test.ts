@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { mount, shallowMount } from '@vue/test-utils'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { mount } from '@vue/test-utils'
 import { computed as vueComputed } from 'vue'
 import FormInput from '../FormInput.vue'
 import FormField from '../FormField.vue'

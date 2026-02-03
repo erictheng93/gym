@@ -54,6 +54,7 @@ export default tseslint.config(
         isRef: 'readonly',
         // Node.js globals
         process: 'readonly',
+        module: 'readonly',
         // Browser globals
         setTimeout: 'readonly',
         setInterval: 'readonly',
@@ -119,6 +120,27 @@ export default tseslint.config(
         usePlans: 'readonly',
         useMakeupRequests: 'readonly',
         useReports: 'readonly',
+        // Additional composables
+        useCampaigns: 'readonly',
+        useCharts: 'readonly',
+        useCoachAuth: 'readonly',
+        useCoachClasses: 'readonly',
+        useCoupons: 'readonly',
+        useDashboard: 'readonly',
+        useFocusTrap: 'readonly',
+        useGoals: 'readonly',
+        useIssues: 'readonly',
+        useLeads: 'readonly',
+        useLessonPlans: 'readonly',
+        useMeasurements: 'readonly',
+        useOfflineSync: 'readonly',
+        useSegmentation: 'readonly',
+        useStudents: 'readonly',
+        useTeachingMaterials: 'readonly',
+        useTenant: 'readonly',
+        useUsers: 'readonly',
+        useWorkouts: 'readonly',
+        useHR: 'readonly',
         // Form validation helpers
         required: 'readonly',
         email: 'readonly',
@@ -152,6 +174,29 @@ export default tseslint.config(
       '**/coverage/**',
       '**/.pnpm-store/**'
     ]
+  },
+  // CommonJS files configuration
+  {
+    files: ['**/*.cjs'],
+    languageOptions: {
+      globals: {
+        module: 'readonly',
+        require: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        exports: 'readonly'
+      }
+    }
+  },
+  // Script files configuration (.mjs and scripts/)
+  {
+    files: ['**/*.mjs', '**/scripts/**/*.ts', '**/scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly'
+      }
+    }
   },
   {
     rules: {

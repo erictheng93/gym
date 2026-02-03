@@ -16,7 +16,6 @@ const {
   bookSession,
   cancelBooking,
   hasBookedSession,
-  getBookingForSession,
   isLoading: bookingsLoading
 } = useBookings()
 const { checkEligibility } = useReviews()

@@ -134,15 +134,10 @@ export function findInput(
   }
 
   if (options.label) {
-    // 通過 label 查找輸入框
+    // 通過 label 查找輸入框 - 使用 CSS 選擇器策略
     const label = page.locator('label').filter({ hasText: options.label })
-    return label.locator('input').or(
-      page.locator(`input[id]`).filter(async (input) => {
-        const id = await input.getAttribute('id')
-        const associatedLabel = await page.locator(`label[for="${id}"]`).count()
-        return associatedLabel > 0
-      })
-    )
+    // 優先查找 label 內的 input，或通過 for 屬性關聯的 input
+    return label.locator('input')
   }
 
   let selector = 'input'
@@ -184,15 +179,10 @@ export function findSelect(
   }
 
   if (options.label) {
-    // 通過 label 查找 select
+    // 通過 label 查找 select - 使用 CSS 選擇器策略
     const label = page.locator('label').filter({ hasText: options.label })
-    return label.locator('select').or(
-      page.locator(`select[id]`).filter(async (select) => {
-        const id = await select.getAttribute('id')
-        const associatedLabel = await page.locator(`label[for="${id}"]`).count()
-        return associatedLabel > 0
-      })
-    )
+    // 優先查找 label 內的 select，或通過 for 屬性關聯的 select
+    return label.locator('select')
   }
 
   if (options.name) {

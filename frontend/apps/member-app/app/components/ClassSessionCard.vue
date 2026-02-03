@@ -13,15 +13,13 @@ const emit = defineEmits<{
   (e: 'details'): void
 }>()
 
-const { isSessionFull, getAvailableSpots, formatTimeRange, getCategoryLabel, getDifficultyLabel } = useClasses()
+const { isSessionFull, getAvailableSpots, getCategoryLabel } = useClasses()
 
 const className = computed(() => props.session.class?.name || props.session.schedule?.class?.name || '課程')
 const instructor = computed(() => props.session.instructor?.full_name || props.session.schedule?.class?.instructor?.full_name || '')
 const category = computed(() => props.session.class?.category || props.session.schedule?.class?.category)
-const difficulty = computed(() => props.session.class?.difficulty_level || props.session.schedule?.class?.difficulty_level)
 const room = computed(() => props.session.schedule?.room || '')
 const duration = computed(() => props.session.class?.duration_minutes || props.session.schedule?.class?.duration_minutes || 60)
-const maxCapacity = computed(() => props.session.class?.max_capacity || props.session.schedule?.class?.max_capacity || 0)
 
 const startTime = computed(() => props.session.schedule?.start_time?.slice(0, 5) || '')
 const endTime = computed(() => props.session.schedule?.end_time?.slice(0, 5) || '')

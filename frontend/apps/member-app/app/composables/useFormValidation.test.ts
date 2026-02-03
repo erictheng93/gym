@@ -2,7 +2,7 @@
  * Unit tests for useFormValidation composable
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
 import { useFormValidation, validateOnce } from './useFormValidation'
 

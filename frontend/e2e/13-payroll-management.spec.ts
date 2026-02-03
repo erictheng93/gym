@@ -68,10 +68,6 @@ test.describe('薪資管理 E2E', () => {
     await page.goto('/hr/payroll')
     await page.waitForLoadState('networkidle')
 
-    // 嘗試點擊第一個薪資連結
-    const salaryLink = page.locator('a[href*="/payroll/"], tr, .salary-item').first()
-    const hasSalaryLink = await salaryLink.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
-
     // 頁面載入成功即可
     expect(true).toBe(true)
   })
@@ -79,10 +75,6 @@ test.describe('薪資管理 E2E', () => {
   test('應該能夠按月份篩選薪資紀錄', async ({ page }) => {
     await page.goto('/hr/payroll')
     await page.waitForLoadState('networkidle')
-
-    // 尋找月份篩選器
-    const monthFilter = page.locator('select, input[type="month"], [data-testid="month-filter"]').first()
-    const hasMonthFilter = await monthFilter.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
 
     // 頁面載入成功即可
     expect(true).toBe(true)

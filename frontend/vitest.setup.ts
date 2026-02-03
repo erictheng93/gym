@@ -3,8 +3,32 @@
  * 为所有测试提供 Nuxt 运行时环境的 mocks
  */
 
-import { vi } from 'vitest'
+import { vi, beforeEach } from 'vitest'
 import * as Vue from 'vue'
+
+// Type declarations for global mocks
+declare global {
+   
+  var useState: <T>(key: string, init?: () => T) => { value: T }
+   
+  var computed: <T>(getter: () => T) => { readonly value: T }
+   
+  var watch: ReturnType<typeof vi.fn>
+   
+  var onMounted: (callback: () => void) => void
+   
+  var navigateTo: ReturnType<typeof vi.fn>
+   
+  var defineNuxtRouteMiddleware: (middleware: unknown) => unknown
+   
+  var useRuntimeConfig: () => { public: { apiBaseUrl: string } }
+   
+  var useAuth: ReturnType<typeof vi.fn>
+   
+  var useToast: ReturnType<typeof vi.fn>
+   
+  var useErrorHandler: ReturnType<typeof vi.fn>
+}
 
 // Mock useErrorHandler module - MUST be before other imports
 export const mockHandleError = vi.fn()
@@ -83,11 +107,11 @@ Object.assign(globalThis, {
 const globalStateStore = new Map<string, any>()
 
 // Mock Nuxt's useState
-export const mockUseState = <T>(key: string, init?: () => T): any => {
+export const mockUseState = <T>(key: string, init?: () => T): { value: T } => {
   if (!globalStateStore.has(key)) {
     const state = {
-      _value: init ? init() : undefined,
-      get value() {
+      _value: init ? init() : undefined as T,
+      get value(): T {
         return this._value
       },
       set value(newValue: T) {
@@ -96,7 +120,7 @@ export const mockUseState = <T>(key: string, init?: () => T): any => {
     }
     globalStateStore.set(key, state)
   }
-  return globalStateStore.get(key)
+  return globalStateStore.get(key) as { value: T }
 }
 
 // Mock Nuxt's computed

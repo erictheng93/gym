@@ -3,14 +3,12 @@
  * Goals List Page
  * Displays all member's fitness goals
  */
-import type { GoalStatus } from '../../../schemas/goal.schema'
-
 definePageMeta({
   middleware: 'auth',
 })
 
 const router = useRouter()
-const { goals, isLoading, fetchGoals, activeGoals, achievedGoals, abandonedGoals } = useGoals()
+const { isLoading, fetchGoals, activeGoals, achievedGoals, abandonedGoals } = useGoals()
 
 // Tab state
 const activeTab = ref<'active' | 'achieved' | 'abandoned'>('active')

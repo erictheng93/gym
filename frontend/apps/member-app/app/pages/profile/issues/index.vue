@@ -3,14 +3,12 @@
  * Issues List Page
  * Displays member's issue reports
  */
-import type { IssueStatus } from '../../../schemas/issue.schema'
-
 definePageMeta({
   middleware: 'auth',
 })
 
 const router = useRouter()
-const { issues, isLoading, fetchIssues, pendingIssues, resolvedIssues } = useIssues()
+const { isLoading, fetchIssues, pendingIssues, resolvedIssues } = useIssues()
 
 // Tab state
 const activeTab = ref<'pending' | 'resolved'>('pending')

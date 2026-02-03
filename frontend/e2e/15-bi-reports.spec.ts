@@ -283,8 +283,7 @@ test.describe('審計日誌', () => {
     if (await firstLog.isVisible()) {
       await firstLog.click()
 
-      // 應該顯示詳情 modal 或展開
-      const details = page.locator('[data-testid="log-details"], .log-details, .modal').first()
+      // 等待詳情 modal 或展開
       await page.waitForTimeout(500)
     }
   })

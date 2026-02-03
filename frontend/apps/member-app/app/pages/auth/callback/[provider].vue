@@ -13,7 +13,7 @@ definePageMeta({
 })
 
 const route = useRoute()
-const { handleCallback, error: socialError } = useSocialAuth()
+const { handleCallback } = useSocialAuth()
 const { completeOAuthLogin } = useMemberAuth()
 
 // 從路徑取得 provider

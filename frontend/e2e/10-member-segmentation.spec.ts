@@ -86,10 +86,6 @@ test.describe('會員分群 (RFM) E2E', () => {
     await page.goto('/marketing/segmentation')
     await page.waitForLoadState('networkidle')
 
-    // 尋找分店篩選器
-    const branchFilter = page.locator('select, [data-testid="branch-filter"]').first()
-    const hasBranchFilter = await branchFilter.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
-
     // 頁面載入成功即可
     expect(true).toBe(true)
   })

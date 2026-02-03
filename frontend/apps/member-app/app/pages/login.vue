@@ -40,11 +40,6 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const error = ref('')
 
-// Get validation error for a field
-const getError = (form: typeof emailForm, field: string) => {
-  return form.errors.value[field as keyof typeof form.errors.value]
-}
-
 // Email 登入處理
 const handleEmailLogin = async () => {
   const result = emailForm.validate({ email: email.value, password: password.value })
@@ -67,7 +62,7 @@ const handleEmailLogin = async () => {
     } else {
       error.value = loginResult.message || '登入失敗，請檢查帳號密碼'
     }
-  } catch (e) {
+  } catch {
     error.value = '登入發生錯誤，請稍後再試'
   } finally {
     emailLoading.value = false

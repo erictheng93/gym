@@ -2,9 +2,7 @@
 const {
   isSupported,
   isSubscribed,
-  canSubscribe,
   isDenied,
-  needsPermission,
   isLoading,
   subscribe,
 } = usePushNotifications()

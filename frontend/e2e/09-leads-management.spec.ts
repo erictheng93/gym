@@ -61,10 +61,6 @@ test.describe('Leads 管理 E2E', () => {
     await page.goto('/leads')
     await page.waitForLoadState('networkidle')
 
-    // 尋找狀態篩選器
-    const statusFilter = page.locator('select, [data-testid="status-filter"], button').filter({ hasText: /狀態|Status|篩選/i }).first()
-    const hasStatusFilter = await statusFilter.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
-
     // 頁面載入成功即可
     expect(true).toBe(true)
   })
@@ -88,10 +84,6 @@ test.describe('Leads 管理 E2E', () => {
   test('應該能夠查看單一 Lead 詳情', async ({ page }) => {
     await page.goto('/leads')
     await page.waitForLoadState('networkidle')
-
-    // 嘗試點擊第一個 Lead 連結
-    const leadLink = page.locator('a[href*="/leads/"], tr, .lead-item').first()
-    const hasLeadLink = await leadLink.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
 
     // 頁面載入成功即可（可能沒有資料）
     expect(true).toBe(true)

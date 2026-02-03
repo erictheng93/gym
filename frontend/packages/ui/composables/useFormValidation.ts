@@ -14,7 +14,7 @@
  * })
  */
 
-import { ref, type Ref } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 
 // 驗證規則類型
 export type ValidationRule<T = unknown> = (value: T) => string | undefined

@@ -20,7 +20,7 @@
       <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />
     </div>
 
-    <form v-else @submit.prevent="handleSubmit" class="space-y-4">
+    <form v-else class="space-y-4" @submit.prevent="handleSubmit">
       <!-- Name -->
       <div>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

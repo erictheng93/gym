@@ -165,9 +165,7 @@ describe('debounce', () => {
 
   describe('memoizeAsync', () => {
     it('should cache successful results', async () => {
-      let callCount = 0
       const fn = vi.fn(async (x: number) => {
-        callCount++
         return x * 2
       })
 

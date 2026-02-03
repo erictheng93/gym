@@ -5,7 +5,6 @@
  * Also handles password reset and profile completion.
  */
 
-import type { Contract } from '@gym-nexus/shared/types'
 import { extractErrorMessage } from '../utils/apiHelpers'
 import type { CurrentMember, AuthResult, OtpSendResult, OAuthResult } from '../types/auth'
 
@@ -56,7 +55,7 @@ export const useAuthMethods = () => {
   const apiUrl = config.public.apiBaseUrl
 
   const { setTokens, clearTokens, getAuthHeader } = useAuthTokens()
-  const { fetchMember, clearSession, setLoading, member } = useAuthSession()
+  const { fetchMember, clearSession, setLoading } = useAuthSession()
 
   const otpLoading = useState('otp_loading', () => false)
 

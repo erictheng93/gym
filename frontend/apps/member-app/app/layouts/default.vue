@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { member, isAuthenticated } = useMemberAuth()
+const { isAuthenticated } = useMemberAuth()
 
 const navItems = [
   { path: '/', icon: 'qr', label: '入場' },

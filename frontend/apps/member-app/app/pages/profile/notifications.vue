@@ -9,7 +9,6 @@ const { addToast } = useToast()
 const {
   isSupported: pushSupported,
   isSubscribed: pushSubscribed,
-  permission: pushPermission,
   isLoading: pushLoading,
   canSubscribe: pushCanSubscribe,
   isDenied: pushDenied,
@@ -23,9 +22,7 @@ const {
   availableChannels,
   channelDetails,
   history,
-  historyPagination,
   isLoading,
-  error,
   fetchPreferences,
   updatePreferences,
   togglePreference,
@@ -35,12 +32,10 @@ const {
   hasMoreHistory,
   getChannelLabel,
   getNotificationTypeLabel,
-  sendTestNotification,
 } = useNotificationPreferences()
 
 const isSaving = ref(false)
 const activeTab = ref<'settings' | 'history'>('settings')
-const showQuietHours = ref(false)
 
 // Load data on mount
 onMounted(async () => {

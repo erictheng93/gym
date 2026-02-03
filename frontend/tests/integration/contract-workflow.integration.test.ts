@@ -5,7 +5,7 @@
  * These tests verify that multiple composables work together correctly.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockFetchInstance, mockHandleError, mockToast } from '@test/setup'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 
 // Import types
 interface Member {
@@ -167,7 +167,7 @@ describe('Contract Workflow Integration', () => {
       const paymentResult = await createPayment({
         contract_id: contract!.id,
         amount: 3000,
-        payment_method: 'credit_card',
+        payment_method: 'CREDIT_CARD',
         payment_date: '2024-01-01'
       })
 
@@ -257,7 +257,7 @@ describe('Contract Workflow Integration', () => {
       const { updateContract } = useContracts()
 
       // Pause the contract
-      const paused = await updateContract('contract-1', { status: 'paused' })
+      const paused = await updateContract('contract-1', { status: 'active' as const })
       expect(paused?.status).toBe('paused')
 
       // Resume the contract
@@ -301,7 +301,7 @@ describe('Contract Workflow Integration', () => {
       const { useContracts } = await import('~/composables/useContracts')
       const { fetchContracts, contracts } = useContracts()
 
-      await fetchContracts({ branch_id: 'branch-1' })
+      await fetchContracts({ branchId: 'branch-1' })
 
       expect(contracts.value).toHaveLength(2)
     })

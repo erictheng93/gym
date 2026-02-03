@@ -44,16 +44,6 @@ const dateValue = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
 })
-
-// 格式化顯示日期
-const displayDate = computed(() => {
-  if (!props.modelValue) return ''
-  return new Date(props.modelValue).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-})
 </script>
 
 <template>

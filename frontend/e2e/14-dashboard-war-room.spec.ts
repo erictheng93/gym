@@ -97,10 +97,6 @@ test.describe('戰情室 Dashboard E2E', () => {
       await page.goto('/dashboard/war-room')
       await page.waitForLoadState('networkidle')
 
-      // 記錄初始營收值
-      const revenueValue = page.locator('[data-testid="revenue-value"], .revenue-amount').first()
-      const initialValue = await revenueValue.textContent().catch(() => null)
-
       // 切換分店
       const branchSelector = page.locator('[data-testid="branch-selector"], select[name="branch"]').first()
       if (await branchSelector.isVisible()) {

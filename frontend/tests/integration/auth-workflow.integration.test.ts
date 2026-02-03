@@ -5,7 +5,7 @@
  * and permission-based access.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockGlobalFetch, mockHandleError, mockToast, mockRuntimeConfig } from '@test/setup'
+import { mockGlobalFetch, mockHandleError } from '@test/setup'
 
 // Helper to create a mock fetch response
 const mockFetchResponse = (data: any, ok = true) => ({
@@ -22,16 +22,6 @@ interface User {
   tenantId: string | null
 }
 
-interface CurrentEmployee {
-  id: string
-  full_name: string
-  employee_code: string | null
-  branch_id: string | null
-  branch_name: string | null
-  job_title_id: string | null
-  job_title_name: string | null
-}
-
 describe('Auth Workflow Integration', () => {
   const testUser: User = {
     id: 'user-1',
@@ -39,16 +29,6 @@ describe('Auth Workflow Integration', () => {
     role: 'admin',
     employeeId: 'emp-1',
     tenantId: 'tenant-1'
-  }
-
-  const testEmployee: CurrentEmployee = {
-    id: 'emp-1',
-    full_name: '管理員',
-    employee_code: 'ADMIN001',
-    branch_id: 'branch-1',
-    branch_name: '總店',
-    job_title_id: 'job-1',
-    job_title_name: '系統管理員'
   }
 
   beforeEach(() => {

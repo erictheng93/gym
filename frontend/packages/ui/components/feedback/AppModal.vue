@@ -26,7 +26,7 @@ interface Props {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   title: undefined,
   maxWidth: 'md'
 })

@@ -27,10 +27,6 @@ const mockPushManager = {
   getSubscription: vi.fn().mockResolvedValue(null),
 }
 
-// Mock Service Worker Registration
-const mockServiceWorkerRegistration = {
-  pushManager: mockPushManager,
-}
 
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({

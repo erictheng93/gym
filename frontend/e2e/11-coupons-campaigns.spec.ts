@@ -61,10 +61,6 @@ test.describe('優惠券管理 E2E', () => {
     await page.goto('/marketing/coupons')
     await page.waitForLoadState('networkidle')
 
-    // 嘗試點擊第一個優惠券連結
-    const couponLink = page.locator('a[href*="/coupons/"], tr, .coupon-item').first()
-    const hasCouponLink = await couponLink.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
-
     // 頁面載入成功即可
     expect(true).toBe(true)
   })
@@ -135,10 +131,6 @@ test.describe('活動管理 E2E', () => {
   test('應該能夠查看活動詳情與成效', async ({ page }) => {
     await page.goto('/marketing/campaigns')
     await page.waitForLoadState('networkidle')
-
-    // 嘗試點擊第一個活動連結
-    const campaignLink = page.locator('a[href*="/campaigns/"], tr, .campaign-item').first()
-    const hasCampaignLink = await campaignLink.isVisible({ timeout: TestEnv.timeouts.default }).catch(() => false)
 
     // 頁面載入成功即可
     expect(true).toBe(true)

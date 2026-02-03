@@ -92,7 +92,7 @@
       </template>
 
       <!-- Edit Mode -->
-      <form v-else @submit.prevent="handleUpdate" class="space-y-4">
+      <form v-else class="space-y-4" @submit.prevent="handleUpdate">
         <!-- Title -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

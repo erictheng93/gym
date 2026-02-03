@@ -289,7 +289,7 @@ describe('useNotificationPreferences', () => {
         preferences: { ...mockPreferences, enable_line: false },
       })
 
-      const { togglePreference, preferences } = useNotificationPreferences()
+      const { togglePreference } = useNotificationPreferences()
       const result = await togglePreference('enable_line', false)
 
       expect(result).toBe(true)

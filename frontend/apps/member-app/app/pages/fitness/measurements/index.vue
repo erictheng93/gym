@@ -9,7 +9,7 @@ definePageMeta({
 })
 
 const router = useRouter()
-const { measurements, isLoading, fetchMeasurements, fetchStats, stats, formatDate, deleteMeasurement } = useMeasurements()
+const { measurements, isLoading, fetchMeasurements, fetchStats, formatDate, deleteMeasurement } = useMeasurements()
 const toast = useToast()
 
 // Period selection

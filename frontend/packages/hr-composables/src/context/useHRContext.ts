@@ -15,8 +15,7 @@ import type {
 import {
   injectHRContext,
   tryInjectHRContext,
-  createDefaultPolicyProvider,
-  type IHRContext
+  createDefaultPolicyProvider
 } from './HRContext'
 
 /**

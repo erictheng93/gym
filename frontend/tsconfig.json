@@ -10,7 +10,18 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"]
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@test/setup": ["./vitest.setup.ts"],
+      "~/composables/*": ["./apps/admin-web/app/composables/*"],
+      "~/constants": ["./apps/admin-web/app/constants"],
+      "~/constants/*": ["./apps/admin-web/app/constants/*"],
+      "~/utils/*": ["./apps/admin-web/app/utils/*"],
+      "~/types/*": ["./apps/admin-web/app/types/*"],
+      "~/*": ["./apps/admin-web/app/*"]
+    }
   },
-  "exclude": ["node_modules", ".nuxt", "dist", ".output", "apps", "packages"]
+  "include": ["tests/**/*", "vitest.setup.ts", "e2e/**/*", "env.d.ts"],
+  "exclude": ["node_modules", ".nuxt", "dist", ".output"]
 }

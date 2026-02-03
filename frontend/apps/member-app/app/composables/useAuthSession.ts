@@ -18,7 +18,7 @@ interface MemberProfileResponse {
 export const useAuthSession = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
-  const { getAuthHeader, refreshAccessToken, hasAccessToken, accessToken } = useAuthTokens()
+  const { refreshAccessToken, accessToken } = useAuthTokens()
 
   const member = useState<CurrentMember | null>('current_member', () => null)
   const isAuthenticated = computed(() => !!member.value)

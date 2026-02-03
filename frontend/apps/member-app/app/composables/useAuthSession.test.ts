@@ -2,7 +2,6 @@
  * Tests for useAuthSession composable
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CurrentMember } from '../types/auth'
 
 // Create mock state and cookie storage
 const stateStore = new Map<string, { value: unknown }>()

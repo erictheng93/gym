@@ -9,8 +9,7 @@ definePageMeta({
 })
 
 const router = useRouter()
-const { workouts, totalWorkouts, isLoading, fetchWorkouts, fetchStats, stats, dailyData } = useWorkouts()
-const toast = useToast()
+const { workouts, totalWorkouts, isLoading, fetchWorkouts, fetchStats, stats } = useWorkouts()
 
 // Period selection for stats
 const selectedPeriod = ref<'week' | 'month'>('week')

@@ -5,7 +5,7 @@
  * and employee operations working together.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockFetchInstance, mockHandleError, mockToast } from '@test/setup'
+import { mockFetchInstance } from '@test/setup'
 
 describe('HR Workflow Integration', () => {
   beforeEach(() => {
@@ -45,7 +45,7 @@ describe('HR Workflow Integration', () => {
       const { useHR } = await import('~/composables/useHR')
       const { checkIn } = useHR()
 
-      const result = await checkIn('emp-1')
+      const result = await checkIn({ employeeId: 'emp-1' })
       expect(result).toBeTruthy()
       expect(mockFetchInstance.createItem).toHaveBeenCalled()
     })
@@ -87,11 +87,12 @@ describe('HR Workflow Integration', () => {
       const { applyLeave } = useHR()
 
       const submitted = await applyLeave({
-        employee_id: 'emp-1',
-        leave_type: 'annual',
-        start_date: '2024-02-01',
-        end_date: '2024-02-03',
-        reason: '家庭旅遊'
+        employeeId: 'emp-1',
+        leaveType: 'ANNUAL',
+        startDate: '2024-02-01',
+        endDate: '2024-02-03',
+        reason: '家庭旅遊',
+        daysRequested: 3
       })
 
       expect(submitted?.leave_status).toBe('PENDING')
@@ -130,8 +131,7 @@ describe('HR Workflow Integration', () => {
       const { fetchEmployeeShifts, employeeShifts } = useHR()
 
       await fetchEmployeeShifts({
-        start_date: '2024-01-15',
-        end_date: '2024-01-21'
+        employeeId: 'emp-1'
       })
 
       expect(employeeShifts.value).toHaveLength(3)
@@ -149,7 +149,7 @@ describe('HR Workflow Integration', () => {
       const { useHR } = await import('~/composables/useHR')
       const { fetchShiftSchedules, shiftSchedules } = useHR()
 
-      await fetchShiftSchedules({ branch_id: 'branch-1' })
+      await fetchShiftSchedules('branch-1')
 
       expect(shiftSchedules.value).toHaveLength(2)
     })
@@ -191,10 +191,10 @@ describe('HR Workflow Integration', () => {
       const { applyMakeup } = useHR()
 
       const result = await applyMakeup({
-        employee_id: 'emp-1',
-        target_date: '2024-01-15',
-        makeup_type: 'CHECK_IN',
-        makeup_time: '09:05:00',
+        employeeId: 'emp-1',
+        branchId: 'branch-1',
+        targetDate: '2024-01-15',
+        makeupType: 'CHECK_IN',
         reason: '忘記打卡'
       })
 

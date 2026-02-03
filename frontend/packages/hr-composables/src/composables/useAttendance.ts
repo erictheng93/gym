@@ -3,21 +3,18 @@
  * 使用適配器模式，與具體後端實現解耦
  */
 
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, type Ref } from 'vue'
 import type {
   IAttendanceRecord,
   IAttendanceRecordWithEmployee,
   ITodayAttendanceSummary,
   IMonthlyAttendanceStats,
-  ICheckInOptions,
   CheckType
 } from '@gym-nexus/hr-core'
 import {
   calculateLateMinutes,
   calculateEarlyLeaveMinutes,
-  calculateWorkHours,
-  calculateOvertimeHours,
-  getTodayDate
+  calculateOvertimeHours
 } from '@gym-nexus/hr-core'
 import { useHRContext } from '../context/useHRContext'
 
@@ -83,7 +80,7 @@ export type MonthlyAttendanceStats = IMonthlyAttendanceStats
  * 考勤管理 composable
  */
 export function useAttendance(): UseAttendanceReturn {
-  const { attendanceAdapter, policyProvider, currentBranchId } = useHRContext()
+  const { attendanceAdapter } = useHRContext()
 
   // ============================================
   // 狀態

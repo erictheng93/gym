@@ -14,7 +14,7 @@ interface CoachProfileResponse {
 export const useCoachSession = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
-  const { getAuthHeader, refreshAccessToken, accessToken } = useCoachTokens()
+  const { refreshAccessToken, accessToken } = useCoachTokens()
 
   const coach = useState<Coach | null>('current_coach', () => null)
   const isAuthenticated = computed(() => !!coach.value)
