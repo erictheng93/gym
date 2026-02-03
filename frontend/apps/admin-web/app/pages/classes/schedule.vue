@@ -5,7 +5,7 @@
  * 週視圖顯示課程場次
  */
 import { MESSAGES, PAGES } from '~/constants'
-import { getSessionStatusBadge, formatDate } from '@gym-nexus/shared'
+import { getSessionStatusBadge } from '@gym-nexus/shared'
 import type { ClassSession } from '~/types/schema'
 
 definePageMeta({

@@ -16,7 +16,6 @@ const hasAccess = computed(() => {
 })
 
 const {
-  tenantInfo,
   tenantQuota,
   fetchTenantInfo,
   fetchTenantQuota,
@@ -116,206 +115,206 @@ const formatNumber = (num: number) => {
     <div v-else>
       <!-- 頁面標題 -->
       <div class="page-header">
-      <h1>系統分析</h1>
-      <p class="page-subtitle">配額使用情況與 API 使用統計</p>
-    </div>
-
-    <!-- 載入狀態 -->
-    <div v-if="isLoading" class="loading-container">
-      <div class="spinner" />
-      <p>載入分析數據中...</p>
-    </div>
-
-    <!-- 主要內容 -->
-    <div v-else class="analytics-content">
-      <!-- 第一行：租戶配額卡片 -->
-      <div class="quota-section">
-        <h2 class="section-title">配額使用情況</h2>
-        <TenantQuotaCard />
+        <h1>系統分析</h1>
+        <p class="page-subtitle">配額使用情況與 API 使用統計</p>
       </div>
 
-      <!-- 第二行：API 使用統計 -->
-      <div class="api-stats-section">
-        <div class="section-header">
-          <h2 class="section-title">API 使用統計</h2>
-          <div class="time-range-selector">
-            <button
-              :class="{ active: statsTimeRange === '24h' }"
-              @click="changeTimeRange('24h')"
-            >
-              24 小時
-            </button>
-            <button
-              :class="{ active: statsTimeRange === '7d' }"
-              @click="changeTimeRange('7d')"
-            >
-              7 天
-            </button>
-            <button
-              :class="{ active: statsTimeRange === '30d' }"
-              @click="changeTimeRange('30d')"
-            >
-              30 天
-            </button>
-          </div>
-        </div>
-
-        <!-- 統計卡片 -->
-        <div class="stats-grid">
-          <!-- 總請求數 -->
-          <div class="stat-card">
-            <div class="stat-icon requests">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">總請求數</p>
-              <p class="stat-value">{{ formatNumber(apiStats.totalRequests) }}</p>
-            </div>
-          </div>
-
-          <!-- 速率限制命中次數 -->
-          <div class="stat-card">
-            <div class="stat-icon rate-limit">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-              </svg>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">速率限制觸發</p>
-              <p class="stat-value">{{ formatNumber(apiStats.rateLimitHits) }}</p>
-              <p class="stat-meta">{{ rateLimitHitRate }}%</p>
-            </div>
-          </div>
-
-          <!-- 平均響應時間 -->
-          <div class="stat-card">
-            <div class="stat-icon response-time">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">平均響應時間</p>
-              <p class="stat-value">{{ apiStats.avgResponseTime }} <span class="unit">ms</span></p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 熱門端點 -->
-        <div class="top-endpoints">
-          <h3 class="subsection-title">熱門 API 端點</h3>
-          <div class="endpoint-list">
-            <div
-              v-for="(endpoint, index) in apiStats.topEndpoints"
-              :key="endpoint.path"
-              class="endpoint-item"
-            >
-              <div class="endpoint-rank">{{ index + 1 }}</div>
-              <div class="endpoint-path">{{ endpoint.path }}</div>
-              <div class="endpoint-count">{{ formatNumber(endpoint.count) }} 次</div>
-            </div>
-          </div>
-        </div>
+      <!-- 載入狀態 -->
+      <div v-if="isLoading" class="loading-container">
+        <div class="spinner" />
+        <p>載入分析數據中...</p>
       </div>
 
-      <!-- 第三行：配額警告區域 -->
-      <div v-if="tenantQuota" class="warnings-section">
-        <h2 class="section-title">配額警告</h2>
-        <div class="warnings-list">
-          <!-- 會員配額警告 -->
-          <div v-if="isQuotaNearLimit('members')" class="warning-card">
-            <div class="warning-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-              </svg>
-            </div>
-            <div class="warning-content">
-              <h4>會員數即將達到上限</h4>
-              <p>
-                目前使用 {{ getQuotaUsagePercent('members') }}%
-                ({{ formatNumber(tenantQuota.members.current) }} / {{ formatNumber(tenantQuota.members.limit) }})
-              </p>
-              <button class="upgrade-button">升級方案</button>
+      <!-- 主要內容 -->
+      <div v-else class="analytics-content">
+        <!-- 第一行：租戶配額卡片 -->
+        <div class="quota-section">
+          <h2 class="section-title">配額使用情況</h2>
+          <TenantQuotaCard />
+        </div>
+
+        <!-- 第二行：API 使用統計 -->
+        <div class="api-stats-section">
+          <div class="section-header">
+            <h2 class="section-title">API 使用統計</h2>
+            <div class="time-range-selector">
+              <button
+                :class="{ active: statsTimeRange === '24h' }"
+                @click="changeTimeRange('24h')"
+              >
+                24 小時
+              </button>
+              <button
+                :class="{ active: statsTimeRange === '7d' }"
+                @click="changeTimeRange('7d')"
+              >
+                7 天
+              </button>
+              <button
+                :class="{ active: statsTimeRange === '30d' }"
+                @click="changeTimeRange('30d')"
+              >
+                30 天
+              </button>
             </div>
           </div>
 
-          <!-- 員工配額警告 -->
-          <div v-if="isQuotaNearLimit('employees')" class="warning-card">
-            <div class="warning-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-              </svg>
+          <!-- 統計卡片 -->
+          <div class="stats-grid">
+            <!-- 總請求數 -->
+            <div class="stat-card">
+              <div class="stat-icon requests">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              </div>
+              <div class="stat-content">
+                <p class="stat-label">總請求數</p>
+                <p class="stat-value">{{ formatNumber(apiStats.totalRequests) }}</p>
+              </div>
             </div>
-            <div class="warning-content">
-              <h4>員工數即將達到上限</h4>
-              <p>
-                目前使用 {{ getQuotaUsagePercent('employees') }}%
-                ({{ formatNumber(tenantQuota.employees.current) }} / {{ formatNumber(tenantQuota.employees.limit) }})
-              </p>
-              <button class="upgrade-button">升級方案</button>
+
+            <!-- 速率限制命中次數 -->
+            <div class="stat-card">
+              <div class="stat-icon rate-limit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+              </div>
+              <div class="stat-content">
+                <p class="stat-label">速率限制觸發</p>
+                <p class="stat-value">{{ formatNumber(apiStats.rateLimitHits) }}</p>
+                <p class="stat-meta">{{ rateLimitHitRate }}%</p>
+              </div>
+            </div>
+
+            <!-- 平均響應時間 -->
+            <div class="stat-card">
+              <div class="stat-icon response-time">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div class="stat-content">
+                <p class="stat-label">平均響應時間</p>
+                <p class="stat-value">{{ apiStats.avgResponseTime }} <span class="unit">ms</span></p>
+              </div>
             </div>
           </div>
 
-          <!-- 分店配額警告 -->
-          <div v-if="isQuotaNearLimit('branches')" class="warning-card">
-            <div class="warning-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
-              </svg>
-            </div>
-            <div class="warning-content">
-              <h4>分店數即將達到上限</h4>
-              <p>
-                目前使用 {{ getQuotaUsagePercent('branches') }}%
-                ({{ formatNumber(tenantQuota.branches.current) }} / {{ formatNumber(tenantQuota.branches.limit) }})
-              </p>
-              <button class="upgrade-button">升級方案</button>
+          <!-- 熱門端點 -->
+          <div class="top-endpoints">
+            <h3 class="subsection-title">熱門 API 端點</h3>
+            <div class="endpoint-list">
+              <div
+                v-for="(endpoint, index) in apiStats.topEndpoints"
+                :key="endpoint.path"
+                class="endpoint-item"
+              >
+                <div class="endpoint-rank">{{ index + 1 }}</div>
+                <div class="endpoint-path">{{ endpoint.path }}</div>
+                <div class="endpoint-count">{{ formatNumber(endpoint.count) }} 次</div>
+              </div>
             </div>
           </div>
+        </div>
 
-          <!-- 存儲配額警告 -->
-          <div v-if="isQuotaNearLimit('storage')" class="warning-card">
-            <div class="warning-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" />
-                <path d="M12 17h.01" />
+        <!-- 第三行：配額警告區域 -->
+        <div v-if="tenantQuota" class="warnings-section">
+          <h2 class="section-title">配額警告</h2>
+          <div class="warnings-list">
+            <!-- 會員配額警告 -->
+            <div v-if="isQuotaNearLimit('members')" class="warning-card">
+              <div class="warning-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+              </div>
+              <div class="warning-content">
+                <h4>會員數即將達到上限</h4>
+                <p>
+                  目前使用 {{ getQuotaUsagePercent('members') }}%
+                  ({{ formatNumber(tenantQuota.members.current) }} / {{ formatNumber(tenantQuota.members.limit) }})
+                </p>
+                <button class="upgrade-button">升級方案</button>
+              </div>
+            </div>
+
+            <!-- 員工配額警告 -->
+            <div v-if="isQuotaNearLimit('employees')" class="warning-card">
+              <div class="warning-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+              </div>
+              <div class="warning-content">
+                <h4>員工數即將達到上限</h4>
+                <p>
+                  目前使用 {{ getQuotaUsagePercent('employees') }}%
+                  ({{ formatNumber(tenantQuota.employees.current) }} / {{ formatNumber(tenantQuota.employees.limit) }})
+                </p>
+                <button class="upgrade-button">升級方案</button>
+              </div>
+            </div>
+
+            <!-- 分店配額警告 -->
+            <div v-if="isQuotaNearLimit('branches')" class="warning-card">
+              <div class="warning-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+              </div>
+              <div class="warning-content">
+                <h4>分店數即將達到上限</h4>
+                <p>
+                  目前使用 {{ getQuotaUsagePercent('branches') }}%
+                  ({{ formatNumber(tenantQuota.branches.current) }} / {{ formatNumber(tenantQuota.branches.limit) }})
+                </p>
+                <button class="upgrade-button">升級方案</button>
+              </div>
+            </div>
+
+            <!-- 存儲配額警告 -->
+            <div v-if="isQuotaNearLimit('storage')" class="warning-card">
+              <div class="warning-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+              </div>
+              <div class="warning-content">
+                <h4>存儲空間即將用完</h4>
+                <p>
+                  目前使用 {{ getQuotaUsagePercent('storage') }}%
+                  ({{ tenantQuota.storage.current.toFixed(2) }} / {{ tenantQuota.storage.limit }} MB)
+                </p>
+                <button class="upgrade-button">升級方案</button>
+              </div>
+            </div>
+
+            <!-- 無警告 -->
+            <div v-if="!isQuotaNearLimit('members') && !isQuotaNearLimit('employees') && !isQuotaNearLimit('branches') && !isQuotaNearLimit('storage')" class="no-warnings">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
+              <p>目前沒有配額警告，一切正常</p>
             </div>
-            <div class="warning-content">
-              <h4>存儲空間即將用完</h4>
-              <p>
-                目前使用 {{ getQuotaUsagePercent('storage') }}%
-                ({{ tenantQuota.storage.current.toFixed(2) }} / {{ tenantQuota.storage.limit }} MB)
-              </p>
-              <button class="upgrade-button">升級方案</button>
-            </div>
-          </div>
-
-          <!-- 無警告 -->
-          <div v-if="!isQuotaNearLimit('members') && !isQuotaNearLimit('employees') && !isQuotaNearLimit('branches') && !isQuotaNearLimit('storage')" class="no-warnings">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            <p>目前沒有配額警告，一切正常</p>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
 </template>
 
 <style scoped>

@@ -37,7 +37,7 @@ async function checkUrl(url: string, timeout = 5000): Promise<boolean> {
 
     clearTimeout(timeoutId)
     return response.ok || response.status === 302
-  } catch (error) {
+  } catch {
     return false
   }
 }
@@ -75,7 +75,7 @@ async function checkDocker(): Promise<ServiceStatus> {
       status: 'running',
       message: '✓ Running'
     }
-  } catch (error) {
+  } catch {
     return {
       name: 'Docker Desktop',
       url: 'N/A',

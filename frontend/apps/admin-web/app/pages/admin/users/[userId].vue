@@ -255,7 +255,7 @@ onMounted(async () => {
           <div class="info-label">最後登入</div>
           <div class="info-value">{{ formatDate(user.lastLoginAt) }}</div>
         </div>
-        <div class="info-card" v-if="user.employee">
+        <div v-if="user.employee" class="info-card">
           <div class="info-label">關聯員工</div>
           <div class="info-value">
             {{ user.employee.fullName }}
@@ -393,7 +393,7 @@ onMounted(async () => {
           </div>
           <div class="modal-footer">
             <button class="btn btn-ghost" @click="showPasswordModal = false">取消</button>
-            <button class="btn btn-primary" @click="handleResetPassword" :disabled="isLoading">
+            <button class="btn btn-primary" :disabled="isLoading" @click="handleResetPassword">
               {{ isLoading ? '處理中...' : '重設密碼' }}
             </button>
           </div>

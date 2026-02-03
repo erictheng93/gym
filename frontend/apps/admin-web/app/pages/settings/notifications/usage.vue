@@ -256,7 +256,6 @@
 
 <script setup lang="ts">
 definePageMeta({
-  layout: 'admin',
   middleware: 'auth'
 })
 
@@ -307,7 +306,7 @@ async function loadBranches() {
       isSystemAdmin.value = true
       branches.value = response.data
     }
-  } catch (error) {
+  } catch {
     // Not admin or no access to branches
     isSystemAdmin.value = false
   }
@@ -315,23 +314,23 @@ async function loadBranches() {
 
 function applyPreset() {
   const now = new Date()
-  const today = now.toISOString().split('T')[0]
+  const today = now.toISOString().split('T')[0]!
 
   switch (filters.value.preset) {
     case 'this_month':
-      filters.value.startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+      filters.value.startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]!
       filters.value.endDate = today
       break
     case 'last_month':
-      filters.value.startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]
-      filters.value.endDate = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0]
+      filters.value.startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]!
+      filters.value.endDate = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0]!
       break
     case 'last_7_days':
-      filters.value.startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      filters.value.startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!
       filters.value.endDate = today
       break
     case 'last_30_days':
-      filters.value.startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      filters.value.startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!
       filters.value.endDate = today
       break
   }

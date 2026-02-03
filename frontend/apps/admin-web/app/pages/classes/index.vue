@@ -5,7 +5,7 @@
  * 課程定義列表與管理
  */
 import { PAGES, MESSAGES, PAGINATION, TIMING } from '~/constants'
-import { getDifficultyBadge, formatDate } from '@gym-nexus/shared'
+import { getDifficultyBadge } from '@gym-nexus/shared'
 
 definePageMeta({
   middleware: 'auth'
@@ -33,13 +33,6 @@ const statusOptions = [
   { value: '', label: MESSAGES.COMMON.ALL_STATUS },
   { value: 'true', label: PAGES.CLASSES.ENABLED },
   { value: 'false', label: PAGES.CLASSES.DISABLED }
-]
-
-// Difficulty options
-const difficultyOptions = [
-  { value: 'BEGINNER', label: PAGES.CLASSES.DIFFICULTY_BEGINNER },
-  { value: 'INTERMEDIATE', label: PAGES.CLASSES.DIFFICULTY_INTERMEDIATE },
-  { value: 'ADVANCED', label: PAGES.CLASSES.DIFFICULTY_ADVANCED }
 ]
 
 // Table columns configuration

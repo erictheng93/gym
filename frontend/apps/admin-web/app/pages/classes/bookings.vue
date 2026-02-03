@@ -20,8 +20,7 @@ const {
   cancelBooking,
   attendClass,
   markNoShow,
-  getBookingStats,
-  BOOKING_STATUS_LABELS
+  getBookingStats
 } = useClassBookings()
 const toast = useToast()
 const { confirm } = useConfirm()

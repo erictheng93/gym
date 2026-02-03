@@ -21,8 +21,8 @@
           </a>
           <button
             v-if="invoice.status === 'open'"
-            @click="markAsPaid"
             class="btn-primary"
+            @click="markAsPaid"
           >
             标记已付款
           </button>
@@ -205,12 +205,11 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuth } from '~/composables/useAuth'
 import { useRuntimeConfig } from '#app'
 
 const route = useRoute()
-const router = useRouter()
 const { apiCall } = useAuth()
 const config = useRuntimeConfig()
 

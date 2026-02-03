@@ -282,7 +282,7 @@ describe('useZodFormValidation', () => {
         path: ['confirmPassword']
       })
 
-      const { formData, validate, errors } = useZodFormValidation(schemaWithRefine, {
+      const { validate, errors } = useZodFormValidation(schemaWithRefine, {
         password: 'password123',
         confirmPassword: 'different'
       })

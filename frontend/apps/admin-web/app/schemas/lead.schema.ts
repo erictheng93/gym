@@ -18,12 +18,12 @@ export const ActivityTypeEnum = z.enum(['CALL', 'SMS', 'EMAIL', 'VISIT', 'TRIAL'
  */
 export const createLeadSchema = z.object({
   name: z
-    .string({ required_error: '請輸入姓名' })
+    .string({ error: '請輸入姓名' })
     .min(1, '請輸入姓名')
     .max(100, '姓名不能超過 100 個字'),
 
   phone: z
-    .string({ required_error: '請輸入電話' })
+    .string({ error: '請輸入電話' })
     .min(1, '請輸入電話')
     .regex(/^[0-9+-]+$/, '請輸入有效的電話號碼'),
 
@@ -36,7 +36,7 @@ export const createLeadSchema = z.object({
   source: LeadSourceEnum,
 
   branch_id: z
-    .string({ required_error: '請選擇分店' })
+    .string({ error: '請選擇分店' })
     .uuid('請選擇有效的分店'),
 
   assigned_to: z
@@ -113,7 +113,7 @@ export const createActivitySchema = z.object({
   activity_type: ActivityTypeEnum,
 
   content: z
-    .string({ required_error: '請輸入內容' })
+    .string({ error: '請輸入內容' })
     .min(1, '請輸入內容')
     .max(1000, '內容不能超過 1000 個字'),
 
@@ -140,7 +140,7 @@ export const createActivitySchema = z.object({
  */
 export const assignLeadSchema = z.object({
   assigned_to: z
-    .string({ required_error: '請選擇員工' })
+    .string({ error: '請選擇員工' })
     .uuid('請選擇有效的員工')
 })
 

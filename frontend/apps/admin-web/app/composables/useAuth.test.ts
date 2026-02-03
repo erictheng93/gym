@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockGlobalFetch, mockHandleError, mockToast } from '@test/setup'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { mockGlobalFetch, mockHandleError } from '@test/setup'
 import { useAuth } from './useAuth'
 
 // Helper to create a mock fetch response

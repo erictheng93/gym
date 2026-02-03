@@ -17,7 +17,6 @@ const {
   isLoading,
   fetchCoupons,
   deleteCoupon,
-  getDiscountTypeLabel,
   getStatusLabel,
   getStatusVariant
 } = useCoupons()

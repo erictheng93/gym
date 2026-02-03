@@ -2,7 +2,7 @@
 import { MESSAGES, PAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
 import type { RevenueReport, MemberGrowthReport, ContractExpiryReport, MemberActivityReport } from '~/composables/useReports'
-import { exportRevenueReport, exportMemberGrowthReport, exportContractExpiryReport, exportMemberActivityReport } from '~/utils/export'
+import { exportRevenueReport, exportMemberGrowthReport, exportContractExpiryReport } from '~/utils/export'
 // GoogleSheetsExport 使用 Lazy 前缀自動懶加載（按需引入）
 
 const { branches, fetchBranches } = useBranches()
@@ -83,7 +83,6 @@ const revenueByMonth = computed(() => {
   revenueReport.value.data.forEach(item => {
     const date = new Date(item.payment_day)
     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-    const monthName = date.toLocaleDateString('zh-TW', { month: 'long' }).replace('月', '月')
 
     if (!monthlyData[monthKey]) {
       monthlyData[monthKey] = 0
@@ -96,10 +95,10 @@ const revenueByMonth = computed(() => {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(-6)
     .map(([key, revenue]) => {
-      const [year, month] = key.split('-')
+      const [, month] = key.split('-')
       const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
       return {
-        month: monthNames[parseInt(month) - 1],
+        month: monthNames[parseInt(month!) - 1],
         revenue
       }
     })
@@ -350,7 +349,7 @@ onMounted(async () => {
             <div class="plan-bar">
               <div
                 class="plan-bar-fill"
-                :style="{ width: `${(plan.count / topPlans[0].count) * 100}%` }"
+                :style="{ width: `${(plan.count / (topPlans[0]?.count || 1)) * 100}%` }"
               ></div>
             </div>
           </div>

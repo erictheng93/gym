@@ -21,14 +21,14 @@ export const createCouponSchema = z.object({
     .optional(),
 
   name: z
-    .string({ required_error: '請輸入優惠券名稱' })
+    .string({ error: '請輸入優惠券名稱' })
     .min(1, '請輸入優惠券名稱')
     .max(100, '名稱不能超過 100 個字'),
 
   discount_type: DiscountTypeEnum,
 
   discount_value: z
-    .number({ required_error: '請輸入折扣值' })
+    .number({ error: '請輸入折扣值' })
     .positive('折扣值必須大於 0'),
 
   min_purchase: z
@@ -61,14 +61,14 @@ export const createCouponSchema = z.object({
     .optional(),
 
   start_date: z
-    .string({ required_error: '請選擇開始日期' })
+    .string({ error: '請選擇開始日期' })
     .refine(
       (val) => !isNaN(new Date(val).getTime()),
       { message: '請輸入有效的日期' }
     ),
 
   end_date: z
-    .string({ required_error: '請選擇結束日期' })
+    .string({ error: '請選擇結束日期' })
     .refine(
       (val) => !isNaN(new Date(val).getTime()),
       { message: '請輸入有效的日期' }
@@ -172,20 +172,20 @@ export const batchGenerateCouponSchema = z.object({
     .optional(),
 
   count: z
-    .number({ required_error: '請輸入數量' })
+    .number({ error: '請輸入數量' })
     .int('數量必須是整數')
     .min(1, '數量至少為 1')
     .max(1000, '數量不能超過 1000'),
 
   name: z
-    .string({ required_error: '請輸入優惠券名稱' })
+    .string({ error: '請輸入優惠券名稱' })
     .min(1, '請輸入優惠券名稱')
     .max(100, '名稱不能超過 100 個字'),
 
   discount_type: DiscountTypeEnum,
 
   discount_value: z
-    .number({ required_error: '請輸入折扣值' })
+    .number({ error: '請輸入折扣值' })
     .positive('折扣值必須大於 0'),
 
   min_purchase: z
@@ -206,10 +206,10 @@ export const batchGenerateCouponSchema = z.object({
     .default(1),
 
   start_date: z
-    .string({ required_error: '請選擇開始日期' }),
+    .string({ error: '請選擇開始日期' }),
 
   end_date: z
-    .string({ required_error: '請選擇結束日期' })
+    .string({ error: '請選擇結束日期' })
 })
 
 /**
@@ -217,15 +217,15 @@ export const batchGenerateCouponSchema = z.object({
  */
 export const validateCouponSchema = z.object({
   code: z
-    .string({ required_error: '請輸入優惠券代碼' })
+    .string({ error: '請輸入優惠券代碼' })
     .min(1, '請輸入優惠券代碼'),
 
   member_id: z
-    .string({ required_error: '請選擇會員' })
+    .string({ error: '請選擇會員' })
     .uuid('請選擇有效的會員'),
 
   amount: z
-    .number({ required_error: '請輸入金額' })
+    .number({ error: '請輸入金額' })
     .positive('金額必須大於 0'),
 
   plan_id: z

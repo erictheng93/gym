@@ -5,7 +5,7 @@
  * 使用 @gym-nexus/ui 組件庫重構
  * 支援批量選擇和操作
  */
-import { MESSAGES, PAGES, STATUS, LABELS, TIMING } from '~/constants'
+import { MESSAGES, PAGES, STATUS, TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'

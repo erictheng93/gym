@@ -21,7 +21,6 @@ const maskableSvg = readFileSync(join(iconsDir, 'maskable-icon.svg'));
 
 // 需要生成的尺寸
 const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
-const appleSizes = [180];
 
 async function generateIcons() {
   console.log('🎨 開始生成 PWA 圖示...\n');

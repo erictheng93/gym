@@ -49,7 +49,7 @@ export interface MonthlyAttendanceStats {
 }
 
 export const useAttendance = () => {
-  const { readItems, readItem, createItem, updateItem, apiFetch } = useFetch()
+  const { readItems, readItem, createItem, updateItem } = useFetch()
 
   // ============================================
   // 狀態

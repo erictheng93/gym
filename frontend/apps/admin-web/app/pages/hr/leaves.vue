@@ -6,7 +6,7 @@
  */
 import { PAGES, MESSAGES } from '~/constants'
 import { useLeaveRequests } from '~/composables/hr'
-import type { LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/schema'
+import type { LeaveRequest, LeaveApprovalLog } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth'

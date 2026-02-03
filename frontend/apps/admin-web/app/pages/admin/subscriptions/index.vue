@@ -2,7 +2,7 @@
   <div class="subscriptions-page">
     <div class="page-header">
       <h1>订阅管理</h1>
-      <button @click="showCreateModal = true" class="btn-primary">
+      <button class="btn-primary" @click="showCreateModal = true">
         创建订阅
       </button>
     </div>
@@ -84,8 +84,8 @@
               </NuxtLink>
               <button
                 v-if="subscription.status === 'active'"
-                @click="cancelSubscription(subscription.id)"
                 class="btn-text text-danger"
+                @click="cancelSubscription(subscription.id)"
               >
                 取消
               </button>
@@ -102,7 +102,7 @@
     <AppModal v-if="showCreateModal" @close="showCreateModal = false">
       <template #header>创建订阅</template>
       <template #default>
-        <form @submit.prevent="createSubscription" class="form">
+        <form class="form" @submit.prevent="createSubscription">
           <div class="form-group">
             <label>租户 *</label>
             <select v-model="newSubscription.tenant_id" required>
@@ -147,7 +147,7 @@
             />
           </div>
           <div class="form-actions">
-            <button type="button" @click="showCreateModal = false" class="btn-secondary">
+            <button type="button" class="btn-secondary" @click="showCreateModal = false">
               取消
             </button>
             <button type="submit" class="btn-primary" :disabled="creatingSubscription">

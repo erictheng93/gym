@@ -278,7 +278,7 @@ const startScanner = async () => {
       await videoRef.value.play()
     }
 
-    // @ts-ignore - BarcodeDetector is experimental
+    // @ts-expect-error - BarcodeDetector is experimental
     barcodeDetector = new window.BarcodeDetector({
       formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code']
     })
@@ -294,7 +294,7 @@ const startScanner = async () => {
             const code = barcodes[0].rawValue
             handleScannedCode(code)
           }
-        } catch (err) {
+        } catch {
           // Ignore detection errors
         }
       }

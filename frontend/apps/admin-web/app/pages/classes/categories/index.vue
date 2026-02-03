@@ -99,7 +99,7 @@ const loadData = async () => {
   try {
     await fetchCategories({})
     stats.value = await getCategoryStats()
-  } catch (error) {
+  } catch {
     toast.error(MESSAGES.ERRORS.CATEGORY_FETCH_FAILED)
   }
 }

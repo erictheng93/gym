@@ -83,7 +83,7 @@ const handleSave = async () => {
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000))
     toast.success('設定已儲存')
-  } catch (error) {
+  } catch {
     toast.error('儲存失敗，請稍後再試')
   } finally {
     isSaving.value = false

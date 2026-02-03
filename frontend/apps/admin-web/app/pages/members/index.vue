@@ -90,7 +90,7 @@ const handleRowClick = (member: typeof members.value[0]) => {
 }
 
 // Batch action handlers
-const handleBatchStatusUpdate = async (status: string) => {
+const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE') => {
   if (selectedIds.value.length === 0) return
 
   const confirmed = await confirm({

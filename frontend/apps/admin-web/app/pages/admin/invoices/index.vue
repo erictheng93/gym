@@ -2,7 +2,7 @@
   <div class="invoices-page">
     <div class="page-header">
       <h1>账单管理</h1>
-      <button @click="showCreateModal = true" class="btn-primary">
+      <button class="btn-primary" @click="showCreateModal = true">
         创建账单
       </button>
     </div>
@@ -83,8 +83,8 @@
               </a>
               <button
                 v-if="invoice.status === 'open'"
-                @click="markAsPaid(invoice.id)"
                 class="btn-text"
+                @click="markAsPaid(invoice.id)"
               >
                 标记已付款
               </button>
@@ -101,7 +101,7 @@
     <AppModal v-if="showCreateModal" @close="showCreateModal = false">
       <template #header>创建账单</template>
       <template #default>
-        <form @submit.prevent="createInvoice" class="form">
+        <form class="form" @submit.prevent="createInvoice">
           <div class="form-group">
             <label>租户 *</label>
             <select v-model="newInvoice.tenant_id" required>
@@ -161,7 +161,7 @@
             <input v-model="newInvoice.period_end" type="date" />
           </div>
           <div class="form-actions">
-            <button type="button" @click="showCreateModal = false" class="btn-secondary">
+            <button type="button" class="btn-secondary" @click="showCreateModal = false">
               取消
             </button>
             <button type="submit" class="btn-primary" :disabled="creatingInvoice">

@@ -15,19 +15,19 @@ export const PaymentStatusEnum = z.enum(['UNPAID', 'PARTIAL', 'PAID'])
  */
 export const createContractSchema = z.object({
   member_id: z
-    .string({ required_error: '請選擇會員' })
+    .string({ error: '請選擇會員' })
     .uuid('請選擇有效的會員'),
 
   plan_id: z
-    .string({ required_error: '請選擇方案' })
+    .string({ error: '請選擇方案' })
     .uuid('請選擇有效的方案'),
 
   branch_id: z
-    .string({ required_error: '請選擇分店' })
+    .string({ error: '請選擇分店' })
     .uuid('請選擇有效的分店'),
 
   start_date: z
-    .string({ required_error: '請選擇開始日期' })
+    .string({ error: '請選擇開始日期' })
     .refine(
       (val) => {
         const date = new Date(val)
@@ -37,7 +37,7 @@ export const createContractSchema = z.object({
     ),
 
   total_amount: z
-    .number({ required_error: '請輸入合約金額' })
+    .number({ error: '請輸入合約金額' })
     .positive('金額必須大於 0'),
 
   sales_person_id: z
@@ -63,7 +63,7 @@ export const createContractSchema = z.object({
  */
 export const pauseContractSchema = z.object({
   start_date: z
-    .string({ required_error: '請選擇暫停開始日期' })
+    .string({ error: '請選擇暫停開始日期' })
     .refine(
       (val) => {
         const date = new Date(val)
@@ -73,7 +73,7 @@ export const pauseContractSchema = z.object({
     ),
 
   end_date: z
-    .string({ required_error: '請選擇暫停結束日期' })
+    .string({ error: '請選擇暫停結束日期' })
     .refine(
       (val) => {
         const date = new Date(val)
@@ -104,7 +104,7 @@ export const pauseContractSchema = z.object({
  */
 export const transferContractSchema = z.object({
   target_member_id: z
-    .string({ required_error: '請選擇目標會員' })
+    .string({ error: '請選擇目標會員' })
     .uuid('請選擇有效的會員'),
 
   reason: z
@@ -119,7 +119,7 @@ export const transferContractSchema = z.object({
  */
 export const terminateContractSchema = z.object({
   reason: z
-    .string({ required_error: '請輸入終止原因' })
+    .string({ error: '請輸入終止原因' })
     .min(1, '請輸入終止原因')
     .max(200, '原因不能超過 200 個字'),
 
@@ -135,7 +135,7 @@ export const terminateContractSchema = z.object({
  */
 export const extendContractSchema = z.object({
   days: z
-    .number({ required_error: '請輸入延期天數' })
+    .number({ error: '請輸入延期天數' })
     .int('天數必須是整數')
     .positive('延期天數必須大於 0')
     .max(365, '延期天數不能超過 365 天'),
@@ -152,7 +152,7 @@ export const extendContractSchema = z.object({
  */
 export const renewContractSchema = z.object({
   start_date: z
-    .string({ required_error: '請選擇新合約開始日期' })
+    .string({ error: '請選擇新合約開始日期' })
     .refine(
       (val) => {
         const date = new Date(val)
@@ -162,7 +162,7 @@ export const renewContractSchema = z.object({
     ),
 
   total_amount: z
-    .number({ required_error: '請輸入續約金額' })
+    .number({ error: '請輸入續約金額' })
     .positive('金額必須大於 0'),
 })
 

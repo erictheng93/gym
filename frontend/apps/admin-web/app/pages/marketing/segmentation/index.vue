@@ -4,8 +4,6 @@
  *
  * 顯示 RFM 分群卡片與會員分佈
  */
-import { MESSAGES } from '~/constants'
-
 definePageMeta({
   middleware: 'auth'
 })

@@ -19,7 +19,7 @@ const currentStep = ref(1)
 const totalSteps = 3
 
 // Form validation - 使用 composable
-const { errors, validate, setError, clearErrors, clearFieldError } = useFormValidation<typeof form>()
+const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
 
 const form = reactive({
   member_id: route.query.member as string || '',

@@ -277,7 +277,7 @@ describe('usePerformance', () => {
 
       const { rejectReview } = usePerformance()
 
-      const result = await rejectReview('review-1', '需要補充說明')
+      await rejectReview('review-1', '需要補充說明')
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/performance/reviews/review-1/reject'),

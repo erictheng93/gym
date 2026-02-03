@@ -15,7 +15,7 @@ export const CampaignStatusEnum = z.enum(['DRAFT', 'ACTIVE', 'ENDED', 'CANCELLED
  */
 export const createCampaignSchema = z.object({
   name: z
-    .string({ required_error: '請輸入活動名稱' })
+    .string({ error: '請輸入活動名稱' })
     .min(1, '請輸入活動名稱')
     .max(100, '名稱不能超過 100 個字'),
 
@@ -28,14 +28,14 @@ export const createCampaignSchema = z.object({
     .optional(),
 
   start_date: z
-    .string({ required_error: '請選擇開始日期' })
+    .string({ error: '請選擇開始日期' })
     .refine(
       (val) => !isNaN(new Date(val).getTime()),
       { message: '請輸入有效的日期' }
     ),
 
   end_date: z
-    .string({ required_error: '請選擇結束日期' })
+    .string({ error: '請選擇結束日期' })
     .refine(
       (val) => !isNaN(new Date(val).getTime()),
       { message: '請輸入有效的日期' }
@@ -111,7 +111,7 @@ export const updateCampaignSchema = z.object({
  */
 export const createAssetSchema = z.object({
   name: z
-    .string({ required_error: '請輸入素材名稱' })
+    .string({ error: '請輸入素材名稱' })
     .min(1, '請輸入素材名稱')
     .max(100, '名稱不能超過 100 個字'),
 

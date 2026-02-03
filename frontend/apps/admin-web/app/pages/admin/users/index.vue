@@ -8,7 +8,6 @@ definePageMeta({
   middleware: 'auth'
 })
 
-const router = useRouter()
 const { confirm } = useConfirm()
 const { users, isLoading, pagination, fetchUsers, deleteUser, toggleUserStatus } = useUsers()
 
@@ -23,12 +22,6 @@ const roleLabels: Record<string, string> = {
   coach: '教練',
   staff: '員工',
   super_admin: '超級管理員'
-}
-
-// Status labels
-const statusLabels = {
-  active: { label: '啟用', class: 'badge-success' },
-  inactive: { label: '停用', class: 'badge-error' }
 }
 
 // Fetch users with filters

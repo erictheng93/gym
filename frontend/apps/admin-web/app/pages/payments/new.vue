@@ -22,7 +22,7 @@ const form = reactive({
   amount: 0,
   payment_method: 'CASH' as 'CASH' | 'CREDIT_CARD' | 'LINE_PAY' | 'TRANSFER',
   payment_type: 'INCOME' as 'INCOME' | 'REFUND',
-  payment_date: new Date().toISOString().split('T')[0],
+  payment_date: new Date().toISOString().split('T')[0]!,
   branch_id: '',
   notes: ''
 })
@@ -74,7 +74,7 @@ onMounted(async () => {
 
   // 預設選擇第一個分店
   if (branches.value.length > 0 && !form.branch_id) {
-    form.branch_id = branches.value[0].id
+    form.branch_id = branches.value[0]!.id
   }
 
   // 如果有預設會員 ID，載入合約

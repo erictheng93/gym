@@ -254,7 +254,7 @@ describe('useCharts', () => {
     })
 
     it('應該在創建新圖表前銷毀舊圖表', () => {
-      const { createLineChart, charts } = useCharts()
+      const { createLineChart } = useCharts()
       const canvas = createMockCanvas()
 
       // Create first chart
@@ -547,7 +547,7 @@ describe('useCharts', () => {
   describe('Chart Management', () => {
     describe('destroyChart', () => {
       it('應該銷毀指定的圖表', () => {
-        const { createLineChart, destroyChart, charts } = useCharts()
+        const { createLineChart, destroyChart } = useCharts()
         const canvas = createMockCanvas()
 
         createLineChart(canvas, 'chart-1', {
@@ -561,7 +561,7 @@ describe('useCharts', () => {
       })
 
       it('應該從 charts Map 中移除圖表', () => {
-        const { createLineChart, destroyChart, charts } = useCharts()
+        const { createLineChart, destroyChart } = useCharts()
         const canvas = createMockCanvas()
 
         createLineChart(canvas, 'chart-1', {

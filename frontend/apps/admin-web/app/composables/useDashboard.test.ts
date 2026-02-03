@@ -264,7 +264,7 @@ describe('useDashboard', () => {
     it('應該成功獲取 Dashboard KPIs', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
 
-      const { fetchKPIs, kpis } = useDashboard()
+      const { fetchKPIs } = useDashboard()
       const result = await fetchKPIs()
 
       expect(result).toEqual(mockKPIsResponse)
@@ -352,7 +352,7 @@ describe('useDashboard', () => {
     it('應該設定 isLoading 狀態', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
 
-      const { fetchKPIs, isLoading } = useDashboard()
+      const { fetchKPIs } = useDashboard()
 
       // Note: In actual implementation, isLoading would be reactive
       // Here we just check that the function completes

@@ -347,7 +347,7 @@ const summaryStats = computed(() => {
               </thead>
               <tbody>
                 <tr v-for="att in employeeAttendances" :key="att.id">
-                  <td>{{ formatDate(att.attendance_date) }}</td>
+                  <td>{{ att.attendance_date ? formatDate(att.attendance_date) : '—' }}</td>
                   <td>
                     <span class="status-badge" :class="getStatusLabel(att.attendance_status).class">
                       {{ getStatusLabel(att.attendance_status).label }}

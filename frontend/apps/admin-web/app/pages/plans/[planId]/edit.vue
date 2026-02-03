@@ -42,6 +42,10 @@ const loadPlan = async () => {
   isLoading.value = true
   try {
     const data = await getPlan(planId.value)
+    if (!data) {
+      console.error('Plan not found')
+      return
+    }
     plan.value = data
     // 填充表單
     form.name = data.name

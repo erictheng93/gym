@@ -19,7 +19,7 @@ const periodOptions = [
 ]
 
 const loadReport = async () => {
-  roiData.value = await fetchROIReport(selectedPeriod.value)
+  roiData.value = await fetchROIReport({ type: selectedPeriod.value })
 }
 
 watch(selectedPeriod, loadReport)

@@ -20,8 +20,7 @@ const {
   formData,
   errors,
   validateField,
-  validate,
-  reset
+  validate
 } = useZodFormValidation(campaignSchema, {
   name: '',
   description: '',
@@ -65,11 +64,15 @@ const handleSubmit = async () => {
   }
 
   try {
+    // Cast is needed because Campaign type expects associated_coupons as objects,
+    // but API accepts string IDs for creation
     const result = await createCampaign({
       ...formData,
-      ...additionalData.value,
+      status: additionalData.value.status,
+      target_segment: additionalData.value.target_segment,
+      target_branches: additionalData.value.target_branches,
       budget: formData.budget ? Number(formData.budget) : null
-    })
+    } as Parameters<typeof createCampaign>[0])
     if (!result) {
       throw new Error('建立活動失敗')
     }
@@ -104,11 +107,12 @@ const handleSubmit = async () => {
         />
 
         <FormTextarea
-          v-model="formData.description"
+          :model-value="formData.description ?? undefined"
           label="活動說明"
           placeholder="活動詳細說明..."
           :rows="3"
           :error="errors.description"
+          @update:model-value="formData.description = $event ?? null"
           @blur="validateField('description')"
         />
 

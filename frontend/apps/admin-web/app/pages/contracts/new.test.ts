@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ContractNew from './new.vue'
-import { MESSAGES, PAGES, LABELS } from '~/constants'
-import type { Member, Plan, Branch, Contract } from '~/types/schema'
+import { MESSAGES, PAGES } from '~/constants'
+import type { Member, Plan, Branch } from '~/types/schema'
 
 // Mock router
 const mockPush = vi.fn()

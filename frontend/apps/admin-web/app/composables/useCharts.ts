@@ -16,8 +16,6 @@ import {
   Legend,
   Filler,
   type ChartConfiguration,
-  type ChartType,
-  type ChartData,
   type ChartOptions
 } from 'chart.js'
 
@@ -177,7 +175,7 @@ export const useCharts = () => {
    * 銷毀所有圖表
    */
   const destroyAllCharts = () => {
-    charts.forEach((chart, id) => {
+    charts.forEach((chart) => {
       chart.destroy()
     })
     charts.clear()

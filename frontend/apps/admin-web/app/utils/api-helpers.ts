@@ -206,7 +206,7 @@ export function buildDateRangeFilter(
  */
 export function getTodayRange(): { start: string; end: string } {
   const today = new Date()
-  const dateStr = today.toISOString().split('T')[0]
+  const dateStr = today.toISOString().split('T')[0]!
   return { start: dateStr, end: dateStr }
 }
 
@@ -224,8 +224,8 @@ export function getThisWeekRange(): { start: string; end: string } {
   endOfWeek.setDate(startOfWeek.getDate() + 6)
 
   return {
-    start: startOfWeek.toISOString().split('T')[0],
-    end: endOfWeek.toISOString().split('T')[0]
+    start: startOfWeek.toISOString().split('T')[0]!,
+    end: endOfWeek.toISOString().split('T')[0]!
   }
 }
 
@@ -239,8 +239,8 @@ export function getThisMonthRange(): { start: string; end: string } {
   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
 
   return {
-    start: startOfMonth.toISOString().split('T')[0],
-    end: endOfMonth.toISOString().split('T')[0]
+    start: startOfMonth.toISOString().split('T')[0]!,
+    end: endOfMonth.toISOString().split('T')[0]!
   }
 }
 

@@ -9,7 +9,6 @@ definePageMeta({
 })
 
 const router = useRouter()
-const toast = useToast()
 const { createUser, fetchAvailableEmployees, isLoading } = useUsers()
 
 // Form state

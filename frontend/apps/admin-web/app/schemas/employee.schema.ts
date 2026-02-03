@@ -4,9 +4,6 @@
 
 import { z } from 'zod'
 
-// 電話驗證正則表達式
-const phoneRegex = /^[0-9]{8,15}$/
-
 // 聘僱狀態枚舉
 export const EmploymentStatusEnum = z.enum(['ACTIVE', 'RESIGNED', 'LEAVE'])
 
@@ -18,7 +15,7 @@ export const EmploymentTypeEnum = z.enum(['FULL_TIME', 'PART_TIME', 'FREELANCE']
  */
 export const employeeBaseSchema = z.object({
   full_name: z
-    .string({ required_error: '請輸入員工姓名' })
+    .string({ error: '請輸入員工姓名' })
     .min(2, '姓名至少需要 2 個字')
     .max(50, '姓名不能超過 50 個字'),
 
@@ -29,11 +26,11 @@ export const employeeBaseSchema = z.object({
     .optional(),
 
   branch_id: z
-    .string({ required_error: '請選擇分店' })
+    .string({ error: '請選擇分店' })
     .uuid('請選擇有效的分店'),
 
   job_title_id: z
-    .string({ required_error: '請選擇職位' })
+    .string({ error: '請選擇職位' })
     .uuid('請選擇有效的職位'),
 
   employment_type: EmploymentTypeEnum.default('FULL_TIME'),
@@ -63,7 +60,7 @@ export const updateEmployeeSchema = employeeBaseSchema.extend({
   employment_status: EmploymentStatusEnum.optional(),
 
   custom_permissions: z
-    .record(z.boolean())
+    .record(z.string(), z.boolean())
     .nullable()
     .optional(),
 })
@@ -86,12 +83,12 @@ export const employeeFilterSchema = z.object({
  */
 export const jobTitleSchema = z.object({
   name: z
-    .string({ required_error: '請輸入職位名稱' })
+    .string({ error: '請輸入職位名稱' })
     .min(1, '請輸入職位名稱')
     .max(50, '職位名稱不能超過 50 個字'),
 
   permissions_config: z
-    .record(z.boolean())
+    .record(z.string(), z.boolean())
     .nullable()
     .optional(),
 })

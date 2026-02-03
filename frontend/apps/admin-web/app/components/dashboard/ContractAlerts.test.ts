@@ -3,8 +3,8 @@
  * 測試合約到期警示元件
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, VueWrapper } from '@vue/test-utils'
+import { describe, it, expect } from 'vitest'
+import { mount } from '@vue/test-utils'
 import ContractAlerts from './ContractAlerts.vue'
 import type { ContractAlertsResponse, ContractAlert } from '~/composables/useDashboard'
 
@@ -471,7 +471,7 @@ describe('ContractAlerts', () => {
         }
       })
 
-      expect(wrapper.find('.view-all-btn').attributes('type')).toBeUndefined
+      expect(wrapper.find('.view-all-btn').attributes('type')).toBeUndefined()
       expect(wrapper.find('button.view-all-btn').exists()).toBe(true)
     })
   })

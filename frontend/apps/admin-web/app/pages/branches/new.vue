@@ -76,7 +76,7 @@ const handleSubmit = async () => {
       successMessage: MESSAGES.SUCCESS.BRANCH_CREATED,
       errorMessage: MESSAGES.ERRORS.BRANCH_CREATE_FAILED,
       onSuccess: () => { router.push('/branches') },
-      onError: (error) => setError('submit', PAGES.BRANCHES.ERROR_CREATE_FAILED)
+      onError: () => setError('submit', PAGES.BRANCHES.ERROR_CREATE_FAILED)
     }
   )
 }

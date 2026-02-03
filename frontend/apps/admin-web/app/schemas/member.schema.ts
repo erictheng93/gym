@@ -19,7 +19,7 @@ export const GenderEnum = z.enum(['M', 'F', 'O'])
  */
 export const memberBaseSchema = z.object({
   full_name: z
-    .string({ required_error: VALIDATION.REQUIRED })
+    .string({ error: VALIDATION.REQUIRED })
     .min(2, VALIDATION.NAME_MIN)
     .max(50, VALIDATION.NAME_MAX),
 
@@ -94,7 +94,7 @@ export const memberBaseSchema = z.object({
  */
 export const createMemberSchema = memberBaseSchema.extend({
   branch_id: z
-    .string({ required_error: VALIDATION.BRANCH_REQUIRED })
+    .string({ error: VALIDATION.BRANCH_REQUIRED })
     .uuid(VALIDATION.BRANCH_INVALID),
 })
 

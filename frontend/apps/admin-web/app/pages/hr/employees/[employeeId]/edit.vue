@@ -89,7 +89,7 @@ const loadEmployee = async () => {
 
     // Load custom permissions if exists
     if (employee.custom_permissions && typeof employee.custom_permissions === 'object') {
-      form.custom_permissions = employee.custom_permissions as Record<string, Record<string, boolean>>
+      form.custom_permissions = employee.custom_permissions as unknown as Record<string, Record<string, boolean>>
       useCustomPermissions.value = true
     }
 
@@ -128,8 +128,9 @@ const toggleModuleAll = (moduleKey: string, value: boolean) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
   if (!module || !form.custom_permissions[moduleKey]) return
 
+  const modulePerms = form.custom_permissions[moduleKey]!
   module.actions.forEach(action => {
-    form.custom_permissions[moduleKey][action.key] = value
+    modulePerms[action.key as keyof typeof modulePerms] = value
   })
 }
 
@@ -137,8 +138,9 @@ const isModuleFullyEnabled = (moduleKey: string) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
   if (!module || !form.custom_permissions[moduleKey]) return false
 
+  const modulePerms = form.custom_permissions[moduleKey]!
   return module.actions.every(action =>
-    form.custom_permissions[moduleKey][action.key] === true
+    modulePerms[action.key as keyof typeof modulePerms] === true
   )
 }
 
@@ -146,26 +148,20 @@ const isModulePartiallyEnabled = (moduleKey: string) => {
   const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
   if (!module || !form.custom_permissions[moduleKey]) return false
 
+  const modulePerms = form.custom_permissions[moduleKey]!
   const enabledCount = module.actions.filter(action =>
-    form.custom_permissions[moduleKey][action.key] === true
+    modulePerms[action.key as keyof typeof modulePerms] === true
   ).length
 
   return enabledCount > 0 && enabledCount < module.actions.length
 }
 
-// Get effective permission (custom or inherited from job title)
-const getEffectivePermission = (moduleKey: string, actionKey: string): boolean => {
-  if (useCustomPermissions.value) {
-    return form.custom_permissions[moduleKey]?.[actionKey] || false
-  }
-  return currentJobTitle.value?.permissions_config?.[moduleKey]?.[actionKey] || false
-}
 
 // Check if permission is custom (different from job title)
 const isCustomPermission = (moduleKey: string, actionKey: string): boolean => {
   if (!useCustomPermissions.value || !currentJobTitle.value) return false
-  const jobTitlePerm = currentJobTitle.value.permissions_config?.[moduleKey]?.[actionKey] || false
-  const customPerm = form.custom_permissions[moduleKey]?.[actionKey] || false
+  const jobTitlePerm = (currentJobTitle.value.permissions_config?.[moduleKey] as Record<string, boolean> | undefined)?.[actionKey] || false
+  const customPerm = (form.custom_permissions[moduleKey] as Record<string, boolean> | undefined)?.[actionKey] || false
   return jobTitlePerm !== customPerm
 }
 
@@ -216,7 +212,7 @@ const handleSubmit = async () => {
       hire_date: form.hire_date || null,
       basic_salary: form.basic_salary || null,
       custom_permissions: useCustomPermissions.value ? form.custom_permissions : null
-    }
+    } as Parameters<typeof updateEmployee>[1]
 
     await updateEmployee(employeeId.value, employeeData)
     useToast().success(MESSAGES.SUCCESS.EMPLOYEE_UPDATED)
@@ -492,7 +488,7 @@ const handleSubmit = async () => {
                   :class="{ 'is-custom': isCustomPermission(module.key, action.key) }"
                 >
                   <input
-                    v-model="form.custom_permissions[module.key][action.key]"
+                    v-model="(form.custom_permissions[module.key] as Record<string, boolean>)[action.key]"
                     type="checkbox"
                   />
                   <span>{{ action.label }}</span>

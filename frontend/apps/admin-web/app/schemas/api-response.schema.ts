@@ -36,9 +36,9 @@ export const apiErrorResponseSchema = z.object({
 })
 
 /**
- * 分頁參數 Schema
+ * 分頁回應 Schema (包含 total)
  */
-export const paginationSchema = z.object({
+export const paginationResponseSchema = z.object({
   page: z.number().int().positive(),
   limit: z.number().int().positive(),
   total: z.number().int().nonnegative(),
@@ -294,7 +294,7 @@ export const performanceReviewResponseSchema = z.object({
   review_date: z.string(),
   period_start: z.string(),
   period_end: z.string(),
-  kpi_data: z.record(z.unknown()),
+  kpi_data: z.record(z.string(), z.unknown()),
   overall_score: z.number().nullable(),
   reviewer_id: z.string().uuid().nullable(),
   comments: z.string().nullable(),

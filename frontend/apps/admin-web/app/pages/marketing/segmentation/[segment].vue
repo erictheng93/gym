@@ -67,7 +67,7 @@ const isTagging = ref(false)
 const handleAutoTag = async () => {
   isTagging.value = true
   try {
-    await autoTagSegment(segment.value)
+    await autoTagSegment({ segment: segment.value })
     toast.success('已自動套用標籤')
     await loadMembers()
   } catch (error) {

@@ -14,8 +14,8 @@
         <div class="actions">
           <button
             v-if="subscription.status === 'active'"
-            @click="cancelSubscription"
             class="btn-danger"
+            @click="cancelSubscription"
           >
             取消订阅
           </button>
@@ -179,12 +179,11 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuth } from '~/composables/useAuth'
 import { useRuntimeConfig } from '#app'
 
 const route = useRoute()
-const router = useRouter()
 const { apiCall } = useAuth()
 const config = useRuntimeConfig()
 

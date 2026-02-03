@@ -14,7 +14,7 @@ definePageMeta({
 Chart.register(...registerables)
 
 const config = useRuntimeConfig()
-const { formatNumber, formatCurrency, getHeatmapColor } = useCharts()
+const { formatNumber, formatCurrency } = useCharts()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -115,7 +115,7 @@ const loadAnalytics = async () => {
       contractTypeData.value = data.type_distribution || []
 
       // Top plans from contract analytics
-      topPlans.value = (data.plan_stats || []).slice(0, 5).map((plan: any, index: number) => ({
+      topPlans.value = (data.plan_stats || []).slice(0, 5).map((plan: any) => ({
         id: plan.plan_id,
         name: plan.plan_name,
         memberCount: parseInt(plan.contract_count) || 0,

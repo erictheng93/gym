@@ -2,15 +2,14 @@
 /**
  * KPI 範本管理頁面
  */
-import { MESSAGES, PAGINATION } from '~/constants'
 import { usePerformance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const toast = useToast()
 const { confirm } = useConfirm()
+const toast = useToast()
 
 const {
   kpiTemplates,
@@ -168,10 +167,9 @@ const handleDelete = async (templateId: string) => {
 
     <!-- Create Modal -->
     <AppModal
-      v-if="showCreateModal"
+      v-model="showCreateModal"
       title="新增 KPI 範本"
-      size="lg"
-      @close="showCreateModal = false"
+      max-width="lg"
     >
       <div class="modal-form">
         <FormInput

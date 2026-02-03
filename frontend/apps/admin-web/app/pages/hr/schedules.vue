@@ -16,7 +16,6 @@ const {
   deleteShiftSchedule,
   fetchShiftEmployees,
   fetchBranchEmployees,
-  assignShiftToEmployee,
   batchAssignShift,
   removeEmployeeShift
 } = useShiftSchedules()
@@ -194,7 +193,7 @@ const toggleDay = (day: string) => {
 // Employee Assignment Functions
 const openAssignModal = async (schedule: ShiftSchedule) => {
   assigningSchedule.value = schedule
-  assignEffectiveDate.value = new Date().toISOString().split('T')[0]
+  assignEffectiveDate.value = new Date().toISOString().split('T')[0]!
   selectedEmployees.value = []
   isLoadingEmployees.value = true
   showAssignModal.value = true
@@ -270,10 +269,6 @@ const handleRemoveAssignment = async (employeeShift: EmployeeShift) => {
   }
 }
 
-const getAssignedCount = (scheduleId: string) => {
-  // This would need to be fetched per schedule, so we'll show it in the modal instead
-  return 0
-}
 </script>
 
 <template>

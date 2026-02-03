@@ -15,7 +15,7 @@ export const PromotionTypeEnum = z.enum(['PROMOTION', 'TRANSFER', 'DEMOTION'])
  */
 export const generatePayrollSchema = z.object({
   period: z
-    .string({ required_error: '請選擇薪資期間' })
+    .string({ error: '請選擇薪資期間' })
     .regex(/^\d{4}-\d{2}$/, '期間格式必須為 YYYY-MM'),
 
   branch_id: z
@@ -63,7 +63,7 @@ export const adjustSalarySchema = z.object({
  */
 export const approveSalarySchema = z.object({
   approved_by: z
-    .string({ required_error: '核准人是必填' })
+    .string({ error: '核准人是必填' })
     .uuid('請選擇有效的員工')
 })
 
@@ -76,7 +76,7 @@ export const batchApproveSchema = z.object({
     .min(1, '請至少選擇一筆紀錄'),
 
   approved_by: z
-    .string({ required_error: '核准人是必填' })
+    .string({ error: '核准人是必填' })
     .uuid('請選擇有效的員工')
 })
 
@@ -103,7 +103,7 @@ export const markAsPaidSchema = z.object({
  */
 export const createPromotionSchema = z.object({
   employee_id: z
-    .string({ required_error: '請選擇員工' })
+    .string({ error: '請選擇員工' })
     .uuid('請選擇有效的員工'),
 
   type: PromotionTypeEnum,
@@ -133,7 +133,7 @@ export const createPromotionSchema = z.object({
     .optional(),
 
   effective_date: z
-    .string({ required_error: '請選擇生效日期' })
+    .string({ error: '請選擇生效日期' })
     .refine(
       (val) => !isNaN(new Date(val).getTime()),
       { message: '請輸入有效的日期' }

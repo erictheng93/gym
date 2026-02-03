@@ -26,7 +26,7 @@ const initialData: CreateCouponInput = {
   usage_limit: null,
   usage_per_member: 1,
   applicable_plans: null,
-  start_date: new Date().toISOString().split('T')[0],
+  start_date: new Date().toISOString().split('T')[0]!,
   end_date: ''
 }
 
@@ -63,7 +63,7 @@ onMounted(async () => {
   // Set default end date to 30 days from now
   const endDate = new Date()
   endDate.setDate(endDate.getDate() + 30)
-  form.end_date = endDate.toISOString().split('T')[0]
+  form.end_date = endDate.toISOString().split('T')[0]!
 })
 
 // Form submission

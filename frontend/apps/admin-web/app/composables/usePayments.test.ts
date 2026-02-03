@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { usePayments } from './usePayments'
 import type { Payment } from '~/types/schema'

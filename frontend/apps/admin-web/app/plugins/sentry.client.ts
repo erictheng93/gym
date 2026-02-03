@@ -15,7 +15,7 @@ export default defineNuxtPlugin((nuxtApp) => {
     console.log('[Sentry] Skipped - No DSN configured')
     return {
       provide: {
-        sentry: null
+        sentry: null as typeof Sentry | null
       }
     }
   }

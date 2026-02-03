@@ -2,14 +2,13 @@
 /**
  * 績效考核列表頁面
  */
-import { MESSAGES, PAGINATION, TIMING } from '~/constants'
+import { MESSAGES, PAGINATION } from '~/constants'
 import { usePerformance } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const toast = useToast()
 const { currentEmployee } = useAuth()
 
 const {

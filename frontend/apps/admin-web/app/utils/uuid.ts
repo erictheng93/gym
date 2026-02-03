@@ -34,20 +34,20 @@ export function generateUUIDv7(): string {
   bytes[5] = timestamp & 0xff
 
   // bytes[6-7]: 版本 7 + 12-bit 隨機
-  bytes[6] = 0x70 | (randomBytes[0] & 0x0f) // 版本 7
-  bytes[7] = randomBytes[1]
+  bytes[6] = 0x70 | (randomBytes[0]! & 0x0f) // 版本 7
+  bytes[7] = randomBytes[1]!
 
   // bytes[8]: 變體 (10xx xxxx) + 6-bit 隨機
-  bytes[8] = 0x80 | (randomBytes[2] & 0x3f) // 變體 RFC 9562
+  bytes[8] = 0x80 | (randomBytes[2]! & 0x3f) // 變體 RFC 9562
 
   // bytes[9-15]: 56-bit 隨機
-  bytes[9] = randomBytes[3]
-  bytes[10] = randomBytes[4]
-  bytes[11] = randomBytes[5]
-  bytes[12] = randomBytes[6]
-  bytes[13] = randomBytes[7]
-  bytes[14] = randomBytes[8]
-  bytes[15] = randomBytes[9]
+  bytes[9] = randomBytes[3]!
+  bytes[10] = randomBytes[4]!
+  bytes[11] = randomBytes[5]!
+  bytes[12] = randomBytes[6]!
+  bytes[13] = randomBytes[7]!
+  bytes[14] = randomBytes[8]!
+  bytes[15] = randomBytes[9]!
 
   // 轉換為 UUID 字串格式
   const hex = Array.from(bytes)

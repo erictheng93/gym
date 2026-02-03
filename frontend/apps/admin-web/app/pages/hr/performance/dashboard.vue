@@ -192,7 +192,7 @@ const getScoreClass = (score: number | null) => {
               :key="performer.id"
               class="ranking-item"
             >
-              <span class="rank-number" :class="`rank-${index + 1}`">{{ index + 1 }}</span>
+              <span class="rank-number" :class="`rank-${Number(index) + 1}`">{{ Number(index) + 1 }}</span>
               <AppAvatar :name="performer.full_name || '?'" size="sm" variant="blue" />
               <span class="performer-name">{{ performer.full_name }}</span>
               <span class="performer-score" :class="getScoreClass(performer.score)">

@@ -101,7 +101,7 @@ export const useLazyLoad = () => {
   const containerRef = ref<HTMLElement | null>(null)
   const hasLoaded = ref(false)
 
-  const { isVisible } = useIntersectionObserver(
+  useIntersectionObserver(
     (visible) => {
       if (visible && !hasLoaded.value) {
         hasLoaded.value = true

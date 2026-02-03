@@ -4,7 +4,7 @@
  *
  * 管理職位與權限設定
  */
-import { PAGES, MESSAGES } from '~/constants'
+import { MESSAGES } from '~/constants'
 import type { JobTitle } from '~/types/schema'
 
 definePageMeta({

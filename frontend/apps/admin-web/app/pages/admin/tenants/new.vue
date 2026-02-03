@@ -236,7 +236,7 @@ const handleCancel = () => {
         <h2 class="section-title">套餐选择</h2>
         <div class="plan-grid">
           <div
-            v-for="(config, key) in planConfigs"
+            v-for="(planConfig, key) in planConfigs"
             :key="key"
             class="plan-card"
             :class="{ selected: form.plan_type === key }"
@@ -252,20 +252,20 @@ const handleCancel = () => {
                   name="plan_type"
                 />
               </div>
-              <h3 class="plan-name">{{ config.label }}</h3>
+              <h3 class="plan-name">{{ planConfig.label }}</h3>
             </div>
             <div v-if="key !== 'custom'" class="plan-limits">
               <div class="plan-limit">
                 <span class="limit-label">会员数：</span>
-                <span class="limit-value">{{ config.max_members }}</span>
+                <span class="limit-value">{{ planConfig.max_members }}</span>
               </div>
               <div class="plan-limit">
                 <span class="limit-label">员工数：</span>
-                <span class="limit-value">{{ config.max_employees }}</span>
+                <span class="limit-value">{{ planConfig.max_employees }}</span>
               </div>
               <div class="plan-limit">
                 <span class="limit-label">分店数：</span>
-                <span class="limit-value">{{ config.max_branches }}</span>
+                <span class="limit-value">{{ planConfig.max_branches }}</span>
               </div>
             </div>
             <ul class="plan-features">

@@ -2,7 +2,6 @@
 /**
  * 薪資明細頁面
  */
-import { MESSAGES } from '~/constants'
 import { usePayroll } from '~/composables/hr'
 
 definePageMeta({
@@ -48,15 +47,6 @@ onMounted(async () => {
   }
 })
 
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
 
 // Calculate net salary preview
 const netSalaryPreview = computed(() => {

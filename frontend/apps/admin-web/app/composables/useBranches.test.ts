@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useBranches } from './useBranches'
 import type { Branch, Employee } from '~/types/schema'

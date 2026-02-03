@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vites
 import { mount, flushPromises } from '@vue/test-utils'
 import { computed as vueComputed, nextTick, ref, reactive, computed } from 'vue'
 import MembersNew from './new.vue'
-import { MESSAGES, PAGES, LABELS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 
 // Restore Vue's computed for component tests
 const originalComputed = globalThis.computed

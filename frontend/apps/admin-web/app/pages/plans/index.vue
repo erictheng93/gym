@@ -146,7 +146,7 @@ onMounted(() => {
       <EmptyState
         :title="PAGES.PLANS.NO_PLANS"
         :description="PAGES.PLANS.NO_PLANS_HINT"
-        icon="file"
+        icon="files"
         :action-label="PAGES.PLANS.ADD_PLAN"
         action-to="/plans/new"
       />

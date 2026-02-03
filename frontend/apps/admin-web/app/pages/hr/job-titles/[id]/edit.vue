@@ -245,7 +245,7 @@ onMounted(() => {
                   class="action-checkbox"
                 >
                   <input
-                    v-model="form.permissions_config[module.key][action.key]"
+                    v-model="(form.permissions_config[module.key] as Record<string, boolean>)[action.key]"
                     type="checkbox"
                   >
                   <span>{{ action.label }}</span>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
-import { MESSAGES, PAGES, LABELS } from '~/constants'
+import { MESSAGES } from '~/constants'
 import { updateMemberSchema, type UpdateMemberInput } from '~/schemas/member.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
@@ -196,9 +196,10 @@ const handleSubmit = async () => {
             />
 
             <FormDatePicker
-              v-model="form.birthday"
+              :model-value="form.birthday ?? undefined"
               label="生日"
               :error="errors.birthday"
+              @update:model-value="form.birthday = $event ?? null"
             />
 
             <FormInput

@@ -98,23 +98,25 @@ const getPaymentMethodLabel = (method: string | null) => {
 // 設定日期快捷選項
 const setDateRange = (range: string) => {
   const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]
+  const todayStr = today.toISOString().split('T')[0]!
 
   switch (range) {
     case 'today':
       startDate.value = todayStr
       endDate.value = todayStr
       break
-    case 'week':
+    case 'week': {
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-      startDate.value = weekAgo.toISOString().split('T')[0]
+      startDate.value = weekAgo.toISOString().split('T')[0]!
       endDate.value = todayStr
       break
-    case 'month':
+    }
+    case 'month': {
       const monthAgo = new Date(today.getFullYear(), today.getMonth(), 1)
-      startDate.value = monthAgo.toISOString().split('T')[0]
+      startDate.value = monthAgo.toISOString().split('T')[0]!
       endDate.value = todayStr
       break
+    }
     case 'all':
       startDate.value = ''
       endDate.value = ''
@@ -233,7 +235,7 @@ const columns = [
     </div>
 
     <!-- Stats Bar -->
-    <StatsBar :total="totalCount" :label="MESSAGES.COMMON.MATCHES" />
+    <StatsBar :count="totalCount" :label="MESSAGES.COMMON.MATCHES" />
 
     <!-- Loading State -->
     <LoadingState v-if="isLoading" :message="MESSAGES.ACTIONS.LOADING" />

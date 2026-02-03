@@ -16,7 +16,6 @@ const {
   totalCount,
   isLoading,
   fetchLeads,
-  updateLead,
   deleteLead,
   assignLead,
   getStatusLabel,

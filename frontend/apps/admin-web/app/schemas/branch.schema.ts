@@ -22,7 +22,7 @@ export const BranchStatusEnum = z.enum(['active', 'archived'])
  */
 export const branchBaseSchema = z.object({
   name: z
-    .string({ required_error: VALIDATION.REQUIRED })
+    .string({ error: VALIDATION.REQUIRED })
     .min(1, VALIDATION.REQUIRED)
     .max(50, VALIDATION.NAME_MAX),
 

@@ -16,14 +16,14 @@ export const PlanStatusEnum = z.enum(['active', 'archived'])
  */
 export const planBaseSchema = z.object({
   name: z
-    .string({ required_error: VALIDATION.REQUIRED })
+    .string({ error: VALIDATION.REQUIRED })
     .min(2, VALIDATION.NAME_MIN)
     .max(50, VALIDATION.NAME_MAX),
 
   plan_type: PlanTypeEnum.optional(),
 
   price: z
-    .number({ required_error: VALIDATION.REQUIRED })
+    .number({ error: VALIDATION.REQUIRED })
     .positive(VALIDATION.AMOUNT_POSITIVE)
     .max(10000000, VALIDATION.AMOUNT_RANGE),
 

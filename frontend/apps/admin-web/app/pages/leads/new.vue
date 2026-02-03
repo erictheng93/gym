@@ -236,11 +236,12 @@ const handleSubmit = async () => {
         </h2>
 
         <FormTextarea
-          v-model="form.notes"
+          :model-value="form.notes ?? undefined"
           label="備註"
           placeholder="輸入備註內容..."
           :rows="4"
           :max-length="500"
+          @update:model-value="form.notes = $event ?? null"
         />
       </section>
 

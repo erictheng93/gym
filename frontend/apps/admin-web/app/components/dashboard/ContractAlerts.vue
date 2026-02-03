@@ -4,7 +4,7 @@
  * 合約到期警示列表
  */
 
-import type { ContractAlert, ContractAlertsResponse } from '~/composables/useDashboard'
+import type { ContractAlertsResponse } from '~/composables/useDashboard'
 
 interface Props {
   alerts: ContractAlertsResponse | null

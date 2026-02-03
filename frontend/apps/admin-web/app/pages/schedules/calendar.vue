@@ -322,7 +322,7 @@ const filteredEmployees = computed(() => {
 })
 
 function formatDateISO(date: Date): string {
-  return date.toISOString().split('T')[0]
+  return date.toISOString().split('T')[0]!
 }
 
 function formatDate(dateStr: string): string {
@@ -356,7 +356,7 @@ function getShiftName(shiftId: string): string {
 
 function getShiftColor(shiftId: string): string {
   const index = availableShifts.value.findIndex(s => s.id === shiftId)
-  return shiftColors[index % shiftColors.length]
+  return shiftColors[index % shiftColors.length]!
 }
 
 function isDateSelected(date: string): boolean {
@@ -395,7 +395,7 @@ async function handleDrop(event: DragEvent, date: string) {
 
   // For simplicity, assign the first available shift
   // In production, you'd want to show a modal to select the shift
-  const shiftId = availableShifts.value[0].id
+  const shiftId = availableShifts.value[0]!.id
 
   await assignShift(draggedEmployee.value.id, shiftId, date)
   draggedEmployee.value = null

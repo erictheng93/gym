@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useContracts } from './useContracts'
 import type { Contract } from '~/types/schema'

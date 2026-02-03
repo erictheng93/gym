@@ -4,8 +4,6 @@
  *
  * 顯示來源分析、轉換率、漏斗圖
  */
-import { MESSAGES } from '~/constants'
-
 definePageMeta({
   middleware: 'auth'
 })
@@ -13,7 +11,6 @@ definePageMeta({
 type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
 type LeadSource = 'FB_AD' | 'IG_AD' | 'GOOGLE_AD' | 'WEBSITE' | 'WALK_IN' | 'REFERRAL'
 
-const router = useRouter()
 const { fetchAnalytics, getSourceLabel, getStatusLabel } = useLeads()
 
 const analytics = ref<Awaited<ReturnType<typeof fetchAnalytics>> | null>(null)

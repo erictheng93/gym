@@ -7,7 +7,6 @@ const {
   isLoading,
   fetchTenantInfo,
   fetchTenantQuota,
-  isTenantActive,
   isTrialExpired,
   tenantStatusText,
   planTypeText,

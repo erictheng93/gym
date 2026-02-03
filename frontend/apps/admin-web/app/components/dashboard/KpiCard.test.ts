@@ -3,7 +3,7 @@
  * 測試 KPI 指標卡片元件
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import KpiCard from './KpiCard.vue'
 
@@ -154,8 +154,6 @@ describe('KpiCard', () => {
       const changeEl = wrapper.find('.kpi-change')
       expect(changeEl.exists()).toBe(true)
       expect(changeEl.text()).toContain('+12.5%')
-      // Check that the element has positive styling (class or inline)
-      const classes = changeEl.classes()
       // In test environment, computed classes might not be applied the same way
       // Just verify the element exists and shows positive change text
       expect(changeEl.text()).toMatch(/\+/)

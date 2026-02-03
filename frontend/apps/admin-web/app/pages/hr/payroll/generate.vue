@@ -13,7 +13,6 @@ definePageMeta({
 })
 
 const router = useRouter()
-const toast = useToast()
 const { generatePayroll } = usePayroll()
 const { branches, fetchBranches } = useBranches()
 const { employees, fetchEmployees } = useEmployees()

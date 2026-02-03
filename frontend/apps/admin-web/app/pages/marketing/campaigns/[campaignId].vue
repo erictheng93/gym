@@ -2,8 +2,6 @@
 /**
  * 行銷活動詳情頁面
  */
-import { MESSAGES } from '~/constants'
-
 definePageMeta({
   middleware: 'auth'
 })

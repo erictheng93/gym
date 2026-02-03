@@ -61,7 +61,6 @@ export function useFormValidation<T extends z.ZodObject<any>>(
 
   const {
     validateOnChange = false,
-    validateOnBlur = true,
     debounce = 300,
   } = options || {}
 

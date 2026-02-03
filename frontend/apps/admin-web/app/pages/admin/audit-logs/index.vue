@@ -2,7 +2,7 @@
   <div class="audit-logs-page">
     <div class="page-header">
       <h1>审计日志</h1>
-      <button @click="exportLogs" class="btn-secondary">
+      <button class="btn-secondary" @click="exportLogs">
         导出日志
       </button>
     </div>
@@ -121,7 +121,7 @@
             </td>
             <td class="ip-address">{{ log.ip_address || '-' }}</td>
             <td class="actions">
-              <button @click="viewDetails(log.id)" class="btn-text">
+              <button class="btn-text" @click="viewDetails(log.id)">
                 查看详情
               </button>
             </td>
@@ -136,9 +136,9 @@
       <!-- Pagination -->
       <div v-if="pagination.total > pagination.limit" class="pagination">
         <button
-          @click="changePage(pagination.page - 1)"
           :disabled="pagination.page === 1"
           class="btn-pagination"
+          @click="changePage(pagination.page - 1)"
         >
           上一页
         </button>
@@ -146,9 +146,9 @@
           第 {{ pagination.page }} 页，共 {{ totalPages }} 页
         </span>
         <button
-          @click="changePage(pagination.page + 1)"
           :disabled="pagination.page >= totalPages"
           class="btn-pagination"
+          @click="changePage(pagination.page + 1)"
         >
           下一页
         </button>

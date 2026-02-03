@@ -254,6 +254,15 @@ export default defineNuxtConfig({
     strict: true
   },
 
+  // Ignore test files and test-setup.ts in nuxt build (they're validated by vitest)
+  ignore: [
+    '**/*.test.ts',
+    '**/*.test.tsx',
+    '**/*.spec.ts',
+    '**/*.spec.tsx',
+    '**/test-setup.ts'
+  ],
+
   // Vite configuration to fix Windows path issues with non-ASCII characters
   vite: {
     server: {

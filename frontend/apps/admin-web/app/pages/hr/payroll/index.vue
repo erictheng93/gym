@@ -18,7 +18,6 @@ const {
   isLoading,
   fetchSalaryRecords,
   approveSalary,
-  markAsPaid,
   getStatusLabel,
   getStatusVariant,
   formatCurrency

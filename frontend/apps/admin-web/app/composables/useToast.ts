@@ -42,6 +42,11 @@ export const useToast = () => {
   const warning = (message: string, duration?: number) => show(message, 'warning', duration)
   const info = (message: string, duration?: number) => show(message, 'info', duration)
 
+  // Object-based API for convenience
+  const addToast = (options: { message: string; type?: ToastType; duration?: number }) => {
+    return show(options.message, options.type ?? 'info', options.duration)
+  }
+
   return {
     toasts: readonly(toasts),
     show,
@@ -49,6 +54,7 @@ export const useToast = () => {
     success,
     error,
     warning,
-    info
+    info,
+    addToast
   }
 }

@@ -14,10 +14,10 @@ export const ReviewStatusEnum = z.enum(['DRAFT', 'SUBMITTED', 'APPROVED'])
  * KPI 項目 Schema
  */
 export const kpiItemSchema = z.object({
-  id: z.string({ required_error: 'KPI ID 是必填' }),
-  name: z.string({ required_error: 'KPI 名稱是必填' }).min(1, '請輸入 KPI 名稱'),
-  weight: z.number({ required_error: '權重是必填' }).min(0, '權重不能為負數').max(100, '權重不能超過 100'),
-  target: z.number({ required_error: '目標值是必填' }).min(0, '目標值不能為負數'),
+  id: z.string({ error: 'KPI ID 是必填' }),
+  name: z.string({ error: 'KPI 名稱是必填' }).min(1, '請輸入 KPI 名稱'),
+  weight: z.number({ error: '權重是必填' }).min(0, '權重不能為負數').max(100, '權重不能超過 100'),
+  target: z.number({ error: '目標值是必填' }).min(0, '目標值不能為負數'),
   actual: z.number().min(0, '實際值不能為負數').optional(),
   achievement: z.number().optional(),
   unit: z.string().optional()
@@ -28,11 +28,11 @@ export const kpiItemSchema = z.object({
  */
 export const createReviewSchema = z.object({
   employee_id: z
-    .string({ required_error: '請選擇員工' })
+    .string({ error: '請選擇員工' })
     .uuid('請選擇有效的員工'),
 
   review_period: z
-    .string({ required_error: '請輸入考核期間' })
+    .string({ error: '請輸入考核期間' })
     .min(1, '請輸入考核期間'),
 
   review_type: ReviewTypeEnum,
@@ -96,7 +96,7 @@ export const submitReviewSchema = z.object({
  */
 export const approveReviewSchema = z.object({
   reviewer_id: z
-    .string({ required_error: '審核人是必填' })
+    .string({ error: '審核人是必填' })
     .uuid('請選擇有效的審核人'),
 
   final_score: z
@@ -121,7 +121,7 @@ export const rejectReviewSchema = z.object({
     .optional(),
 
   rejection_reason: z
-    .string({ required_error: '請輸入退回原因' })
+    .string({ error: '請輸入退回原因' })
     .min(1, '請輸入退回原因')
     .max(500, '退回原因不能超過 500 個字')
 })
@@ -131,7 +131,7 @@ export const rejectReviewSchema = z.object({
  */
 export const createTemplateSchema = z.object({
   name: z
-    .string({ required_error: '請輸入範本名稱' })
+    .string({ error: '請輸入範本名稱' })
     .min(1, '請輸入範本名稱')
     .max(100, '名稱不能超過 100 個字'),
 

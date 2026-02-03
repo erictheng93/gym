@@ -12,7 +12,7 @@ definePageMeta({
 })
 
 const { currentEmployee, checkAuth } = useAuth()
-const { branches, fetchBranches } = useBranches()
+const { fetchBranches } = useBranches()
 const {
   recentAttendances,
   isLoading: isAttendanceLoading,
@@ -68,7 +68,7 @@ const fetchLocationInfo = async () => {
     const response = await fetch('https://api.ipify.org?format=json')
     const data = await response.json()
     locationInfo.value.ip = data.ip
-  } catch (e) {
+  } catch {
     console.log('Could not fetch IP')
   }
 

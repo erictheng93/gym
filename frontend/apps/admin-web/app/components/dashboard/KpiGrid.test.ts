@@ -3,8 +3,8 @@
  * 測試 KPI 網格元件
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, VueWrapper } from '@vue/test-utils'
+import { describe, it, expect } from 'vitest'
+import { mount } from '@vue/test-utils'
 import KpiGrid from './KpiGrid.vue'
 import KpiCard from './KpiCard.vue'
 import type { DashboardKPIs } from '~/composables/useDashboard'

@@ -2,7 +2,6 @@
 /**
  * 績效考核詳情頁面
  */
-import { MESSAGES } from '~/constants'
 import { usePerformance } from '~/composables/hr'
 
 definePageMeta({
@@ -61,11 +60,6 @@ const formatDate = (dateStr: string | null) => {
 // Check if current user is reviewer
 const isReviewer = computed(() => {
   return currentReview.value?.reviewer_id === currentEmployee.value?.id
-})
-
-// Check if can edit
-const canEdit = computed(() => {
-  return currentReview.value?.status === 'DRAFT' && isReviewer.value
 })
 
 // Check if can approve
@@ -314,9 +308,8 @@ const getScoreClass = (score: number | null) => {
 
     <!-- Reject Modal -->
     <AppModal
-      v-if="showRejectModal"
+      v-model="showRejectModal"
       title="退回考核"
-      @close="showRejectModal = false"
     >
       <FormTextarea
         v-model="rejectReason"
