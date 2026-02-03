@@ -1,11 +1,11 @@
 import { STORAGE_KEYS } from '~/constants'
 
 export const useTheme = () => {
-  const userTheme = useState<'light' | 'dark' | 'system'>(STORAGE_KEYS.THEME, () => 'light')
+  const userTheme = useState<'light' | 'dark' | 'system'>(STORAGE_KEYS.THEME, () => 'dark')
 
   const isDark = computed(() => {
     if (import.meta.server) {
-      return false // Default to light on server
+      return true // Default to dark on server
     }
     if (userTheme.value === 'system') {
       return window.matchMedia('(prefers-color-scheme: dark)').matches

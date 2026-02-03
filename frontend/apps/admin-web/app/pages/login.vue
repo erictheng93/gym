@@ -31,13 +31,15 @@ onMounted(async () => {
     return
   }
 
-  // Check and apply theme
+  // Check and apply theme (default to dark)
   const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME)
-  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+  if (savedTheme === 'light') {
+    isDark.value = false
+    document.documentElement.setAttribute('data-theme', 'light')
+  } else {
+    // Default to dark mode
     isDark.value = true
     document.documentElement.setAttribute('data-theme', 'dark')
-  } else {
-    document.documentElement.setAttribute('data-theme', 'light')
   }
 })
 
