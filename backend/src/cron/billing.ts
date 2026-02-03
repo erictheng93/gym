@@ -118,19 +118,19 @@ async function updateUsageRecords() {
         const [mc] = await db
           .select({ count: count() })
           .from(members)
-          .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'active'`);
+          .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
         memberCount = Number(mc?.count || 0);
 
         const [ec] = await db
           .select({ count: count() })
           .from(employees)
-          .where(sql`${employees.branchId} = ANY(${branchIds}) AND ${employees.status} = 'active'`);
+          .where(sql`${employees.branchId} = ANY(${branchIds}) AND ${employees.status} = 'ACTIVE'`);
         employeeCount = Number(ec?.count || 0);
 
         const [cc] = await db
           .select({ count: count() })
           .from(contracts)
-          .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.contractStatus} = 'ACTIVE'`);
+          .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
         contractCount = Number(cc?.count || 0);
       }
 

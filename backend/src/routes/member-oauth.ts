@@ -472,7 +472,7 @@ app.post(
           tokenExpiresAt: tokens.expiresIn
             ? new Date(Date.now() + tokens.expiresIn * 1000)
             : null,
-          rawProfile: userInfo as Record<string, unknown>,
+          rawProfile: userInfo as unknown as Record<string, unknown>,
         });
 
         if (memberByEmail.status === 'BANNED') {
@@ -641,7 +641,7 @@ app.post(
       tokenExpiresAt: tokens.expiresIn
         ? new Date(Date.now() + tokens.expiresIn * 1000)
         : null,
-      rawProfile: userInfo as Record<string, unknown>,
+      rawProfile: userInfo as unknown as Record<string, unknown>,
     });
 
     return c.json({

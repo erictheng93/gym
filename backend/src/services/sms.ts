@@ -383,6 +383,7 @@ export function calculateSmsSegments(message: string): { charCount: number; segm
   const charCount = message.length;
 
   // Check if message contains non-ASCII characters (Chinese, emoji, etc.)
+  // eslint-disable-next-line no-control-regex
   const hasUnicode = /[^\x00-\x7F]/.test(message);
 
   let segmentCount: number;

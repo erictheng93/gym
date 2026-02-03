@@ -199,6 +199,13 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
     remainingCounts = plan.classCounts;
   }
 
+  // Default endDate to 1 year from start if not provided (for count-based plans)
+  if (!endDate) {
+    const start = new Date(data.startDate);
+    start.setFullYear(start.getFullYear() + 1);
+    endDate = start.toISOString().split('T')[0];
+  }
+
   const [newContract] = await db.insert(contracts).values({
     contractNo,
     memberId: data.memberId,
@@ -365,10 +372,8 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
     .where(eq(contracts.id, id))
     .returning();
 
-  await db.update(members).set({
-    status: 'PAUSED',
-    updatedAt: new Date(),
-  }).where(eq(members.id, contract.memberId));
+  // Member status stays ACTIVE - the contract is paused, not the member
+  // They can still have other active contracts
 
   return c.json({ success: true, data: updatedContract });
 });

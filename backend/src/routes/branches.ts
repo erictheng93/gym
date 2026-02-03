@@ -28,8 +28,8 @@ app.get('/', async (c) => {
   const result = await db
     .select({
       branch: branches,
-      employeeCount: sql<number>`(SELECT COUNT(*) FROM employees WHERE employees.branch_id = ${branches.id} AND employees.status = 'active')`,
-      memberCount: sql<number>`(SELECT COUNT(*) FROM members WHERE members.branch_id = ${branches.id} AND members.status = 'active')`,
+      employeeCount: sql<number>`(SELECT COUNT(*) FROM employees WHERE employees.branch_id = ${branches.id} AND employees.status = 'ACTIVE')`,
+      memberCount: sql<number>`(SELECT COUNT(*) FROM members WHERE members.branch_id = ${branches.id} AND members.status = 'ACTIVE')`,
     })
     .from(branches)
     .where(eq(branches.tenantId, tenantId))
@@ -93,8 +93,15 @@ app.post('/', requireRole('super_admin', 'admin'), zValidator('json', createBran
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
+  // Generate branch code from name
+  const branchCode = data.name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 10) + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+
   const [newBranch] = await db.insert(branches).values({
     ...data,
+    code: branchCode,
     tenantId,
   }).returning();
 

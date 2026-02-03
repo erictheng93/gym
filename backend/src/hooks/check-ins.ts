@@ -14,18 +14,38 @@ interface CheckInData {
   checkTime?: string;
 }
 
+// Type for SQL function result
+interface DeductCountResult {
+  success: boolean;
+  remaining: number;
+  contract_status: string;
+}
+
+// Type for check-in record (full or partial)
+type CheckInRecord = {
+  id: string;
+  memberId?: string;
+  branchId?: string;
+  checkInTime?: Date | null;
+  checkTime?: Date | null;
+  checkInType?: string | null;
+  contractId?: string | null;
+  notes?: string | null;
+  createdAt?: Date | null;
+};
+
 interface CheckInValidationResult {
   valid: boolean;
   error?: string;
   member?: {
     id: string;
     fullName: string;
-    memberStatus: string;
+    status: string;
     branchId: string;
   };
   contract?: {
     id: string;
-    contractStatus: string;
+    status: string;
     remainingCounts: number | null;
     planType: string;
     endDate: string | null;
@@ -47,7 +67,7 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
     .select({
       id: members.id,
       fullName: members.fullName,
-      memberStatus: members.memberStatus,
+      status: members.status,
       branchId: members.branchId,
     })
     .from(members)
@@ -61,10 +81,10 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
     };
   }
 
-  if (member.memberStatus !== 'ACTIVE') {
+  if (member.status !== 'ACTIVE') {
     return {
       valid: false,
-      error: `會員 ${member.fullName} 狀態為 ${member.memberStatus}，無法入場`,
+      error: `會員 ${member.fullName} 狀態為 ${member.status}，無法入場`,
       isCrossBranch: false,
     };
   }
@@ -73,7 +93,7 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
   const validContracts = await db
     .select({
       id: contracts.id,
-      contractStatus: contracts.contractStatus,
+      status: contracts.status,
       remainingCounts: contracts.remainingCounts,
       endDate: contracts.endDate,
       planType: membershipPlans.planType,
@@ -83,8 +103,7 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
     .where(
       and(
         eq(contracts.memberId, data.memberId),
-        eq(contracts.contractStatus, 'ACTIVE'),
-        eq(contracts.status, 'active'),
+        eq(contracts.status, 'ACTIVE'),
         lte(contracts.startDate, today),
         gte(contracts.endDate, today)
       )
@@ -121,12 +140,12 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
     member: {
       id: member.id,
       fullName: member.fullName,
-      memberStatus: member.memberStatus,
+      status: member.status,
       branchId: member.branchId,
     },
     contract: {
       id: contract.id,
-      contractStatus: contract.contractStatus,
+      status: contract.status,
       remainingCounts: contract.remainingCounts,
       planType: contract.planType || 'TIME_BASED',
       endDate: contract.endDate,
@@ -150,7 +169,7 @@ export async function deductSessionCount(contractId: string): Promise<{
       const result = await db.execute(
         sql`SELECT * FROM deduct_contract_count(${contractId}::uuid, 1)`
       );
-      const row = (result as any)[0];
+      const row = (result as unknown as DeductCountResult[])[0];
       if (row?.success) {
         console.log(
           `[CheckInHook] Session deducted: contract ${contractId} remaining ${row.remaining} (atomic)`
@@ -204,7 +223,7 @@ export async function deductSessionCount(contractId: string): Promise<{
       await db
         .update(contracts)
         .set({
-          contractStatus: 'EXPIRED',
+          status: 'EXPIRED',
           updatedAt: new Date(),
         })
         .where(eq(contracts.id, contractId));
@@ -263,7 +282,7 @@ export async function hasCheckedInToday(memberId: string, branchId: string): Pro
       alreadyCheckedIn: true,
       checkIn: {
         id: existingCheckIns[0].id,
-        checkTime: existingCheckIns[0].checkTime,
+        checkTime: existingCheckIns[0].checkTime!,
       },
     };
   }
@@ -280,7 +299,7 @@ export async function hasCheckedInToday(memberId: string, branchId: string): Pro
 export async function processCheckIn(data: CheckInData): Promise<{
   success: boolean;
   error?: string;
-  checkIn?: any;
+  checkIn?: CheckInRecord;
   alreadyCheckedIn?: boolean;
   sessionDeducted?: boolean;
   remainingSessions?: number;

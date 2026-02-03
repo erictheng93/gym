@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { db, tenants, members, employees, branches } from '../db/index.js';
-import { eq, sql, count } from 'drizzle-orm';
+import { eq, count } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 

@@ -4,8 +4,8 @@
  * Runs weekly (Sunday 5:00 AM)
  */
 
-import { db, members, contracts, payments, checkIns, branches } from '../db/index.js';
-import { eq, and, gte, sql, count, sum, max } from 'drizzle-orm';
+import { db, members, contracts, payments, checkIns } from '../db/index.js';
+import { eq, and, gte, count, sum, max } from 'drizzle-orm';
 
 type RFMSegment = 'CHAMPION' | 'LOYAL' | 'POTENTIAL' | 'AT_RISK' | 'HIBERNATING' | 'LOST';
 
@@ -41,7 +41,7 @@ export async function runRFMSegmentation() {
         tenantId: members.tenantId,
       })
       .from(members)
-      .where(eq(members.status, 'active'));
+      .where(eq(members.status, 'ACTIVE'));
 
     console.log(`[RFM] Analyzing ${allMembers.length} members...`);
 
@@ -80,7 +80,7 @@ export async function runRFMSegmentation() {
           .where(
             and(
               eq(contracts.memberId, member.id),
-              eq(payments.paymentType, 'INCOME'),
+              eq(payments.type, 'INCOME'),
               gte(payments.paymentDate, oneYearAgo)
             )
           );

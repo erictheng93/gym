@@ -39,7 +39,7 @@ async function generateDailySnapshot() {
         .where(
           and(
             sql`${payments.branchId} = ANY(${branchIds})`,
-            eq(payments.paymentType, 'INCOME'),
+            eq(payments.type, 'INCOME'),
             sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
           )
         );
@@ -49,12 +49,12 @@ async function generateDailySnapshot() {
       const [memberCount] = await db
         .select({ count: count() })
         .from(members)
-        .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'active'`);
+        .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
 
       const [contractCount] = await db
         .select({ count: count() })
         .from(contracts)
-        .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.contractStatus} = 'ACTIVE'`);
+        .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
 
       await db.insert(usageRecords).values({
         tenantId: tenant.id,

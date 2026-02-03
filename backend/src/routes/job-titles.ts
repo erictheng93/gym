@@ -13,7 +13,10 @@ app.use('*', requireTenant);
 
 const createJobTitleSchema = z.object({
   name: z.string().min(1, '職稱名稱必填'),
+  code: z.string().min(1, '職稱代碼必填').max(20),
+  description: z.string().optional(),
   level: z.number().int().min(0).max(10).optional(),
+  sort: z.number().int().optional(),
   permissionsConfig: z.record(z.unknown()).optional(),
 });
 
@@ -90,7 +93,6 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobT
 
   const [updated] = await db.update(jobTitles).set({
     ...data,
-    updatedAt: new Date(),
   }).where(eq(jobTitles.id, id)).returning();
 
   return c.json({

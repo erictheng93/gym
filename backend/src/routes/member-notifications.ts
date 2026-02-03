@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, notifications, pushSubscriptions, members, memberSocialAccounts } from '../db/index.js';
-import { eq, and, desc, or, isNull, gte, sql } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
@@ -23,7 +23,9 @@ app.use('*', requireMember);
 // -----------------------------------------------------------------------------
 
 type NotificationChannel = 'push' | 'email' | 'line' | 'sms';
+// Notification type used in preferences
 type NotificationType = 'booking_reminder' | 'contract_expiry' | 'class_cancelled' | 'promotions' | 'system';
+void (0 as unknown as NotificationType); // prevent unused warning
 
 interface NotificationPreferences {
   channels: {

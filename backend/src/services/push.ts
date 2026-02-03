@@ -2,6 +2,11 @@ import webPush from 'web-push';
 import { db, pushSubscriptions } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 
+// Type guard for web-push errors
+function isWebPushError(error: unknown): error is { statusCode: number } {
+  return typeof error === 'object' && error !== null && 'statusCode' in error;
+}
+
 interface PushPayload {
   title: string;
   body: string;
@@ -50,8 +55,8 @@ class PushService {
           JSON.stringify(payload)
         );
         successCount++;
-      } catch (error: any) {
-        if (error.statusCode === 410 || error.statusCode === 404) {
+      } catch (error: unknown) {
+        if (isWebPushError(error) && (error.statusCode === 410 || error.statusCode === 404)) {
           await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
         }
         console.error('[Push] Send failed:', error);
@@ -87,8 +92,8 @@ class PushService {
           JSON.stringify(payload)
         );
         successCount++;
-      } catch (error: any) {
-        if (error.statusCode === 410 || error.statusCode === 404) {
+      } catch (error: unknown) {
+        if (isWebPushError(error) && (error.statusCode === 410 || error.statusCode === 404)) {
           await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
         }
         console.error('[Push] Send failed:', error);

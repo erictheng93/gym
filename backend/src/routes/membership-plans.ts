@@ -13,6 +13,7 @@ app.use('*', requireTenant);
 
 const createPlanSchema = z.object({
   name: z.string().min(1, '方案名稱必填'),
+  code: z.string().min(1, '方案代碼必填').max(20),
   planType: z.enum(['TIME_BASED', 'COUNT_BASED']),
   durationMonths: z.number().int().min(1).optional(),
   classCounts: z.number().int().min(1).optional(),

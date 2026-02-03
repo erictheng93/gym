@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, bookings, classSessions, classes, members, contracts, branches } from '../db/index.js';
+import { db, bookings, classSessions, classes, members, contracts, branches, BOOKING_STATUS } from '../db/index.js';
 import { eq, and, sql, desc, or, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
@@ -52,7 +52,7 @@ app.get('/', async (c) => {
   }
 
   if (status) {
-    conditions.push(eq(bookings.bookingStatus, status as any));
+    conditions.push(eq(bookings.bookingStatus, status as typeof BOOKING_STATUS[number]));
   }
 
   const whereCondition = and(...conditions);
@@ -189,7 +189,7 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
     .where(eq(members.id, data.memberId))
     .limit(1);
 
-  if (!member || member.memberStatus !== 'ACTIVE') {
+  if (!member || member.status !== 'ACTIVE') {
     return c.json({ success: false, error: '會員不存在或狀態無效' }, 400);
   }
 

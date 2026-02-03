@@ -66,7 +66,6 @@ let browser: Browser | null = null;
 async function getBrowser(): Promise<Browser> {
   if (!browser || !browser.connected) {
     // Dynamic import to avoid build-time dependency
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const puppeteer = await (Function('return import("puppeteer")')() as Promise<{ default: { launch: (opts: unknown) => Promise<Browser> } }>);
     browser = await puppeteer.default.launch({
       headless: true,

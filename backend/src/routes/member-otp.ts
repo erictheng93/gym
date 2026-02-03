@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
-import { eq, and, gt, desc, sql } from 'drizzle-orm';
+import { eq, and, gt, desc } from 'drizzle-orm';
 import { rateLimiter } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
@@ -13,7 +13,11 @@ import { emailService } from '../services/email.js';
 // OTP-based authentication for member-app
 // Endpoints: /send, /verify, /refresh
 
-const app = new Hono();
+type OtpVariables = {
+  requestBody?: { identifier?: string };
+};
+
+const app = new Hono<{ Variables: OtpVariables }>();
 
 // -----------------------------------------------------------------------------
 // Rate Limiters

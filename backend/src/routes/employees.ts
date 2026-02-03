@@ -16,14 +16,24 @@ const createEmployeeSchema = z.object({
   phone: z.string().optional().nullable(),
   email: z.string().email().optional().nullable(),
   branchId: z.string().uuid(),
-  jobTitleId: z.string().uuid().optional().nullable(),
-  employmentStatus: z.enum(['ACTIVE', 'RESIGNED', 'SUSPENDED']).optional(),
-  employmentType: z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT']).optional().nullable(),
+  jobTitleId: z.string().uuid(),
+  status: z.enum(['ACTIVE', 'RESIGNED', 'LEAVE']).optional(),
+  employmentType: z.enum(['FULL_TIME', 'PART_TIME', 'FREELANCE']),
   hireDate: z.string().optional().nullable(),
   basicSalary: z.coerce.number().optional().nullable(),
 });
 
-const updateEmployeeSchema = createEmployeeSchema.partial();
+const updateEmployeeSchema = z.object({
+  fullName: z.string().min(2, '姓名至少 2 個字元').optional(),
+  phone: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  branchId: z.string().uuid().optional(),
+  jobTitleId: z.string().uuid().optional(),
+  status: z.enum(['ACTIVE', 'RESIGNED', 'LEAVE']).optional(),
+  employmentType: z.enum(['FULL_TIME', 'PART_TIME', 'FREELANCE']).optional(),
+  hireDate: z.string().optional().nullable(),
+  basicSalary: z.coerce.number().optional().nullable(),
+});
 
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -200,13 +210,23 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     }
   }
 
+  // Build update data, excluding null values for non-nullable fields
+  const updateData: Record<string, unknown> = {
+    updatedAt: new Date(),
+  };
+  if (data.fullName !== undefined) updateData.fullName = data.fullName;
+  if (data.phone !== undefined) updateData.phone = data.phone;
+  if (data.email !== undefined) updateData.email = data.email;
+  if (data.branchId !== undefined) updateData.branchId = data.branchId;
+  if (data.jobTitleId !== undefined) updateData.jobTitleId = data.jobTitleId;
+  if (data.status !== undefined) updateData.status = data.status;
+  if (data.employmentType !== undefined) updateData.employmentType = data.employmentType;
+  if (data.hireDate !== undefined && data.hireDate !== null) updateData.hireDate = data.hireDate;
+  if (data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary ? String(data.basicSalary) : null;
+
   const [updatedEmployee] = await db
     .update(employees)
-    .set({
-      ...data,
-      basicSalary: data.basicSalary ? String(data.basicSalary) : undefined,
-      updatedAt: new Date(),
-    })
+    .set(updateData)
     .where(eq(employees.id, id))
     .returning();
 
@@ -240,8 +260,7 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
   await db
     .update(employees)
     .set({
-      status: 'archived',
-      employmentStatus: 'RESIGNED',
+      status: 'RESIGNED',
       updatedAt: new Date(),
     })
     .where(eq(employees.id, id));

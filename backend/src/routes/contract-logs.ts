@@ -14,11 +14,10 @@ app.use('*', requireTenant);
 const createLogSchema = z.object({
   contractId: z.string().uuid(),
   logType: z.enum(['PAUSE', 'RESUME', 'EXTEND', 'TRANSFER', 'CANCEL', 'CLASS_USED', 'RENEWAL']),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  daysAffected: z.number().int().optional(),
+  startDate: z.string(),
+  endDate: z.string(),
+  days: z.number().int().default(0),
   reason: z.string().optional(),
-  branchId: z.string().uuid().optional(),
   originalMemberId: z.string().uuid().optional(),
   targetMemberId: z.string().uuid().optional(),
 });
@@ -63,7 +62,7 @@ app.get('/', async (c) => {
     .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
     .innerJoin(members, eq(contracts.memberId, members.id))
     .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+    .leftJoin(employees, eq(contractLogs.createdBy, employees.id))
     .where(and(eq(branches.tenantId, tenantId), ...conditions))
     .orderBy(desc(contractLogs.createdAt))
     .limit(limit)
@@ -122,7 +121,7 @@ app.get('/contract/:contractId', async (c) => {
       },
     })
     .from(contractLogs)
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+    .leftJoin(employees, eq(contractLogs.createdBy, employees.id))
     .where(eq(contractLogs.contractId, contractId))
     .orderBy(desc(contractLogs.createdAt));
 
@@ -155,7 +154,8 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
 
   const [newLog] = await db.insert(contractLogs).values({
     ...data,
-    createdByEmployee: user.employeeId,
+    createdBy: user.employeeId,
+    tenantId,
   }).returning();
 
   return c.json({
@@ -189,7 +189,7 @@ app.get('/:id', async (c) => {
     .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
     .innerJoin(members, eq(contracts.memberId, members.id))
     .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+    .leftJoin(employees, eq(contractLogs.createdBy, employees.id))
     .where(and(eq(contractLogs.id, id), eq(branches.tenantId, tenantId)))
     .limit(1);
 

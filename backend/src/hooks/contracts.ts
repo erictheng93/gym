@@ -4,7 +4,7 @@
  */
 
 import { db, contracts, members } from '../db/index.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { calculateMemberStatus } from './utils.js';
 
 /**
@@ -15,33 +15,28 @@ export async function syncMemberStatusOnContractChange(memberId: string): Promis
   if (!memberId) return;
 
   try {
-    // Get all active contracts for this member
+    // Get all contracts for this member
     const memberContracts = await db
       .select({
         id: contracts.id,
-        contractStatus: contracts.contractStatus,
+        status: contracts.status,
       })
       .from(contracts)
-      .where(
-        and(
-          eq(contracts.memberId, memberId),
-          eq(contracts.status, 'active')
-        )
-      );
+      .where(eq(contracts.memberId, memberId));
 
     // Calculate new member status
-    const memberStatus = calculateMemberStatus(memberContracts);
+    const newStatus = calculateMemberStatus(memberContracts);
 
     // Update member status
     await db
       .update(members)
       .set({
-        memberStatus,
+        status: newStatus,
         updatedAt: new Date(),
       })
       .where(eq(members.id, memberId));
 
-    console.log(`[ContractHook] Member ${memberId} status updated to ${memberStatus}`);
+    console.log(`[ContractHook] Member ${memberId} status updated to ${newStatus}`);
   } catch (error) {
     console.error('[ContractHook] Error syncing member status:', error);
     throw error;
@@ -52,7 +47,7 @@ export async function syncMemberStatusOnContractChange(memberId: string): Promis
  * Handle contract creation hook
  * - Updates member status
  */
-export async function onContractCreate(contractId: string, memberId: string): Promise<void> {
+export async function onContractCreate(_contractId: string, memberId: string): Promise<void> {
   await syncMemberStatusOnContractChange(memberId);
 }
 
@@ -61,7 +56,7 @@ export async function onContractCreate(contractId: string, memberId: string): Pr
  * - Updates member status if contract_status changed
  */
 export async function onContractUpdate(
-  contractId: string,
+  _contractId: string,
   memberId: string,
   contractStatusChanged: boolean
 ): Promise<void> {
@@ -87,7 +82,7 @@ export async function activateContract(contractId: string): Promise<void> {
   await db
     .update(contracts)
     .set({
-      contractStatus: 'ACTIVE',
+      status: 'ACTIVE',
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, contractId));
@@ -112,7 +107,7 @@ export async function expireContract(contractId: string): Promise<void> {
   await db
     .update(contracts)
     .set({
-      contractStatus: 'EXPIRED',
+      status: 'EXPIRED',
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, contractId));
@@ -137,7 +132,7 @@ export async function cancelContract(contractId: string): Promise<void> {
   await db
     .update(contracts)
     .set({
-      contractStatus: 'CANCELLED',
+      status: 'CANCELLED',
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, contractId));

@@ -1,9 +1,9 @@
-import { Hono } from 'hono';
+import { Hono, Context, Next } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { hash } from '@node-rs/argon2';
 import { db, users, employees, branches, jobTitles, sessions } from '../db/index.js';
-import { eq, and, desc, sql, like, or } from 'drizzle-orm';
+import { eq, and, desc, sql, like } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { lucia } from '../auth/lucia.js';
@@ -14,7 +14,7 @@ app.use('*', requireAuth);
 app.use('*', requireTenant);
 
 // Require admin role for all user management operations
-const requireAdmin = async (c: any, next: () => Promise<void>) => {
+const requireAdmin = async (c: Context<{ Variables: AuthVariables & TenantVariables }>, next: Next) => {
   const user = c.get('user');
   if (!user || !['admin', 'super_admin'].includes(user.role)) {
     return c.json({ success: false, error: '需要管理員權限' }, 403);
@@ -80,8 +80,8 @@ app.get('/', async (c) => {
     conditions.push(like(users.email, `%${search}%`));
   }
 
-  if (roleFilter) {
-    conditions.push(eq(users.role, roleFilter));
+  if (roleFilter && ['super_admin', 'admin', 'manager', 'coach', 'staff'].includes(roleFilter)) {
+    conditions.push(eq(users.role, roleFilter as 'super_admin' | 'admin' | 'manager' | 'coach' | 'staff'));
   }
 
   if (activeFilter !== undefined) {
@@ -180,7 +180,7 @@ app.get('/:id', async (c) => {
   }
 
   // Exclude password hash
-  const { passwordHash, ...userWithoutPassword } = result.user;
+  const { passwordHash: _passwordHash, ...userWithoutPassword } = result.user;
 
   return c.json({
     success: true,
@@ -260,7 +260,7 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
     }).where(eq(employees.id, data.employeeId));
   }
 
-  const { passwordHash: _, ...userWithoutPassword } = newUser;
+  const { passwordHash: _passwordHash, ...userWithoutPassword } = newUser;
 
   return c.json({ success: true, data: userWithoutPassword }, 201);
 });
@@ -351,7 +351,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
     await lucia.invalidateUserSessions(id);
   }
 
-  const { passwordHash, ...userWithoutPassword } = updatedUser;
+  const { passwordHash: _passwordHash, ...userWithoutPassword } = updatedUser;
 
   return c.json({ success: true, data: userWithoutPassword });
 });

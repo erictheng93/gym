@@ -4,7 +4,7 @@
  */
 
 import { db, contracts, contractLogs, members } from '../db/index.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { calculateMemberStatus, addDays } from './utils.js';
 
 type LogType = 'PAUSE' | 'RESUME' | 'CLASS_USED' | 'TRANSFER' | 'EXTEND';
@@ -12,10 +12,10 @@ type LogType = 'PAUSE' | 'RESUME' | 'CLASS_USED' | 'TRANSFER' | 'EXTEND';
 interface ContractLogData {
   contractId: string;
   logType: LogType;
-  daysAffected?: number;
+  days?: number;
   targetMemberId?: string;
   reason?: string;
-  createdByEmployee?: string;
+  createdBy?: string;
   tenantId?: string;
 }
 
@@ -26,13 +26,14 @@ interface ContractLogData {
  * - Creates an EXTEND log automatically
  */
 export async function handlePauseLog(data: ContractLogData): Promise<void> {
-  if (!data.contractId || !data.daysAffected) return;
+  if (!data.contractId || !data.days) return;
 
   const [contract] = await db
     .select({
       id: contracts.id,
       endDate: contracts.endDate,
-      contractStatus: contracts.contractStatus,
+      startDate: contracts.startDate,
+      status: contracts.status,
       memberId: contracts.memberId,
     })
     .from(contracts)
@@ -42,14 +43,15 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
 
   // Calculate new end date
   const currentEndDate = new Date(contract.endDate);
-  const newEndDate = addDays(currentEndDate, data.daysAffected);
+  const newEndDate = addDays(currentEndDate, data.days);
+  const today = new Date().toISOString().split('T')[0];
 
   // Update contract
   await db
     .update(contracts)
     .set({
       endDate: newEndDate.toISOString().split('T')[0],
-      contractStatus: 'PAUSED',
+      status: 'PAUSED',
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
@@ -58,11 +60,11 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
   await db.insert(contractLogs).values({
     contractId: data.contractId,
     logType: 'EXTEND',
+    startDate: today,
     endDate: newEndDate.toISOString().split('T')[0],
-    daysAffected: data.daysAffected,
-    reason: `因暫停自動展延 ${data.daysAffected} 天`,
-    createdByEmployee: data.createdByEmployee,
-    status: 'active',
+    days: data.days,
+    reason: `因暫停自動展延 ${data.days} 天`,
+    createdBy: data.createdBy,
     tenantId: data.tenantId,
   });
 
@@ -72,7 +74,7 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
   }
 
   console.log(
-    `[ContractLogHook] Contract ${data.contractId} extended by ${data.daysAffected} days due to PAUSE`
+    `[ContractLogHook] Contract ${data.contractId} extended by ${data.days} days due to PAUSE`
   );
 }
 
@@ -91,7 +93,7 @@ export async function handleResumeLog(data: ContractLogData): Promise<void> {
   await db
     .update(contracts)
     .set({
-      contractStatus: 'ACTIVE',
+      status: 'ACTIVE',
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));
@@ -144,7 +146,7 @@ export async function handleClassUsedLog(data: ContractLogData): Promise<void> {
     await db
       .update(contracts)
       .set({
-        contractStatus: 'EXPIRED',
+        status: 'EXPIRED',
         updatedAt: new Date(),
       })
       .where(eq(contracts.id, data.contractId));
@@ -205,7 +207,7 @@ export async function handleTransferLog(data: ContractLogData): Promise<void> {
  * - Extends contract end date
  */
 export async function handleExtendLog(data: ContractLogData): Promise<void> {
-  if (!data.contractId || !data.daysAffected) return;
+  if (!data.contractId || !data.days) return;
 
   const [contract] = await db
     .select({
@@ -218,7 +220,7 @@ export async function handleExtendLog(data: ContractLogData): Promise<void> {
   if (!contract || !contract.endDate) return;
 
   const currentEndDate = new Date(contract.endDate);
-  const newEndDate = addDays(currentEndDate, data.daysAffected);
+  const newEndDate = addDays(currentEndDate, data.days);
 
   await db
     .update(contracts)
@@ -229,7 +231,7 @@ export async function handleExtendLog(data: ContractLogData): Promise<void> {
     .where(eq(contracts.id, data.contractId));
 
   console.log(
-    `[ContractLogHook] Contract ${data.contractId} extended by ${data.daysAffected} days`
+    `[ContractLogHook] Contract ${data.contractId} extended by ${data.days} days`
   );
 }
 
@@ -264,25 +266,20 @@ async function updateMemberStatus(memberId: string): Promise<void> {
   const memberContracts = await db
     .select({
       id: contracts.id,
-      contractStatus: contracts.contractStatus,
+      status: contracts.status,
     })
     .from(contracts)
-    .where(
-      and(
-        eq(contracts.memberId, memberId),
-        eq(contracts.status, 'active')
-      )
-    );
+    .where(eq(contracts.memberId, memberId));
 
-  const memberStatus = calculateMemberStatus(memberContracts);
+  const newStatus = calculateMemberStatus(memberContracts);
 
   await db
     .update(members)
     .set({
-      memberStatus,
+      status: newStatus,
       updatedAt: new Date(),
     })
     .where(eq(members.id, memberId));
 
-  console.log(`[ContractLogHook] Member ${memberId} status updated to ${memberStatus}`);
+  console.log(`[ContractLogHook] Member ${memberId} status updated to ${newStatus}`);
 }

@@ -241,6 +241,11 @@ app.post('/:id/convert', async (c) => {
   const lastNum = lastMember?.memberCode ? parseInt(lastMember.memberCode.slice(1)) : 0;
   const memberCode = `M${String(lastNum + 1).padStart(6, '0')}`;
 
+  // Ensure phone is provided for member creation
+  if (!lead.lead.phone) {
+    return c.json({ success: false, error: '需要電話號碼才能轉換為會員' }, 400);
+  }
+
   // Create member from lead
   const [newMember] = await db.insert(members).values({
     fullName: lead.lead.fullName,

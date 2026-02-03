@@ -99,7 +99,7 @@ app.get('/overview', async (c) => {
     .where(
       and(
         inArray(payments.branchId, branchIds),
-        eq(payments.paymentType, 'INCOME'),
+        eq(payments.type, 'INCOME'),
         gte(payments.paymentDate, monthStartDate)
       )
     );
@@ -110,7 +110,7 @@ app.get('/overview', async (c) => {
     .where(
       and(
         inArray(payments.branchId, branchIds),
-        eq(payments.paymentType, 'INCOME'),
+        eq(payments.type, 'INCOME'),
         gte(payments.paymentDate, lastMonthStartDate),
         lte(payments.paymentDate, lastMonthEndDate)
       )
@@ -204,7 +204,7 @@ app.get('/revenue-trend', async (c) => {
       .where(
         and(
           inArray(payments.branchId, branchIds),
-          eq(payments.paymentType, 'INCOME'),
+          eq(payments.type, 'INCOME'),
           gte(payments.paymentDate, sql`current_date - interval '12 months'`)
         )
       )
@@ -230,7 +230,7 @@ app.get('/revenue-trend', async (c) => {
     .where(
       and(
         inArray(payments.branchId, branchIds),
-        eq(payments.paymentType, 'INCOME'),
+        eq(payments.type, 'INCOME'),
         gte(payments.paymentDate, sql`current_date - interval '30 days'`)
       )
     )

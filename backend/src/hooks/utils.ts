@@ -3,37 +3,36 @@
  */
 
 import { db, contracts, members } from '../db/index.js';
-import { eq, and, gte, sql } from 'drizzle-orm';
+import { and, gte, sql } from 'drizzle-orm';
 
-// Contract status type
-type ContractStatus = 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'PENDING';
+// Contract status type (matches CONTRACT_STATUS in schema)
+type ContractStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'TRANSFERRED';
 
-// Member status type
-type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'PAUSED';
+// Member status type (matches MEMBER_STATUS in schema)
+type MemberStatus = 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED';
 
 // Payment status type
 type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
 
 interface ContractWithStatus {
   id: string;
-  contractStatus: ContractStatus;
+  status: ContractStatus;
 }
 
 /**
  * Calculate member status based on all contracts
- * Priority: ACTIVE > PAUSED > INACTIVE
+ * Priority: ACTIVE > EXPIRED
  */
 export function calculateMemberStatus(memberContracts: ContractWithStatus[]): MemberStatus {
   if (!memberContracts || memberContracts.length === 0) {
-    return 'INACTIVE';
+    return 'EXPIRED';
   }
 
-  const hasActive = memberContracts.some(c => c.contractStatus === 'ACTIVE');
-  const hasPaused = memberContracts.some(c => c.contractStatus === 'PAUSED');
+  const hasActive = memberContracts.some(c => c.status === 'ACTIVE');
+  const hasPaused = memberContracts.some(c => c.status === 'PAUSED');
 
-  if (hasActive) return 'ACTIVE';
-  if (hasPaused) return 'PAUSED';
-  return 'INACTIVE';
+  if (hasActive || hasPaused) return 'ACTIVE';
+  return 'EXPIRED';
 }
 
 /**
@@ -78,7 +77,7 @@ export async function generateMemberCode(): Promise<string> {
     const count = result[0]?.count || 0;
     const sequence = (Number(count) + 1).toString().padStart(4, '0');
     return `${prefix}${dateStr}${sequence}`;
-  } catch (error) {
+  } catch (_error) {
     // Fallback to timestamp if query fails
     const timestamp = Date.now().toString().slice(-6);
     return `${prefix}${dateStr}${timestamp}`;
@@ -113,7 +112,7 @@ export async function generateContractNo(): Promise<string> {
     const count = result[0]?.count || 0;
     const sequence = (Number(count) + 1).toString().padStart(4, '0');
     return `${prefix}${dateStr}${sequence}`;
-  } catch (error) {
+  } catch (_error) {
     const timestamp = Date.now().toString().slice(-6);
     return `${prefix}${dateStr}${timestamp}`;
   }

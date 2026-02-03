@@ -76,8 +76,13 @@ type Variables = AuthVariables & TenantVariables;
 
 const app = new Hono<{ Variables: Variables }>();
 
+// Parse CORS origins from environment variable or use defaults
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'];
+
 app.use('*', cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+  origin: corsOrigins,
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token', 'X-Coach-Token'],

@@ -34,7 +34,7 @@ app.get('/revenue', async (c) => {
     inArray(payments.branchId, branchIds),
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
-    eq(payments.paymentType, 'INCOME'),
+    eq(payments.type, 'INCOME'),
   ];
 
   if (branchId) {
@@ -109,7 +109,7 @@ app.get('/member-growth', async (c) => {
   const [totalResult] = await db
     .select({ count: count() })
     .from(members)
-    .where(and(...conditions, eq(members.status, 'active')));
+    .where(and(...conditions, eq(members.status, 'ACTIVE')));
 
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);

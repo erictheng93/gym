@@ -13,10 +13,10 @@ app.use('*', requireTenant);
 
 const createMemberSchema = z.object({
   fullName: z.string().min(2, '姓名至少 2 個字元'),
-  phone: z.string().optional(),
+  phone: z.string().min(1, '電話號碼必填'),
   email: z.string().email().optional().nullable(),
   branchId: z.string().uuid(),
-  memberStatus: z.enum(['ACTIVE', 'INACTIVE', 'PAUSED', 'EXPIRED']).optional(),
+  status: z.enum(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'BANNED']).optional(),
   joinDate: z.string().optional(),
   salesPersonId: z.string().uuid().optional().nullable(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional().nullable(),
@@ -35,7 +35,7 @@ const querySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(20),
   search: z.string().optional(),
   branchId: z.string().uuid().optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'PAUSED', 'EXPIRED']).optional(),
+  status: z.enum(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'BANNED']).optional(),
   sortBy: z.enum(['fullName', 'memberCode', 'joinDate', 'dateCreated']).default('dateCreated'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
@@ -262,7 +262,7 @@ app.delete('/:id', async (c) => {
 
   await db
     .update(members)
-    .set({ status: 'archived', updatedAt: new Date() })
+    .set({ status: 'SUSPENDED', updatedAt: new Date() })
     .where(eq(members.id, id));
 
   return c.json({ success: true, message: '會員已封存' });

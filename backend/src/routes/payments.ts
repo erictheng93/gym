@@ -135,12 +135,12 @@ app.get('/summary', async (c) => {
   const [incomeResult] = await db
     .select({ total: sum(payments.amount) })
     .from(payments)
-    .where(and(whereCondition, eq(payments.paymentType, 'INCOME')));
+    .where(and(whereCondition, eq(payments.type, 'INCOME')));
 
   const [refundResult] = await db
     .select({ total: sum(payments.amount) })
     .from(payments)
-    .where(and(whereCondition, eq(payments.paymentType, 'REFUND')));
+    .where(and(whereCondition, eq(payments.type, 'REFUND')));
 
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
@@ -226,11 +226,21 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
+  // contractId is required in schema
+  if (!data.contractId) {
+    return c.json({ success: false, error: '必須指定合約' }, 400);
+  }
+
   const [newPayment] = await db.insert(payments).values({
-    ...data,
+    contractId: data.contractId,
+    memberId: data.memberId,
+    branchId: data.branchId,
     amount: String(data.amount),
+    paymentMethod: data.paymentMethod,
     paymentDate: new Date(),
-    receivedBy: user.employeeId,
+    type: data.paymentType,
+    notes: data.notes,
+    createdBy: user.employeeId,
     tenantId,
   }).returning();
 
@@ -241,8 +251,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
       .where(
         and(
           eq(payments.contractId, data.contractId),
-          eq(payments.paymentType, 'INCOME'),
-          eq(payments.status, 'active')
+          eq(payments.type, 'INCOME')
         )
       );
 

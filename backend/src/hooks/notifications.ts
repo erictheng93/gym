@@ -11,7 +11,7 @@ interface PushPayload {
   body: string;
   icon?: string;
   url?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 /**
@@ -19,7 +19,7 @@ interface PushPayload {
  */
 export function buildNotificationPayload(
   type: string,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): PushPayload {
   switch (type) {
     case 'booking_reminder':
@@ -60,8 +60,8 @@ export function buildNotificationPayload(
 
     default:
       return {
-        title: data.title || '通知',
-        body: data.message || '',
+        title: (data.title as string) || '通知',
+        body: (data.message as string) || '',
         icon: '/icons/notification.png',
         data: { type, ...data },
       };
@@ -179,7 +179,7 @@ export async function createNotification(data: {
   title: string;
   message: string;
   type: string;
-  notificationData?: Record<string, any>;
+  notificationData?: Record<string, unknown>;
   tenantId: string;
 }): Promise<void> {
   try {

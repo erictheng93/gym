@@ -18,7 +18,7 @@ const app = new Hono<{ Variables: Variables }>();
  * List files with pagination
  */
 app.get('/', async (c) => {
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
   const { page = '1', limit = '20', folder } = c.req.query();
 
   const pageNum = Math.max(1, parseInt(page));
@@ -59,7 +59,7 @@ app.get('/', async (c) => {
  * Get file by ID
  */
 app.get('/:id', async (c) => {
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
   const { id } = c.req.param();
 
   const [file] = await db
@@ -91,7 +91,7 @@ app.get('/:id', async (c) => {
  * Get signed download URL
  */
 app.get('/:id/download', async (c) => {
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
   const { id } = c.req.param();
   const { expires = '3600' } = c.req.query();
 
@@ -131,7 +131,7 @@ app.get('/:id/download', async (c) => {
  */
 app.post('/', async (c) => {
   const user = c.get('user');
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
 
   const body = await c.req.parseBody();
   const file = body['file'];
@@ -208,7 +208,7 @@ app.post('/', async (c) => {
  * Update file metadata
  */
 app.patch('/:id', async (c) => {
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
   const { id } = c.req.param();
 
   const [existingFile] = await db
@@ -257,7 +257,7 @@ app.patch('/:id', async (c) => {
  * Delete a file
  */
 app.delete('/:id', async (c) => {
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
   const { id } = c.req.param();
 
   const [existingFile] = await db
@@ -289,7 +289,7 @@ app.delete('/:id', async (c) => {
  * Get storage statistics
  */
 app.get('/stats', async (c) => {
-  const tenantId = c.get('tenantId');
+  const tenantId = c.get('tenantId')!;
 
   const allFiles = await db
     .select({

@@ -4,7 +4,7 @@
  */
 
 import { db, leads, employees, jobTitles, leadActivities, notifications } from '../db/index.js';
-import { eq, and, or, ilike, sql, inArray } from 'drizzle-orm';
+import { eq, and, or, ilike, sql, notInArray } from 'drizzle-orm';
 
 interface LeadData {
   id?: string;
@@ -43,7 +43,7 @@ export async function autoAssignLead(data: LeadData): Promise<string | null> {
       .where(
         and(
           eq(employees.branchId, data.branchId),
-          eq(employees.status, 'active'),
+          eq(employees.status, 'ACTIVE'),
           or(
             ilike(jobTitles.name, '%sales%'),
             ilike(jobTitles.name, '%業務%'),
@@ -60,7 +60,7 @@ export async function autoAssignLead(data: LeadData): Promise<string | null> {
         .where(
           and(
             eq(employees.branchId, data.branchId),
-            eq(employees.status, 'active')
+            eq(employees.status, 'ACTIVE')
           )
         )
         .limit(1);
@@ -168,7 +168,7 @@ export async function onLeadCreate(leadId: string, data: LeadData): Promise<void
  */
 export async function onLeadStatusChange(
   leadId: string,
-  oldStatus: string,
+  _oldStatus: string,
   newStatus: string,
   data: {
     assignedTo?: string;

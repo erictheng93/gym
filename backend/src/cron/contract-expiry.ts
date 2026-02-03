@@ -41,7 +41,7 @@ async function checkExpiringContracts(daysAhead: number) {
     .innerJoin(branches, eq(contracts.branchId, branches.id))
     .where(
       and(
-        eq(contracts.contractStatus, 'ACTIVE'),
+        eq(contracts.status, 'ACTIVE'),
         eq(contracts.endDate, targetDateStr)
       )
     );

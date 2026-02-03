@@ -4,7 +4,7 @@
  */
 
 import { db, contracts, payments } from '../db/index.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { calculatePaymentStatus } from './utils.js';
 
 type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
@@ -40,26 +40,21 @@ export async function updateContractPaymentStatus(contractId: string): Promise<v
 
     if (!contract) return;
 
-    // Get all active payments for this contract
+    // Get all payments for this contract
     const contractPayments = await db
       .select({
         id: payments.id,
         amount: payments.amount,
-        paymentType: payments.paymentType,
+        type: payments.type,
       })
       .from(payments)
-      .where(
-        and(
-          eq(payments.contractId, contractId),
-          eq(payments.status, 'active')
-        )
-      );
+      .where(eq(payments.contractId, contractId));
 
     // Calculate total paid amount (subtract refunds)
     let paidAmount = 0;
     for (const payment of contractPayments) {
       const amount = parseFloat(payment.amount || '0');
-      if (payment.paymentType === 'REFUND') {
+      if (payment.type === 'REFUND') {
         paidAmount -= amount;
       } else {
         paidAmount += amount;
@@ -136,22 +131,17 @@ export async function getContractPaymentSummary(contractId: string): Promise<{
   const contractPayments = await db
     .select({
       amount: payments.amount,
-      paymentType: payments.paymentType,
+      type: payments.type,
     })
     .from(payments)
-    .where(
-      and(
-        eq(payments.contractId, contractId),
-        eq(payments.status, 'active')
-      )
-    );
+    .where(eq(payments.contractId, contractId));
 
   let paidAmount = 0;
   let refundedAmount = 0;
 
   for (const payment of contractPayments) {
     const amount = parseFloat(payment.amount || '0');
-    if (payment.paymentType === 'REFUND') {
+    if (payment.type === 'REFUND') {
       refundedAmount += amount;
     } else {
       paidAmount += amount;

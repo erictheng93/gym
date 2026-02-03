@@ -256,7 +256,7 @@ app.get('/me/permissions', requireAuth, async (c) => {
   }
 
   // Check employee status
-  if (result.status !== 'active') {
+  if (result.status !== 'ACTIVE') {
     return c.json({
       success: true,
       data: {

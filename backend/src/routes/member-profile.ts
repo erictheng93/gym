@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, members, branches, contracts, membershipPlans, memberCredentials, memberSocialAccounts } from '../db/index.js';
-import { eq, and, or, gte, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
@@ -98,7 +98,6 @@ app.get('/', async (c) => {
     .limit(1);
 
   // Get active contracts with plan info
-  const today = new Date().toISOString().split('T')[0];
   const activeContracts = await db
     .select({
       id: contracts.id,

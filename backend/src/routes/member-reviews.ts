@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, classReviews, bookings, classSessions, classes, members } from '../db/index.js';
-import { eq, and, desc, avg, count, sql, gte, lte } from 'drizzle-orm';
+import { eq, and, desc, avg, count } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
