@@ -19,8 +19,16 @@ cd backend
 pnpm install
 pnpm dev                        # Development with hot reload (http://localhost:8056)
 pnpm build                      # Build for production
+pnpm start                      # Run production build
+pnpm db:generate                # Generate migrations
+pnpm db:migrate                 # Run migrations
 pnpm db:push                    # Push schema changes to database
 pnpm db:studio                  # Open Drizzle Studio
+pnpm db:seed                    # Seed database with test data
+pnpm test                       # Run tests
+pnpm test:coverage              # Run tests with coverage
+pnpm lint                       # Lint source code
+pnpm typecheck                  # TypeScript type checking
 ```
 
 ### Frontend (Nuxt 3)
@@ -31,6 +39,11 @@ pnpm dev                        # All apps in parallel
 pnpm dev:admin                  # Admin web only (http://localhost:3001)
 pnpm dev:member                 # Member app only (http://localhost:3002)
 pnpm dev:coach                  # Coach app only (http://localhost:3003)
+pnpm build                      # Build all apps for production
+pnpm lint                       # Lint all packages
+pnpm typecheck                  # TypeScript type checking
+pnpm test                       # Run unit tests
+pnpm test:e2e                   # Run Playwright E2E tests
 ```
 
 ## Architecture
@@ -40,12 +53,15 @@ pnpm dev:coach                  # Coach app only (http://localhost:3003)
 gym-nexus/
 ├── backend/                    # Hono.js API
 │   ├── src/
-│   │   ├── routes/            # API route handlers
-│   │   ├── services/          # Business logic (email, sms, line, payment, pdf)
-│   │   ├── middleware/        # Auth, CSRF, rate limiting
+│   │   ├── routes/            # API route handlers (46 routes)
+│   │   ├── services/          # Business logic services (9 services)
+│   │   ├── middleware/        # Auth, CSRF, rate limiting (7 middleware)
 │   │   ├── db/                # Drizzle schema and migrations
-│   │   ├── hooks/             # Business event hooks
-│   │   └── cron/              # Scheduled jobs
+│   │   ├── hooks/             # Business event hooks (7 hooks)
+│   │   ├── cron/              # Scheduled jobs (4 cron jobs)
+│   │   ├── auth/              # Lucia auth configuration
+│   │   ├── types/             # TypeScript type definitions
+│   │   └── utils/             # Utility functions
 │   ├── docker-compose.yml     # Development environment
 │   └── Dockerfile             # Production build
 ├── frontend/
@@ -53,86 +69,139 @@ gym-nexus/
 │   │   ├── admin-web/         # Staff dashboard (e-contracts, reports, HR)
 │   │   ├── member-app/        # Member PWA (booking, profile, check-in)
 │   │   └── coach-app/         # Coach app (classes, students, lesson plans)
-│   └── packages/              # Shared UI components
-└── docs/
+│   ├── packages/
+│   │   ├── ui/                # Shared UI components
+│   │   ├── shared/            # Shared utilities and types
+│   │   ├── hr-core/           # HR feature core logic
+│   │   └── hr-composables/    # HR feature composables
+│   ├── tests/                 # Integration tests
+│   └── e2e/                   # Playwright E2E tests
+└── docs/                      # Documentation
 ```
 
 ### Backend Architecture
 
 **Tech Stack:**
-- Hono.js (web framework)
-- Drizzle ORM (type-safe database access)
-- Lucia Auth (session-based staff auth)
+- Hono.js 4.x (web framework)
+- Drizzle ORM 0.38.x (type-safe database access)
+- Lucia Auth 3.x (session-based staff auth)
 - JWT (member/coach auth with X-Member-Token/X-Coach-Token)
 - Node.js 22
 
-**Route Files (~35 routes):**
+**Route Files (46 routes):**
 | Category | Files | Description |
 |----------|-------|-------------|
 | Auth | auth, member-auth, member-otp, member-oauth, coach-auth | Multi-type authentication |
-| Core | members, contracts, contract-logs, branches, employees | Core business entities |
+| Core | members, contracts, contract-logs, branches, employees, job-titles, users, tenant | Core business entities |
 | Classes | classes, bookings, check-ins, coach-classes, coach-schedule | Booking system |
-| Finance | payments, payment-webhooks, payroll | Payments & HR |
+| Finance | payments, payment-webhooks, membership-plans | Payments & plans |
 | Marketing | leads, campaigns, coupons | Marketing tools |
 | Member App | member-profile, member-push, member-notifications, member-reviews, member-check-in, member-workouts, member-goals, member-measurements, member-issues | Full member functionality |
 | Coach App | coach-profile, coach-students, coach-lesson-plans, coach-teaching-materials | Coach functionality |
 | System | dashboard, reports, notifications, files, pdf, health | System utilities |
 | HR | hr-payroll, hr-performance | Human resources |
 
-**Services:**
+**Services (9 services):**
 - `email.ts` - SMTP email with templates
 - `push.ts` - Web push notifications (VAPID)
 - `line.ts` - LINE Messaging API (Flex messages, multicast)
 - `sms.ts` - Mitake SMS gateway (Taiwan)
 - `payment.ts` - Multi-gateway (Stripe, ECPay, LINE Pay, Manual)
 - `pdf.ts` - PDF generation (Puppeteer)
-- `storage.ts` - S3/R2 file storage
+- `files.ts` - S3/R2 file storage
+- `member-jwt.ts` - Member JWT token generation/validation
+- `coach-jwt.ts` - Coach JWT token generation/validation
 
-**Middleware:**
+**Middleware (7 middleware):**
 - `auth.ts` - Staff authentication (Lucia sessions)
 - `member-auth.ts` - Member JWT validation
 - `coach-auth.ts` - Coach JWT validation
 - `tenant-context.ts` - Multi-tenant context
 - `rate-limiter.ts` - Rate limiting
 - `csrf.ts` - CSRF protection
+- `api-logger.ts` - Request/response logging
 
-### Database Schema (Drizzle)
+**Hooks (7 hooks):**
+- `contracts.ts` - Contract lifecycle events
+- `payments.ts` - Payment processing hooks
+- `check-ins.ts` - Check-in event hooks
+- `contract-logs.ts` - Contract log event handling
+- `leads.ts` - Lead conversion hooks
+- `notifications.ts` - Notification trigger hooks
+- `utils.ts` - Hook utility functions
 
-**Core Tables:**
+### Database Schema (Drizzle - 51 tables)
+
+**Authentication & Multi-tenant:**
+- `users` - Staff user accounts
+- `sessions` - Lucia auth sessions
 - `tenants` - Multi-tenant root
+
+**Core Business:**
 - `branches` - Branch locations (HEADQUARTER/BRANCH types)
 - `employees` - Staff with job titles and permissions
+- `jobTitles` - Job title configuration
+- `membershipPlans` - Membership plan definitions
 - `members` - Customer data with status management
 - `contracts` - Membership contracts (TIME_BASED/COUNT_BASED)
-- `contract_logs` - Contract events (pause/transfer/extend)
+- `contractLogs` - Contract events (pause/transfer/extend)
 - `payments` - Financial transactions
-- `classes` - Class schedules
+- `subscriptions` - Recurring payment subscriptions
+- `invoices` - Invoice records
+- `usageRecords` - Usage tracking
+
+**Classes & Bookings:**
+- `classes` - Class definitions
+- `classSchedules` - Recurring schedules
+- `classSessions` - Individual sessions
 - `bookings` - Class bookings
-- `check_ins` - Entry logs
+- `checkIns` - Member entry logs
 
 **Member App Tables:**
-- `member_devices` - Push notification tokens
-- `member_reviews` - Class reviews
-- `member_issues` - Support tickets
-- `member_workouts` - Workout logs
-- `member_goals` - Fitness goals
-- `member_measurements` - Body measurements
+- `memberCredentials` - Login credentials
+- `memberSocialAccounts` - OAuth social accounts
+- `pushSubscriptions` - Push notification tokens
+- `classReviews` - Class reviews
+- `issueReports` - Support tickets
+- `workoutLogs` - Workout logs
+- `memberGoals` - Fitness goals
+- `bodyMeasurements` - Body measurements
 
 **Coach App Tables:**
-- `coach_notes` - Student notes
-- `lesson_plans` - Lesson planning
-- `teaching_materials` - Exercise library
+- `coachMemberAssignments` - Coach-member relationships
+- `coachNotes` - Student notes
+- `lessonPlans` - Lesson planning
+- `teachingMaterials` - Exercise library
+- `classRecords` - Class attendance records
 
 **HR Tables:**
-- `salary_records` - Payroll records
-- `promotion_records` - Promotions/raises
-- `performance_reviews` - Performance tracking
-- `kpi_templates` - KPI templates
+- `attendances` - Staff attendance
+- `leaveRequests` - Leave management
+- `salaryRecords` - Payroll records
+- `promotionRecords` - Promotions/raises
+- `performanceReviews` - Performance tracking
+- `kpiTemplates` - KPI templates
+
+**Marketing Tables:**
+- `leads` - Lead management
+- `leadActivities` - Lead activity tracking
+- `campaigns` - Marketing campaigns
+- `coupons` - Coupon definitions
+- `couponUsages` - Coupon usage records
 
 **Notification Tables:**
-- `branch_notification_config` - Multi-tenant LINE/SMS config
-- `line_message_logs` - LINE message tracking
-- `sms_logs` - SMS tracking
+- `notifications` - In-app notifications
+- `branchNotificationConfig` - Multi-tenant LINE/SMS config
+- `lineMessageLogs` - LINE message tracking
+- `smsLogs` - SMS tracking
+
+**Authentication Tables:**
+- `otpTokens` - OTP token storage
+- `otpSendLogs` - OTP send rate limiting
+
+**System Tables:**
+- `files` - File metadata
+- `auditLogs` - Audit trail
 
 ### API Endpoints Reference
 
@@ -141,7 +210,7 @@ gym-nexus/
 /api/member/otp/*           - OTP login
 /api/member/auth/*          - Auth & refresh
 /api/member/me              - Profile CRUD
-/api/member/oauth/*         - Social login
+/api/member/oauth/*         - Social login (Google, LINE, Apple)
 /api/member/push/*          - Push notifications
 /api/member/notifications/* - In-app notifications
 /api/member/reviews/*       - Class reviews
@@ -168,11 +237,25 @@ gym-nexus/
 /api/auth/*                 - Staff login
 /api/members/*              - Member management
 /api/contracts/*            - Contract management
+/api/contract-logs/*        - Contract event logs
 /api/payments/*             - Payment management
-/api/payroll/*              - HR payroll
-/api/performance/*          - HR performance
+/api/branches/*             - Branch management
+/api/employees/*            - Employee management
+/api/job-titles/*           - Job title configuration
+/api/membership-plans/*     - Membership plan management
+/api/classes/*              - Class management
+/api/bookings/*             - Booking management
+/api/hr/payroll/*           - HR payroll
+/api/hr/performance/*       - HR performance
+/api/leads/*                - Lead management
+/api/campaigns/*            - Campaign management
+/api/coupons/*              - Coupon management
 /api/reports/*              - Analytics
 /api/dashboard/*            - Dashboard data
+/api/notifications/*        - System notifications
+/api/files/*                - File management
+/api/tenant/*               - Tenant configuration
+/api/health                 - Health check
 ```
 
 ### Port Configuration
@@ -218,6 +301,25 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 - `analytics.ts` - Daily analytics aggregation
 - `rfm.ts` - RFM segmentation calculation
 - `contract-expiry.ts` - Expiry notifications
+
+### Testing
+
+**Backend Tests:**
+```bash
+cd backend
+pnpm test                    # Run all tests
+pnpm test:coverage           # Run with coverage report
+```
+
+**Frontend Tests:**
+```bash
+cd frontend
+pnpm test                    # Run Vitest unit tests
+pnpm test:e2e                # Run Playwright E2E tests
+```
+
+**E2E Tests Location:** `frontend/e2e/`
+**Integration Tests Location:** `frontend/tests/integration/`
 
 ## Language
 

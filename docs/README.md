@@ -21,20 +21,34 @@
 
 ### 文件分類
 
-#### 仍然適用 (Still Applicable)
-- `BUSINESS_STRATEGY*.md` - 商業策略 (非技術相關)
+#### 部署與運維 (Deployment & Operations)
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - 完整部署指南 (Cloudflare Pages + Tunnel)
+- **[deployment/setup-cloudflare-tunnel.md](./deployment/setup-cloudflare-tunnel.md)** - Cloudflare Tunnel 設定
+- `deployment-runbook.md` - 部署操作手冊
+- `monitoring-setup.md` - 監控設定
+- `disaster-recovery.md` - 災難復原
+
+#### 功能文件 (Feature Documentation)
+- **[ADMIN_WEB.md](./ADMIN_WEB.md)** - Admin Web 功能說明
+- **[MEMBER_APP.md](./MEMBER_APP.md)** - Member App 功能說明
+- **[SECURITY.md](./SECURITY.md)** - 安全性設計
+
+#### 測試 (Testing)
+- **[testing/E2E-TEST-SETUP.md](./testing/E2E-TEST-SETUP.md)** - E2E 測試設定
+
+#### 整合 (Integrations)
 - `LOOKER_STUDIO_SETUP.md` - Looker Studio 設定
-- `GOOGLE_WORKSPACE_INTEGRATION_QUICKSTART.md` - Google 整合
+- `GOOGLE_WORKSPACE_INTEGRATION_QUICKSTART.md` - Google Workspace 整合
 
-#### 需要更新 (Needs Update)
-- `environment-variables.md` - 請參考 `/backend/.env.example`
-- `deployment-runbook.md` - 部署流程待更新
-- `monitoring-setup.md` - 監控設定待更新
-- `disaster-recovery.md` - 災難復原待更新
+#### 商業策略 (Business Strategy)
+- `BUSINESS_STRATEGY.md` - 商業策略
+- `BUSINESS_STRATEGY_V2.md` - 商業策略 V2
 
-#### 歷史紀錄 (Historical Reference)
-- `implementation/` - 舊版實作紀錄
-- `*_SUMMARY.md` - 舊版功能摘要
+#### 環境設定 (Environment)
+- `environment-variables.md` - 環境變數說明 (請以 `/backend/.env.example` 為準)
+
+#### 歷史紀錄 (Historical Reference - archive/)
+- `archive/` - 已歸檔的舊版實作紀錄
 
 ---
 
@@ -68,12 +82,27 @@
 
 ## 技術堆疊 (Tech Stack)
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Hono.js + Drizzle ORM + Lucia Auth |
-| Database | PostgreSQL 17 + PostGIS 3.4 |
-| Frontend | Nuxt 3 + Vue 3 + Tailwind CSS |
-| Auth (Staff) | Lucia (Session-based) |
-| Auth (Member/Coach) | JWT |
-| File Storage | Cloudflare R2 / S3 |
-| Deployment | Coolify (VPS) + Cloudflare Pages |
+| Layer | Technology | Version |
+|-------|------------|---------|
+| Backend | Hono.js + Drizzle ORM + Lucia Auth | 4.x / 0.38.x / 3.x |
+| Database | PostgreSQL + PostGIS | 17 / 3.4 |
+| Frontend | Nuxt + Vue + Tailwind CSS | 3 / 3.5 / 3.x |
+| Auth (Staff) | Lucia (Session-based) | 3.x |
+| Auth (Member/Coach) | JWT (X-Member-Token / X-Coach-Token) | - |
+| File Storage | Cloudflare R2 / S3 | - |
+| Deployment | VPS (Docker) + Cloudflare Pages + Tunnel | - |
+| Runtime | Node.js | 22 |
+| Package Manager | pnpm | - |
+
+## 專案統計 (Project Statistics)
+
+| Component | Count |
+|-----------|-------|
+| Backend Routes | 46 |
+| Backend Services | 9 |
+| Backend Middleware | 7 |
+| Backend Hooks | 7 |
+| Cron Jobs | 4 |
+| Database Tables | 51 |
+| Frontend Apps | 3 |
+| Frontend Packages | 4 |

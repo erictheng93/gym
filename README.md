@@ -42,16 +42,16 @@
 | 技術 | 用途 | 版本 |
 |------|------|------|
 | **Hono.js** | 輕量 Web 框架 | v4.x |
-| **Drizzle ORM** | Type-safe 資料庫存取 | v0.30+ |
-| **Lucia Auth** | 員工認證 (Session-based) | v3 |
+| **Drizzle ORM** | Type-safe 資料庫存取 | v0.38.x |
+| **Lucia Auth** | 員工認證 (Session-based) | v3.x |
 | **PostgreSQL + PostGIS** | 核心資料庫 + 地理空間 | v17 + 3.4 |
 | **Node.js** | Runtime | v22 LTS |
 
 ### Frontend
 | 技術 | 用途 | 版本 |
 |------|------|------|
-| **Nuxt 3** | SSR/SSG 框架 | v4.x |
-| **Vue 3** | UI 框架 | v3.5 |
+| **Nuxt** | SSR/SSG 框架 | v3.x |
+| **Vue** | UI 框架 | v3.5 |
 | **Tailwind CSS** | 樣式系統 | v3.x |
 
 ### Infrastructure
@@ -100,12 +100,12 @@
 gym-nexus/
 ├── backend/                    # Hono.js API
 │   ├── src/
-│   │   ├── routes/            # API 路由 (~35 個)
-│   │   ├── services/          # 業務邏輯 (email, sms, line, payment)
-│   │   ├── middleware/        # 認證、CSRF、Rate Limiting
-│   │   ├── db/                # Drizzle Schema
-│   │   ├── hooks/             # 業務事件鉤子
-│   │   └── cron/              # 排程任務
+│   │   ├── routes/            # API 路由 (46 個)
+│   │   ├── services/          # 業務邏輯 (9 個服務)
+│   │   ├── middleware/        # 認證、CSRF、Rate Limiting (7 個)
+│   │   ├── db/                # Drizzle Schema (51 張表)
+│   │   ├── hooks/             # 業務事件鉤子 (7 個)
+│   │   └── cron/              # 排程任務 (4 個)
 │   ├── docker-compose.yml
 │   └── Dockerfile
 │
@@ -114,9 +114,13 @@ gym-nexus/
 │   │   ├── admin-web/         # 員工後台 (Port 3001)
 │   │   ├── member-app/        # 會員 PWA (Port 3002)
 │   │   └── coach-app/         # 教練 App (Port 3003)
-│   └── packages/
-│       ├── ui/                # 共用 UI 元件
-│       └── shared/            # 共用型別與工具
+│   ├── packages/
+│   │   ├── ui/                # 共用 UI 元件
+│   │   ├── shared/            # 共用型別與工具
+│   │   ├── hr-core/           # HR 功能核心邏輯
+│   │   └── hr-composables/    # HR 功能 Composables
+│   ├── tests/                 # 整合測試
+│   └── e2e/                   # Playwright E2E 測試
 │
 ├── docs/                       # 技術文件
 ├── CLAUDE.md                   # AI 開發助理指引
@@ -250,15 +254,21 @@ GET  /api/reports/*
 ## 🧪 測試 (Testing)
 
 ```bash
+# Backend 測試
+cd backend
+pnpm test              # 執行測試
+pnpm test:coverage     # 執行測試並產生覆蓋率報告
+
 # Frontend 單元測試
 cd frontend
-pnpm test
+pnpm test              # Vitest 單元測試
 
 # Frontend E2E 測試
-pnpm test:e2e
+pnpm test:e2e          # Playwright E2E 測試
 
 # 型別檢查
-pnpm typecheck
+cd backend && pnpm typecheck
+cd frontend && pnpm typecheck
 ```
 
 ---
