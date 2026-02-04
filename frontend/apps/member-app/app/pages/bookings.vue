@@ -464,10 +464,8 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   border-radius: 9px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .tab-switcher {
-    background-color: rgba(118, 118, 128, 0.24);
-  }
+:root.theme-dark .tab-switcher {
+  background-color: rgba(118, 118, 128, 0.24);
 }
 
 .tab-button {
@@ -496,13 +494,11 @@ const getReviewSessionDate = (booking: Booking | null): string => {
     0 3px 1px rgba(0, 0, 0, 0.04);
 }
 
-@media (prefers-color-scheme: dark) {
-  .tab-button.active {
-    background-color: #636366;
-    box-shadow:
-      0 0 0 0.5px rgba(255, 255, 255, 0.04),
-      0 3px 8px rgba(0, 0, 0, 0.3);
-  }
+:root.theme-dark .tab-button.active {
+  background-color: #636366;
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.04),
+    0 3px 8px rgba(0, 0, 0, 0.3);
 }
 
 .tab-button .badge {

@@ -139,14 +139,12 @@ const icons = {
 }
 
 /* 深色模式調整 */
-@media (prefers-color-scheme: dark) {
-  .divider::before,
-  .divider::after {
-    background-color: rgba(255, 255, 255, 0.2);
-  }
+:root.theme-dark .divider::before,
+:root.theme-dark .divider::after {
+  background-color: rgba(255, 255, 255, 0.2);
+}
 
-  .social-btn-outline {
-    border-color: rgba(255, 255, 255, 0.2);
-  }
+:root.theme-dark .social-btn-outline {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 </style>

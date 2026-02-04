@@ -40,16 +40,14 @@ defineProps<{
   animation: shimmer 1.5s infinite ease-in-out;
 }
 
-@media (prefers-color-scheme: dark) {
-  .skeleton {
-    background: linear-gradient(
-      90deg,
-      var(--color-surface) 25%,
-      rgba(255, 255, 255, 0.08) 50%,
-      var(--color-surface) 75%
-    );
-    background-size: 200% 100%;
-  }
+:root.theme-dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    var(--color-surface) 75%
+  );
+  background-size: 200% 100%;
 }
 
 @keyframes shimmer {

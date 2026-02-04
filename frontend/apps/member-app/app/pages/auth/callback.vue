@@ -218,22 +218,20 @@ const goToLogin = () => {
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .callback-container {
-    background-color: #1f2937;
-  }
+:root.theme-dark .callback-container {
+  background-color: #1f2937;
+}
 
-  .callback-text {
-    color: #f9fafb;
-  }
+:root.theme-dark .callback-text {
+  color: #f9fafb;
+}
 
-  .callback-subtext {
-    color: #9ca3af;
-  }
+:root.theme-dark .callback-subtext {
+  color: #9ca3af;
+}
 
-  .spinner {
-    border-color: #374151;
-    border-top-color: #10b981;
-  }
+:root.theme-dark .spinner {
+  border-color: #374151;
+  border-top-color: #10b981;
 }
 </style>

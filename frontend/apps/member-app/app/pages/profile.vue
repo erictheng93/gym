@@ -251,9 +251,12 @@ const getIconColor = (icon: string) => {
 
 // Pull-to-refresh handlers
 const handleTouchStart = (e: TouchEvent) => {
+  const touch = e.touches[0]
+  if (!touch) return
+
   if (window.scrollY === 0 && !isRefreshing.value) {
     isPulling.value = true
-    startTouchY.value = e.touches[0].clientY
+    startTouchY.value = touch.clientY
   }
 }
 
@@ -261,6 +264,8 @@ const handleTouchMove = (e: TouchEvent) => {
   if (!isPulling.value || isRefreshing.value) return
 
   const touch = e.touches[0]
+  if (!touch) return
+
   const delta = touch.clientY - startTouchY.value
   pullDistance.value = Math.max(0, Math.min(delta, 120))
 }

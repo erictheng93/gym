@@ -346,34 +346,32 @@ const providerName = computed(() => {
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .callback-container {
-    background-color: #1f2937;
-  }
+:root.theme-dark .callback-container {
+  background-color: #1f2937;
+}
 
-  .callback-text {
-    color: #f9fafb;
-  }
+:root.theme-dark .callback-text {
+  color: #f9fafb;
+}
 
-  .callback-subtext {
-    color: #9ca3af;
-  }
+:root.theme-dark .callback-subtext {
+  color: #9ca3af;
+}
 
-  .spinner {
-    border-color: #374151;
-    border-top-color: #10b981;
-  }
+:root.theme-dark .spinner {
+  border-color: #374151;
+  border-top-color: #10b981;
+}
 
-  .social-info {
-    background-color: #374151;
-  }
+:root.theme-dark .social-info {
+  background-color: #374151;
+}
 
-  .social-info p {
-    color: #f3f4f6;
-  }
+:root.theme-dark .social-info p {
+  color: #f3f4f6;
+}
 
-  .social-email {
-    color: #9ca3af !important;
-  }
+:root.theme-dark .social-email {
+  color: #9ca3af !important;
 }
 </style>
