@@ -41,3 +41,6 @@ test-results/
 # Claude Code
 .claude/
 Gym參考廠商/
+
+# Images
+*.png
