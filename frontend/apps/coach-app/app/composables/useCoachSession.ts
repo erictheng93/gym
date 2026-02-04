@@ -19,6 +19,8 @@ export const useCoachSession = () => {
   const coach = useState<Coach | null>('current_coach', () => null)
   const isAuthenticated = computed(() => !!coach.value)
   const isLoading = useState('coach_auth_loading', () => false)
+  // Track if initial auth check is in progress (prevents content flash)
+  const isAuthChecking = useState('coach_auth_checking', () => true)
 
   /**
    * Get coach display name
@@ -95,6 +97,13 @@ export const useCoachSession = () => {
   }
 
   /**
+   * Set auth checking state (for initial auth check)
+   */
+  const setAuthChecking = (checking: boolean) => {
+    isAuthChecking.value = checking
+  }
+
+  /**
    * Update coach data
    */
   const updateCoachData = (updates: Partial<Coach>) => {
@@ -108,6 +117,7 @@ export const useCoachSession = () => {
     coach,
     isAuthenticated,
     isLoading,
+    isAuthChecking,
     displayName,
     branchName,
     studentCount,
@@ -117,6 +127,7 @@ export const useCoachSession = () => {
     fetchCoach,
     clearSession,
     setLoading,
+    setAuthChecking,
     updateCoachData,
   }
 }

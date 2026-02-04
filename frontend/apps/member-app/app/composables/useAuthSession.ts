@@ -23,6 +23,8 @@ export const useAuthSession = () => {
   const member = useState<CurrentMember | null>('current_member', () => null)
   const isAuthenticated = computed(() => !!member.value)
   const isLoading = useState('member_auth_loading', () => false)
+  // Track if initial auth check is in progress (prevents content flash)
+  const isAuthChecking = useState('member_auth_checking', () => true)
 
   /**
    * Get the active contract from member
@@ -112,6 +114,13 @@ export const useAuthSession = () => {
   }
 
   /**
+   * Set auth checking state (for initial auth check)
+   */
+  const setAuthChecking = (checking: boolean) => {
+    isAuthChecking.value = checking
+  }
+
+  /**
    * Update member data (for profile updates)
    */
   const updateMemberData = (updates: Partial<CurrentMember>) => {
@@ -125,6 +134,7 @@ export const useAuthSession = () => {
     member,
     isAuthenticated,
     isLoading,
+    isAuthChecking,
     activeContract,
     displayName,
     memberStatus,
@@ -133,6 +143,7 @@ export const useAuthSession = () => {
     fetchMember,
     clearSession,
     setLoading,
+    setAuthChecking,
     updateMemberData,
   }
 }

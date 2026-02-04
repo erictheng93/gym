@@ -85,27 +85,37 @@ export const useCoachAuth = () => {
    * Check authentication status and restore session if possible
    */
   const checkAuth = async (): Promise<boolean> => {
-    // Already authenticated
+    // Already authenticated - skip loading state to avoid flash
     if (session.isAuthenticated.value) {
+      session.setAuthChecking(false)
       return true
     }
 
-    // Try with access token
-    if (tokens.hasAccessToken.value) {
-      const success = await session.fetchCoach()
-      if (success) return true
-    }
+    // Set auth checking state to show loading UI
+    session.setAuthChecking(true)
 
-    // Try refreshing token
-    if (tokens.hasRefreshToken.value) {
-      const refreshed = await tokens.refreshAccessToken()
-      if (refreshed) {
+    try {
+
+      // Try with access token
+      if (tokens.hasAccessToken.value) {
         const success = await session.fetchCoach()
         if (success) return true
       }
-    }
 
-    return false
+      // Try refreshing token
+      if (tokens.hasRefreshToken.value) {
+        const refreshed = await tokens.refreshAccessToken()
+        if (refreshed) {
+          const success = await session.fetchCoach()
+          if (success) return true
+        }
+      }
+
+      return false
+    } finally {
+      // Always clear auth checking state when done
+      session.setAuthChecking(false)
+    }
   }
 
   /**
@@ -142,6 +152,7 @@ export const useCoachAuth = () => {
     coach: session.coach,
     isAuthenticated: session.isAuthenticated,
     isLoading: session.isLoading,
+    isAuthChecking: session.isAuthChecking,
     displayName: session.displayName,
     branchName: session.branchName,
     studentCount: session.studentCount,

@@ -60,7 +60,7 @@ const handleSubmit = async () => {
   }
 
   try {
-    const result = await login(form.email, form.password)
+    const result = await login(form.email.trim(), form.password.trim())
 
     if (result.success) {
       await navigateTo('/', { replace: true })

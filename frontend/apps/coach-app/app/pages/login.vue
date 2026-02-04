@@ -195,7 +195,7 @@ const triggerShake = () => {
 const handleLogin = async () => {
   error.value = ''
 
-  const result = await login(identifier.value, password.value)
+  const result = await login(identifier.value.trim(), password.value.trim())
 
   if (result.success) {
     await router.push('/')

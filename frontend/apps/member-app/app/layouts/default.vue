@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { isAuthenticated } = useMemberAuth()
+const { isAuthenticated, isAuthChecking } = useMemberAuth()
 
 const navItems = [
   { path: '/', icon: 'qr', label: '入場' },
@@ -14,16 +14,24 @@ const navItems = [
     <!-- Toast Notifications -->
     <ToastContainer />
 
-    <!-- Main Content -->
-    <main class="main-content">
+    <!-- Auth Loading Screen (prevents content flash) -->
+    <div v-if="isAuthChecking" class="auth-loading">
+      <div class="auth-loading-content">
+        <div class="auth-loading-spinner" />
+        <span class="auth-loading-text">載入中...</span>
+      </div>
+    </div>
+
+    <!-- Main Content (only render when auth check is complete) -->
+    <main v-else class="main-content">
       <slot />
     </main>
 
     <!-- Offline Sync Indicator -->
-    <OfflineSyncIndicator />
+    <OfflineSyncIndicator v-if="!isAuthChecking" />
 
-    <!-- Bottom Navigation (只在登入後顯示) -->
-    <nav v-if="isAuthenticated" class="bottom-nav">
+    <!-- Bottom Navigation (只在登入後且認證檢查完成時顯示) -->
+    <nav v-if="!isAuthChecking && isAuthenticated" class="bottom-nav">
       <NuxtLink
         v-for="item in navItems"
         :key="item.path"
@@ -70,6 +78,44 @@ const navItems = [
   flex-direction: column;
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+/* Auth Loading Screen */
+.auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--color-background);
+}
+
+.auth-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.auth-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.auth-loading-text {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .main-content {

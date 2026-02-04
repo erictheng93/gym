@@ -36,37 +36,47 @@ export const useMemberAuth = () => {
    * 4. Try OAuth session (cookie-based auth)
    */
   const checkAuth = async (): Promise<boolean> => {
-    // Already authenticated
+    // Already authenticated - skip loading state to avoid flash
     if (session.isAuthenticated.value) {
+      session.setAuthChecking(false)
       return true
     }
 
-    // Try with access token
-    if (tokens.hasAccessToken.value) {
-      const success = await session.fetchMember()
-      if (success) return true
-    }
+    // Set auth checking state to show loading UI
+    session.setAuthChecking(true)
 
-    // Try refreshing token
-    if (tokens.hasRefreshToken.value) {
-      const refreshed = await tokens.refreshAccessToken()
-      if (refreshed) {
+    try {
+
+      // Try with access token
+      if (tokens.hasAccessToken.value) {
         const success = await session.fetchMember()
         if (success) return true
       }
-    }
 
-    // Try OAuth session (cookie-based auth)
-    try {
-      const oauthResult = await methods.loginWithOAuth()
-      if (oauthResult.success) {
-        return true
+      // Try refreshing token
+      if (tokens.hasRefreshToken.value) {
+        const refreshed = await tokens.refreshAccessToken()
+        if (refreshed) {
+          const success = await session.fetchMember()
+          if (success) return true
+        }
       }
-    } catch {
-      // OAuth session invalid, continue
-    }
 
-    return false
+      // Try OAuth session (cookie-based auth)
+      try {
+        const oauthResult = await methods.loginWithOAuth()
+        if (oauthResult.success) {
+          return true
+        }
+      } catch {
+        // OAuth session invalid, continue
+      }
+
+      return false
+    } finally {
+      // Always clear auth checking state when done
+      session.setAuthChecking(false)
+    }
   }
 
   return {
@@ -76,6 +86,7 @@ export const useMemberAuth = () => {
     member: session.member,
     isAuthenticated: session.isAuthenticated,
     isLoading: session.isLoading,
+    isAuthChecking: session.isAuthChecking,
     activeContract: session.activeContract,
     displayName: session.displayName,
     memberStatus: session.memberStatus,

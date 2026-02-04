@@ -42,7 +42,7 @@ const error = ref('')
 
 // Email 登入處理
 const handleEmailLogin = async () => {
-  const result = emailForm.validate({ email: email.value, password: password.value })
+  const result = emailForm.validate({ email: email.value.trim(), password: password.value.trim() })
 
   if (!result.success) {
     // Show first validation error
@@ -71,7 +71,7 @@ const handleEmailLogin = async () => {
 
 // Phone OTP 發送
 const sendOtp = async () => {
-  const result = phoneForm.validate({ phone: phone.value })
+  const result = phoneForm.validate({ phone: phone.value.trim() })
 
   if (!result.success) {
     const firstError = Object.values(phoneForm.errors.value)[0]
@@ -105,7 +105,7 @@ const sendOtp = async () => {
 
 // Phone OTP 驗證
 const handleOtpLogin = async () => {
-  const result = otpForm.validate({ phone: phone.value, code: otp.value })
+  const result = otpForm.validate({ phone: phone.value.trim(), code: otp.value.trim() })
 
   if (!result.success) {
     const firstError = Object.values(otpForm.errors.value)[0]
