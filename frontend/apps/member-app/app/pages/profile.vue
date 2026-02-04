@@ -21,6 +21,13 @@ const profileForm = useFormValidation(updateProfileSchema)
 const isEditing = ref(false)
 const isSaving = ref(false)
 
+// Pull-to-refresh
+const isPulling = ref(false)
+const pullDistance = ref(0)
+const isRefreshing = ref(false)
+const startTouchY = ref(0)
+const PULL_THRESHOLD = 80
+
 // 編輯表單
 const editForm = reactive({
   full_name: '',
@@ -215,42 +222,122 @@ const menuItems = [
   { icon: 'help', label: '聯絡客服', description: '問題諮詢與回報', path: '/profile/support' },
 ]
 
+// Theme settings
+const { themeMode, setTheme } = useTheme()
+
+type ThemeModeType = 'light' | 'dark' | 'system'
+const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
+  { value: 'light', label: '淺色', icon: 'sun' },
+  { value: 'dark', label: '深色', icon: 'moon' },
+  { value: 'system', label: '系統', icon: 'auto' },
+]
+
+const handleThemeChange = (mode: ThemeModeType) => {
+  setTheme(mode)
+}
+
+// Icon color mapping for iOS style
+const getIconColor = (icon: string) => {
+  const colorMap: Record<string, string> = {
+    activity: 'pink',
+    history: 'blue',
+    payment: 'green',
+    bell: 'red',
+    alert: 'orange',
+    help: 'teal',
+  }
+  return colorMap[icon] || 'gray'
+}
+
+// Pull-to-refresh handlers
+const handleTouchStart = (e: TouchEvent) => {
+  if (window.scrollY === 0 && !isRefreshing.value) {
+    isPulling.value = true
+    startTouchY.value = e.touches[0].clientY
+  }
+}
+
+const handleTouchMove = (e: TouchEvent) => {
+  if (!isPulling.value || isRefreshing.value) return
+
+  const touch = e.touches[0]
+  const delta = touch.clientY - startTouchY.value
+  pullDistance.value = Math.max(0, Math.min(delta, 120))
+}
+
+const handleTouchEnd = async () => {
+  if (!isPulling.value) return
+
+  if (pullDistance.value >= PULL_THRESHOLD) {
+    isRefreshing.value = true
+    await handleRefresh()
+  }
+
+  isPulling.value = false
+  pullDistance.value = 0
+  isRefreshing.value = false
+}
+
+const handleRefresh = async () => {
+  await Promise.all([fetchMember(), loadMemberDetail()])
+  toast.success('資料已更新')
+}
+
 onMounted(() => {
   loadMemberDetail()
 })
 </script>
 
 <template>
-  <div class="profile-page">
-    <!-- Profile Header Card -->
-    <div class="profile-header-card">
-      <div class="profile-bg-pattern" />
-      <div class="profile-header-content">
-        <div class="avatar-wrapper">
-          <div class="avatar">
-            {{ member?.full_name?.charAt(0) || 'M' }}
-          </div>
-          <div
-            class="status-badge"
-            :class="getStatusInfo(member?.member_status || '').class"
-          >
-            {{ getStatusInfo(member?.member_status || '').label }}
-          </div>
-        </div>
-        <h1 class="profile-name">{{ member?.full_name }}</h1>
-        <p class="profile-code">{{ member?.member_code }}</p>
-        <p v-if="member?.branch_name" class="profile-branch">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-            <circle cx="12" cy="10" r="3" />
-          </svg>
-          {{ member?.branch_name }}
-        </p>
-      </div>
+  <div
+    class="profile-page"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+  >
+    <!-- Pull-to-refresh indicator -->
+    <div
+      class="pull-indicator"
+      :class="{ visible: isPulling || isRefreshing }"
+      :style="{ transform: `translateY(${pullDistance - 40}px)` }"
+    >
+      <div class="pull-spinner" :class="{ spinning: isRefreshing }" />
     </div>
 
-    <!-- Quick Stats -->
-    <div v-if="memberDetail" class="stats-row">
+    <!-- Profile Header - iOS Style -->
+    <header class="profile-header">
+      <div class="avatar">
+        {{ member?.full_name?.charAt(0) || 'M' }}
+      </div>
+      <h1 class="profile-name">{{ member?.full_name }}</h1>
+      <p class="profile-code">{{ member?.member_code }}</p>
+      <div
+        class="status-badge"
+        :class="getStatusInfo(member?.member_status || '').class"
+      >
+        <span class="status-dot" />
+        {{ getStatusInfo(member?.member_status || '').label }}
+      </div>
+    </header>
+
+    <!-- Quick Stats - iOS Card Style -->
+    <div v-if="isLoadingDetail" class="stats-card">
+      <div class="stat-item">
+        <SkeletonLoader width="60px" height="20px" radius="4px" />
+        <span class="stat-label">會員年資</span>
+      </div>
+      <div class="stat-divider" />
+      <div class="stat-item">
+        <SkeletonLoader width="40px" height="20px" radius="4px" />
+        <span class="stat-label">合約狀態</span>
+      </div>
+      <div class="stat-divider" />
+      <div class="stat-item">
+        <SkeletonLoader width="60px" height="20px" radius="4px" />
+        <span class="stat-label">所屬分店</span>
+      </div>
+    </div>
+    <div v-else-if="memberDetail" class="stats-card">
       <div class="stat-item">
         <span class="stat-value">{{ membershipDuration || '-' }}</span>
         <span class="stat-label">會員年資</span>
@@ -259,6 +346,11 @@ onMounted(() => {
       <div class="stat-item">
         <span class="stat-value">{{ member?.activeContract ? '有效' : '無' }}</span>
         <span class="stat-label">合約狀態</span>
+      </div>
+      <div class="stat-divider" />
+      <div class="stat-item">
+        <span class="stat-value">{{ member?.branch_name || '-' }}</span>
+        <span class="stat-label">所屬分店</span>
       </div>
     </div>
 
@@ -382,63 +474,124 @@ onMounted(() => {
       </div>
     </section>
 
-    <!-- Menu Section -->
-    <section class="section">
-      <h2 class="section-title">更多功能</h2>
-      <div class="menu-list">
+    <!-- Appearance Section - Theme Toggle -->
+    <section class="list-section">
+      <h3 class="list-section-header">外觀設定</h3>
+      <div class="list-inset-grouped">
+        <div class="theme-row">
+          <span class="list-icon purple">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          </span>
+          <span class="list-title">外觀主題</span>
+        </div>
+        <div class="theme-selector">
+          <button
+            v-for="option in themeOptions"
+            :key="option.value"
+            class="theme-option"
+            :class="{ active: themeMode === option.value }"
+            @click="handleThemeChange(option.value)"
+          >
+            <span class="theme-option-icon">
+              <!-- Sun icon for light -->
+              <svg v-if="option.icon === 'sun'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+              <!-- Moon icon for dark -->
+              <svg v-else-if="option.icon === 'moon'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+              <!-- Auto icon for system -->
+              <svg v-else-if="option.icon === 'auto'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+            </span>
+            <span class="theme-option-label">{{ option.label }}</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Menu Section - iOS Inset Grouped List -->
+    <section class="list-section">
+      <h3 class="list-section-header">功能選單</h3>
+      <div class="list-inset-grouped">
         <NuxtLink
           v-for="item in menuItems"
           :key="item.path"
           :to="item.path"
-          class="menu-item"
+          class="list-row"
         >
-          <span class="menu-icon">
-            <svg v-if="item.icon === 'activity'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <span class="list-icon" :class="getIconColor(item.icon)">
+            <svg v-if="item.icon === 'activity'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-            <svg v-else-if="item.icon === 'history'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else-if="item.icon === 'history'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
-            <svg v-else-if="item.icon === 'payment'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else-if="item.icon === 'payment'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <rect x="1" y="4" width="22" height="16" rx="2" />
               <line x1="1" y1="10" x2="23" y2="10" />
             </svg>
-            <svg v-else-if="item.icon === 'bell'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else-if="item.icon === 'bell'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            <svg v-else-if="item.icon === 'alert'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else-if="item.icon === 'alert'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <svg v-else-if="item.icon === 'help'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else-if="item.icon === 'help'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <circle cx="12" cy="12" r="10" />
               <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
           </span>
-          <div class="menu-content">
-            <span class="menu-label">{{ item.label }}</span>
-            <span class="menu-description">{{ item.description }}</span>
-          </div>
-          <svg class="menu-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6" />
+          <span class="list-title">{{ item.label }}</span>
+          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+            <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </NuxtLink>
       </div>
     </section>
 
-    <!-- Logout Button -->
-    <button class="logout-btn" @click="handleLogout">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-        <polyline points="16 17 21 12 16 7" />
-        <line x1="21" y1="12" x2="9" y2="12" />
-      </svg>
-      登出
-    </button>
+    <!-- Logout - iOS Inset Grouped List -->
+    <section class="list-section">
+      <div class="list-inset-grouped">
+        <button class="list-row logout-row" @click="handleLogout">
+          <span class="list-icon red">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </span>
+          <span class="list-title logout-text">登出</span>
+        </button>
+      </div>
+    </section>
 
     <!-- App Version -->
     <p class="app-version">Gym Nexus v1.0.0</p>
@@ -447,120 +600,130 @@ onMounted(() => {
 
 <style scoped>
 .profile-page {
-  padding: 16px;
+  padding: 0;
   padding-bottom: calc(100px + env(safe-area-inset-bottom));
-}
-
-/* Header Card */
-.profile-header-card {
   position: relative;
-  padding: 32px 24px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, #059669 100%);
-  border-radius: 24px;
-  margin-bottom: 16px;
-  overflow: hidden;
 }
 
-.profile-bg-pattern {
+/* Pull-to-refresh */
+.pull-indicator {
   position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.08) 0%, transparent 40%);
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(-40px);
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.profile-header-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.pull-indicator.visible {
+  opacity: 1;
+}
+
+.pull-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+}
+
+.pull-spinner.spinning {
+  animation: spin 0.8s linear infinite;
+}
+
+/* iOS Style Profile Header */
+.profile-header {
+  padding: 24px 16px 20px;
   text-align: center;
 }
 
-.avatar-wrapper {
-  position: relative;
-  margin-bottom: 16px;
-}
-
 .avatar {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.2);
-  border: 3px solid rgba(255, 255, 255, 0.3);
+  /* iOS system blue gradient for avatar */
+  background: linear-gradient(180deg, #007aff 0%, #0055cc 100%);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
-  font-weight: 700;
-}
-
-.status-badge {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 11px;
+  font-size: 36px;
   font-weight: 600;
-  white-space: nowrap;
-}
-
-.status-active {
-  background-color: rgba(255, 255, 255, 0.95);
-  color: var(--color-primary);
-}
-
-.status-expired {
-  background-color: rgba(239, 68, 68, 0.9);
-  color: white;
-}
-
-.status-suspended {
-  background-color: rgba(245, 158, 11, 0.9);
-  color: white;
-}
-
-.status-inactive {
-  background-color: rgba(107, 114, 128, 0.9);
-  color: white;
+  margin: 0 auto 12px;
+  /* Subtle inner shadow */
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .profile-name {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  color: white;
+  color: var(--color-text);
+  letter-spacing: -0.4px;
   margin-bottom: 4px;
 }
 
 .profile-code {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
-  font-family: monospace;
+  font-family: 'SF Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px;
+  color: var(--color-text-secondary);
   letter-spacing: 1px;
   margin-bottom: 8px;
 }
 
-.profile-branch {
-  display: flex;
+.status-badge {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 5px 12px;
+  border-radius: 14px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
 }
 
-/* Stats Row */
-.stats-row {
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-active {
+  background: rgba(52, 199, 89, 0.12);
+  color: #34c759;
+}
+
+.status-expired {
+  background: rgba(255, 59, 48, 0.12);
+  color: #ff3b30;
+}
+
+.status-suspended {
+  background: rgba(255, 149, 0, 0.12);
+  color: #ff9500;
+}
+
+.status-inactive {
+  background: rgba(142, 142, 147, 0.12);
+  color: #8e8e93;
+}
+
+/* Stats Card - iOS Style */
+.stats-card {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 16px 20px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  margin-bottom: 24px;
+  justify-content: space-around;
+  margin: 0 16px 24px;
+  padding: 16px 12px;
+  background: var(--color-background);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .stats-card {
+  background: var(--color-surface);
 }
 
 .stat-item {
@@ -568,26 +731,138 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  flex: 1;
 }
 
 .stat-value {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--color-text);
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-secondary);
 }
 
 .stat-divider {
-  width: 1px;
-  height: 32px;
-  background-color: var(--color-border);
+  width: 0.5px;
+  height: 28px;
+  background: var(--color-divider);
 }
 
-/* Section */
+/* iOS Inset Grouped List Styles */
+.list-section {
+  margin-bottom: 24px;
+}
+
+.list-section-header {
+  padding: 8px 36px 8px 16px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: -0.08px;
+}
+
+.list-inset-grouped {
+  margin: 0 16px;
+  background: var(--color-background);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .list-inset-grouped {
+  background: var(--color-surface);
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  padding: 11px 16px;
+  min-height: 44px;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--color-text);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.list-row:active {
+  background: var(--color-surface);
+}
+
+.list-row:not(:last-child) {
+  position: relative;
+}
+
+.list-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 56px;
+  right: 0;
+  height: 0.5px;
+  background: var(--color-divider);
+}
+
+.list-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.list-icon svg {
+  color: white;
+}
+
+/* Icon colors - iOS system colors */
+.list-icon.blue { background: #007aff; }
+.list-icon.green { background: #34c759; }
+.list-icon.orange { background: #ff9500; }
+.list-icon.red { background: #ff3b30; }
+.list-icon.purple { background: #af52de; }
+.list-icon.pink { background: #ff2d55; }
+.list-icon.teal { background: #5ac8fa; }
+.list-icon.gray { background: #8e8e93; }
+
+.list-title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.list-chevron {
+  color: rgba(60, 60, 67, 0.3);
+  flex-shrink: 0;
+}
+
+:root.theme-dark .list-chevron {
+  color: rgba(235, 235, 245, 0.3);
+}
+
+/* Logout row special styling */
+.logout-row {
+  font-size: 17px;
+}
+
+.logout-text {
+  color: #ff3b30;
+}
+
+/* Section with title and edit button */
 .section {
   margin-bottom: 24px;
 }
@@ -596,77 +871,111 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  padding: 8px 16px;
+  margin-bottom: 8px;
 }
 
 .section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: -0.08px;
 }
 
 .edit-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-primary);
+  gap: 4px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 400;
+  color: #007aff;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .edit-btn:active {
-  background-color: var(--color-border);
+  background: rgba(0, 122, 255, 0.1);
 }
 
-/* Info Card */
+.edit-btn svg {
+  display: none;
+}
+
+/* Info Card - iOS Inset Grouped Style */
 .info-card {
-  background-color: var(--color-surface);
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
+  margin: 0 16px;
+  background: var(--color-background);
+  border-radius: 10px;
   overflow: hidden;
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .info-card {
+  background: var(--color-surface);
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
+  padding: 11px 16px;
+  min-height: 44px;
 }
 
 .info-row:not(:last-child) {
-  border-bottom: 1px solid var(--color-border);
+  position: relative;
+}
+
+.info-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 0;
+  height: 0.5px;
+  background: var(--color-divider);
 }
 
 .info-label {
-  font-size: 14px;
-  color: var(--color-text-secondary);
+  font-size: 17px;
+  color: var(--color-text);
   flex-shrink: 0;
 }
 
 .info-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text);
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
   text-align: right;
 }
 
 .email-value {
   word-break: break-all;
-  max-width: 200px;
+  max-width: 180px;
+  font-size: 15px;
 }
 
-/* Edit Card */
+/* Edit Card - iOS Style */
 .edit-card {
-  background-color: var(--color-surface);
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
-  padding: 20px;
+  margin: 0 16px;
+  background: var(--color-background);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .edit-card {
+  background: var(--color-surface);
 }
 
 .input-group {
@@ -676,36 +985,40 @@ onMounted(() => {
 .input-group label {
   display: block;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--color-text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  padding-left: 4px;
 }
 
 .input-group input {
   width: 100%;
-  padding: 14px 16px;
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  font-size: 15px;
+  padding: 12px 14px;
+  background-color: var(--color-surface);
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
   color: var(--color-text);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: box-shadow 0.15s ease;
+}
+
+:root.theme-dark .input-group input {
+  background-color: rgba(118, 118, 128, 0.24);
 }
 
 .input-group input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
 }
 
 .input-group input::placeholder {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 .edit-actions {
   display: flex;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .btn-cancel,
@@ -713,38 +1026,39 @@ onMounted(() => {
   flex: 1;
   padding: 14px;
   border-radius: 12px;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .btn-cancel {
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
+  background-color: var(--color-surface);
+  border: none;
+  color: #007aff;
 }
 
 .btn-cancel:active:not(:disabled) {
-  background-color: var(--color-border);
+  opacity: 0.7;
 }
 
 .btn-save {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--color-primary);
+  background-color: #007aff;
   border: none;
   color: white;
 }
 
 .btn-save:active:not(:disabled) {
-  background-color: #059669;
+  background-color: #0055cc;
 }
 
 .btn-cancel:disabled,
 .btn-save:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -764,96 +1078,91 @@ onMounted(() => {
 .edit-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: 16px;
+  padding: 12px;
+  background: rgba(0, 122, 255, 0.08);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.edit-hint svg {
+  color: #007aff;
+  flex-shrink: 0;
+}
+
+/* App Version */
+.app-version {
+  text-align: center;
   font-size: 12px;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
+  padding: 16px;
 }
 
-/* Menu List */
-.menu-list {
-  background-color: var(--color-surface);
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
-  overflow: hidden;
-}
-
-.menu-item {
+/* Theme Selector Styles */
+.theme-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  text-decoration: none;
-  color: var(--color-text);
-  transition: background-color 0.2s ease;
+  padding: 11px 16px;
+  gap: 12px;
 }
 
-.menu-item:not(:last-child) {
-  border-bottom: 1px solid var(--color-border);
+.theme-selector {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px 16px;
 }
 
-.menu-item:active {
-  background-color: var(--color-border);
+.theme-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: var(--color-surface-secondary);
+  border: 2px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.menu-icon {
+.theme-option:active {
+  transform: scale(0.97);
+}
+
+.theme-option.active {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+}
+
+.theme-option-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 40px;
   height: 40px;
-  background-color: rgba(16, 185, 129, 0.1);
-  border-radius: 12px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.theme-option.active .theme-option-icon {
+  background: var(--color-primary);
+  color: white;
+}
+
+.theme-option-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color 0.2s ease;
+}
+
+.theme-option.active .theme-option-label {
   color: var(--color-primary);
-}
-
-.menu-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.menu-label {
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.menu-description {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-}
-
-.menu-arrow {
-  color: var(--color-text-tertiary);
-}
-
-/* Logout */
-.logout-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 16px;
-  background-color: transparent;
-  border: 1px solid var(--color-error);
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--color-error);
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  margin-bottom: 24px;
-}
-
-.logout-btn:active {
-  background-color: rgba(239, 68, 68, 0.1);
-}
-
-.app-version {
-  text-align: center;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
 }
 </style>

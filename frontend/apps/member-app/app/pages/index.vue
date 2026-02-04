@@ -12,12 +12,19 @@ const qrCodeDataUrl = ref('')
 const qrExpiry = ref<Date | null>(null)
 const timeRemaining = ref(0)
 
+// Pull-to-refresh
+const isPulling = ref(false)
+const pullDistance = ref(0)
+const isRefreshing = ref(false)
+const startTouchY = ref(0)
+const PULL_THRESHOLD = 80
+
 // 生成入場 QR Code
 const generateQRCode = async () => {
   if (!member.value) return
 
-  // QR Code 有效期 30 秒
-  const expiry = new Date(Date.now() + 30 * 1000)
+  // QR Code 有效期 3 分鐘 (180 秒)
+  const expiry = new Date(Date.now() + 180 * 1000)
   qrExpiry.value = expiry
 
   // QR Code 內容: member_code + timestamp + signature (簡化版)
@@ -58,6 +65,36 @@ const updateCountdown = () => {
   }
 }
 
+// Pull-to-refresh handlers
+const handleTouchStart = (e: TouchEvent) => {
+  if (window.scrollY === 0 && !isRefreshing.value) {
+    isPulling.value = true
+    startTouchY.value = e.touches[0].clientY
+  }
+}
+
+const handleTouchMove = (e: TouchEvent) => {
+  if (!isPulling.value || isRefreshing.value) return
+
+  const touch = e.touches[0]
+  const delta = touch.clientY - startTouchY.value
+  pullDistance.value = Math.max(0, Math.min(delta, 120))
+}
+
+const handleTouchEnd = async () => {
+  if (!isPulling.value) return
+
+  if (pullDistance.value >= PULL_THRESHOLD) {
+    isRefreshing.value = true
+    await generateQRCode()
+    toast.success('已更新')
+  }
+
+  isPulling.value = false
+  pullDistance.value = 0
+  isRefreshing.value = false
+}
+
 // 初始化
 onMounted(() => {
   generateQRCode()
@@ -69,6 +106,16 @@ onMounted(() => {
     clearInterval(timer)
   })
 })
+
+// 格式化時間顯示 (分:秒)
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  if (mins > 0) {
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+  return `${secs}秒`
+}
 
 // 合約狀態文字
 const contractStatusText = computed(() => {
@@ -91,7 +138,21 @@ const contractStatusText = computed(() => {
 </script>
 
 <template>
-  <div class="entry-page">
+  <div
+    class="entry-page"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+  >
+    <!-- Pull-to-refresh indicator -->
+    <div
+      class="pull-indicator"
+      :class="{ visible: isPulling || isRefreshing }"
+      :style="{ transform: `translateY(${pullDistance - 40}px)` }"
+    >
+      <div class="pull-spinner" :class="{ spinning: isRefreshing }" />
+    </div>
+
     <!-- Header -->
     <header class="header">
       <h1 class="greeting">{{ member?.full_name || '會員' }}，您好</h1>
@@ -101,139 +162,162 @@ const contractStatusText = computed(() => {
     <!-- Push Notification Banner -->
     <PushPermissionBanner />
 
-    <!-- QR Code Card -->
+    <!-- QR Code Card - iOS Style -->
     <section
-      class="qr-card"
+      class="qr-section"
       aria-labelledby="qr-section-title"
       aria-describedby="qr-section-desc"
     >
       <h2 id="qr-section-title" class="sr-only">入場 QR Code</h2>
       <p id="qr-section-desc" class="sr-only">
-        掃描此 QR Code 進入健身房，每 {{ timeRemaining }} 秒自動刷新
+        掃描此 QR Code 進入健身房，每 3 分鐘自動刷新，剩餘 {{ formatTime(timeRemaining) }}
       </p>
 
-      <div class="qr-container">
-        <img
-          v-if="qrCodeDataUrl"
-          :src="qrCodeDataUrl"
-          alt="入場 QR Code，會員編號 {{ member?.member_code }}"
-          class="qr-image"
-        />
+      <div class="qr-card">
+        <div class="qr-container">
+          <img
+            v-if="qrCodeDataUrl"
+            :src="qrCodeDataUrl"
+            alt="入場 QR Code，會員編號 {{ member?.member_code }}"
+            class="qr-image"
+          />
+          <div
+            v-else
+            class="qr-loading"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="qr-loading-spinner" />
+          </div>
+        </div>
+
+        <p class="member-code" aria-label="會員編號">{{ member?.member_code }}</p>
+
+        <!-- Progress dots - Apple Watch style -->
         <div
-          v-else
-          class="qr-loading"
-          role="status"
+          class="progress-dots"
+          role="timer"
+          :aria-label="`剩餘 ${timeRemaining} 秒`"
           aria-live="polite"
         >
-          載入中...
-        </div>
-      </div>
-
-      <div class="qr-info">
-        <p class="member-code" aria-label="會員編號">{{ member?.member_code }}</p>
-        <p class="expiry-text" aria-live="polite">
           <span
-            class="countdown"
-            :class="{ warning: timeRemaining <= 10 }"
-            :aria-label="`剩餘 ${timeRemaining} 秒`"
-          >
-            {{ timeRemaining }}
-          </span>
-          秒後自動刷新
-        </p>
-      </div>
+            v-for="i in 10"
+            :key="i"
+            class="dot"
+            :class="{ active: i <= Math.ceil(timeRemaining / 18) }"
+          />
+          <span class="time-hint">{{ formatTime(timeRemaining) }}</span>
+        </div>
 
-      <button
-        class="refresh-btn"
-        type="button"
-        aria-label="立即刷新 QR Code"
-        @click="generateQRCode"
-      >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          aria-hidden="true"
+        <button
+          class="refresh-btn"
+          type="button"
+          aria-label="立即刷新 QR Code"
+          @click="generateQRCode"
         >
-          <path d="M23 4v6h-6M1 20v-6h6" />
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-        </svg>
-        立即刷新
-      </button>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            aria-hidden="true"
+          >
+            <path d="M23 4v6h-6M1 20v-6h6" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+          重新整理
+        </button>
+      </div>
     </section>
 
-    <!-- Contract Status -->
-    <section
-      class="status-card"
-      aria-labelledby="status-section-title"
-    >
-      <h2 id="status-section-title" class="sr-only">會籍資訊</h2>
+    <!-- Contract Status - iOS Inset Grouped List -->
+    <section class="list-section" aria-labelledby="status-section-title">
+      <h3 id="status-section-title" class="list-section-header">會籍狀態</h3>
 
-      <dl class="status-list">
-        <div class="status-row">
-          <dt class="status-label">會籍狀態</dt>
-          <dd
-            class="status-value"
+      <div class="list-inset-grouped">
+        <NuxtLink to="/contracts" class="list-row">
+          <span class="list-icon green">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+          <span class="list-title">會員狀態</span>
+          <span
+            class="list-value"
             :class="{
-              'status-active': member?.member_status === 'ACTIVE',
-              'status-expired': member?.member_status === 'EXPIRED'
+              'value-success': member?.member_status === 'ACTIVE',
+              'value-error': member?.member_status === 'EXPIRED'
             }"
           >
-            {{ member?.member_status === 'ACTIVE' ? '有效' : '已到期' }}
-          </dd>
-        </div>
-        <div class="status-row">
-          <dt class="status-label">合約資訊</dt>
-          <dd class="status-value">{{ contractStatusText }}</dd>
-        </div>
-      </dl>
+            {{ member?.member_status === 'ACTIVE' ? '有效會員' : '已到期' }}
+          </span>
+          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+            <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+        <NuxtLink to="/contracts" class="list-row">
+          <span class="list-icon blue">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </span>
+          <span class="list-title">合約資訊</span>
+          <span class="list-value">{{ contractStatusText }}</span>
+          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+            <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+      </div>
     </section>
 
-    <!-- Quick Actions -->
-    <nav class="quick-actions" aria-label="快速操作">
-      <NuxtLink
-        to="/bookings"
-        class="action-card"
-        aria-label="預約課程"
-      >
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          aria-hidden="true"
-        >
-          <rect x="3" y="4" width="18" height="18" rx="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
-        </svg>
-        <span>預約課程</span>
-      </NuxtLink>
-      <NuxtLink
-        to="/contracts"
-        class="action-card"
-        aria-label="查看我的合約"
-      >
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          aria-hidden="true"
-        >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
-        <span>我的合約</span>
-      </NuxtLink>
+    <!-- Quick Actions - iOS Inset Grouped List -->
+    <nav class="list-section" aria-label="快速操作">
+      <h3 class="list-section-header">快速操作</h3>
+
+      <div class="list-inset-grouped">
+        <NuxtLink to="/bookings" class="list-row">
+          <span class="list-icon orange">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </span>
+          <span class="list-title">預約課程</span>
+          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+            <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+        <NuxtLink to="/contracts" class="list-row">
+          <span class="list-icon purple">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </span>
+          <span class="list-title">我的合約</span>
+          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+            <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+        <NuxtLink to="/fitness" class="list-row">
+          <span class="list-icon pink">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+          </span>
+          <span class="list-title">健身追蹤</span>
+          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+            <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </NuxtLink>
+      </div>
     </nav>
   </div>
 </template>
@@ -253,43 +337,100 @@ const contractStatusText = computed(() => {
 }
 
 .entry-page {
-  padding: 24px 16px;
+  padding: 24px 0;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  position: relative;
 }
 
-.status-list {
-  margin: 0;
+/* Pull-to-refresh */
+.pull-indicator {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(-40px);
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
+.pull-indicator.visible {
+  opacity: 1;
+}
+
+.pull-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+}
+
+.pull-spinner.spinning {
+  animation: pullSpin 0.8s linear infinite;
+}
+
+@keyframes pullSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* iOS Large Title Header */
 .header {
+  padding: 0 16px;
   margin-bottom: 24px;
 }
 
 .greeting {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.4px;
   margin-bottom: 4px;
 }
 
 .branch {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-text-secondary);
 }
 
+/* QR Section - iOS Style */
+.qr-section {
+  padding: 0 16px;
+  margin-bottom: 24px;
+}
+
 .qr-card {
-  background: linear-gradient(135deg, var(--color-primary) 0%, #059669 100%);
-  border-radius: 24px;
+  /* Clean white card - NO gradients */
+  background: var(--color-background);
+  border-radius: 20px;
   padding: 32px 24px;
   text-align: center;
-  margin-bottom: 20px;
+
+  /* iOS card shadow */
+  box-shadow:
+    0 0.5px 0 0 rgba(0, 0, 0, 0.04),
+    0 2px 8px 0 rgba(0, 0, 0, 0.08),
+    0 8px 24px 0 rgba(0, 0, 0, 0.06);
+
+  /* Subtle border */
+  border: 0.5px solid var(--color-border);
+}
+
+:root.theme-dark .qr-card {
+  background: var(--color-surface);
+  box-shadow:
+    0 0.5px 0 0 rgba(255, 255, 255, 0.04),
+    0 2px 8px 0 rgba(0, 0, 0, 0.3);
 }
 
 .qr-container {
-  background-color: white;
-  border-radius: 16px;
+  display: inline-flex;
   padding: 16px;
-  display: inline-block;
+  background: white;
+  border-radius: 16px;
   margin-bottom: 16px;
+
+  /* Inner shadow for depth */
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
 
 .qr-image {
@@ -304,122 +445,192 @@ const contractStatusText = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-secondary);
 }
 
-.qr-info {
-  margin-bottom: 16px;
+.qr-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .member-code {
-  font-size: 18px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 8px;
+  font-family: 'SF Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
   letter-spacing: 2px;
+  margin-bottom: 16px;
 }
 
-.expiry-text {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
+/* Progress dots - Apple Watch style */
+.progress-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 20px;
 }
 
-.countdown {
-  font-weight: 700;
-  color: white;
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-border-strong, rgba(0, 0, 0, 0.12));
+  transition: background 0.2s var(--ease-out), transform 0.2s var(--ease-out);
 }
 
-.countdown.warning {
-  color: #fbbf24;
+.dot.active {
+  background: var(--color-primary);
+  transform: scale(1.2);
 }
 
+.time-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-left: 8px;
+  min-width: 32px;
+}
+
+/* iOS Tertiary button style */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--color-surface);
   border: none;
-  padding: 12px 24px;
-  border-radius: 12px;
+  border-radius: 20px;
   font-size: 14px;
   font-weight: 500;
+  color: var(--color-primary);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.15s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .refresh-btn:active {
-  background-color: rgba(255, 255, 255, 0.3);
+  background: var(--color-border);
+  transform: scale(0.97);
 }
 
-.status-card {
-  background-color: var(--color-surface);
-  border-radius: 16px;
-  padding: 16px 20px;
-  margin-bottom: 20px;
-  border: 1px solid var(--color-border);
+/* iOS Inset Grouped List Styles */
+.list-section {
+  margin-bottom: 24px;
 }
 
-.status-row {
+.list-section-header {
+  padding: 8px 36px 8px 16px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: -0.08px;
+}
+
+.list-inset-grouped {
+  margin: 0 16px;
+  background: var(--color-background);
+  border-radius: 10px;
+  overflow: hidden;
+
+  /* iOS grouped list shadow */
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .list-inset-grouped {
+  background: var(--color-surface);
+}
+
+.list-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
+  padding: 11px 16px;
+  min-height: 44px;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.status-row:not(:last-child) {
-  border-bottom: 1px solid var(--color-border);
+.list-row:active {
+  background: var(--color-surface);
 }
 
-.status-label {
-  font-size: 14px;
+/* Inset separator - iOS style */
+.list-row:not(:last-child) {
+  position: relative;
+}
+
+.list-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 56px;
+  right: 0;
+  height: 0.5px;
+  background: var(--color-divider);
+}
+
+/* iOS-style icon (colored rounded square) */
+.list-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.list-icon svg {
+  color: white;
+}
+
+/* Icon colors - iOS system colors */
+.list-icon.blue { background: #007aff; }
+.list-icon.green { background: #34c759; }
+.list-icon.orange { background: #ff9500; }
+.list-icon.red { background: #ff3b30; }
+.list-icon.purple { background: #af52de; }
+.list-icon.pink { background: #ff2d55; }
+.list-icon.teal { background: #5ac8fa; }
+.list-icon.gray { background: #8e8e93; }
+
+.list-title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.list-value {
+  font-size: 17px;
   color: var(--color-text-secondary);
 }
 
-.status-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.status-active {
+.value-success {
   color: var(--color-success);
 }
 
-.status-expired {
+.value-error {
   color: var(--color-error);
 }
 
-.quick-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.list-chevron {
+  color: rgba(60, 60, 67, 0.3);
+  flex-shrink: 0;
 }
 
-.action-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 16px;
-  background-color: var(--color-surface);
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
-  text-decoration: none;
-  color: var(--color-text);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.action-card:active {
-  transform: scale(0.98);
-}
-
-.action-card svg {
-  color: var(--color-primary);
-}
-
-.action-card span {
-  font-size: 14px;
-  font-weight: 500;
+:root.theme-dark .list-chevron {
+  color: rgba(235, 235, 245, 0.3);
 }
 </style>

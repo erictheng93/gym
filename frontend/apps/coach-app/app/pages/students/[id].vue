@@ -1,298 +1,300 @@
 <template>
-  <div class="p-4">
-    <!-- Back Button -->
-    <button
-      class="flex items-center text-gray-600 dark:text-gray-400 mb-4"
-      @click="router.back()"
-    >
-      <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
-      返回
-    </button>
+  <div class="student-detail-page">
+    <!-- Header with Back -->
+    <div class="detail-header">
+      <button class="back-button" @click="router.back()">
+        <svg class="back-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        <span>返回</span>
+      </button>
+    </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="py-12 text-center">
-      <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />
+    <div v-if="loading" class="loading-container">
+      <div class="apple-spinner" />
     </div>
 
     <!-- Not Found -->
-    <div v-else-if="!student" class="py-12 text-center text-gray-500">
-      找不到學員資料
+    <div v-else-if="!student" class="empty-state">
+      <div class="empty-icon">👤</div>
+      <p>找不到學員資料</p>
     </div>
 
     <!-- Student Detail -->
-    <div v-else>
-      <!-- Header -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4">
-        <div class="flex items-center space-x-4">
-          <div class="w-16 h-16 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-2xl font-medium text-gray-600 dark:text-gray-300">
-            {{ student.full_name.charAt(0) }}
+    <div v-else class="detail-content">
+      <!-- Hero Card -->
+      <div class="hero-card">
+        <div class="avatar-section">
+          <div class="avatar-ring">
+            <div class="avatar-circle">
+              {{ student.full_name.charAt(0) }}
+            </div>
           </div>
-          <div>
-            <h1 class="text-xl font-bold text-gray-900 dark:text-white">
-              {{ student.full_name }}
-            </h1>
-            <p class="text-gray-500">{{ student.member_code }}</p>
-            <span
-              class="text-xs px-2 py-0.5 rounded-full"
-              :class="student.coach_role === 'PRIMARY' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'"
-            >
+          <div class="avatar-info">
+            <h1 class="student-name">{{ student.full_name }}</h1>
+            <p class="student-code">{{ student.member_code }}</p>
+            <div class="role-badge" :class="student.coach_role === 'PRIMARY' ? 'primary' : 'secondary'">
               {{ student.coach_role === 'PRIMARY' ? '主教練' : '副教練' }}
-            </span>
+            </div>
           </div>
         </div>
 
-        <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span class="text-gray-500">電話</span>
-            <p class="font-medium">{{ student.phone || '-' }}</p>
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <a v-if="student.phone" :href="`tel:${student.phone}`" class="action-button call">
+            <svg class="action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            <span>電話</span>
+          </a>
+          <a v-if="student.email" :href="`mailto:${student.email}`" class="action-button email">
+            <svg class="action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span>郵件</span>
+          </a>
+          <button class="action-button note" @click="showNoteForm = true">
+            <svg class="action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span>筆記</span>
+          </button>
+        </div>
+
+        <!-- Info Grid -->
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">電話</span>
+            <span class="info-value">{{ student.phone || '-' }}</span>
           </div>
-          <div>
-            <span class="text-gray-500">Email</span>
-            <p class="font-medium">{{ student.email || '-' }}</p>
+          <div class="info-item">
+            <span class="info-label">Email</span>
+            <span class="info-value">{{ student.email || '-' }}</span>
           </div>
-          <div>
-            <span class="text-gray-500">入會日期</span>
-            <p class="font-medium">{{ formatDate(student.join_date) }}</p>
+          <div class="info-item">
+            <span class="info-label">入會日期</span>
+            <span class="info-value">{{ formatDate(student.join_date) }}</span>
           </div>
-          <div>
-            <span class="text-gray-500">指派日期</span>
-            <p class="font-medium">{{ formatDate(student.assigned_at) }}</p>
+          <div class="info-item">
+            <span class="info-label">指派日期</span>
+            <span class="info-value">{{ formatDate(student.assigned_at) }}</span>
           </div>
         </div>
       </div>
 
-      <!-- Tabs -->
-      <div class="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+      <!-- Segmented Control -->
+      <div class="segmented-control">
         <button
           v-for="tab in tabs"
           :key="tab.key"
-          class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-          :class="activeTab === tab.key
-            ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-gray-500 hover:text-gray-700'"
+          class="segment"
+          :class="{ active: activeTab === tab.key }"
           @click="activeTab = tab.key"
         >
           {{ tab.label }}
         </button>
+        <div class="segment-indicator" :style="segmentIndicatorStyle" />
       </div>
 
       <!-- Tab Content: Contracts -->
-      <div v-if="activeTab === 'contracts'" class="space-y-3">
+      <div v-if="activeTab === 'contracts'" class="tab-content">
         <div
-          v-for="contract in student.contracts"
+          v-for="(contract, index) in student.contracts"
           :key="contract.id"
-          class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+          class="glass-card stagger-item"
+          :style="{ animationDelay: `${index * 0.05}s` }"
         >
-          <div class="flex justify-between items-start">
-            <div>
-              <p class="font-medium text-gray-900 dark:text-white">{{ contract.plan_name }}</p>
-              <p class="text-sm text-gray-500">{{ contract.contract_no }}</p>
+          <div class="card-header">
+            <div class="card-title-group">
+              <p class="card-title">{{ contract.plan_name }}</p>
+              <p class="card-subtitle">{{ contract.contract_no }}</p>
             </div>
-            <span
-              class="px-2 py-1 text-xs rounded-full"
-              :class="getContractStatusClass(contract.status)"
-            >
+            <span class="status-badge" :class="getContractStatusClass(contract.status)">
               {{ getContractStatusText(contract.status) }}
             </span>
           </div>
-          <div class="mt-2 text-sm text-gray-500">
-            <p>{{ formatDate(contract.start_date) }} ~ {{ formatDate(contract.end_date) }}</p>
-            <p v-if="contract.plan_type === 'COUNT_BASED'" class="text-orange-600">
+          <div class="card-body">
+            <p class="date-range">{{ formatDate(contract.start_date) }} ~ {{ formatDate(contract.end_date) }}</p>
+            <p v-if="contract.plan_type === 'COUNT_BASED'" class="remaining-count">
               剩餘 {{ contract.remaining_counts }} 堂
             </p>
           </div>
         </div>
-        <div v-if="student.contracts.length === 0" class="text-center text-gray-500 py-8">
-          沒有有效合約
+        <div v-if="student.contracts.length === 0" class="empty-tab">
+          <div class="empty-tab-icon">📋</div>
+          <p>沒有有效合約</p>
         </div>
       </div>
 
       <!-- Tab Content: Goals -->
-      <div v-if="activeTab === 'goals'" class="space-y-3">
+      <div v-if="activeTab === 'goals'" class="tab-content">
         <div
-          v-for="goal in student.goals"
+          v-for="(goal, index) in student.goals"
           :key="goal.id"
-          class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+          class="glass-card stagger-item"
+          :style="{ animationDelay: `${index * 0.05}s` }"
         >
-          <div class="flex justify-between items-start">
-            <p class="font-medium text-gray-900 dark:text-white">{{ getGoalText(goal.goal_type) }}</p>
-            <span
-              class="px-2 py-1 text-xs rounded-full"
-              :class="goal.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'"
-            >
+          <div class="card-header">
+            <p class="card-title">{{ getGoalText(goal.goal_type) }}</p>
+            <span class="status-badge" :class="goal.status === 'IN_PROGRESS' ? 'blue' : 'green'">
               {{ goal.status === 'IN_PROGRESS' ? '進行中' : '已達成' }}
             </span>
           </div>
-          <div class="mt-2 text-sm text-gray-500">
-            <p>開始：{{ formatDate(goal.start_date) }}</p>
-            <p v-if="goal.target_date">目標：{{ formatDate(goal.target_date) }}</p>
+          <div class="card-body">
+            <p class="date-info">開始：{{ formatDate(goal.start_date) }}</p>
+            <p v-if="goal.target_date" class="date-info">目標：{{ formatDate(goal.target_date) }}</p>
           </div>
         </div>
-        <div v-if="student.goals.length === 0" class="text-center text-gray-500 py-8">
-          尚未設定目標
+        <div v-if="student.goals.length === 0" class="empty-tab">
+          <div class="empty-tab-icon">🎯</div>
+          <p>尚未設定目標</p>
         </div>
       </div>
 
       <!-- Tab Content: Measurements -->
-      <div v-if="activeTab === 'measurements'" class="space-y-3">
+      <div v-if="activeTab === 'measurements'" class="tab-content">
         <div
-          v-for="m in student.measurements"
+          v-for="(m, index) in student.measurements"
           :key="m.id"
-          class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+          class="glass-card stagger-item"
+          :style="{ animationDelay: `${index * 0.05}s` }"
         >
-          <div class="flex justify-between items-center mb-2">
-            <p class="font-medium text-gray-900 dark:text-white">{{ formatDate(m.date) }}</p>
-            <span class="text-xs text-gray-500">{{ m.source }}</span>
+          <div class="card-header">
+            <p class="card-title">{{ formatDate(m.date) }}</p>
+            <span class="source-tag">{{ m.source }}</span>
           </div>
-          <div class="grid grid-cols-4 gap-2 text-center text-sm">
-            <div>
-              <p class="text-gray-500">體重</p>
-              <p class="font-medium">{{ m.weight ? `${m.weight}kg` : '-' }}</p>
+          <div class="measurement-grid">
+            <div class="measurement-item">
+              <span class="measurement-label">體重</span>
+              <span class="measurement-value">{{ m.weight ? `${m.weight}kg` : '-' }}</span>
             </div>
-            <div>
-              <p class="text-gray-500">體脂</p>
-              <p class="font-medium">{{ m.body_fat ? `${m.body_fat}%` : '-' }}</p>
+            <div class="measurement-item">
+              <span class="measurement-label">體脂</span>
+              <span class="measurement-value">{{ m.body_fat ? `${m.body_fat}%` : '-' }}</span>
             </div>
-            <div>
-              <p class="text-gray-500">肌肉量</p>
-              <p class="font-medium">{{ m.muscle_mass ? `${m.muscle_mass}kg` : '-' }}</p>
+            <div class="measurement-item">
+              <span class="measurement-label">肌肉量</span>
+              <span class="measurement-value">{{ m.muscle_mass ? `${m.muscle_mass}kg` : '-' }}</span>
             </div>
-            <div>
-              <p class="text-gray-500">BMI</p>
-              <p class="font-medium">{{ m.bmi || '-' }}</p>
+            <div class="measurement-item">
+              <span class="measurement-label">BMI</span>
+              <span class="measurement-value">{{ m.bmi || '-' }}</span>
             </div>
           </div>
         </div>
-        <div v-if="student.measurements.length === 0" class="text-center text-gray-500 py-8">
-          尚無身體數據記錄
+        <div v-if="student.measurements.length === 0" class="empty-tab">
+          <div class="empty-tab-icon">📊</div>
+          <p>尚無身體數據記錄</p>
         </div>
       </div>
 
       <!-- Tab Content: Notes -->
-      <div v-if="activeTab === 'notes'">
-        <!-- Add Note Button -->
-        <button
-          class="w-full mb-4 py-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500"
-          @click="showNoteForm = true"
-        >
-          + 新增筆記
+      <div v-if="activeTab === 'notes'" class="tab-content">
+        <button class="add-note-button" @click="showNoteForm = true">
+          <svg class="add-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          新增筆記
         </button>
 
-        <!-- Notes List -->
-        <div class="space-y-3">
+        <div class="notes-timeline">
           <div
-            v-for="note in student.notes"
+            v-for="(note, index) in student.notes"
             :key="note.id"
-            class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+            class="note-item stagger-item"
+            :style="{ animationDelay: `${index * 0.05}s` }"
           >
-            <div class="flex justify-between items-start mb-2">
-              <span
-                class="px-2 py-0.5 text-xs rounded-full"
-                :class="getNoteTypeClass(note.note_type)"
-              >
-                {{ getNoteTypeText(note.note_type) }}
-              </span>
-              <span class="text-xs text-gray-500">{{ formatDate(note.created_at) }}</span>
+            <div class="note-dot" :class="getNoteTypeColor(note.note_type)" />
+            <div class="note-content">
+              <div class="note-header">
+                <span class="note-type" :class="getNoteTypeColor(note.note_type)">
+                  {{ getNoteTypeText(note.note_type) }}
+                </span>
+                <span class="note-date">{{ formatDate(note.created_at) }}</span>
+              </div>
+              <p class="note-text">{{ note.content }}</p>
             </div>
-            <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ note.content }}</p>
           </div>
         </div>
-        <div v-if="student.notes.length === 0" class="text-center text-gray-500 py-8">
-          尚無筆記
+        <div v-if="student.notes.length === 0" class="empty-tab">
+          <div class="empty-tab-icon">📝</div>
+          <p>尚無筆記</p>
         </div>
       </div>
 
       <!-- Tab Content: History -->
-      <div v-if="activeTab === 'history'" class="space-y-3">
+      <div v-if="activeTab === 'history'" class="tab-content">
         <div
-          v-for="cls in student.class_history"
+          v-for="(cls, index) in student.class_history"
           :key="cls.id"
-          class="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+          class="glass-card stagger-item"
+          :style="{ animationDelay: `${index * 0.05}s` }"
         >
-          <div class="flex justify-between items-start">
-            <div>
-              <p class="font-medium text-gray-900 dark:text-white">
-                {{ formatDateTime(cls.scheduled_at) }}
-              </p>
-              <p class="text-sm text-gray-500">{{ cls.duration_minutes }} 分鐘</p>
+          <div class="card-header">
+            <div class="card-title-group">
+              <p class="card-title">{{ formatDateTime(cls.scheduled_at) }}</p>
+              <p class="card-subtitle">{{ cls.duration_minutes }} 分鐘</p>
             </div>
-            <span
-              class="px-2 py-1 text-xs rounded-full"
-              :class="getClassStatusClass(cls.status)"
-            >
+            <span class="status-badge" :class="getClassStatusClass(cls.status)">
               {{ getClassStatusText(cls.status) }}
             </span>
           </div>
-          <div v-if="cls.coach_notes" class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            {{ cls.coach_notes }}
+          <div v-if="cls.coach_notes" class="card-body">
+            <p class="coach-notes">{{ cls.coach_notes }}</p>
           </div>
         </div>
-        <div v-if="student.class_history.length === 0" class="text-center text-gray-500 py-8">
-          尚無課程記錄
+        <div v-if="student.class_history.length === 0" class="empty-tab">
+          <div class="empty-tab-icon">📅</div>
+          <p>尚無課程記錄</p>
         </div>
       </div>
     </div>
 
-    <!-- Note Form Modal -->
-    <div
-      v-if="showNoteForm"
-      class="fixed inset-0 z-50 bg-black/50 flex items-end"
-      @click="showNoteForm = false"
-    >
-      <div
-        class="w-full bg-white dark:bg-gray-800 rounded-t-xl p-4 max-h-[80vh] overflow-auto"
-        @click.stop
-      >
-        <h3 class="text-lg font-medium mb-4">新增學員筆記</h3>
-        <form @submit.prevent="handleCreateNote">
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              筆記類型
-            </label>
-            <select
-              v-model="noteForm.note_type"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-              required
-            >
-              <option value="PROGRESS">進度記錄</option>
-              <option value="GOAL">目標設定</option>
-              <option value="INJURY">傷病記錄</option>
-              <option value="FEEDBACK">回饋意見</option>
-              <option value="GENERAL">一般筆記</option>
-            </select>
-          </div>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              內容
-            </label>
-            <textarea
-              v-model="noteForm.content"
-              rows="4"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700"
-              required
-            />
-          </div>
-          <div class="flex gap-2">
-            <button
-              type="button"
-              class="flex-1 py-2 border border-gray-300 dark:border-gray-600 rounded-lg"
-              @click="showNoteForm = false"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              class="flex-1 py-2 bg-blue-600 text-white rounded-lg"
-              :disabled="noteSubmitting"
-            >
-              {{ noteSubmitting ? '儲存中...' : '儲存' }}
-            </button>
-          </div>
-        </form>
+    <!-- Note Form Sheet -->
+    <Transition name="sheet">
+      <div v-if="showNoteForm" class="sheet-overlay" @click="showNoteForm = false">
+        <div class="sheet-container" @click.stop>
+          <div class="sheet-handle" />
+          <h3 class="sheet-title">新增學員筆記</h3>
+          <form @submit.prevent="handleCreateNote">
+            <div class="form-group">
+              <label class="form-label">筆記類型</label>
+              <div class="type-selector">
+                <button
+                  v-for="type in noteTypes"
+                  :key="type.value"
+                  type="button"
+                  class="type-option"
+                  :class="{ active: noteForm.note_type === type.value, [type.color]: true }"
+                  @click="noteForm.note_type = type.value"
+                >
+                  {{ type.label }}
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">內容</label>
+              <textarea
+                v-model="noteForm.content"
+                class="form-textarea"
+                rows="4"
+                placeholder="輸入筆記內容..."
+                required
+              />
+            </div>
+            <div class="sheet-actions">
+              <button type="button" class="btn-cancel" @click="showNoteForm = false">
+                取消
+              </button>
+              <button type="submit" class="btn-submit" :disabled="noteSubmitting">
+                {{ noteSubmitting ? '儲存中...' : '儲存' }}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
@@ -312,11 +314,27 @@ const student = ref<Awaited<ReturnType<typeof getStudent>>>(null)
 const tabs = [
   { key: 'contracts', label: '合約' },
   { key: 'goals', label: '目標' },
-  { key: 'measurements', label: '身體數據' },
+  { key: 'measurements', label: '數據' },
   { key: 'notes', label: '筆記' },
-  { key: 'history', label: '課程歷史' },
+  { key: 'history', label: '歷史' },
 ]
 const activeTab = ref('contracts')
+
+const segmentIndicatorStyle = computed(() => {
+  const index = tabs.findIndex(t => t.key === activeTab.value)
+  return {
+    transform: `translateX(${index * 100}%)`,
+    width: `${100 / tabs.length}%`,
+  }
+})
+
+const noteTypes = [
+  { value: 'PROGRESS', label: '進度', color: 'blue' },
+  { value: 'GOAL', label: '目標', color: 'green' },
+  { value: 'INJURY', label: '傷病', color: 'red' },
+  { value: 'FEEDBACK', label: '回饋', color: 'purple' },
+  { value: 'GENERAL', label: '一般', color: 'gray' },
+]
 
 const showNoteForm = ref(false)
 const noteSubmitting = ref(false)
@@ -352,11 +370,11 @@ const getGoalText = (goalType: string) => {
 
 const getContractStatusClass = (status: string) => {
   const classes: Record<string, string> = {
-    ACTIVE: 'bg-green-100 text-green-800',
-    PAUSED: 'bg-yellow-100 text-yellow-800',
-    EXPIRED: 'bg-gray-100 text-gray-600',
+    ACTIVE: 'green',
+    PAUSED: 'yellow',
+    EXPIRED: 'gray',
   }
-  return classes[status] || 'bg-gray-100 text-gray-600'
+  return classes[status] || 'gray'
 }
 
 const getContractStatusText = (status: string) => {
@@ -371,13 +389,13 @@ const getContractStatusText = (status: string) => {
 
 const getClassStatusClass = (status: string) => {
   const classes: Record<string, string> = {
-    BOOKED: 'bg-blue-100 text-blue-800',
-    COMPLETED: 'bg-green-100 text-green-800',
-    MEMBER_CANCELLED: 'bg-gray-100 text-gray-600',
-    COACH_CANCELLED: 'bg-gray-100 text-gray-600',
-    NO_SHOW: 'bg-red-100 text-red-800',
+    BOOKED: 'blue',
+    COMPLETED: 'green',
+    MEMBER_CANCELLED: 'gray',
+    COACH_CANCELLED: 'gray',
+    NO_SHOW: 'red',
   }
-  return classes[status] || 'bg-gray-100 text-gray-600'
+  return classes[status] || 'gray'
 }
 
 const getClassStatusText = (status: string) => {
@@ -391,15 +409,15 @@ const getClassStatusText = (status: string) => {
   return texts[status] || status
 }
 
-const getNoteTypeClass = (type: string) => {
-  const classes: Record<string, string> = {
-    PROGRESS: 'bg-blue-100 text-blue-800',
-    GOAL: 'bg-green-100 text-green-800',
-    INJURY: 'bg-red-100 text-red-800',
-    FEEDBACK: 'bg-purple-100 text-purple-800',
-    GENERAL: 'bg-gray-100 text-gray-600',
+const getNoteTypeColor = (type: string) => {
+  const colors: Record<string, string> = {
+    PROGRESS: 'blue',
+    GOAL: 'green',
+    INJURY: 'red',
+    FEEDBACK: 'purple',
+    GENERAL: 'gray',
   }
-  return classes[type] || 'bg-gray-100 text-gray-600'
+  return colors[type] || 'gray'
 }
 
 const getNoteTypeText = (type: string) => {
@@ -421,7 +439,6 @@ const handleCreateNote = async () => {
     success('筆記已新增')
     showNoteForm.value = false
     noteForm.value = { note_type: 'PROGRESS', content: '' }
-    // Reload student data
     student.value = await getStudent(route.params.id as string)
   } else {
     showError(result.message || '新增筆記失敗')
@@ -435,3 +452,723 @@ onMounted(async () => {
   loading.value = false
 })
 </script>
+
+<style scoped>
+.student-detail-page {
+  min-height: 100vh;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+
+/* Header */
+.detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 12px 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--apple-blue);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.back-button:active {
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.back-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-secondary);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+/* Detail Content */
+.detail-content {
+  padding: 0 16px 24px;
+}
+
+/* Hero Card */
+.hero-card {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 20px;
+}
+
+.avatar-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.avatar-ring {
+  padding: 3px;
+  background: linear-gradient(135deg, var(--apple-blue), var(--apple-purple));
+  border-radius: 50%;
+}
+
+.avatar-circle {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-bg);
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--apple-blue);
+}
+
+.avatar-info {
+  flex: 1;
+}
+
+.student-name {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.student-code {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+.role-badge.primary {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--apple-blue);
+}
+
+.role-badge.secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.action-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s var(--ease-apple);
+}
+
+.action-button:active {
+  transform: scale(0.95);
+}
+
+.action-button.call {
+  color: var(--apple-green);
+}
+
+.action-button.email {
+  color: var(--apple-blue);
+}
+
+.action-button.note {
+  color: var(--apple-orange);
+}
+
+.action-icon {
+  width: 24px;
+  height: 24px;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.info-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Segmented Control */
+.segmented-control {
+  position: relative;
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 16px;
+}
+
+.segment {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
+  text-align: center;
+}
+
+.segment.active {
+  color: var(--text-primary);
+}
+
+.segment-indicator {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  height: calc(100% - 6px);
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.3s var(--ease-apple);
+  z-index: 0;
+}
+
+/* Tab Content */
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Glass Card */
+.glass-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.card-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.card-subtitle {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.card-body {
+  padding-top: 8px;
+}
+
+.date-range {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.remaining-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--apple-orange);
+  margin-top: 4px;
+}
+
+.date-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.coach-notes {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Status Badge */
+.status-badge {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.status-badge.green {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--apple-green);
+}
+
+.status-badge.yellow {
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--apple-orange);
+}
+
+.status-badge.blue {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--apple-blue);
+}
+
+.status-badge.red {
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--apple-red);
+}
+
+.status-badge.purple {
+  background: rgba(175, 82, 222, 0.12);
+  color: var(--apple-purple);
+}
+
+.status-badge.gray {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* Source Tag */
+.source-tag {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* Measurement Grid */
+.measurement-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+
+.measurement-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.measurement-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.measurement-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Add Note Button */
+.add-note-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  border: 2px dashed var(--border-color);
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-note-button:hover {
+  border-color: var(--apple-blue);
+  color: var(--apple-blue);
+}
+
+.add-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Notes Timeline */
+.notes-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.notes-timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--border-color);
+  border-radius: 1px;
+}
+
+.note-item {
+  position: relative;
+  padding: 12px 0;
+}
+
+.note-dot {
+  position: absolute;
+  left: -24px;
+  top: 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid var(--card-bg);
+  box-shadow: 0 0 0 2px var(--border-color);
+}
+
+.note-dot.blue { background: var(--apple-blue); box-shadow: 0 0 0 2px var(--apple-blue); }
+.note-dot.green { background: var(--apple-green); box-shadow: 0 0 0 2px var(--apple-green); }
+.note-dot.red { background: var(--apple-red); box-shadow: 0 0 0 2px var(--apple-red); }
+.note-dot.purple { background: var(--apple-purple); box-shadow: 0 0 0 2px var(--apple-purple); }
+.note-dot.gray { background: var(--text-tertiary); box-shadow: 0 0 0 2px var(--text-tertiary); }
+
+.note-content {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.note-type {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.note-type.blue { background: rgba(0, 122, 255, 0.12); color: var(--apple-blue); }
+.note-type.green { background: rgba(52, 199, 89, 0.12); color: var(--apple-green); }
+.note-type.red { background: rgba(255, 59, 48, 0.12); color: var(--apple-red); }
+.note-type.purple { background: rgba(175, 82, 222, 0.12); color: var(--apple-purple); }
+.note-type.gray { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+.note-date {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.note-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Empty Tab */
+.empty-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--text-tertiary);
+}
+
+.empty-tab-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+/* Sheet Modal */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet-container {
+  width: 100%;
+  max-height: 85vh;
+  background: var(--card-bg);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px 24px;
+  overflow-y: auto;
+}
+
+.sheet-handle {
+  width: 36px;
+  height: 5px;
+  background: var(--border-color);
+  border-radius: 3px;
+  margin: 0 auto 16px;
+}
+
+.sheet-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.type-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.type-option {
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--bg-secondary);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.type-option.active.blue {
+  background: rgba(0, 122, 255, 0.12);
+  border-color: var(--apple-blue);
+  color: var(--apple-blue);
+}
+
+.type-option.active.green {
+  background: rgba(52, 199, 89, 0.12);
+  border-color: var(--apple-green);
+  color: var(--apple-green);
+}
+
+.type-option.active.red {
+  background: rgba(255, 59, 48, 0.12);
+  border-color: var(--apple-red);
+  color: var(--apple-red);
+}
+
+.type-option.active.purple {
+  background: rgba(175, 82, 222, 0.12);
+  border-color: var(--apple-purple);
+  color: var(--apple-purple);
+}
+
+.type-option.active.gray {
+  background: var(--bg-tertiary);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-primary);
+  resize: none;
+  transition: border-color 0.2s;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--apple-blue);
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-cancel {
+  flex: 1;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.btn-submit {
+  flex: 1;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--apple-blue);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sheet Transition */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.3s;
+}
+
+.sheet-enter-active .sheet-container,
+.sheet-leave-active .sheet-container {
+  transition: transform 0.3s var(--ease-spring);
+}
+
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+
+.sheet-enter-from .sheet-container,
+.sheet-leave-to .sheet-container {
+  transform: translateY(100%);
+}
+
+/* Stagger Animation */
+.stagger-item {
+  animation: fadeInUp 0.5s var(--ease-apple) both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dark Mode */
+:root.dark .hero-card,
+:root.dark .glass-card,
+:root.dark .sheet-container,
+:root.dark .note-content {
+  background: var(--card-bg);
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .detail-content {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .info-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+</style>

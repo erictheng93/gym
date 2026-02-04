@@ -415,18 +415,20 @@ const getReviewSessionDate = (booking: Booking | null): string => {
 
 <style scoped>
 .bookings-page {
-  padding: 24px 16px;
-  padding-bottom: 100px;
+  padding: 24px 0;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
 .page-header {
-  margin-bottom: 24px;
+  padding: 0 16px;
+  margin-bottom: 20px;
 }
 
 .page-title {
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.4px;
 }
 
 /* Success Toast */
@@ -453,14 +455,19 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   transform: translateY(-20px);
 }
 
-/* Tab Switcher */
+/* iOS Segmented Control */
 .tab-switcher {
   display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  background-color: var(--color-surface);
-  padding: 6px;
-  border-radius: 16px;
+  margin: 0 16px 24px;
+  background-color: rgba(118, 118, 128, 0.12);
+  padding: 2px;
+  border-radius: 9px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab-switcher {
+    background-color: rgba(118, 118, 128, 0.24);
+  }
 }
 
 .tab-button {
@@ -468,39 +475,52 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 12px;
   background: none;
   border: none;
-  border-radius: 12px;
-  font-size: 14px;
+  border-radius: 7px;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   cursor: pointer;
   transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tab-button.active {
-  background-color: var(--color-primary);
-  color: white;
+  background-color: var(--color-background);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 3px 8px rgba(0, 0, 0, 0.12),
+    0 3px 1px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab-button.active {
+    background-color: #636366;
+    box-shadow:
+      0 0 0 0.5px rgba(255, 255, 255, 0.04),
+      0 3px 8px rgba(0, 0, 0, 0.3);
+  }
 }
 
 .tab-button .badge {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  background-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
-  color: var(--color-primary);
-  font-size: 12px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background-color: #ff3b30;
+  color: white;
+  font-size: 11px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .tab-button.active .badge {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: #ff3b30;
   color: white;
 }
 
@@ -536,13 +556,17 @@ const getReviewSessionDate = (booking: Booking | null): string => {
 /* Section */
 .section {
   margin-bottom: 32px;
+  padding: 0 16px;
 }
 
 .section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: -0.08px;
+  margin-bottom: 8px;
+  padding-left: 4px;
 }
 
 .booking-list {

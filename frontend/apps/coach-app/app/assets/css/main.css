@@ -1,14 +1,121 @@
-/* Coach App Main Styles */
+/* Coach App Main Styles - Apple-Inspired Design System */
 @import '@ui/assets/css/main.css';
 
-/* Coach App specific theme - Blue accent */
+/* ============================================
+   APPLE DESIGN SYSTEM TOKENS
+   ============================================ */
+
 :root {
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #dbeafe;
+  /* Apple System Colors */
+  --apple-blue: #007AFF;
+  --apple-green: #34C759;
+  --apple-orange: #FF9500;
+  --apple-red: #FF3B30;
+  --apple-purple: #AF52DE;
+  --apple-pink: #FF2D92;
+  --apple-teal: #5AC8FA;
+  --apple-indigo: #5856D6;
+  --apple-yellow: #FFCC00;
+  --apple-mint: #00C7BE;
+
+  /* Background Colors */
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F2F2F7;
+  --bg-grouped: #F2F2F7;
+
+  /* Text Colors */
+  --text-primary: #000000;
+  --text-secondary: #3C3C43;
+  --text-tertiary: #8E8E93;
+  --text-quaternary: #C7C7CC;
+
+  /* Separator & Fill */
+  --separator: rgba(60, 60, 67, 0.12);
+  --separator-opaque: #C6C6C8;
+  --fill-primary: rgba(120, 120, 128, 0.2);
+  --fill-secondary: rgba(120, 120, 128, 0.16);
+  --fill-tertiary: rgba(118, 118, 128, 0.12);
+  --fill-quaternary: rgba(116, 116, 128, 0.08);
+
+  /* Glass Effect */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-thick: rgba(255, 255, 255, 0.85);
+  --glass-blur: 20px;
+  --glass-border: rgba(0, 0, 0, 0.08);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 25px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.16);
+
+  /* Easing */
+  --ease-apple: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Border Radius */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-pill: 9999px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+
+  /* Typography */
+  --font-title: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+
+  /* Coach App Primary */
+  --color-primary: var(--apple-blue);
+  --color-primary-hover: #0066CC;
+  --color-primary-light: rgba(0, 122, 255, 0.12);
 }
 
-/* Safe area padding for PWA */
+/* Dark Mode */
+.dark {
+  --bg-primary: #000000;
+  --bg-secondary: #1C1C1E;
+  --bg-tertiary: #2C2C2E;
+  --bg-grouped: #000000;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(235, 235, 245, 0.6);
+  --text-tertiary: rgba(235, 235, 245, 0.3);
+  --text-quaternary: rgba(235, 235, 245, 0.18);
+
+  --separator: rgba(84, 84, 88, 0.65);
+  --separator-opaque: #38383A;
+  --fill-primary: rgba(120, 120, 128, 0.36);
+  --fill-secondary: rgba(120, 120, 128, 0.32);
+  --fill-tertiary: rgba(118, 118, 128, 0.24);
+  --fill-quaternary: rgba(116, 116, 128, 0.18);
+
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-bg-thick: rgba(28, 28, 30, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 25px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================
+   SAFE AREA PADDING
+   ============================================ */
+
 .safe-area-top {
   padding-top: env(safe-area-inset-top);
 }
@@ -17,18 +124,324 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Page transition */
-.page-enter-active,
+/* ============================================
+   PAGE TRANSITIONS
+   ============================================ */
+
+.page-enter-active {
+  animation: fadeInUp 0.4s var(--ease-apple);
+}
+
 .page-leave-active {
-  transition: all 0.2s ease-out;
+  animation: fadeOutDown 0.3s var(--ease-apple);
 }
 
-.page-enter-from {
-  opacity: 0;
-  transform: translateX(20px);
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.page-leave-to {
-  opacity: 0;
-  transform: translateX(-20px);
+@keyframes fadeOutDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ============================================
+   STAGGER ANIMATIONS
+   ============================================ */
+
+.stagger-item {
+  animation: slideInUp 0.5s var(--ease-apple) both;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0.05s; }
+.stagger-item:nth-child(2) { animation-delay: 0.10s; }
+.stagger-item:nth-child(3) { animation-delay: 0.15s; }
+.stagger-item:nth-child(4) { animation-delay: 0.20s; }
+.stagger-item:nth-child(5) { animation-delay: 0.25s; }
+.stagger-item:nth-child(6) { animation-delay: 0.30s; }
+.stagger-item:nth-child(7) { animation-delay: 0.35s; }
+.stagger-item:nth-child(8) { animation-delay: 0.40s; }
+.stagger-item:nth-child(9) { animation-delay: 0.45s; }
+.stagger-item:nth-child(10) { animation-delay: 0.50s; }
+
+/* ============================================
+   APPLE-STYLE COMPONENTS
+   ============================================ */
+
+/* Glass Card */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+}
+
+/* Grouped Card */
+.grouped-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--separator);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* Pill Button */
+.pill-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s var(--ease-apple);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pill-button:active {
+  transform: scale(0.96);
+}
+
+.pill-button-primary {
+  background: var(--apple-blue);
+  color: white;
+}
+
+.pill-button-secondary {
+  background: var(--fill-tertiary);
+  color: var(--text-primary);
+}
+
+.pill-button-secondary.active {
+  background: var(--apple-blue);
+  color: white;
+}
+
+/* Search Bar */
+.apple-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.apple-search-bar input {
+  width: 100%;
+  height: 36px;
+  padding: 0 16px 0 36px;
+  background: var(--fill-tertiary);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s var(--ease-apple);
+}
+
+.apple-search-bar input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.apple-search-bar input:focus {
+  background: var(--fill-secondary);
+}
+
+.apple-search-bar .search-icon {
+  position: absolute;
+  left: 10px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+/* List Item */
+.apple-list-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-apple);
+}
+
+.apple-list-item:hover {
+  background: var(--fill-quaternary);
+}
+
+.apple-list-item:active {
+  background: var(--fill-tertiary);
+}
+
+.apple-list-item + .apple-list-item {
+  border-top: 0.5px solid var(--separator);
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge-blue {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--apple-blue);
+}
+
+.status-badge-green {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--apple-green);
+}
+
+.status-badge-orange {
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--apple-orange);
+}
+
+.status-badge-red {
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--apple-red);
+}
+
+.status-badge-gray {
+  background: var(--fill-tertiary);
+  color: var(--text-tertiary);
+}
+
+/* Avatar */
+.apple-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.apple-avatar-sm {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+
+.apple-avatar-md {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.apple-avatar-lg {
+  width: 48px;
+  height: 48px;
+  font-size: 16px;
+}
+
+.apple-avatar-gradient {
+  background: linear-gradient(135deg, var(--apple-blue) 0%, var(--apple-teal) 100%);
+  color: white;
+}
+
+/* Section Title */
+.section-title-lg {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.section-title-md {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.section-title-sm {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Loading Spinner */
+.apple-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--fill-tertiary);
+  border-top-color: var(--apple-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   HIGH CONTRAST MODE
+   ============================================ */
+
+@media (prefers-contrast: high) {
+  .grouped-card,
+  .glass-card {
+    border-width: 2px;
+  }
 }

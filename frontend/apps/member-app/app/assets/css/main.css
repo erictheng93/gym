@@ -1,32 +1,15 @@
 /*
  * Gym Nexus Member App - Apple-inspired Design System
  * Refined minimalism with iOS-native feel
+ *
+ * Theme System: Supports Light / Dark / System modes
+ * Default: Dark theme
  */
 
 :root {
   /* Typography */
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-
-  /* Light Theme Colors */
-  --color-primary: #34c759;
-  --color-primary-dark: #30b350;
-  --color-primary-light: rgba(52, 199, 89, 0.12);
-  --color-background: #ffffff;
-  --color-surface: #f5f5f7;
-  --color-text: #1d1d1f;
-  --color-text-secondary: #86868b;
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-strong: rgba(0, 0, 0, 0.12);
-  --color-divider: rgba(60, 60, 67, 0.12);
-  --color-error: #ff3b30;
-  --color-success: #34c759;
-  --color-warning: #ff9f0a;
-
-  /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
 
   /* Spacing */
   --space-xs: 4px;
@@ -51,25 +34,113 @@
   /* Safe Areas */
   --safe-area-top: env(safe-area-inset-top);
   --safe-area-bottom: env(safe-area-inset-bottom);
+
+  /* Default to Dark theme (applied before JS loads) */
+  --color-primary: #30d158;
+  --color-primary-dark: #28c44d;
+  --color-primary-light: rgba(48, 209, 88, 0.15);
+  --color-accent: #0a84ff;
+  --color-background: #000000;
+  --color-surface: #1c1c1e;
+  --color-surface-secondary: #2c2c2e;
+  --color-text: #f5f5f7;
+  --color-text-secondary: #98989d;
+  --color-text-tertiary: #636366;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-divider: rgba(84, 84, 88, 0.65);
+  --color-error: #ff453a;
+  --color-success: #30d158;
+  --color-warning: #ffd60a;
+
+  /* iOS System Colors (Dark mode as default) */
+  --ios-blue: #0a84ff;
+  --ios-green: #30d158;
+  --ios-orange: #ff9f0a;
+  --ios-red: #ff453a;
+  --ios-purple: #bf5af2;
+  --ios-pink: #ff375f;
+  --ios-teal: #64d2ff;
+  --ios-yellow: #ffd60a;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-/* Dark Theme */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-primary: #30d158;
-    --color-primary-dark: #28c44d;
-    --color-primary-light: rgba(48, 209, 88, 0.15);
-    --color-background: #000000;
-    --color-surface: #1c1c1e;
-    --color-text: #f5f5f7;
-    --color-text-secondary: #86868b;
-    --color-border: rgba(255, 255, 255, 0.08);
-    --color-border-strong: rgba(255, 255, 255, 0.12);
-    --color-divider: rgba(84, 84, 88, 0.65);
-    --color-error: #ff453a;
-    --color-success: #30d158;
-    --color-warning: #ffd60a;
-  }
+/* ============================================
+   Light Theme
+   ============================================ */
+:root.theme-light {
+  --color-primary: #34c759;
+  --color-primary-dark: #30b350;
+  --color-primary-light: rgba(52, 199, 89, 0.12);
+  --color-accent: #007aff;
+  --color-background: #ffffff;
+  --color-surface: #f5f5f7;
+  --color-surface-secondary: #e5e5ea;
+  --color-text: #1d1d1f;
+  --color-text-secondary: #86868b;
+  --color-text-tertiary: #aeaeb2;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-strong: rgba(0, 0, 0, 0.12);
+  --color-divider: rgba(60, 60, 67, 0.12);
+  --color-error: #ff3b30;
+  --color-success: #34c759;
+  --color-warning: #ff9f0a;
+
+  /* iOS System Colors (Light mode) */
+  --ios-blue: #007aff;
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-red: #ff3b30;
+  --ios-purple: #af52de;
+  --ios-pink: #ff2d55;
+  --ios-teal: #5ac8fa;
+  --ios-yellow: #ffcc00;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* ============================================
+   Dark Theme (explicit class)
+   ============================================ */
+:root.theme-dark {
+  --color-primary: #30d158;
+  --color-primary-dark: #28c44d;
+  --color-primary-light: rgba(48, 209, 88, 0.15);
+  --color-accent: #0a84ff;
+  --color-background: #000000;
+  --color-surface: #1c1c1e;
+  --color-surface-secondary: #2c2c2e;
+  --color-text: #f5f5f7;
+  --color-text-secondary: #98989d;
+  --color-text-tertiary: #636366;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-divider: rgba(84, 84, 88, 0.65);
+  --color-error: #ff453a;
+  --color-success: #30d158;
+  --color-warning: #ffd60a;
+
+  /* iOS System Colors (Dark mode) */
+  --ios-blue: #0a84ff;
+  --ios-green: #30d158;
+  --ios-orange: #ff9f0a;
+  --ios-red: #ff453a;
+  --ios-purple: #bf5af2;
+  --ios-pink: #ff375f;
+  --ios-teal: #64d2ff;
+  --ios-yellow: #ffd60a;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 /* Base Reset */

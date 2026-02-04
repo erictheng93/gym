@@ -317,43 +317,43 @@ const resumeContract = async (contract: Contract) => {
 
 <style scoped>
 .contracts-page {
-  padding: 24px 16px;
-  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  padding: 24px 0;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
 .page-header {
-  margin-bottom: 24px;
+  padding: 0 16px;
+  margin-bottom: 20px;
 }
 
 .page-title {
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.4px;
 }
 
 .message {
+  margin: 0 16px 16px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: 10px;
   font-size: 14px;
-  margin-bottom: 16px;
 }
 
 .message.success {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: var(--color-primary);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background-color: rgba(52, 199, 89, 0.12);
+  color: #34c759;
 }
 
 .message.error {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: var(--color-error);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background-color: rgba(255, 59, 48, 0.12);
+  color: #ff3b30;
 }
 
 .loading {
   display: flex;
   justify-content: center;
-  padding: 48px;
+  padding: 48px 16px;
   color: var(--color-text-secondary);
 }
 
@@ -362,11 +362,18 @@ const resumeContract = async (contract: Contract) => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  margin: 0 16px;
   padding: 64px 24px;
-  background-color: var(--color-surface);
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
+  background-color: var(--color-background);
+  border-radius: 12px;
   text-align: center;
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .empty-state {
+  background-color: var(--color-surface);
 }
 
 .empty-state svg {
@@ -375,41 +382,50 @@ const resumeContract = async (contract: Contract) => {
 
 .empty-state p {
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .contract-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 0 16px;
 }
 
 .contract-card {
+  background-color: var(--color-background);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow:
+    0 0 0 0.5px var(--color-border),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:root.theme-dark .contract-card {
   background-color: var(--color-surface);
-  border-radius: 16px;
-  padding: 20px;
-  border: 1px solid var(--color-border);
 }
 
 .contract-card.active {
-  border-color: var(--color-primary);
-  border-width: 2px;
+  box-shadow:
+    0 0 0 2px var(--color-primary),
+    0 2px 8px rgba(52, 199, 89, 0.15);
 }
 
 .contract-card.paused {
-  border-color: #f59e0b;
-  border-width: 2px;
+  box-shadow:
+    0 0 0 2px #ff9500,
+    0 2px 8px rgba(255, 149, 0, 0.15);
 }
 
 .contract-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .contract-plan {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--color-text);
 }
@@ -417,46 +433,47 @@ const resumeContract = async (contract: Contract) => {
 .contract-status {
   font-size: 12px;
   font-weight: 500;
-  padding: 6px 12px;
-  border-radius: 20px;
+  padding: 4px 10px;
+  border-radius: 12px;
 }
 
 .contract-status.active {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: var(--color-primary);
+  background-color: rgba(52, 199, 89, 0.12);
+  color: #34c759;
 }
 
 .contract-status.paused {
-  background-color: rgba(251, 191, 36, 0.1);
-  color: #f59e0b;
+  background-color: rgba(255, 149, 0, 0.12);
+  color: #ff9500;
 }
 
 .contract-status.expired,
 .contract-status.terminated {
-  background-color: rgba(107, 114, 128, 0.1);
-  color: var(--color-text-secondary);
+  background-color: rgba(142, 142, 147, 0.12);
+  color: #8e8e93;
 }
 
 .contract-details {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 4px 0;
 }
 
 .detail-label {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-text-secondary);
 }
 
 .detail-value {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 400;
   color: var(--color-text);
 }
 
@@ -478,43 +495,44 @@ const resumeContract = async (contract: Contract) => {
 }
 
 .contract-actions {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--color-divider);
 }
 
 .action-btn {
   width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  font-size: 14px;
+  padding: 11px;
+  border-radius: 10px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .action-btn.pause {
-  background-color: transparent;
-  border: 1px solid var(--color-border);
+  background-color: rgba(118, 118, 128, 0.12);
+  border: none;
   color: var(--color-text);
 }
 
 .action-btn.pause:active {
-  background-color: var(--color-border);
+  background-color: rgba(118, 118, 128, 0.2);
 }
 
 .action-btn.resume {
-  background-color: var(--color-primary);
+  background-color: #34c759;
   border: none;
   color: white;
 }
 
 .action-btn.resume:active {
-  opacity: 0.9;
+  background-color: #30b350;
 }
 
 .action-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

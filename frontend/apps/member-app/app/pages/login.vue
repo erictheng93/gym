@@ -424,7 +424,7 @@ onUnmounted(() => {
    DESIGN SYSTEM - Premium Fitness Aesthetic
    ============================================ */
 
-/* Custom Properties */
+/* Custom Properties - Dark Theme (Default) */
 .login-page {
   --accent: #FF6B35;
   --accent-light: #FF8F66;
@@ -453,6 +453,23 @@ onUnmounted(() => {
 
   /* Font Import - Clash Display */
   font-family: 'Clash Display', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+}
+
+/* Light Theme Overrides */
+:root.theme-light .login-page {
+  --bg-deep: #F5F5F7;
+  --bg-card: #FFFFFF;
+  --bg-input: #F0F0F5;
+  --bg-hover: #E8E8ED;
+
+  --text-primary: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-muted: #AEAEB2;
+
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-medium: rgba(0, 0, 0, 0.12);
+
+  --accent-glow: rgba(255, 107, 53, 0.2);
 }
 
 
@@ -492,6 +509,12 @@ onUnmounted(() => {
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 60px 60px;
   mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
+}
+
+:root.theme-light .bg-pattern {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
 }
 
 .bg-glow {
