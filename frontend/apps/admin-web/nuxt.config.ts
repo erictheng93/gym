@@ -257,7 +257,7 @@ export default defineNuxtConfig({
       periodicSyncForUpdates: 3600 // 每小時檢查更新
     },
     devOptions: {
-      enabled: true,
+      enabled: false,
       type: 'module'
     }
   },
