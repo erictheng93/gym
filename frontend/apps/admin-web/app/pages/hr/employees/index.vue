@@ -37,17 +37,6 @@ const statusOptions = [
   { value: 'LEAVE', label: '留停' }
 ]
 
-// Table columns configuration
-const columns = [
-  { key: 'fullName', label: '員工', slot: 'employee' },
-  { key: 'employeeCode', label: '編號', slot: 'code' },
-  { key: 'jobTitle.name', label: '職位', hideOnMobile: true },
-  { key: 'branch.name', label: '分店', hideOnMobile: true },
-  { key: 'employmentType', label: '聘用類型', slot: 'employmentType', hideOnMobile: true },
-  { key: 'status', label: '狀態', slot: 'status' },
-  { key: 'createdAt', label: '加入日期', format: (v: string) => formatDate(v), hideOnMobile: true }
-]
-
 // Load employees
 const loadEmployees = async () => {
   await fetchEmployees({
@@ -89,6 +78,16 @@ onMounted(async () => {
 const handleRowClick = (employee: typeof employees.value[0]) => {
   selectedEmployee.value = employee
   showModal.value = true
+}
+
+// Get avatar variant based on status
+const getEmployeeStatusVariant = (status: string) => {
+  const map: Record<string, string> = {
+    ACTIVE: 'green',
+    RESIGNED: 'gray',
+    LEAVE: 'yellow'
+  }
+  return map[status] || 'green'
 }
 </script>
 
@@ -138,10 +137,9 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
     <!-- Stats -->
     <StatsBar :count="totalCount" label="符合條件" />
 
-    <!-- Data Table -->
-    <DataTable
+    <!-- Data List -->
+    <DataList
       :data="employees"
-      :columns="columns"
       :loading="isLoading"
       loading-message="載入中..."
       empty-title="尚無員工資料"
@@ -152,33 +150,24 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
       row-clickable
       @row-click="handleRowClick"
     >
-      <!-- Employee Cell -->
-      <template #employee="{ row }">
-        <div class="employee-cell">
-          <AppAvatar :name="row.fullName" size="md" variant="green" />
-          <span class="employee-name">{{ row.fullName }}</span>
+      <template #item="{ row }">
+        <div class="employee-row">
+          <div class="employee-main">
+            <AppAvatar :name="row.fullName" size="md" variant="green" />
+            <div class="employee-info">
+              <span class="employee-name">{{ row.fullName }}</span>
+              <code class="employee-code">{{ row.employeeCode || '—' }}</code>
+            </div>
+          </div>
+          <div class="employee-meta">
+            <span class="meta-item hide-mobile">{{ row.jobTitle?.name || '—' }}</span>
+            <span class="meta-item hide-mobile">{{ row.branch?.name || '—' }}</span>
+            <AppBadge
+              :label="getEmployeeStatusBadge(row.status).label"
+              :variant="getEmployeeStatusBadge(row.status).variant"
+            />
+          </div>
         </div>
-      </template>
-
-      <!-- Code Cell -->
-      <template #code="{ row }">
-        <code class="item-code">{{ row.employeeCode || '—' }}</code>
-      </template>
-
-      <!-- Employment Type Cell -->
-      <template #employmentType="{ row }">
-        <AppBadge
-          :label="getEmploymentTypeBadge(row.employmentType).label"
-          :variant="getEmploymentTypeBadge(row.employmentType).variant"
-        />
-      </template>
-
-      <!-- Status Cell -->
-      <template #status="{ row }">
-        <AppBadge
-          :label="getEmployeeStatusBadge(row.status).label"
-          :variant="getEmployeeStatusBadge(row.status).variant"
-        />
       </template>
 
       <!-- Pagination -->
@@ -190,77 +179,164 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
           next-label="下一頁"
         />
       </template>
-    </DataTable>
+    </DataList>
 
-    <!-- Employee Detail Modal -->
-    <AppModal v-model="showModal" max-width="md">
+    <!-- Employee Detail Modal - Apple Style -->
+    <AppModal v-model="showModal" max-width="lg">
       <template #header>
-        <AppAvatar :name="selectedEmployee?.fullName" size="lg" variant="green" />
-        <div>
-          <h2 class="modal-title">{{ selectedEmployee?.fullName }}</h2>
-          <p class="modal-subtitle">{{ selectedEmployee?.employeeCode }}</p>
-        </div>
+        <!-- Empty header, we'll use custom hero -->
       </template>
 
-      <div class="detail-grid">
-        <div class="detail-item">
-          <span class="detail-label">職位</span>
-          <span class="detail-value">{{ selectedEmployee?.jobTitle?.name || '—' }}</span>
+      <div class="employee-modal-content">
+        <!-- Hero Section -->
+        <div class="employee-hero">
+          <div class="hero-avatar-wrapper">
+            <AppAvatar
+              :name="selectedEmployee?.fullName"
+              size="xl"
+              :variant="getEmployeeStatusVariant(selectedEmployee?.status || 'ACTIVE')"
+            />
+            <div
+              class="hero-status-indicator"
+              :class="`status-${selectedEmployee?.status?.toLowerCase()}`"
+            />
+          </div>
+          <div class="hero-info">
+            <h2 class="hero-name">{{ selectedEmployee?.fullName }}</h2>
+            <div class="hero-meta">
+              <code class="hero-code">{{ selectedEmployee?.employeeCode }}</code>
+              <span class="hero-divider">•</span>
+              <AppBadge
+                v-if="selectedEmployee?.status"
+                :label="getEmployeeStatusBadge(selectedEmployee.status).label"
+                :variant="getEmployeeStatusBadge(selectedEmployee.status).variant"
+                size="sm"
+              />
+            </div>
+          </div>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">分店</span>
-          <span class="detail-value">{{ selectedEmployee?.branch?.name || '—' }}</span>
+
+        <!-- Info Cards -->
+        <div class="info-cards">
+          <!-- Job Card -->
+          <div class="info-card">
+            <div class="card-icon card-icon-green">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+              </svg>
+            </div>
+            <div class="card-content">
+              <h3 class="card-title">職務資訊</h3>
+              <div class="card-grid">
+                <div class="card-field">
+                  <span class="field-label">職位</span>
+                  <span class="field-value">{{ selectedEmployee?.jobTitle?.name || '—' }}</span>
+                </div>
+                <div class="card-field">
+                  <span class="field-label">分店</span>
+                  <span class="field-value">{{ selectedEmployee?.branch?.name || '—' }}</span>
+                </div>
+                <div class="card-field">
+                  <span class="field-label">聘用類型</span>
+                  <span class="field-value">
+                    <AppBadge
+                      v-if="selectedEmployee?.employmentType"
+                      :label="getEmploymentTypeBadge(selectedEmployee.employmentType).label"
+                      :variant="getEmploymentTypeBadge(selectedEmployee.employmentType).variant"
+                      size="sm"
+                    />
+                    <template v-else>—</template>
+                  </span>
+                </div>
+                <div class="card-field">
+                  <span class="field-label">基本薪資</span>
+                  <span class="field-value">
+                    {{ selectedEmployee?.basicSalary ? formatCurrency(Number(selectedEmployee.basicSalary)) : '—' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contact Card -->
+          <div class="info-card">
+            <div class="card-icon card-icon-blue">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+            </div>
+            <div class="card-content">
+              <h3 class="card-title">聯絡方式</h3>
+              <div class="card-grid">
+                <div class="card-field">
+                  <span class="field-label">電話</span>
+                  <span class="field-value">{{ selectedEmployee?.phone || '—' }}</span>
+                </div>
+                <div class="card-field">
+                  <span class="field-label">Email</span>
+                  <span class="field-value field-value-email">{{ selectedEmployee?.email || '—' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Additional Info Card -->
+          <div class="info-card info-card-full">
+            <div class="card-icon card-icon-purple">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+            <div class="card-content">
+              <h3 class="card-title">其他資訊</h3>
+              <div class="card-grid card-grid-3">
+                <div class="card-field">
+                  <span class="field-label">加入日期</span>
+                  <span class="field-value">
+                    {{ selectedEmployee?.createdAt ? formatDate(selectedEmployee.createdAt) : '—' }}
+                  </span>
+                </div>
+                <div class="card-field">
+                  <span class="field-label">狀態</span>
+                  <span class="field-value">
+                    <AppBadge
+                      v-if="selectedEmployee?.status"
+                      :label="getEmployeeStatusBadge(selectedEmployee.status).label"
+                      :variant="getEmployeeStatusBadge(selectedEmployee.status).variant"
+                      size="sm"
+                    />
+                    <template v-else>—</template>
+                  </span>
+                </div>
+                <div class="card-field">
+                  <span class="field-label">員工編號</span>
+                  <span class="field-value">
+                    <code class="field-code">{{ selectedEmployee?.employeeCode || '—' }}</code>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">聘用類型</span>
-          <AppBadge
-            v-if="selectedEmployee?.employmentType"
-            :label="getEmploymentTypeBadge(selectedEmployee.employmentType).label"
-            :variant="getEmploymentTypeBadge(selectedEmployee.employmentType).variant"
-          />
-          <span v-else>—</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">狀態</span>
-          <AppBadge
-            v-if="selectedEmployee?.status"
-            :label="getEmployeeStatusBadge(selectedEmployee.status).label"
-            :variant="getEmployeeStatusBadge(selectedEmployee.status).variant"
-          />
-          <span v-else>—</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">電話</span>
-          <span class="detail-value">{{ selectedEmployee?.phone || '—' }}</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Email</span>
-          <span class="detail-value">{{ selectedEmployee?.email || '—' }}</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">基本薪資</span>
-          <span class="detail-value">
-            {{ selectedEmployee?.basicSalary ? formatCurrency(Number(selectedEmployee.basicSalary)) : '—' }}
-          </span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">加入日期</span>
-          <span class="detail-value">
-            {{ selectedEmployee?.createdAt ? formatDate(selectedEmployee.createdAt) : '—' }}
-          </span>
+
+        <!-- Action Buttons -->
+        <div class="modal-actions">
+          <button class="action-btn action-btn-secondary" @click="showModal = false">
+            關閉
+          </button>
+          <NuxtLink :to="`/hr/employees/${selectedEmployee?.id}/edit`" class="action-btn action-btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              <path d="m15 5 4 4" />
+            </svg>
+            編輯員工
+          </NuxtLink>
         </div>
       </div>
-
-      <template #footer>
-        <button class="btn btn-ghost" @click="showModal = false">關閉</button>
-        <NuxtLink :to="`/hr/employees/${selectedEmployee?.id}/edit`" class="btn btn-primary">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-            <path d="m15 5 4 4" />
-          </svg>
-          編輯員工
-        </NuxtLink>
-      </template>
     </AppModal>
   </PageContainer>
 </template>
@@ -270,11 +346,24 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
   min-width: 140px;
 }
 
-/* Employee Cell */
-.employee-cell {
+/* Employee Row */
+.employee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.employee-main {
   display: flex;
   align-items: center;
   gap: var(--space-md);
+}
+
+.employee-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .employee-name {
@@ -282,60 +371,280 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
   color: var(--color-text-primary);
 }
 
-.item-code {
+.employee-code {
   font-family: var(--font-mono);
-  font-size: 13px;
-  padding: 2px 8px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
-}
-
-/* Modal */
-.modal-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.modal-subtitle {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  margin: 0;
-  font-family: var(--font-mono);
-}
-
-/* Detail Grid */
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-lg);
-}
-
-.detail-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.detail-label {
   font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--color-text-tertiary);
 }
 
-.detail-value {
-  font-size: 15px;
+.employee-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.meta-item {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+/* ============================================
+   Apple Style Modal
+   ============================================ */
+
+.employee-modal-content {
+  padding: 0;
+}
+
+/* Hero Section */
+.employee-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-xl) var(--space-lg);
+  background: linear-gradient(180deg, rgba(52, 199, 89, 0.08) 0%, transparent 100%);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  margin: calc(-1 * var(--space-lg)) calc(-1 * var(--space-lg)) 0;
+}
+
+.hero-avatar-wrapper {
+  position: relative;
+  margin-bottom: var(--space-md);
+}
+
+.hero-avatar-wrapper :deep(.avatar) {
+  width: 88px !important;
+  height: 88px !important;
+  font-size: 32px;
+  box-shadow: 0 4px 20px rgba(52, 199, 89, 0.25);
+}
+
+.hero-status-indicator {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid var(--color-bg-primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.hero-status-indicator.status-active {
+  background: var(--color-success);
+}
+
+.hero-status-indicator.status-resigned {
+  background: var(--color-text-tertiary);
+}
+
+.hero-status-indicator.status-leave {
+  background: var(--color-warning);
+}
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.hero-name {
+  font-size: 24px;
+  font-weight: 600;
   color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.hero-code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.hero-divider {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+/* Info Cards */
+.info-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  padding: var(--space-lg) 0;
+}
+
+.info-card {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.info-card-full {
+  grid-column: 1 / -1;
+}
+
+.card-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-icon-green {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34C759;
+}
+
+.card-icon-blue {
+  background: rgba(0, 122, 255, 0.15);
+  color: #007AFF;
+}
+
+.card-icon-purple {
+  background: rgba(175, 82, 222, 0.15);
+  color: #AF52DE;
+}
+
+.card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+
+.card-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.field-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.field-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.field-value-email {
+  word-break: break-all;
+}
+
+.field-code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* Action Buttons */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-md);
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-decoration: none;
+  border: none;
+}
+
+.action-btn-secondary {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.action-btn-secondary:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.action-btn-primary {
+  background: linear-gradient(180deg, #34C759 0%, #28a745 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(52, 199, 89, 0.35);
+}
+
+.action-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(52, 199, 89, 0.45);
 }
 
 /* Responsive */
 @media (max-width: 640px) {
-  .detail-grid {
+  .hide-mobile {
+    display: none;
+  }
+
+  .info-cards {
     grid-template-columns: 1fr;
+  }
+
+  .card-grid,
+  .card-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    width: 100%;
   }
 }
 </style>
