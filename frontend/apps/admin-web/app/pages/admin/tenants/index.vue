@@ -304,28 +304,28 @@ onMounted(() => {
                   </span>
                 </td>
                 <td>
-                  <QuotaBar
+                  <AdminQuotaBar
                     :current="tenant.current_members"
                     :limit="tenant.max_members"
                     compact
                   />
                 </td>
                 <td>
-                  <QuotaBar
+                  <AdminQuotaBar
                     :current="tenant.current_employees"
                     :limit="tenant.max_employees"
                     compact
                   />
                 </td>
                 <td>
-                  <QuotaBar
+                  <AdminQuotaBar
                     :current="tenant.current_branches"
                     :limit="tenant.max_branches"
                     compact
                   />
                 </td>
                 <td>
-                  <HealthBadge
+                  <AdminHealthBadge
                     :members-percent="tenant.members_usage_percent"
                     :employees-percent="tenant.employees_usage_percent"
                     :branches-percent="tenant.branches_usage_percent"

@@ -41,7 +41,7 @@ describe('usePlans', () => {
       await fetchPlans()
 
       expect(plans.value).toEqual(mockPlans)
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership_plans', expect.any(Object))
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.any(Object))
     })
 
     it('應該支援狀態過濾', async () => {
@@ -50,7 +50,7 @@ describe('usePlans', () => {
       const { fetchPlans } = usePlans()
       await fetchPlans({ status: 'active' })
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership_plans', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
         filter: { status: 'active' }
       }))
     })
@@ -61,7 +61,7 @@ describe('usePlans', () => {
       const { fetchPlans } = usePlans()
       await fetchPlans({ planType: 'TIME_BASED' })
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership_plans', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
         filter: { plan_type: 'TIME_BASED' }
       }))
     })
@@ -72,7 +72,7 @@ describe('usePlans', () => {
       const { fetchPlans } = usePlans()
       await fetchPlans({ status: '', planType: '' })
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership_plans', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
         filter: {}
       }))
     })
@@ -83,7 +83,7 @@ describe('usePlans', () => {
       const { fetchPlans } = usePlans()
       await fetchPlans({ status: 'active', planType: 'COUNT_BASED' })
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership_plans', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
         filter: { status: 'active', plan_type: 'COUNT_BASED' }
       }))
     })
@@ -94,7 +94,7 @@ describe('usePlans', () => {
       const { fetchPlans } = usePlans()
       await fetchPlans()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership_plans', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
         sort: 'price'
       }))
     })
@@ -142,7 +142,7 @@ describe('usePlans', () => {
       const result = await getPlan('plan-1')
 
       expect(result).toEqual(mockPlan)
-      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('membership_plans', 'plan-1')
+      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('membership-plans', 'plan-1')
     })
 
     it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
@@ -172,7 +172,7 @@ describe('usePlans', () => {
       const result = await createPlan(newPlan)
 
       expect(result).toEqual(createdPlan)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('membership_plans', newPlan)
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('membership-plans', newPlan)
     })
 
     it('應該在建立失敗時返回 null 並呼叫 handleError', async () => {
@@ -197,7 +197,7 @@ describe('usePlans', () => {
       const result = await updatePlan('plan-1', updates)
 
       expect(result).toEqual(updatedPlan)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('membership_plans', 'plan-1', updates)
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('membership-plans', 'plan-1', updates)
     })
 
     it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
@@ -219,7 +219,7 @@ describe('usePlans', () => {
       const result = await deletePlan('plan-1')
 
       expect(result).toBe(true)
-      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('membership_plans', 'plan-1')
+      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('membership-plans', 'plan-1')
     })
 
     it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {

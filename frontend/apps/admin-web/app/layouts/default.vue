@@ -161,17 +161,30 @@ const isSubmenuActive = (item: typeof menuItems[0]) => {
   return item.submenu.some(sub => route.path.startsWith(sub.to)) || route.path.startsWith(item.to)
 }
 
+// Track if component is mounted (for SSR hydration safety)
+const isMounted = ref(false)
+onMounted(() => {
+  isMounted.value = true
+})
+
 const userInitial = computed(() => {
+  if (!isMounted.value) return '' // Return empty during SSR
   if (user.value?.first_name) return user.value.first_name[0]?.toUpperCase() ?? '?'
   if (user.value?.email) return user.value.email[0]?.toUpperCase() ?? '?'
   return '?'
 })
 
 const userName = computed(() => {
+  if (!isMounted.value) return '' // Return empty during SSR
   if (user.value?.first_name || user.value?.last_name) {
     return `${user.value.first_name || ''} ${user.value.last_name || ''}`.trim()
   }
   return user.value?.email?.split('@')[0] || MESSAGES.USER.DEFAULT_NAME
+})
+
+const userEmail = computed(() => {
+  if (!isMounted.value) return '' // Return empty during SSR
+  return user?.value?.email || ''
 })
 </script>
 
@@ -248,7 +261,7 @@ const userName = computed(() => {
             <div class="user-avatar">{{ userInitial }}</div>
             <div class="user-details">
               <p class="user-name">{{ userName }}</p>
-              <p class="user-email">{{ user?.email }}</p>
+              <p class="user-email">{{ userEmail }}</p>
             </div>
           </div>
 
@@ -554,6 +567,35 @@ const userName = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.loading-placeholder {
+  display: block;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.user-avatar .loading-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.user-name.loading-placeholder {
+  width: 80px;
+  height: 14px;
+  margin-bottom: 4px;
+}
+
+.user-email.loading-placeholder {
+  width: 120px;
+  height: 12px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .logout-btn {

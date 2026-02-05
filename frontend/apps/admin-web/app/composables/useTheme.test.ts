@@ -32,19 +32,19 @@ describe('useTheme', () => {
   })
 
   describe('theme initialization', () => {
-    it('should initialize with light theme by default', () => {
+    it('should initialize with dark theme by default', () => {
       const { userTheme } = useTheme()
-      expect(userTheme.value).toBe('light')
+      expect(userTheme.value).toBe('dark')
     })
 
-    it('should return light theme on server', () => {
+    it('should return dark theme on server', () => {
       ;(global as any).import = {
         meta: { server: true },
       }
 
       const { isDark, theme } = useTheme()
-      expect(isDark.value).toBe(false)
-      expect(theme.value).toBe('light')
+      expect(isDark.value).toBe(true)
+      expect(theme.value).toBe('dark')
     })
   })
 

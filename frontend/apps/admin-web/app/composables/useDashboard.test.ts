@@ -217,7 +217,6 @@ const mockRevenueTargetsResponse = {
 describe('useDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGetToken.mockResolvedValue('test-token-123')
     mockFetch.mockReset()
     mockHandleError.mockReset()
   })
@@ -227,10 +226,20 @@ describe('useDashboard', () => {
   })
 
   // ============================================
-  // 認證令牌測試
+  // 認證設定測試
   // ============================================
-  describe('Authentication Token', () => {
-    it('應該在請求中包含 Authorization header', async () => {
+  describe('Authentication', () => {
+    it('應該使用 credentials: include 發送請求', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
+
+      const { fetchKPIs } = useDashboard()
+      await fetchKPIs()
+
+      const callArgs = mockFetch.mock.calls[0][1]
+      expect(callArgs.credentials).toBe('include')
+    })
+
+    it('應該包含 Content-Type header', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
 
       const { fetchKPIs } = useDashboard()
@@ -240,20 +249,10 @@ describe('useDashboard', () => {
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token-123'
+            'Content-Type': 'application/json'
           })
         })
       )
-    })
-
-    it('應該使用 credentials: include 發送請求', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
-
-      const { fetchKPIs } = useDashboard()
-      await fetchKPIs()
-
-      const callArgs = mockFetch.mock.calls[0][1]
-      expect(callArgs.credentials).toBe('include')
     })
   })
 
@@ -745,17 +744,6 @@ describe('useDashboard', () => {
       stopLiveUpdates()
     })
 
-    it('應該在沒有 token 時記錄警告', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      mockGetToken.mockReturnValueOnce(null)
-
-      const { startLiveUpdates } = useDashboard()
-      startLiveUpdates()
-
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token'))
-      consoleSpy.mockRestore()
-    })
-
     it('stopLiveUpdates 應該清理資源', () => {
       mockFetch.mockResolvedValue(createMockResponse(mockKPIsResponse))
 
@@ -859,22 +847,6 @@ describe('useDashboard', () => {
   // Request Headers 測試
   // ============================================
   describe('Request Headers', () => {
-    it('應該包含 Content-Type header', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse(mockKPIsResponse))
-
-      const { fetchKPIs } = useDashboard()
-      await fetchKPIs()
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json'
-          })
-        })
-      )
-    })
-
     it('POST 請求應該包含正確的 headers', async () => {
       mockFetch
         .mockResolvedValueOnce(createMockResponse({ success: true }))
@@ -888,8 +860,7 @@ describe('useDashboard', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer test-token-123'
+            'Content-Type': 'application/json'
           })
         })
       )

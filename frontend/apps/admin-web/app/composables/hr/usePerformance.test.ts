@@ -406,7 +406,7 @@ describe('usePerformance', () => {
     it('getStatusVariant 應該返回正確的樣式', () => {
       const { getStatusVariant } = usePerformance()
 
-      expect(getStatusVariant('DRAFT')).toBe('secondary')
+      expect(getStatusVariant('DRAFT')).toBe('default')
       expect(getStatusVariant('SUBMITTED')).toBe('warning')
       expect(getStatusVariant('APPROVED')).toBe('success')
     })

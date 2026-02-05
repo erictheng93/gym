@@ -273,18 +273,18 @@ describe('Login Page', () => {
       const wrapper = mount(Login)
       const themeToggle = wrapper.find('.theme-toggle')
 
-      // Initial state (light)
-      expect(wrapper.vm.isDark).toBe(false)
-
-      // Toggle to dark
-      await themeToggle.trigger('click')
+      // Initial state (dark - default theme is now dark)
       expect(wrapper.vm.isDark).toBe(true)
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEYS.THEME, 'dark')
 
-      // Toggle back to light
+      // Toggle to light
       await themeToggle.trigger('click')
       expect(wrapper.vm.isDark).toBe(false)
       expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEYS.THEME, 'light')
+
+      // Toggle back to dark
+      await themeToggle.trigger('click')
+      expect(wrapper.vm.isDark).toBe(true)
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEYS.THEME, 'dark')
     })
 
     it('應該在掛載時從 localStorage 讀取主題', () => {

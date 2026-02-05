@@ -121,12 +121,14 @@ describe('useAuth', () => {
   describe('fetchUser', () => {
     it('應該成功取得用戶資訊', async () => {
       const mockMeData = {
-        id: 'user-1',
-        email: 'test@example.com',
-        role: 'admin',
-        employeeId: 'emp-1',
-        tenantId: 'tenant-1',
-        isActive: true,
+        user: {
+          id: 'user-1',
+          email: 'test@example.com',
+          role: 'admin',
+          employeeId: 'emp-1',
+          tenantId: 'tenant-1',
+          isActive: true
+        },
         employee: null
       }
 
@@ -221,12 +223,14 @@ describe('useAuth', () => {
 
     it('應該在沒有用戶時嘗試取得用戶資訊', async () => {
       const mockMeData = {
-        id: 'user-1',
-        email: 'test@example.com',
-        role: 'admin',
-        employeeId: 'emp-1',
-        tenantId: 'tenant-1',
-        isActive: true,
+        user: {
+          id: 'user-1',
+          email: 'test@example.com',
+          role: 'admin',
+          employeeId: 'emp-1',
+          tenantId: 'tenant-1',
+          isActive: true
+        },
         employee: {
           id: 'emp-1',
           fullName: 'Test User',

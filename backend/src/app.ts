@@ -73,6 +73,7 @@ import shiftSchedulesRoutes from './routes/shift-schedules.js';
 
 // Tenant routes
 import tenantRoutes from './routes/tenant.js';
+import adminTenantsRoutes from './routes/admin-tenants.js';
 
 // Public routes (no auth required)
 import brandingRoutes from './routes/branding.js';
@@ -138,6 +139,7 @@ app.route('/health', healthRoutes);
 
 // Admin routes
 app.route('/api/users', usersRoutes);
+app.route('/api/admin/tenants', adminTenantsRoutes);
 
 // HR routes
 app.route('/api/payroll', hrPayrollRoutes);

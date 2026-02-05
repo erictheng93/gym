@@ -561,7 +561,7 @@ describe('useCharts', () => {
       })
 
       it('應該從 charts Map 中移除圖表', () => {
-        const { createLineChart, destroyChart } = useCharts()
+        const { createLineChart, destroyChart, charts } = useCharts()
         const canvas = createMockCanvas()
 
         createLineChart(canvas, 'chart-1', {

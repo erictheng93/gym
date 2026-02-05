@@ -11,6 +11,11 @@ import {
   contractsColumns,
   paymentsColumns,
   revenueColumns,
+  branchPerformanceColumns,
+  coachPerformanceColumns,
+  memberGrowthColumns,
+  contractExpiryColumns,
+  memberActivityColumns,
   type ExportColumn,
 } from '../src/services/export.js';
 
@@ -336,6 +341,54 @@ describe('Export Service', () => {
       expect(revenueColumns.some(col => col.key === 'date')).toBe(true);
       expect(revenueColumns.some(col => col.key === 'total')).toBe(true);
     });
+
+    it('should have valid branch performance columns', () => {
+      expect(branchPerformanceColumns.length).toBeGreaterThan(0);
+      expect(branchPerformanceColumns.every(col => col.header && col.key)).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'branchName')).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'revenue')).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'previousRevenue')).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'revenueGrowth')).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'newMembers')).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'checkIns')).toBe(true);
+      expect(branchPerformanceColumns.some(col => col.key === 'activeContracts')).toBe(true);
+    });
+
+    it('should have valid coach performance columns', () => {
+      expect(coachPerformanceColumns.length).toBeGreaterThan(0);
+      expect(coachPerformanceColumns.every(col => col.header && col.key)).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'coachName')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'coachCode')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'branchName')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'classesTaught')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'totalStudents')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'satisfactionRating')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'reviewCount')).toBe(true);
+      expect(coachPerformanceColumns.some(col => col.key === 'attendanceRate')).toBe(true);
+    });
+
+    it('should have valid member growth columns', () => {
+      expect(memberGrowthColumns.length).toBeGreaterThan(0);
+      expect(memberGrowthColumns.every(col => col.header && col.key)).toBe(true);
+      expect(memberGrowthColumns.some(col => col.key === 'month')).toBe(true);
+      expect(memberGrowthColumns.some(col => col.key === 'count')).toBe(true);
+    });
+
+    it('should have valid contract expiry columns', () => {
+      expect(contractExpiryColumns.length).toBeGreaterThan(0);
+      expect(contractExpiryColumns.every(col => col.header && col.key)).toBe(true);
+      expect(contractExpiryColumns.some(col => col.key === 'contractNo')).toBe(true);
+      expect(contractExpiryColumns.some(col => col.key === 'memberName')).toBe(true);
+      expect(contractExpiryColumns.some(col => col.key === 'endDate')).toBe(true);
+      expect(contractExpiryColumns.some(col => col.key === 'daysUntilExpiry')).toBe(true);
+    });
+
+    it('should have valid member activity columns', () => {
+      expect(memberActivityColumns.length).toBeGreaterThan(0);
+      expect(memberActivityColumns.every(col => col.header && col.key)).toBe(true);
+      expect(memberActivityColumns.some(col => col.key === 'date')).toBe(true);
+      expect(memberActivityColumns.some(col => col.key === 'count')).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -408,6 +461,97 @@ describe('Export Service', () => {
       expect(csvResult.buffer!.length).toBeGreaterThan(0);
 
       const excelResult = await generateExcel(columns, data, '大量資料');
+      expect(excelResult.success).toBe(true);
+    });
+
+    it('should export branch performance data correctly', async () => {
+      const data = [
+        {
+          branchName: '台北總店',
+          revenue: 1500000,
+          previousRevenue: 1200000,
+          revenueGrowth: '25.00%',
+          newMembers: 45,
+          checkIns: 3200,
+          activeContracts: 180,
+        },
+        {
+          branchName: '新竹分店',
+          revenue: 800000,
+          previousRevenue: 750000,
+          revenueGrowth: '6.67%',
+          newMembers: 28,
+          checkIns: 1800,
+          activeContracts: 95,
+        },
+      ];
+
+      const csvResult = generateCsv(branchPerformanceColumns, data);
+      expect(csvResult.success).toBe(true);
+      const csvContent = csvResult.buffer!.toString('utf-8');
+      expect(csvContent).toContain('分店名稱');
+      expect(csvContent).toContain('營收');
+      expect(csvContent).toContain('台北總店');
+      expect(csvContent).toContain('1500000');
+
+      const excelResult = await generateExcel(branchPerformanceColumns, data, '分店業績');
+      expect(excelResult.success).toBe(true);
+    });
+
+    it('should export coach performance data correctly', async () => {
+      const data = [
+        {
+          coachName: '王教練',
+          coachCode: 'C001',
+          branchName: '台北總店',
+          classesTaught: 48,
+          totalStudents: 25,
+          satisfactionRating: '4.8',
+          reviewCount: 35,
+          attendanceRate: '95.00%',
+        },
+        {
+          coachName: '李教練',
+          coachCode: 'C002',
+          branchName: '新竹分店',
+          classesTaught: 36,
+          totalStudents: 18,
+          satisfactionRating: '4.5',
+          reviewCount: 22,
+          attendanceRate: '92.50%',
+        },
+      ];
+
+      const csvResult = generateCsv(coachPerformanceColumns, data);
+      expect(csvResult.success).toBe(true);
+      const csvContent = csvResult.buffer!.toString('utf-8');
+      expect(csvContent).toContain('教練姓名');
+      expect(csvContent).toContain('授課堂數');
+      expect(csvContent).toContain('王教練');
+      expect(csvContent).toContain('48');
+
+      const excelResult = await generateExcel(coachPerformanceColumns, data, '教練績效');
+      expect(excelResult.success).toBe(true);
+    });
+
+    it('should handle coach performance with null satisfaction rating', async () => {
+      const data = [
+        {
+          coachName: '新教練',
+          coachCode: 'C003',
+          branchName: '台北總店',
+          classesTaught: 5,
+          totalStudents: 3,
+          satisfactionRating: null,
+          reviewCount: 0,
+          attendanceRate: '100.00%',
+        },
+      ];
+
+      const csvResult = generateCsv(coachPerformanceColumns, data);
+      expect(csvResult.success).toBe(true);
+
+      const excelResult = await generateExcel(coachPerformanceColumns, data, '教練績效');
       expect(excelResult.success).toBe(true);
     });
   });

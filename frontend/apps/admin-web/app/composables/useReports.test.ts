@@ -113,7 +113,6 @@ const mockMemberActivityReport = {
 describe('useReports', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGetToken.mockResolvedValue('test-token-123')
     mockFetch.mockReset()
   })
 
@@ -122,25 +121,9 @@ describe('useReports', () => {
   })
 
   // ============================================
-  // 認證令牌測試
+  // 認證測試 (Session Cookie)
   // ============================================
-  describe('Authentication Token', () => {
-    it('應該在請求中包含 Authorization header', async () => {
-      mockFetch.mockResolvedValueOnce(createMockResponse(mockRevenueReport))
-
-      const { getRevenueReport } = useReports()
-      await getRevenueReport()
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token-123'
-          })
-        })
-      )
-    })
-
+  describe('Authentication', () => {
     it('應該使用 credentials: include 發送請求', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(mockRevenueReport))
 
@@ -205,7 +188,7 @@ describe('useReports', () => {
       await getRevenueReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/api/admin/reports/revenue?')
+      expect(calledUrl).toContain('/api/reports/revenue?')
     })
 
     it('應該處理 API 錯誤並返回 null', async () => {
@@ -249,7 +232,7 @@ describe('useReports', () => {
       await getMemberGrowthReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/api/admin/reports/member-growth')
+      expect(calledUrl).toContain('/api/reports/member-growth')
     })
 
     it('應該支持分店篩選', async () => {
@@ -284,7 +267,7 @@ describe('useReports', () => {
       await getContractExpiryReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/api/admin/reports/contract-expiry')
+      expect(calledUrl).toContain('/api/reports/contract-expiry')
     })
 
     it('應該支持自定義 days_ahead 和 limit', async () => {
@@ -337,7 +320,7 @@ describe('useReports', () => {
       await getMemberActivityReport()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/api/admin/reports/member-activity')
+      expect(calledUrl).toContain('/api/reports/member-activity')
     })
   })
 
@@ -382,7 +365,7 @@ describe('useReports', () => {
       await refreshReports()
 
       const calledUrl = mockFetch.mock.calls[0][0]
-      expect(calledUrl).toContain('/api/admin/reports/refresh')
+      expect(calledUrl).toContain('/api/reports/refresh')
     })
 
     it('應該在失敗時返回錯誤訊息', async () => {
@@ -520,9 +503,9 @@ describe('useReports', () => {
         expect.any(String),
         expect.objectContaining({
           method: 'POST',
+          credentials: 'include',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer test-token-123'
+            'Content-Type': 'application/json'
           })
         })
       )

@@ -139,6 +139,100 @@ export interface MemberActivityReport {
   data: MemberActivityData[]
 }
 
+// Branch Performance Report Types
+export interface BranchPerformancePeriod {
+  current: { start: string; end: string }
+  previous: { start: string; end: string }
+}
+
+export interface BranchPerformanceSummary {
+  total_revenue: number
+  total_revenue_growth: number
+  total_new_members: number
+  total_check_ins: number
+  total_active_contracts: number
+}
+
+export interface BranchPerformanceData {
+  branch_id: string
+  branch_name: string
+  current_period: {
+    revenue: number
+    new_members: number
+    check_ins: number
+    active_contracts: number
+  }
+  previous_period: {
+    revenue: number
+    new_members: number
+    check_ins: number
+  }
+  growth: {
+    revenue_change: number
+    members_change: number
+    check_ins_change: number
+  }
+  rank: number
+}
+
+export interface BranchRanking {
+  branch_id: string
+  branch_name: string
+  value: number
+  rank: number
+}
+
+export interface BranchPerformanceReport {
+  success: boolean
+  period: BranchPerformancePeriod
+  summary: BranchPerformanceSummary
+  data: BranchPerformanceData[]
+  ranking: {
+    by_revenue: BranchRanking[]
+    by_growth: BranchRanking[]
+    by_check_ins: BranchRanking[]
+  }
+}
+
+// Coach Performance Report Types
+export interface CoachPerformanceSummary {
+  total_coaches: number
+  total_classes_taught: number
+  total_students: number
+  average_satisfaction: number
+}
+
+export interface CoachPerformanceMetrics {
+  classes_taught: number
+  total_students: number
+  satisfaction_rating: number | null
+  review_count: number
+  renewal_rate: number | null
+  attendance_rate: number
+  notes_created: number
+  lesson_plans_created: number
+}
+
+export interface CoachPerformanceData {
+  coach_id: string
+  coach_name: string
+  coach_code: string
+  branch_id: string
+  branch_name: string
+  job_title: string
+  metrics: CoachPerformanceMetrics
+  details: {
+    classes_by_category: Array<{ category: string; count: number }>
+  }
+}
+
+export interface CoachPerformanceReport {
+  success: boolean
+  period: { start_date: string; end_date: string }
+  summary: CoachPerformanceSummary
+  data: CoachPerformanceData[]
+}
+
 export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
@@ -281,11 +375,65 @@ export const useReports = () => {
     }
   }
 
+  /**
+   * 獲取分店業績報表
+   */
+  const getBranchPerformanceReport = async (
+    period: 'week' | 'month' | 'year' = 'month',
+    branchId?: string,
+    compareWithPrevious: boolean = true
+  ): Promise<BranchPerformanceReport | null> => {
+    try {
+      const params = new URLSearchParams()
+      params.append('period', period)
+      if (branchId) params.append('branch_id', branchId)
+      params.append('compareWithPrevious', String(compareWithPrevious))
+
+      const response = await authFetch(`${baseURL}/api/reports/branch-performance?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.getBranchPerformanceReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return null
+    }
+  }
+
+  /**
+   * 獲取教練績效報表
+   */
+  const getCoachPerformanceReport = async (
+    period: 'month' | 'quarter' | 'year' = 'month',
+    coachId?: string,
+    branchId?: string
+  ): Promise<CoachPerformanceReport | null> => {
+    try {
+      const params = new URLSearchParams()
+      params.append('period', period)
+      if (coachId) params.append('coach_id', coachId)
+      if (branchId) params.append('branch_id', branchId)
+
+      const response = await authFetch(`${baseURL}/api/reports/coach-performance?${params}`)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.json()
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.getCoachPerformanceReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return null
+    }
+  }
+
   return {
     getRevenueReport,
     getMemberGrowthReport,
     getContractExpiryReport,
     getMemberActivityReport,
+    getBranchPerformanceReport,
+    getCoachPerformanceReport,
     refreshReports
   }
 }

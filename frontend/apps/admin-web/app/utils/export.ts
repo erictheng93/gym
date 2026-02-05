@@ -1,14 +1,52 @@
 /**
  * 報表匯出工具函數
  * 支援 CSV, Excel, PDF 格式
+ *
+ * 使用動態導入 (Dynamic Import) 延遲載入大型依賴：
+ * - xlsx: ~500KB - 只在匯出 Excel 時載入
+ * - jspdf: ~200KB - 只在匯出 PDF 時載入
  */
 
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+// Type declarations for dynamic imports
+type XLSXModule = typeof import('xlsx')
+type JsPDFModule = typeof import('jspdf')
+type AutoTableModule = typeof import('jspdf-autotable')
+
+// Lazy-loaded module cache
+let xlsxModule: XLSXModule | null = null
+let jspdfModule: JsPDFModule | null = null
+let autoTableModule: AutoTableModule | null = null
 
 /**
- * 匯出為 CSV
+ * 動態載入 xlsx 模組
+ */
+async function loadXLSX(): Promise<XLSXModule> {
+  if (!xlsxModule) {
+    xlsxModule = await import('xlsx')
+  }
+  return xlsxModule
+}
+
+/**
+ * 動態載入 jsPDF 模組
+ */
+async function loadJsPDF(): Promise<{ jsPDF: JsPDFModule['default']; autoTable: AutoTableModule['default'] }> {
+  if (!jspdfModule || !autoTableModule) {
+    const [jspdf, autotable] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable')
+    ])
+    jspdfModule = jspdf
+    autoTableModule = autotable
+  }
+  return {
+    jsPDF: jspdfModule.default,
+    autoTable: autoTableModule.default
+  }
+}
+
+/**
+ * 匯出為 CSV (不需要外部依賴)
  */
 export function exportToCSV(data: any[], filename: string) {
   if (!data || data.length === 0) {
@@ -42,13 +80,16 @@ export function exportToCSV(data: any[], filename: string) {
 }
 
 /**
- * 匯出為 Excel (XLSX)
+ * 匯出為 Excel (XLSX) - 動態載入 xlsx
  */
-export function exportToExcel(data: any[], filename: string, sheetName: string = 'Sheet1') {
+export async function exportToExcel(data: any[], filename: string, sheetName: string = 'Sheet1') {
   if (!data || data.length === 0) {
     alert('沒有資料可匯出')
     return
   }
+
+  // 動態載入 xlsx 模組
+  const XLSX = await loadXLSX()
 
   // 創建工作表
   const worksheet = XLSX.utils.json_to_sheet(data)
@@ -68,9 +109,9 @@ export function exportToExcel(data: any[], filename: string, sheetName: string =
 }
 
 /**
- * 匯出為 PDF
+ * 匯出為 PDF - 動態載入 jspdf
  */
-export function exportToPDF(
+export async function exportToPDF(
   data: any[],
   filename: string,
   title: string,
@@ -80,6 +121,9 @@ export function exportToPDF(
     alert('沒有資料可匯出')
     return
   }
+
+  // 動態載入 jsPDF 模組
+  const { jsPDF, autoTable } = await loadJsPDF()
 
   // 創建 PDF 文件
   const doc = new jsPDF()
@@ -141,7 +185,7 @@ export function formatReportDataForExport(
 /**
  * 營收報表匯出
  */
-export function exportRevenueReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
+export async function exportRevenueReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
   const fieldMapping = {
     payment_day: '日期',
     branch_name: '分店名稱',
@@ -164,10 +208,10 @@ export function exportRevenueReport(data: any[], format: 'csv' | 'excel' | 'pdf'
       exportToCSV(formattedData, filename)
       break
     case 'excel':
-      exportToExcel(formattedData, filename, '營收報表')
+      await exportToExcel(formattedData, filename, '營收報表')
       break
     case 'pdf':
-      exportToPDF(formattedData, filename, '營收報表')
+      await exportToPDF(formattedData, filename, '營收報表')
       break
   }
 }
@@ -175,7 +219,7 @@ export function exportRevenueReport(data: any[], format: 'csv' | 'excel' | 'pdf'
 /**
  * 會員成長報表匯出
  */
-export function exportMemberGrowthReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
+export async function exportMemberGrowthReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
   const fieldMapping = {
     join_day: '日期',
     branch_name: '分店名稱',
@@ -194,10 +238,10 @@ export function exportMemberGrowthReport(data: any[], format: 'csv' | 'excel' | 
       exportToCSV(formattedData, filename)
       break
     case 'excel':
-      exportToExcel(formattedData, filename, '會員成長報表')
+      await exportToExcel(formattedData, filename, '會員成長報表')
       break
     case 'pdf':
-      exportToPDF(formattedData, filename, '會員成長報表')
+      await exportToPDF(formattedData, filename, '會員成長報表')
       break
   }
 }
@@ -205,7 +249,7 @@ export function exportMemberGrowthReport(data: any[], format: 'csv' | 'excel' | 
 /**
  * 合約到期提醒匯出
  */
-export function exportContractExpiryReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
+export async function exportContractExpiryReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
   const fieldMapping = {
     contract_no: '合約編號',
     member_name: '會員姓名',
@@ -231,10 +275,10 @@ export function exportContractExpiryReport(data: any[], format: 'csv' | 'excel' 
       exportToCSV(formattedData, filename)
       break
     case 'excel':
-      exportToExcel(formattedData, filename, '合約到期提醒')
+      await exportToExcel(formattedData, filename, '合約到期提醒')
       break
     case 'pdf':
-      exportToPDF(formattedData, filename, '合約到期提醒')
+      await exportToPDF(formattedData, filename, '合約到期提醒')
       break
   }
 }
@@ -242,7 +286,7 @@ export function exportContractExpiryReport(data: any[], format: 'csv' | 'excel' 
 /**
  * 會員活躍度報表匯出
  */
-export function exportMemberActivityReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
+export async function exportMemberActivityReport(data: any[], format: 'csv' | 'excel' | 'pdf' = 'excel') {
   const fieldMapping = {
     activity_day: '日期',
     branch_name: '分店名稱',
@@ -264,10 +308,10 @@ export function exportMemberActivityReport(data: any[], format: 'csv' | 'excel' 
       exportToCSV(formattedData, filename)
       break
     case 'excel':
-      exportToExcel(formattedData, filename, '會員活躍度報表')
+      await exportToExcel(formattedData, filename, '會員活躍度報表')
       break
     case 'pdf':
-      exportToPDF(formattedData, filename, '會員活躍度報表')
+      await exportToPDF(formattedData, filename, '會員活躍度報表')
       break
   }
 }

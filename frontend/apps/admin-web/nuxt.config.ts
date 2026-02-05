@@ -283,6 +283,56 @@ export default defineNuxtConfig({
         allow: ['..']
       }
     },
+    build: {
+      // Optimize chunk splitting for better caching and loading performance
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            // Core Vue/Nuxt - loaded on every page
+            if (id.includes('node_modules/vue') ||
+                id.includes('node_modules/@vue') ||
+                id.includes('node_modules/nuxt')) {
+              return 'vue-core'
+            }
+
+            // xlsx - Very large, only loaded when exporting Excel
+            if (id.includes('node_modules/xlsx') ||
+                id.includes('node_modules/sheetjs')) {
+              return 'xlsx-vendor'
+            }
+
+            // Chart.js - Only loaded on dashboard/analytics pages
+            if (id.includes('node_modules/chart.js') ||
+                id.includes('node_modules/@kurkle')) {
+              return 'chartjs-vendor'
+            }
+
+            // PDF generation - Only loaded when generating PDFs
+            if (id.includes('node_modules/jspdf') ||
+                id.includes('node_modules/jspdf-autotable')) {
+              return 'pdf-vendor'
+            }
+
+            // Sentry - Error tracking, can be loaded async
+            if (id.includes('node_modules/@sentry')) {
+              return 'sentry-vendor'
+            }
+
+            // Zod - Schema validation
+            if (id.includes('node_modules/zod')) {
+              return 'zod-vendor'
+            }
+
+            // QR scanning - Only loaded on check-in pages
+            if (id.includes('node_modules/jsqr')) {
+              return 'qr-vendor'
+            }
+          }
+        }
+      },
+      // Increase chunk size warning limit slightly (optional, for known large vendors)
+      chunkSizeWarningLimit: 550
+    },
     plugins: [
       {
         name: 'fix-windows-nuxt-paths',

@@ -53,7 +53,7 @@ describe('useJobTitles', () => {
       const { fetchJobTitles } = useJobTitles()
       await fetchJobTitles()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job_titles', {
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job-titles', {
         filter: { status: 'active' },
         sort: 'name',
         limit: 1000
@@ -66,7 +66,7 @@ describe('useJobTitles', () => {
       const { fetchJobTitles } = useJobTitles()
       await fetchJobTitles()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job_titles', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job-titles', expect.objectContaining({
         sort: 'name'
       }))
     })
@@ -77,7 +77,7 @@ describe('useJobTitles', () => {
       const { fetchJobTitles } = useJobTitles()
       await fetchJobTitles()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job_titles', expect.objectContaining({
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job-titles', expect.objectContaining({
         limit: 1000
       }))
     })
@@ -130,7 +130,7 @@ describe('useJobTitles', () => {
       const result = await getJobTitle('job-1')
 
       expect(result).toEqual(mockJobTitle)
-      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('job_titles', 'job-1')
+      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('job-titles', 'job-1')
     })
 
     it('應該處理取得失敗並返回 null', async () => {
@@ -158,7 +158,7 @@ describe('useJobTitles', () => {
       const result = await createJobTitle(newJobTitle)
 
       expect(result).toEqual(createdJobTitle)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('job_titles', newJobTitle)
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('job-titles', newJobTitle)
     })
 
     it('應該處理建立失敗並返回 null', async () => {
@@ -189,7 +189,7 @@ describe('useJobTitles', () => {
       const result = await updateJobTitle('job-1', updates)
 
       expect(result).toEqual(updatedJobTitle)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('job_titles', 'job-1', updates)
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('job-titles', 'job-1', updates)
     })
 
     it('應該處理更新失敗並返回 null', async () => {
@@ -210,7 +210,7 @@ describe('useJobTitles', () => {
       const result = await deleteJobTitle('job-1')
 
       expect(result).toBe(true)
-      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('job_titles', 'job-1')
+      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('job-titles', 'job-1')
     })
 
     it('應該處理刪除失敗並返回 false', async () => {

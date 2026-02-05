@@ -218,6 +218,33 @@ export const memberActivityColumns: ExportColumn[] = [
 ];
 
 /**
+ * Branch performance report export columns
+ */
+export const branchPerformanceColumns: ExportColumn[] = [
+  { header: '分店名稱', key: 'branchName', width: 18 },
+  { header: '營收', key: 'revenue', width: 15 },
+  { header: '上期營收', key: 'previousRevenue', width: 15 },
+  { header: '營收成長率', key: 'revenueGrowth', width: 12 },
+  { header: '新增會員', key: 'newMembers', width: 12 },
+  { header: '入場次數', key: 'checkIns', width: 12 },
+  { header: '有效合約數', key: 'activeContracts', width: 12 },
+];
+
+/**
+ * Coach performance report export columns
+ */
+export const coachPerformanceColumns: ExportColumn[] = [
+  { header: '教練姓名', key: 'coachName', width: 15 },
+  { header: '員工編號', key: 'coachCode', width: 12 },
+  { header: '分店', key: 'branchName', width: 15 },
+  { header: '授課堂數', key: 'classesTaught', width: 12 },
+  { header: '學員數', key: 'totalStudents', width: 12 },
+  { header: '滿意度', key: 'satisfactionRating', width: 10 },
+  { header: '評價數', key: 'reviewCount', width: 10 },
+  { header: '出席率', key: 'attendanceRate', width: 10 },
+];
+
+/**
  * Members list export columns
  */
 export const membersColumns: ExportColumn[] = [
@@ -335,6 +362,8 @@ export const exportService = {
   memberGrowthColumns,
   contractExpiryColumns,
   memberActivityColumns,
+  branchPerformanceColumns,
+  coachPerformanceColumns,
   membersColumns,
   contractsColumns,
   paymentsColumns,
