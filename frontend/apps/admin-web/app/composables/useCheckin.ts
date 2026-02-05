@@ -1,6 +1,5 @@
-import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
-import type { MemberCheckin, Member, Contract, ContractLog } from '~/types/schema'
+import type { Member, Contract } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
 export interface CheckinRecord {
@@ -32,10 +31,64 @@ export interface QrCheckinResult {
   }
 }
 
+// API response types
+interface CheckInApiResponse {
+  success: boolean
+  data: Array<{
+    id: string
+    memberId: string
+    branchId: string
+    contractId?: string
+    checkInTime: string
+    checkInType: string
+    processedById?: string
+    notes?: string
+    member: {
+      id: string
+      fullName: string
+      memberCode: string
+    }
+    branch: {
+      id: string
+      name: string
+    }
+    processedBy?: {
+      id: string
+      fullName: string
+    }
+  }>
+  pagination: {
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+  }
+}
+
+interface ContractApiResponse {
+  success: boolean
+  data: Array<{
+    id: string
+    memberId: string
+    contractNo: string
+    status: string
+    startDate: string
+    endDate: string
+    remainingCounts?: number | null
+    plan?: {
+      id: string
+      name: string
+      planType: string
+    }
+  }>
+  pagination?: {
+    total: number
+  }
+}
+
 export const useCheckin = () => {
   const config = useRuntimeConfig()
-  const apiUrl = config.public.apiBaseUrl
-  const { readItems, createItem, updateItem } = useFetch()
+  const apiUrl = config.public.apiBaseUrl || 'http://localhost:8056'
   const { handleError } = useErrorHandler()
   const todayCheckins = useState<CheckinRecord[]>('today_checkins', () => [])
   const isLoading = useState('checkin_loading', () => false)
@@ -58,30 +111,36 @@ export const useCheckin = () => {
     const { start, end } = getTodayRange()
 
     try {
-      const filter: Record<string, unknown> = {
-        check_time_gte: start,
-        check_time_lt: end
-      }
-
+      // Build query params for the check-ins API
+      const params = new URLSearchParams()
+      params.append('startDate', start)
+      params.append('endDate', end)
+      params.append('limit', '50')
       if (branchId) {
-        filter.branch_id = branchId
+        params.append('branchId', branchId)
       }
 
-      const { data, total } = await readItems<MemberCheckin>('member_checkins', {
-        filter,
-        sort: 'check_time',
-        sortOrder: 'desc',
-        limit: 50
+      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+        credentials: 'include'
       })
 
-      todayCheckins.value = data.map(checkin => ({
-        id: checkin.id,
-        member: checkin.member as Member,
-        time: checkin.check_time,
-        contract: checkin.contract as Contract,
-        branch_id: checkin.branch_id || undefined
-      }))
-      todayCount.value = total
+      if (response.success && response.data) {
+        // Map API response to CheckinRecord format
+        todayCheckins.value = response.data.map(checkin => ({
+          id: checkin.id,
+          member: {
+            id: checkin.member.id,
+            full_name: checkin.member.fullName,
+            member_code: checkin.member.memberCode
+          } as Member,
+          time: checkin.checkInTime,
+          branch_id: checkin.branchId
+        }))
+        todayCount.value = response.pagination?.total || response.data.length
+      } else {
+        todayCheckins.value = []
+        todayCount.value = 0
+      }
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.fetchTodayCheckins',
@@ -101,75 +160,74 @@ export const useCheckin = () => {
     contractId?: string
     verifiedBy?: string
   }): Promise<CheckinRecord | null> => {
-    const { memberId, branchId, contractId, verifiedBy } = options
+    const { memberId, branchId, contractId } = options
 
     try {
-      const checkinData: Partial<MemberCheckin> = {
-        member_id: memberId,
-        check_time: new Date().toISOString()
+      // Call the check-ins API directly
+      const response = await $fetch<{
+        success: boolean
+        message?: string
+        data?: {
+          id: string
+          memberId: string
+          branchId: string
+          contractId?: string
+          checkInTime: string
+          member: {
+            id: string
+            fullName: string
+            memberCode: string
+          }
+          alreadyCheckedIn?: boolean
+        }
+        error?: string
+      }>(`${apiUrl}/api/check-ins`, {
+        method: 'POST',
+        credentials: 'include',
+        body: {
+          memberId,
+          branchId,
+          contractId
+        }
+      })
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to create checkin record')
       }
 
-      if (branchId) checkinData.branch_id = branchId
-      if (contractId) checkinData.contract_id = contractId
-      if (verifiedBy) checkinData.verified_by = verifiedBy
+      const result = response.data
 
-      const result = await createItem<MemberCheckin>('member_checkins', checkinData)
-
-      if (!result) {
-        throw new Error('Failed to create checkin record')
-      }
-
-      // Handle COUNT_BASED contract - deduct remaining counts
+      // Check if count was deducted (backend handles this automatically for COUNT_BASED)
       let countDeducted = false
       let remainingCounts: number | null = null
 
+      // If we have a contractId, fetch the updated contract to get remaining counts
       if (contractId) {
-        // Fetch the contract with plan info
-        const { data: contracts } = await readItems<Contract>('contracts', {
-          filter: { id: contractId },
-          limit: 1
-        })
-
-        const contract = contracts[0]
-        if (contract?.plan?.plan_type === 'COUNT_BASED' && contract.remaining_counts !== null && contract.remaining_counts > 0) {
-          // Deduct one count
-          const newRemainingCounts = contract.remaining_counts - 1
-          await updateItem<Contract>('contracts', contractId, {
-            remaining_counts: newRemainingCounts
+        try {
+          const contractResponse = await $fetch<ContractApiResponse>(`${apiUrl}/api/contracts?id=${contractId}&limit=1`, {
+            credentials: 'include'
           })
-
-          // Create contract log for the deduction
-          await createItem<ContractLog>('contract_logs', {
-            contract_id: contractId,
-            log_type: 'CLASS_USED',
-            reason: '入場扣堂',
-            days_affected: 1,
-            created_by_employee: verifiedBy || null,
-            branch_id: branchId || null
-          } as Partial<ContractLog>)
-
-          countDeducted = true
-          remainingCounts = newRemainingCounts
+          if (contractResponse.success && contractResponse.data?.[0]) {
+            const contract = contractResponse.data[0]
+            if (contract.plan?.planType === 'COUNT_BASED') {
+              countDeducted = true
+              remainingCounts = contract.remainingCounts ?? null
+            }
+          }
+        } catch {
+          // Ignore errors fetching contract details
         }
       }
 
-      // Fetch the created record with relations
-      const { data: createdRecords } = await readItems<MemberCheckin>('member_checkins', {
-        filter: { id: result.id },
-        limit: 1
-      })
-
-      const created = createdRecords[0]
-      if (!created) {
-        throw new Error('Failed to fetch created checkin record')
-      }
-
       const checkinRecord: CheckinRecord = {
-        id: created.id,
-        member: created.member as Member,
-        time: created.check_time,
-        contract: created.contract as Contract,
-        branch_id: created.branch_id || undefined,
+        id: result.id,
+        member: {
+          id: result.member.id,
+          full_name: result.member.fullName,
+          member_code: result.member.memberCode
+        } as Member,
+        time: result.checkInTime,
+        branch_id: result.branchId,
         countDeducted,
         remainingCounts
       }
@@ -191,27 +249,53 @@ export const useCheckin = () => {
   // Get member's active contract for check-in
   const getMemberActiveContract = async (memberId: string): Promise<Contract | null> => {
     try {
-      const now = new Date().toISOString().split('T')[0]
-      const { data: contracts } = await readItems<Contract>('contracts', {
-        filter: {
-          member_id: memberId,
-          contract_status: 'ACTIVE',
-          start_date_lte: now,
-          end_date_gte: now
-        },
-        sort: 'start_date',
-        sortOrder: 'desc',
-        limit: 1
+      const today = new Date().toISOString().split('T')[0] || ''
+      const params = new URLSearchParams()
+      params.append('memberId', memberId)
+      params.append('status', 'ACTIVE')
+      params.append('limit', '1')
+
+      const response = await $fetch<ContractApiResponse>(`${apiUrl}/api/contracts?${params.toString()}`, {
+        credentials: 'include'
       })
 
-      const contract = contracts[0]
+      if (!response.success || !response.data?.length) {
+        return null
+      }
+
+      const contractData = response.data[0]
+      if (!contractData) {
+        return null
+      }
+
+      // Check date validity
+      if (contractData.startDate > today || contractData.endDate < today) {
+        return null
+      }
+
       // For COUNT_BASED contracts, also check if there are remaining counts
-      if (contract?.plan?.plan_type === 'COUNT_BASED' && contract.remaining_counts !== null && contract.remaining_counts <= 0) {
+      if (contractData.plan?.planType === 'COUNT_BASED' &&
+          contractData.remainingCounts !== null &&
+          contractData.remainingCounts !== undefined &&
+          contractData.remainingCounts <= 0) {
         // No remaining counts - treat as no active contract for check-in
         return null
       }
 
-      return contract || null
+      // Map to Contract format expected by the UI
+      return {
+        id: contractData.id,
+        contract_no: contractData.contractNo,
+        contract_status: contractData.status,
+        start_date: contractData.startDate,
+        end_date: contractData.endDate,
+        remaining_counts: contractData.remainingCounts ?? null,
+        plan: contractData.plan ? {
+          id: contractData.plan.id,
+          name: contractData.plan.name,
+          plan_type: contractData.plan.planType
+        } : undefined
+      } as Contract
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.getMemberActiveContract',
@@ -224,13 +308,28 @@ export const useCheckin = () => {
   // Fetch check-in history for a specific member
   const fetchMemberCheckinHistory = async (memberId: string, limit = 20) => {
     try {
-      const { data } = await readItems<MemberCheckin>('member_checkins', {
-        filter: { member_id: memberId },
-        sort: 'check_time',
-        sortOrder: 'desc',
-        limit
+      const params = new URLSearchParams()
+      params.append('memberId', memberId)
+      params.append('limit', String(limit))
+
+      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+        credentials: 'include'
       })
-      return data
+
+      if (response.success && response.data) {
+        return response.data.map(checkin => ({
+          id: checkin.id,
+          member_id: checkin.memberId,
+          branch_id: checkin.branchId,
+          check_time: checkin.checkInTime,
+          member: {
+            id: checkin.member.id,
+            full_name: checkin.member.fullName,
+            member_code: checkin.member.memberCode
+          }
+        }))
+      }
+      return []
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.fetchMemberCheckinHistory',
@@ -243,22 +342,22 @@ export const useCheckin = () => {
   // Check if member has already checked in today
   const hasCheckedInToday = async (memberId: string, branchId?: string): Promise<boolean> => {
     const { start, end } = getTodayRange()
-    const filter: Record<string, unknown> = {
-      member_id: memberId,
-      check_time_gte: start,
-      check_time_lt: end
-    }
-
-    if (branchId) {
-      filter.branch_id = branchId
-    }
 
     try {
-      const { total } = await readItems<MemberCheckin>('member_checkins', {
-        filter,
-        limit: 1
+      const params = new URLSearchParams()
+      params.append('memberId', memberId)
+      params.append('startDate', start)
+      params.append('endDate', end)
+      params.append('limit', '1')
+      if (branchId) {
+        params.append('branchId', branchId)
+      }
+
+      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+        credentials: 'include'
       })
-      return total > 0
+
+      return response.success && response.pagination ? response.pagination.total > 0 : false
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.hasCheckedInToday',
