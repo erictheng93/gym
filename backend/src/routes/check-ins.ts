@@ -30,74 +30,89 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 50, 100);
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(branches.tenantId, tenantId)];
+  try {
+    const conditions = [eq(branches.tenantId, tenantId)];
 
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
-  }
+    if (branchId) {
+      conditions.push(eq(checkIns.branchId, branchId));
+    }
 
-  if (memberId) {
-    conditions.push(eq(checkIns.memberId, memberId));
-  }
+    if (memberId) {
+      conditions.push(eq(checkIns.memberId, memberId));
+    }
 
-  if (startDate) {
-    conditions.push(gte(checkIns.checkInTime, new Date(startDate)));
-  }
+    if (startDate) {
+      conditions.push(gte(checkIns.checkInTime, new Date(startDate)));
+    }
 
-  if (endDate) {
-    conditions.push(lte(checkIns.checkInTime, new Date(endDate)));
-  }
+    if (endDate) {
+      conditions.push(lte(checkIns.checkInTime, new Date(endDate)));
+    }
 
-  const result = await db
-    .select({
-      checkIn: checkIns,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
+    const result = await db
+      .select({
+        checkIn: {
+          id: checkIns.id,
+          memberId: checkIns.memberId,
+          branchId: checkIns.branchId,
+          contractId: checkIns.contractId,
+          checkInTime: checkIns.checkInTime,
+          checkInType: checkIns.checkInType,
+          checkInMethod: checkIns.checkInMethod,
+          processedById: checkIns.processedById,
+          notes: checkIns.notes,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+        processedBy: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(checkIns)
+      .innerJoin(members, eq(checkIns.memberId, members.id))
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .leftJoin(employees, eq(checkIns.processedById, employees.id))
+      .where(and(...conditions))
+      .orderBy(desc(checkIns.checkInTime))
+      .limit(limit)
+      .offset(offset);
+
+    // Get total count
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(checkIns)
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(and(...conditions));
+
+    const total = Number(countResult?.count || 0);
+
+    return c.json({
+      success: true,
+      data: result.map(r => ({
+        ...r.checkIn,
+        member: r.member,
+        branch: r.branch,
+        processedBy: r.processedBy,
+      })),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      processedBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(checkIns)
-    .innerJoin(members, eq(checkIns.memberId, members.id))
-    .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .leftJoin(employees, eq(checkIns.processedById, employees.id))
-    .where(and(...conditions))
-    .orderBy(desc(checkIns.checkInTime))
-    .limit(limit)
-    .offset(offset);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(and(...conditions));
-
-  const total = Number(countResult?.count || 0);
-
-  return c.json({
-    success: true,
-    data: result.map(r => ({
-      ...r.checkIn,
-      member: r.member,
-      branch: r.branch,
-      processedBy: r.processedBy,
-    })),
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    },
-  });
+    });
+  } catch (error) {
+    console.error('[check-ins GET /] Error:', error);
+    return c.json({ success: false, error: '查詢入場紀錄失敗', details: String(error) }, 500);
+  }
 });
 
 // Create check-in (entry)
