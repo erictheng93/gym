@@ -143,12 +143,6 @@ const colorPresets = [
     <!-- Header -->
     <header class="page-header">
       <div class="header-content">
-        <NuxtLink to="/admin/settings" class="back-link">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          返回設定
-        </NuxtLink>
         <h1>品牌設定</h1>
         <p class="header-description">自訂 Launch Screen 的品牌名稱和顏色</p>
       </div>
@@ -391,20 +385,6 @@ const colorPresets = [
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-}
-
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  margin-bottom: var(--space-sm);
-}
-
-.back-link:hover {
-  color: var(--color-accent);
 }
 
 .header-content h1 {

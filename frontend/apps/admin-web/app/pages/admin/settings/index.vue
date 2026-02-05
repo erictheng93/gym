@@ -107,7 +107,7 @@ const handleSave = async () => {
 
     <!-- Quick Links -->
     <div class="quick-links">
-      <NuxtLink to="/admin/settings/branding" class="quick-link-card">
+      <NuxtLink to="/admin/branding" class="quick-link-card">
         <div class="quick-link-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
             <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor" />
