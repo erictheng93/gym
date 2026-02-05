@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, payments, contracts, members, branches } from '../db/index.js';
-import { eq, and, sql, desc, sum, inArray } from 'drizzle-orm';
+import { eq, and, sql, desc, sum, inArray, gte, lte } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { generateExcel, generateCsv, paymentsColumns, translatePaymentMethod, translatePaymentType } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -157,6 +158,96 @@ app.get('/summary', async (c) => {
       totalRefund,
       netIncome: totalIncome - totalRefund,
       paymentCount: Number(countResult?.count || 0),
+    },
+  });
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/payments/export - Export Payments List
+// -----------------------------------------------------------------------------
+
+app.get('/export', async (c) => {
+  const tenantId = c.get('tenantId')!;
+  const { branchId, startDate, endDate, format = 'csv' } = c.req.query();
+
+  const tenantBranches = await db
+    .select({ id: branches.id })
+    .from(branches)
+    .where(eq(branches.tenantId, tenantId));
+
+  const branchIds = tenantBranches.map(b => b.id);
+
+  if (branchIds.length === 0) {
+    const result = generateCsv(paymentsColumns, []);
+    return new Response(result.buffer, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="payments.csv"`,
+      },
+    });
+  }
+
+  let conditions = [inArray(payments.branchId, branchIds)];
+
+  if (branchId) {
+    conditions.push(eq(payments.branchId, branchId));
+  }
+
+  if (startDate) {
+    conditions.push(gte(payments.paymentDate, new Date(startDate)));
+  }
+
+  if (endDate) {
+    conditions.push(lte(payments.paymentDate, new Date(endDate)));
+  }
+
+  const result = await db
+    .select({
+      payment: payments,
+      member: {
+        id: members.id,
+        fullName: members.fullName,
+        memberCode: members.memberCode,
+      },
+    })
+    .from(payments)
+    .leftJoin(members, eq(payments.memberId, members.id))
+    .where(and(...conditions))
+    .orderBy(desc(payments.createdAt));
+
+  const exportData = result.map(r => ({
+    receiptNo: r.payment.receiptNo || '',
+    memberName: r.member?.fullName || '',
+    memberCode: r.member?.memberCode || '',
+    amount: parseFloat(r.payment.amount || '0'),
+    paymentMethod: translatePaymentMethod(r.payment.paymentMethod),
+    paymentDate: r.payment.paymentDate?.toISOString().split('T')[0] || '',
+    type: translatePaymentType(r.payment.type),
+  }));
+
+  const filename = `付款記錄_${new Date().toISOString().split('T')[0]}`;
+
+  if (format === 'xlsx' || format === 'excel') {
+    const exportResult = await generateExcel(paymentsColumns, exportData, '付款記錄');
+    if (!exportResult.success || !exportResult.buffer) {
+      return c.json({ success: false, error: exportResult.error || '匯出失敗' }, 500);
+    }
+    return new Response(exportResult.buffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.xlsx"`,
+      },
+    });
+  }
+
+  const csvResult = generateCsv(paymentsColumns, exportData);
+  if (!csvResult.success || !csvResult.buffer) {
+    return c.json({ success: false, error: csvResult.error || '匯出失敗' }, 500);
+  }
+  return new Response(csvResult.buffer, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.csv"`,
     },
   });
 });

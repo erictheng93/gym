@@ -10,3 +10,5 @@ export { smsService, initSmsService, sendSms, normalizePhoneNumber, checkBalance
 export { paymentService, initPaymentService, createPayment, getPaymentStatus, processRefund } from './payment.js';
 export type { PaymentGateway, PaymentStatus, CreatePaymentOptions, PaymentResult, RefundOptions, RefundResult } from './payment.js';
 export { pdfService, generateContractPdf, generateInvoicePdf } from './pdf.js';
+export { exportService, generateExcel, generateCsv } from './export.js';
+export type { ExportColumn, ExportResult } from './export.js';

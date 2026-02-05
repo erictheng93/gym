@@ -5,6 +5,7 @@ import { db, salaryRecords, promotionRecords, employees, jobTitles, branches } f
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { authMiddleware, requireAuth } from '../middleware/index.js';
 import type { AuthVariables } from '../middleware/index.js';
+import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../services/export.js';
 
 // =============================================================================
 // HR PAYROLL ROUTES
@@ -403,6 +404,88 @@ app.post('/salary-records/:id/pay', async (c) => {
     .where(eq(salaryRecords.id, id));
 
   return c.json({ success: true, message: '已標記為已發放' });
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/payroll/export - Export Salary Records
+// -----------------------------------------------------------------------------
+
+app.get('/export', async (c) => {
+  const { period, branch_id, status, format = 'csv' } = c.req.query();
+
+  const conditions = [];
+  if (period) conditions.push(eq(salaryRecords.period, period));
+  if (status) conditions.push(eq(salaryRecords.status, status as 'PENDING' | 'APPROVED' | 'PAID'));
+  if (branch_id) conditions.push(eq(salaryRecords.branchId, branch_id));
+
+  const records = await db
+    .select({
+      id: salaryRecords.id,
+      employeeId: salaryRecords.employeeId,
+      period: salaryRecords.period,
+      baseSalary: salaryRecords.baseSalary,
+      overtimeHours: salaryRecords.overtimeHours,
+      overtimePay: salaryRecords.overtimePay,
+      commission: salaryRecords.commission,
+      bonus: salaryRecords.bonus,
+      deductions: salaryRecords.deductions,
+      netSalary: salaryRecords.netSalary,
+      status: salaryRecords.status,
+      employeeName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      branchName: branches.name,
+      jobTitleName: jobTitles.name,
+    })
+    .from(salaryRecords)
+    .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
+    .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(salaryRecords.period), desc(salaryRecords.createdAt));
+
+  // Transform data for export
+  const exportData = records.map(r => ({
+    employeeCode: r.employeeCode || '',
+    employeeName: r.employeeName || '',
+    jobTitle: r.jobTitleName || '',
+    branchName: r.branchName || '',
+    period: r.period,
+    baseSalary: parseFloat(r.baseSalary),
+    overtimeHours: parseFloat(r.overtimeHours || '0'),
+    overtimePay: parseFloat(r.overtimePay || '0'),
+    commission: parseFloat(r.commission || '0'),
+    bonus: parseFloat(r.bonus || '0'),
+    deductions: parseFloat(r.deductions || '0'),
+    netSalary: parseFloat(r.netSalary),
+    status: translateStatus(r.status),
+  }));
+
+  const filename = `薪資記錄_${period || new Date().toISOString().split('T')[0]}`;
+
+  if (format === 'xlsx' || format === 'excel') {
+    const result = await generateExcel(payrollColumns, exportData, '薪資記錄');
+    if (!result.success || !result.buffer) {
+      return c.json({ success: false, error: result.error || '匯出失敗' }, 500);
+    }
+    return new Response(result.buffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.xlsx"`,
+      },
+    });
+  }
+
+  // Default: CSV
+  const result = generateCsv(payrollColumns, exportData);
+  if (!result.success || !result.buffer) {
+    return c.json({ success: false, error: result.error || '匯出失敗' }, 500);
+  }
+  return new Response(result.buffer, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.csv"`,
+    },
+  });
 });
 
 // -----------------------------------------------------------------------------

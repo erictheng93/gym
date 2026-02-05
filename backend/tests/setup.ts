@@ -1,15 +1,21 @@
-import { beforeAll, afterAll, beforeEach } from 'vitest';
-import { db } from '../src/db/index.js';
+import { beforeAll, afterAll } from 'vitest';
+
+// Flag to track database connection status
+export let isDbConnected = false;
 
 // Test database connection check
 beforeAll(async () => {
   try {
+    // Dynamic import to avoid errors if DB env vars are missing
+    const { db } = await import('../src/db/index.js');
     // Verify database connection
-    const result = await db.execute('SELECT 1 as connected');
+    await db.execute('SELECT 1 as connected');
+    isDbConnected = true;
     console.log('✅ Test database connected');
   } catch (error) {
-    console.error('❌ Failed to connect to test database:', error);
-    throw error;
+    isDbConnected = false;
+    console.warn('⚠️ Test database not available - integration tests will be skipped');
+    // Don't throw - allow unit tests to run
   }
 });
 

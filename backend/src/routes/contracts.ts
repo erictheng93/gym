@@ -5,6 +5,7 @@ import { db, contracts, contractLogs, members, membershipPlans, branches, paymen
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { generateExcel, generateCsv, contractsColumns, translateStatus } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -34,7 +35,6 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
   const status = c.req.query('status');
-  const sortBy = c.req.query('sortBy') || 'createdAt';
   const sortOrder = c.req.query('sortOrder') || 'desc';
 
   const tenantBranches = await db
@@ -51,7 +51,8 @@ app.get('/', async (c) => {
   // Build where conditions
   const conditions = [inArray(contracts.branchId, branchIds)];
   if (status) {
-    conditions.push(eq(contracts.status, status as 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'TRANSFERRED'));
+    // Case-insensitive status comparison
+    conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
   }
 
   const [countResult] = await db
@@ -91,6 +92,95 @@ app.get('/', async (c) => {
     data: result,
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+  });
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/contracts/export - Export Contracts List
+// -----------------------------------------------------------------------------
+
+app.get('/export', async (c) => {
+  const tenantId = c.get('tenantId')!;
+  const { status, format = 'csv' } = c.req.query();
+
+  const tenantBranches = await db
+    .select({ id: branches.id })
+    .from(branches)
+    .where(eq(branches.tenantId, tenantId));
+
+  const branchIds = tenantBranches.map(b => b.id);
+
+  if (branchIds.length === 0) {
+    const result = generateCsv(contractsColumns, []);
+    return new Response(result.buffer, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="contracts.csv"`,
+      },
+    });
+  }
+
+  const conditions = [inArray(contracts.branchId, branchIds)];
+  if (status) {
+    // Case-insensitive status comparison
+    conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
+  }
+
+  const result = await db
+    .select({
+      contract: contracts,
+      member: {
+        id: members.id,
+        fullName: members.fullName,
+        memberCode: members.memberCode,
+      },
+      plan: {
+        id: membershipPlans.id,
+        name: membershipPlans.name,
+      },
+    })
+    .from(contracts)
+    .leftJoin(members, eq(contracts.memberId, members.id))
+    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+    .where(and(...conditions))
+    .orderBy(desc(contracts.createdAt));
+
+  const exportData = result.map(r => ({
+    contractNo: r.contract.contractNo || '',
+    memberName: r.member?.fullName || '',
+    memberCode: r.member?.memberCode || '',
+    planName: r.plan?.name || '',
+    status: translateStatus(r.contract.status),
+    startDate: r.contract.startDate || '',
+    endDate: r.contract.endDate || '',
+    totalAmount: parseFloat(r.contract.totalAmount || '0'),
+    paymentStatus: translateStatus(r.contract.paymentStatus),
+  }));
+
+  const filename = `合約列表_${new Date().toISOString().split('T')[0]}`;
+
+  if (format === 'xlsx' || format === 'excel') {
+    const exportResult = await generateExcel(contractsColumns, exportData, '合約列表');
+    if (!exportResult.success || !exportResult.buffer) {
+      return c.json({ success: false, error: exportResult.error || '匯出失敗' }, 500);
+    }
+    return new Response(exportResult.buffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.xlsx"`,
+      },
+    });
+  }
+
+  const csvResult = generateCsv(contractsColumns, exportData);
+  if (!csvResult.success || !csvResult.buffer) {
+    return c.json({ success: false, error: csvResult.error || '匯出失敗' }, 500);
+  }
+  return new Response(csvResult.buffer, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.csv"`,
+    },
   });
 });
 

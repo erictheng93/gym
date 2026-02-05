@@ -5,6 +5,7 @@ import { db, members, contracts, branches, membershipPlans } from '../db/index.j
 import { eq, and, or, ilike, sql, desc, asc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { generateExcel, generateCsv, membersColumns, translateStatus, translateGender } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -63,7 +64,8 @@ app.get('/', zValidator('query', querySchema), async (c) => {
   }
 
   if (status) {
-    baseCondition = and(baseCondition, eq(members.status, status))!;
+    // Case-insensitive status comparison
+    baseCondition = and(baseCondition, sql`lower(${members.status}) = lower(${status})`)!;
   }
 
   if (search) {
@@ -110,6 +112,86 @@ app.get('/', zValidator('query', querySchema), async (c) => {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    },
+  });
+});
+
+// -----------------------------------------------------------------------------
+// GET /api/members/export - Export Members List
+// -----------------------------------------------------------------------------
+
+app.get('/export', async (c) => {
+  const tenantId = c.get('tenantId')!;
+  const { branchId, status, format = 'csv' } = c.req.query();
+
+  const tenantBranches = await db
+    .select({ id: branches.id, name: branches.name })
+    .from(branches)
+    .where(eq(branches.tenantId, tenantId));
+
+  const branchIds = tenantBranches.map(b => b.id);
+  const branchMap = new Map(tenantBranches.map(b => [b.id, b.name]));
+
+  if (branchIds.length === 0) {
+    const result = generateCsv(membersColumns, []);
+    return new Response(result.buffer, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="members.csv"`,
+      },
+    });
+  }
+
+  let baseCondition = inArray(members.branchId, branchIds);
+
+  if (branchId) {
+    baseCondition = and(baseCondition, eq(members.branchId, branchId))!;
+  }
+
+  if (status) {
+    baseCondition = and(baseCondition, eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'))!;
+  }
+
+  const result = await db
+    .select()
+    .from(members)
+    .where(baseCondition)
+    .orderBy(desc(members.createdAt));
+
+  const exportData = result.map(m => ({
+    memberCode: m.memberCode || '',
+    fullName: m.fullName || '',
+    phone: m.phone || '',
+    email: m.email || '',
+    gender: translateGender(m.gender),
+    status: translateStatus(m.status),
+    joinDate: m.joinDate || '',
+    branchName: branchMap.get(m.branchId!) || '',
+  }));
+
+  const filename = `會員列表_${new Date().toISOString().split('T')[0]}`;
+
+  if (format === 'xlsx' || format === 'excel') {
+    const exportResult = await generateExcel(membersColumns, exportData, '會員列表');
+    if (!exportResult.success || !exportResult.buffer) {
+      return c.json({ success: false, error: exportResult.error || '匯出失敗' }, 500);
+    }
+    return new Response(exportResult.buffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.xlsx"`,
+      },
+    });
+  }
+
+  const csvResult = generateCsv(membersColumns, exportData);
+  if (!csvResult.success || !csvResult.buffer) {
+    return c.json({ success: false, error: csvResult.error || '匯出失敗' }, 500);
+  }
+  return new Response(csvResult.buffer, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}.csv"`,
     },
   });
 });
