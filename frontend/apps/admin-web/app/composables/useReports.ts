@@ -172,7 +172,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/api/admin/reports/revenue?${params}`)
+      const response = await authFetch(`${baseURL}/api/reports/revenue?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -198,7 +198,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/api/admin/reports/member-growth?${params}`)
+      const response = await authFetch(`${baseURL}/api/reports/member-growth?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -224,7 +224,7 @@ export const useReports = () => {
       if (branchId) params.append('branch_id', branchId)
       params.append('limit', limit.toString())
 
-      const response = await authFetch(`${baseURL}/api/admin/reports/contract-expiry?${params}`)
+      const response = await authFetch(`${baseURL}/api/reports/contract-expiry?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -250,7 +250,7 @@ export const useReports = () => {
       if (endDate) params.append('end_date', endDate)
       if (branchId) params.append('branch_id', branchId)
 
-      const response = await authFetch(`${baseURL}/api/admin/reports/member-activity?${params}`)
+      const response = await authFetch(`${baseURL}/api/reports/member-activity?${params}`)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return response.json()
     } catch (error) {
@@ -267,7 +267,7 @@ export const useReports = () => {
    */
   const refreshReports = async (): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await authFetch(`${baseURL}/api/admin/reports/refresh`, {
+      const response = await authFetch(`${baseURL}/api/reports/refresh`, {
         method: 'POST'
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)

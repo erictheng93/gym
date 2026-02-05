@@ -12,7 +12,7 @@ export const useJobTitles = () => {
   const fetchJobTitles = async () => {
     isLoading.value = true
     try {
-      const { data } = await readItems<JobTitle>('job_titles', {
+      const { data } = await readItems<JobTitle>('job-titles', {
         filter: { status: 'active' },
         sort: 'name',
         limit: 1000
@@ -31,7 +31,7 @@ export const useJobTitles = () => {
 
   const getJobTitle = async (id: string) => {
     try {
-      const data = await readItem<JobTitle>('job_titles', id)
+      const data = await readItem<JobTitle>('job-titles', id)
       return data
     } catch (error) {
       handleError(error, {
@@ -44,7 +44,7 @@ export const useJobTitles = () => {
 
   const createJobTitle = async (jobTitle: Partial<JobTitle>) => {
     try {
-      const data = await createItem<JobTitle>('job_titles', jobTitle)
+      const data = await createItem<JobTitle>('job-titles', jobTitle)
       return data
     } catch (error) {
       handleError(error, {
@@ -57,7 +57,7 @@ export const useJobTitles = () => {
 
   const updateJobTitle = async (id: string, jobTitle: Partial<JobTitle>) => {
     try {
-      const data = await updateItem<JobTitle>('job_titles', id, jobTitle)
+      const data = await updateItem<JobTitle>('job-titles', id, jobTitle)
       return data
     } catch (error) {
       handleError(error, {
@@ -70,7 +70,7 @@ export const useJobTitles = () => {
 
   const deleteJobTitle = async (id: string) => {
     try {
-      const result = await deleteItem('job_titles', id)
+      const result = await deleteItem('job-titles', id)
       return result
     } catch (error) {
       handleError(error, {

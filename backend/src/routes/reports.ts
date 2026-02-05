@@ -11,13 +11,13 @@ app.use('*', requireTenant);
 
 app.get('/revenue', async (c) => {
   const tenantId = c.get('tenantId')!;
-  const branchId = c.req.query('branchId');
-  const startDate = c.req.query('startDate') || (() => {
+  const branchId = c.req.query('branchId') || c.req.query('branch_id');
+  const startDate = c.req.query('startDate') || c.req.query('start_date') || (() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
     return d.toISOString().split('T')[0];
   })();
-  const endDate = c.req.query('endDate') || new Date().toISOString().split('T')[0];
+  const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
 
   const tenantBranches = await db
     .select({ id: branches.id, name: branches.name })
@@ -86,7 +86,7 @@ app.get('/revenue', async (c) => {
 
 app.get('/member-growth', async (c) => {
   const tenantId = c.get('tenantId')!;
-  const branchId = c.req.query('branchId');
+  const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const months = Number(c.req.query('months')) || 6;
 
   const tenantBranches = await db
@@ -138,8 +138,8 @@ app.get('/member-growth', async (c) => {
 
 app.get('/contract-expiry', async (c) => {
   const tenantId = c.get('tenantId')!;
-  const branchId = c.req.query('branchId');
-  const days = Number(c.req.query('days')) || 30;
+  const branchId = c.req.query('branchId') || c.req.query('branch_id');
+  const days = Number(c.req.query('days') || c.req.query('days_ahead')) || 30;
 
   const tenantBranches = await db
     .select({ id: branches.id })
@@ -202,7 +202,7 @@ app.get('/contract-expiry', async (c) => {
 
 app.get('/member-activity', async (c) => {
   const tenantId = c.get('tenantId')!;
-  const branchId = c.req.query('branchId');
+  const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days')) || 30;
 
   const tenantBranches = await db

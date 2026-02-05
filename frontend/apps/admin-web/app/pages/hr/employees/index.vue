@@ -39,13 +39,13 @@ const statusOptions = [
 
 // Table columns configuration
 const columns = [
-  { key: 'full_name', label: '員工', slot: 'employee' },
-  { key: 'employee_code', label: '編號', slot: 'code' },
-  { key: 'job_title_id.name', label: '職位', hideOnMobile: true },
-  { key: 'branch_id.name', label: '分店', hideOnMobile: true },
-  { key: 'employment_type', label: '聘用類型', slot: 'employmentType', hideOnMobile: true },
-  { key: 'employment_status', label: '狀態', slot: 'status' },
-  { key: 'date_created', label: '加入日期', format: (v: string) => formatDate(v), hideOnMobile: true }
+  { key: 'fullName', label: '員工', slot: 'employee' },
+  { key: 'employeeCode', label: '編號', slot: 'code' },
+  { key: 'jobTitle.name', label: '職位', hideOnMobile: true },
+  { key: 'branch.name', label: '分店', hideOnMobile: true },
+  { key: 'employmentType', label: '聘用類型', slot: 'employmentType', hideOnMobile: true },
+  { key: 'status', label: '狀態', slot: 'status' },
+  { key: 'createdAt', label: '加入日期', format: (v: string) => formatDate(v), hideOnMobile: true }
 ]
 
 // Load employees
@@ -155,29 +155,29 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
       <!-- Employee Cell -->
       <template #employee="{ row }">
         <div class="employee-cell">
-          <AppAvatar :name="row.full_name" size="md" variant="green" />
-          <span class="employee-name">{{ row.full_name }}</span>
+          <AppAvatar :name="row.fullName" size="md" variant="green" />
+          <span class="employee-name">{{ row.fullName }}</span>
         </div>
       </template>
 
       <!-- Code Cell -->
       <template #code="{ row }">
-        <code class="item-code">{{ row.employee_code || '—' }}</code>
+        <code class="item-code">{{ row.employeeCode || '—' }}</code>
       </template>
 
       <!-- Employment Type Cell -->
       <template #employmentType="{ row }">
         <AppBadge
-          :label="getEmploymentTypeBadge(row.employment_type).label"
-          :variant="getEmploymentTypeBadge(row.employment_type).variant"
+          :label="getEmploymentTypeBadge(row.employmentType).label"
+          :variant="getEmploymentTypeBadge(row.employmentType).variant"
         />
       </template>
 
       <!-- Status Cell -->
       <template #status="{ row }">
         <AppBadge
-          :label="getEmployeeStatusBadge(row.employment_status).label"
-          :variant="getEmployeeStatusBadge(row.employment_status).variant"
+          :label="getEmployeeStatusBadge(row.status).label"
+          :variant="getEmployeeStatusBadge(row.status).variant"
         />
       </template>
 
@@ -195,17 +195,17 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
     <!-- Employee Detail Modal -->
     <AppModal v-model="showModal" max-width="md">
       <template #header>
-        <AppAvatar :name="selectedEmployee?.full_name" size="lg" variant="green" />
+        <AppAvatar :name="selectedEmployee?.fullName" size="lg" variant="green" />
         <div>
-          <h2 class="modal-title">{{ selectedEmployee?.full_name }}</h2>
-          <p class="modal-subtitle">{{ selectedEmployee?.employee_code }}</p>
+          <h2 class="modal-title">{{ selectedEmployee?.fullName }}</h2>
+          <p class="modal-subtitle">{{ selectedEmployee?.employeeCode }}</p>
         </div>
       </template>
 
       <div class="detail-grid">
         <div class="detail-item">
           <span class="detail-label">職位</span>
-          <span class="detail-value">{{ selectedEmployee?.job_title?.name || '—' }}</span>
+          <span class="detail-value">{{ selectedEmployee?.jobTitle?.name || '—' }}</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">分店</span>
@@ -214,18 +214,18 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
         <div class="detail-item">
           <span class="detail-label">聘用類型</span>
           <AppBadge
-            v-if="selectedEmployee?.employment_type"
-            :label="getEmploymentTypeBadge(selectedEmployee.employment_type).label"
-            :variant="getEmploymentTypeBadge(selectedEmployee.employment_type).variant"
+            v-if="selectedEmployee?.employmentType"
+            :label="getEmploymentTypeBadge(selectedEmployee.employmentType).label"
+            :variant="getEmploymentTypeBadge(selectedEmployee.employmentType).variant"
           />
           <span v-else>—</span>
         </div>
         <div class="detail-item">
           <span class="detail-label">狀態</span>
           <AppBadge
-            v-if="selectedEmployee?.employment_status"
-            :label="getEmployeeStatusBadge(selectedEmployee.employment_status).label"
-            :variant="getEmployeeStatusBadge(selectedEmployee.employment_status).variant"
+            v-if="selectedEmployee?.status"
+            :label="getEmployeeStatusBadge(selectedEmployee.status).label"
+            :variant="getEmployeeStatusBadge(selectedEmployee.status).variant"
           />
           <span v-else>—</span>
         </div>
@@ -240,13 +240,13 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
         <div class="detail-item">
           <span class="detail-label">基本薪資</span>
           <span class="detail-value">
-            {{ selectedEmployee?.basic_salary ? formatCurrency(Number(selectedEmployee.basic_salary)) : '—' }}
+            {{ selectedEmployee?.basicSalary ? formatCurrency(Number(selectedEmployee.basicSalary)) : '—' }}
           </span>
         </div>
         <div class="detail-item">
           <span class="detail-label">加入日期</span>
           <span class="detail-value">
-            {{ selectedEmployee?.date_created ? formatDate(selectedEmployee.date_created) : '—' }}
+            {{ selectedEmployee?.createdAt ? formatDate(selectedEmployee.createdAt) : '—' }}
           </span>
         </div>
       </div>

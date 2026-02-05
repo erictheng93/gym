@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, contracts, contractLogs, members, membershipPlans, branches, payments } from '../db/index.js';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -33,6 +33,9 @@ app.get('/', async (c) => {
   const page = Number(c.req.query('page')) || 1;
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
+  const status = c.req.query('status');
+  const sortBy = c.req.query('sortBy') || 'createdAt';
+  const sortOrder = c.req.query('sortOrder') || 'desc';
 
   const tenantBranches = await db
     .select({ id: branches.id })
@@ -42,15 +45,24 @@ app.get('/', async (c) => {
   const branchIds = tenantBranches.map(b => b.id);
 
   if (branchIds.length === 0) {
-    return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
+    return c.json({ success: true, data: [], meta: { total: 0, page, limit }, pagination: { total: 0, page, limit, totalPages: 0 } });
+  }
+
+  // Build where conditions
+  const conditions = [inArray(contracts.branchId, branchIds)];
+  if (status) {
+    conditions.push(eq(contracts.status, status as 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'TRANSFERRED'));
   }
 
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(contracts)
-    .where(inArray(contracts.branchId, branchIds));
+    .where(and(...conditions));
 
   const total = Number(countResult?.count || 0);
+
+  // Determine sort order
+  const orderFn = sortOrder === 'asc' ? asc(contracts.createdAt) : desc(contracts.createdAt);
 
   const result = await db
     .select({
@@ -69,8 +81,8 @@ app.get('/', async (c) => {
     .from(contracts)
     .leftJoin(members, eq(contracts.memberId, members.id))
     .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(inArray(contracts.branchId, branchIds))
-    .orderBy(desc(contracts.createdAt))
+    .where(and(...conditions))
+    .orderBy(orderFn)
     .limit(limit)
     .offset(offset);
 
@@ -78,6 +90,7 @@ app.get('/', async (c) => {
     success: true,
     data: result,
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
   });
 });
 
