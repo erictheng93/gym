@@ -1626,3 +1626,69 @@ export const kpiTemplatesRelations = relations(kpiTemplates, ({ one }) => ({
     references: [employees.id],
   }),
 }));
+
+// =============================================================================
+// HR MODULE - SHIFT SCHEDULES (班表管理)
+// =============================================================================
+
+export const SHIFT_STATUS = ['draft', 'published', 'archived'] as const;
+export const WEEKDAY = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+
+export const shiftSchedules = pgTable('shift_schedules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  status: varchar('status', { length: 20 }).default('published').$type<typeof SHIFT_STATUS[number]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  startTime: time('start_time').notNull(),
+  endTime: time('end_time').notNull(),
+  breakStart: time('break_start'),
+  breakEnd: time('break_end'),
+  gracePeriodMinutes: integer('grace_period_minutes').default(15),
+  earlyLeaveMinutes: integer('early_leave_minutes').default(15),
+  overtimeStartAfter: time('overtime_start_after'),
+  isDefault: boolean('is_default').default(false),
+  applicableDays: jsonb('applicable_days').default(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']).$type<typeof WEEKDAY[number][]>(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_shift_schedules_branch').on(table.branchId),
+  index('idx_shift_schedules_status').on(table.status),
+  index('idx_shift_schedules_tenant').on(table.tenantId),
+]);
+
+export const shiftSchedulesRelations = relations(shiftSchedules, ({ one, many }) => ({
+  branch: one(branches, {
+    fields: [shiftSchedules.branchId],
+    references: [branches.id],
+  }),
+  employeeShifts: many(employeeShifts),
+}));
+
+// Employee Shift Assignments (員工班表指派)
+export const employeeShifts = pgTable('employee_shifts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  employeeId: uuid('employee_id').notNull().references(() => employees.id, { onDelete: 'cascade' }),
+  shiftScheduleId: uuid('shift_schedule_id').notNull().references(() => shiftSchedules.id, { onDelete: 'cascade' }),
+  effectiveDate: date('effective_date').notNull(),
+  endDate: date('end_date'),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+}, (table) => [
+  index('idx_employee_shifts_employee').on(table.employeeId),
+  index('idx_employee_shifts_shift').on(table.shiftScheduleId),
+  index('idx_employee_shifts_effective').on(table.effectiveDate),
+  index('idx_employee_shifts_tenant').on(table.tenantId),
+]);
+
+export const employeeShiftsRelations = relations(employeeShifts, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeeShifts.employeeId],
+    references: [employees.id],
+  }),
+  shiftSchedule: one(shiftSchedules, {
+    fields: [employeeShifts.shiftScheduleId],
+    references: [shiftSchedules.id],
+  }),
+}));

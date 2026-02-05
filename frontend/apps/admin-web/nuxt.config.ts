@@ -78,7 +78,7 @@ export default defineNuxtConfig({
         'X-Content-Type-Options': 'nosniff',
         'X-XSS-Protection': '1; mode=block',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
         // CSP - Allow Backend API, Google APIs, Sentry
         'Content-Security-Policy': [
           "default-src 'self'",

@@ -25,15 +25,21 @@ const {
 // 當前員工今日考勤記錄
 const todayAttendance = ref<Awaited<ReturnType<typeof getTodayAttendance>> | null>(null)
 
-const currentTime = ref(new Date())
+// 使用 null 作為初始值避免 SSR hydration mismatch
+const currentTime = ref<Date | null>(null)
 const isProcessing = ref(false)
 const locationInfo = ref<{ ip?: string; gps?: string }>({})
 const showSuccessAnimation = ref(false)
 const successMessage = ref('')
+const isClient = ref(false)
 
 // 更新當前時間
 let timeInterval: ReturnType<typeof setInterval>
 onMounted(async () => {
+  // 標記已在客戶端
+  isClient.value = true
+  currentTime.value = new Date()
+
   timeInterval = setInterval(() => {
     currentTime.value = new Date()
   }, 1000)
@@ -63,26 +69,41 @@ const loadAttendanceData = async () => {
 
 // 取得位置資訊
 const fetchLocationInfo = async () => {
-  // 取得 IP（簡化版，實際應使用後端 API）
-  try {
-    const response = await fetch('https://api.ipify.org?format=json')
-    const data = await response.json()
-    locationInfo.value.ip = data.ip
-  } catch {
-    console.log('Could not fetch IP')
+  // 取得 IP - 透過後端 API 獲取，避免 CSP 問題
+  // 注意：若需要 IP 功能，應在後端實作 /api/ip endpoint
+  // 目前暫時跳過 IP 取得，因為外部 API 被 CSP 阻擋
+
+  // 取得 GPS - 先檢查權限狀態
+  // 目前 Permissions-Policy 設定為 geolocation=()，表示禁用
+  // 若需要此功能，需修改 nuxt.config.ts 中的 Permissions-Policy 為 geolocation=(self)
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return
   }
 
-  // 取得 GPS
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        locationInfo.value.gps = `${position.coords.latitude},${position.coords.longitude}`
-      },
-      () => {
-        console.log('Could not get GPS location')
+  // 使用 Permissions API 檢查是否被 Permissions-Policy 阻擋
+  if (navigator.permissions) {
+    try {
+      const permissionStatus = await navigator.permissions.query({ name: 'geolocation' })
+      // 如果權限被拒絕或不可用，不嘗試呼叫 geolocation API
+      if (permissionStatus.state === 'denied') {
+        return
       }
-    )
+    } catch {
+      // Permissions API 查詢失敗，可能被 Permissions-Policy 阻擋
+      return
+    }
   }
+
+  // 嘗試取得位置
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      locationInfo.value.gps = `${position.coords.latitude},${position.coords.longitude}`
+    },
+    () => {
+      // 位置取得失敗，靜默處理
+    },
+    { timeout: 5000, enableHighAccuracy: false }
+  )
 }
 
 // 格式化時間
@@ -122,7 +143,7 @@ const formatDateShort = (dateStr: string) => {
 
 // 計算工時
 const calculateWorkHours = computed(() => {
-  if (!todayAttendance.value?.check_in) return null
+  if (!todayAttendance.value?.check_in || !currentTime.value) return null
 
   const checkInTime = new Date(todayAttendance.value.check_in)
   const checkOutTime = todayAttendance.value.check_out
@@ -249,8 +270,14 @@ const currentBranchName = computed(() => {
       <div class="clock-card">
         <!-- Date & Time Display -->
         <div class="datetime-display">
-          <div class="current-date">{{ formatDate(currentTime) }}</div>
-          <div class="current-time">{{ formatTime(currentTime) }}</div>
+          <template v-if="currentTime">
+            <div class="current-date">{{ formatDate(currentTime) }}</div>
+            <div class="current-time">{{ formatTime(currentTime) }}</div>
+          </template>
+          <template v-else>
+            <div class="current-date">載入中...</div>
+            <div class="current-time">--:--:--</div>
+          </template>
         </div>
 
         <!-- Status Indicator -->
