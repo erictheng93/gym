@@ -163,12 +163,14 @@ export const useAuthV2 = () => {
   }
 
   interface MeData {
-    id: string
-    email: string
-    role: string
-    employeeId: string | null
-    tenantId: string | null
-    isActive: boolean
+    user: {
+      id: string
+      email: string
+      role: string
+      employeeId: string | null
+      tenantId: string | null
+      isActive: boolean
+    }
     employee: {
       id: string
       fullName: string
@@ -184,13 +186,13 @@ export const useAuthV2 = () => {
   const fetchUser = async () => {
     try {
       const response = await apiRequest<MeData>('/api/auth/me')
-      if (response.success && response.data) {
+      if (response.success && response.data?.user) {
         user.value = {
-          id: response.data.id,
-          email: response.data.email,
-          role: response.data.role,
-          employeeId: response.data.employeeId,
-          tenantId: response.data.tenantId,
+          id: response.data.user.id,
+          email: response.data.user.email,
+          role: response.data.user.role,
+          employeeId: response.data.user.employeeId,
+          tenantId: response.data.user.tenantId,
         }
 
         // Also update employee info from /me response
