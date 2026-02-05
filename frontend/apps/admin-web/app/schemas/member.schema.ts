@@ -64,7 +64,8 @@ export const memberBaseSchema = z.object({
     .string()
     .regex(uuidRegex, VALIDATION.BRANCH_INVALID)
     .nullable()
-    .optional(),
+    .optional()
+    .or(z.literal('')),
 
   emergency_contact: z
     .string()

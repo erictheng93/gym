@@ -328,12 +328,13 @@ const getEmployeeStatusVariant = (status: string) => {
           <button class="action-btn action-btn-secondary" @click="showModal = false">
             關閉
           </button>
-          <NuxtLink :to="`/hr/employees/${selectedEmployee?.id}/edit`" class="action-btn action-btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-              <path d="m15 5 4 4" />
+          <NuxtLink :to="`/hr/employees/${selectedEmployee?.id}`" class="action-btn action-btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V6.5L15.5 2z" />
+              <path d="M3 7.6v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8" />
+              <path d="M15 2v5h5" />
             </svg>
-            編輯員工
+            查看完整檔案
           </NuxtLink>
         </div>
       </div>

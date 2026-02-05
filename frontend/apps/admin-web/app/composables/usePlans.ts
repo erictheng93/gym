@@ -21,7 +21,7 @@ export const usePlans = () => {
       if (status && status !== '') filter.status = status
       if (planType && planType !== '') filter.plan_type = planType
 
-      const { data } = await readItems<MembershipPlan>('membership_plans', {
+      const { data } = await readItems<MembershipPlan>('membership-plans', {
         filter,
         sort: 'price'
       })
@@ -39,7 +39,7 @@ export const usePlans = () => {
 
   const getPlan = async (id: string) => {
     try {
-      const data = await readItem<MembershipPlan>('membership_plans', id)
+      const data = await readItem<MembershipPlan>('membership-plans', id)
       return data
     } catch (error) {
       handleError(error, {
@@ -52,7 +52,7 @@ export const usePlans = () => {
 
   const createPlan = async (plan: Partial<MembershipPlan>) => {
     try {
-      const data = await createItem<MembershipPlan>('membership_plans', plan)
+      const data = await createItem<MembershipPlan>('membership-plans', plan)
       return data
     } catch (error) {
       handleError(error, {
@@ -65,7 +65,7 @@ export const usePlans = () => {
 
   const updatePlan = async (id: string, plan: Partial<MembershipPlan>) => {
     try {
-      const data = await updateItem<MembershipPlan>('membership_plans', id, plan)
+      const data = await updateItem<MembershipPlan>('membership-plans', id, plan)
       return data
     } catch (error) {
       handleError(error, {
@@ -78,7 +78,7 @@ export const usePlans = () => {
 
   const deletePlan = async (id: string) => {
     try {
-      const result = await deleteItem('membership_plans', id)
+      const result = await deleteItem('membership-plans', id)
       return result
     } catch (error) {
       handleError(error, {

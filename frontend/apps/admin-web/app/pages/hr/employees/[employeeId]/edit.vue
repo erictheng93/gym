@@ -70,32 +70,36 @@ const supervisorOptions = computed(() =>
 const loadEmployee = async () => {
   isLoading.value = true
   try {
-    const employee = await getEmployee(employeeId.value)
+    const employee = await getEmployee(employeeId.value) as Record<string, unknown> | null
     if (!employee) {
       throw new Error('Employee not found')
     }
-    form.full_name = employee.full_name
-    form.employee_code = employee.employee_code || ''
-    form.phone = employee.phone || ''
-    form.email = employee.email || ''
-    form.branch_id = employee.branch_id || ''
-    form.job_title_id = employee.job_title_id || ''
-    form.supervisor_id = employee.supervisor_id || ''
-    form.user_id = employee.user_id || ''
-    form.employment_status = employee.employment_status
-    form.employment_type = employee.employment_type
-    form.hire_date = employee.hire_date || ''
-    form.basic_salary = employee.basic_salary
+    // Map backend camelCase to form snake_case
+    // Support both naming conventions for compatibility
+    form.full_name = (employee.fullName || employee.full_name || '') as string
+    form.employee_code = (employee.employeeCode || employee.employee_code || '') as string
+    form.phone = (employee.phone || '') as string
+    form.email = (employee.email || '') as string
+    form.branch_id = (employee.branchId || employee.branch_id || '') as string
+    form.job_title_id = (employee.jobTitleId || employee.job_title_id || '') as string
+    form.supervisor_id = (employee.supervisorId || employee.supervisor_id || '') as string
+    form.user_id = (employee.userId || employee.user_id || '') as string
+    form.employment_status = (employee.status || employee.employment_status || 'ACTIVE') as 'ACTIVE' | 'RESIGNED' | 'LEAVE'
+    form.employment_type = (employee.employmentType || employee.employment_type || 'FULL_TIME') as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE'
+    form.hire_date = (employee.hireDate || employee.hire_date || '') as string
+    form.basic_salary = (employee.basicSalary || employee.basic_salary || null) as number | null
 
     // Load custom permissions if exists
-    if (employee.custom_permissions && typeof employee.custom_permissions === 'object') {
-      form.custom_permissions = employee.custom_permissions as unknown as Record<string, Record<string, boolean>>
+    const customPerms = employee.customPermissions || employee.custom_permissions
+    if (customPerms && typeof customPerms === 'object') {
+      form.custom_permissions = customPerms as unknown as Record<string, Record<string, boolean>>
       useCustomPermissions.value = true
     }
 
     // Load job title permissions
-    if (employee.job_title_id) {
-      await loadJobTitlePermissions(employee.job_title_id)
+    const jobTitleId = (employee.jobTitleId || employee.job_title_id) as string | undefined
+    if (jobTitleId) {
+      await loadJobTitlePermissions(jobTitleId)
     }
   } catch (error) {
     console.error('Failed to load employee:', error)
@@ -200,19 +204,22 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const employeeData = {
-      ...form,
-      employee_code: form.employee_code || null,
-      phone: form.phone || null,
-      email: form.email || null,
-      branch_id: form.branch_id || null,
-      job_title_id: form.job_title_id || null,
-      supervisor_id: form.supervisor_id || null,
-      user_id: form.user_id || null,
-      hire_date: form.hire_date || null,
-      basic_salary: form.basic_salary || null,
-      custom_permissions: useCustomPermissions.value ? form.custom_permissions : null
-    } as Parameters<typeof updateEmployee>[1]
+    // Map form snake_case to backend camelCase
+    const employeeData: Record<string, unknown> = {
+      fullName: form.full_name,
+      phone: form.phone || undefined,
+      email: form.email || undefined,
+      status: form.employment_status,
+      employmentType: form.employment_type,
+      customPermissions: useCustomPermissions.value ? form.custom_permissions : undefined
+    }
+
+    // Only include optional fields if they have values
+    if (form.branch_id) employeeData.branchId = form.branch_id
+    if (form.job_title_id) employeeData.jobTitleId = form.job_title_id
+    if (form.supervisor_id) employeeData.supervisorId = form.supervisor_id
+    if (form.hire_date) employeeData.hireDate = form.hire_date
+    if (form.basic_salary !== null) employeeData.basicSalary = form.basic_salary
 
     await updateEmployee(employeeId.value, employeeData)
     useToast().success(MESSAGES.SUCCESS.EMPLOYEE_UPDATED)

@@ -11,8 +11,10 @@ const navItems = [
 
 <template>
   <div class="app-layout safe-area-top safe-area-bottom">
-    <!-- Toast Notifications -->
-    <ToastContainer />
+    <!-- Toast Notifications (ClientOnly to prevent hydration mismatch from Teleport) -->
+    <ClientOnly>
+      <ToastContainer />
+    </ClientOnly>
 
     <!-- Auth Loading Screen (prevents content flash) -->
     <div v-if="isAuthChecking" class="auth-loading">

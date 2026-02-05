@@ -23,7 +23,9 @@ export const MEMBER_STATUS: Record<string, StatusConfig> = {
 
 export function getMemberStatusBadge(status: string | undefined | null): StatusConfig {
   if (!status) return { label: '未設定', variant: 'default' }
-  return MEMBER_STATUS[status] || { label: status, variant: 'default' }
+  // Support both uppercase and lowercase status values from API
+  const normalizedStatus = status.toUpperCase()
+  return MEMBER_STATUS[normalizedStatus] || { label: status, variant: 'default' }
 }
 
 // ============================================

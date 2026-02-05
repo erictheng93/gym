@@ -121,12 +121,17 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '無權限存取此員工' }, 403);
   }
 
-  const recentAttendances = await db
-    .select()
-    .from(attendances)
-    .where(eq(attendances.employeeId, id))
-    .orderBy(desc(attendances.createdAt))
-    .limit(30);
+  let recentAttendances: typeof attendances.$inferSelect[] = [];
+  try {
+    recentAttendances = await db
+      .select()
+      .from(attendances)
+      .where(eq(attendances.employeeId, id))
+      .orderBy(desc(attendances.createdAt))
+      .limit(30);
+  } catch {
+    // Ignore attendance fetch errors
+  }
 
   return c.json({
     success: true,

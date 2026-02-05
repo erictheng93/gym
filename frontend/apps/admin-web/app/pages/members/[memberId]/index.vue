@@ -16,16 +16,24 @@ const member = ref<Awaited<ReturnType<typeof getMember>> | null>(null)
 const isLoading = ref(true)
 const isDeleting = ref(false)
 const showDeleteModal = ref(false)
+const loadError = ref(false)
 
 const memberId = computed(() => route.params.memberId as string)
 
 const loadMember = async () => {
   isLoading.value = true
+  loadError.value = false
   try {
     member.value = await getMember(memberId.value)
+    if (!member.value) {
+      loadError.value = true
+      useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
+      return
+    }
     await fetchContracts({ memberId: memberId.value })
   } catch (error) {
     console.error('Failed to load member:', error)
+    loadError.value = true
     useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
   } finally {
     isLoading.value = false
@@ -44,13 +52,14 @@ const formatDate = (dateStr: string | null) => {
 }
 
 const getStatusBadge = (status: string) => {
+  const normalizedStatus = status?.toUpperCase()
   const map: Record<string, { label: string; class: string }> = {
     ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
     EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
     SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
     BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
   }
-  return map[status] || { label: status, class: '' }
+  return map[normalizedStatus] || { label: status, class: '' }
 }
 
 const getContractStatusBadge = (status: string) => {
@@ -65,7 +74,14 @@ const getContractStatusBadge = (status: string) => {
 }
 
 const getGenderLabel = (gender: string | null) => {
-  const map: Record<string, string> = { M: LABELS.GENDER.MALE, F: LABELS.GENDER.FEMALE, O: LABELS.GENDER.OTHER }
+  const map: Record<string, string> = {
+    M: LABELS.GENDER.MALE,
+    F: LABELS.GENDER.FEMALE,
+    O: LABELS.GENDER.OTHER,
+    MALE: LABELS.GENDER.MALE,
+    FEMALE: LABELS.GENDER.FEMALE,
+    OTHER: LABELS.GENDER.OTHER
+  }
   return gender ? map[gender] || gender : '—'
 }
 
@@ -92,6 +108,34 @@ const handleDelete = async () => {
     <div v-if="isLoading" class="loading-container">
       <div class="loading-spinner-large" />
       <p class="text-secondary mt-md">{{ MESSAGES.ACTIONS.LOADING }}</p>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="loadError" class="error-container">
+      <div class="error-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" x2="12" y1="8" y2="12" />
+          <line x1="12" x2="12.01" y1="16" y2="16" />
+        </svg>
+      </div>
+      <h2 class="error-title">無法載入會員資料</h2>
+      <p class="error-desc text-secondary">會員可能不存在或您沒有權限查看此會員</p>
+      <div class="error-actions">
+        <button class="btn btn-secondary" @click="router.back()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          返回
+        </button>
+        <button class="btn btn-primary" @click="loadMember">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+          重試
+        </button>
+      </div>
     </div>
 
     <template v-else-if="member">
@@ -123,13 +167,13 @@ const handleDelete = async () => {
       <!-- Profile Hero -->
       <section class="profile-hero glass-card">
         <div class="profile-avatar-large">
-          {{ member.full_name[0] }}
+          {{ member.fullName?.[0] || '?' }}
         </div>
         <div class="profile-info">
           <div class="profile-header-row">
-            <h1 class="text-display">{{ member.full_name }}</h1>
-            <span :class="['badge badge-large', getStatusBadge(member.member_status).class]">
-              {{ getStatusBadge(member.member_status).label }}
+            <h1 class="text-display">{{ member.fullName }}</h1>
+            <span :class="['badge badge-large', getStatusBadge(member.status).class]">
+              {{ getStatusBadge(member.status).label }}
             </span>
           </div>
           <div class="profile-meta">
@@ -137,19 +181,19 @@ const handleDelete = async () => {
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" />
               </svg>
-              {{ member.member_code }}
+              {{ member.memberCode }}
             </span>
-            <span v-if="member.branch" class="meta-item">
+            <span v-if="member.branchId" class="meta-item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
               </svg>
-              {{ member.branch.name }}
+              所屬分店
             </span>
-            <span v-if="member.join_date" class="meta-item">
+            <span v-if="member.joinDate" class="meta-item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
               </svg>
-              {{ formatDate(member.join_date) }} 加入
+              {{ formatDate(member.joinDate) }} 加入
             </span>
           </div>
         </div>
@@ -176,11 +220,11 @@ const handleDelete = async () => {
             </div>
             <div class="info-item">
               <label>緊急聯絡人</label>
-              <span>{{ member.emergency_contact || '—' }}</span>
+              <span>{{ member.emergencyContact || '—' }}</span>
             </div>
             <div class="info-item">
               <label>緊急聯絡電話</label>
-              <span>{{ member.emergency_phone || '—' }}</span>
+              <span>{{ member.emergencyPhone || '—' }}</span>
             </div>
           </div>
         </section>
@@ -208,7 +252,7 @@ const handleDelete = async () => {
             </div>
             <div class="info-item">
               <label>業務</label>
-              <span>{{ member.sales_person?.full_name || '—' }}</span>
+              <span>{{ member.salesPersonId ? '已指派' : '—' }}</span>
             </div>
           </div>
         </section>
@@ -256,21 +300,21 @@ const handleDelete = async () => {
             class="contract-card card card-interactive"
           >
             <div class="contract-header">
-              <code class="contract-no">{{ contract.contract_no }}</code>
-              <span :class="['badge', getContractStatusBadge(contract.contract_status).class]">
-                {{ getContractStatusBadge(contract.contract_status).label }}
+              <code class="contract-no">{{ contract.contractNo }}</code>
+              <span :class="['badge', getContractStatusBadge(contract.contractStatus).class]">
+                {{ getContractStatusBadge(contract.contractStatus).label }}
               </span>
             </div>
             <h4 class="plan-name">{{ contract.plan?.name || '—' }}</h4>
             <div class="contract-dates">
-              <span>{{ formatDate(contract.start_date) }}</span>
+              <span>{{ formatDate(contract.startDate) }}</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
               </svg>
-              <span>{{ formatDate(contract.end_date) }}</span>
+              <span>{{ formatDate(contract.endDate) }}</span>
             </div>
             <div class="contract-amount">
-              NT$ {{ contract.total_amount?.toLocaleString() || 0 }}
+              NT$ {{ contract.totalAmount?.toLocaleString() || 0 }}
             </div>
           </NuxtLink>
         </div>
@@ -288,7 +332,7 @@ const handleDelete = async () => {
           </div>
           <h3 class="modal-title">{{ MESSAGES.CONFIRM.DELETE_TITLE }}</h3>
           <p class="modal-desc text-secondary">
-            {{ PAGES.MEMBERS.DELETE_WARNING }}「{{ member?.full_name }}」
+            {{ PAGES.MEMBERS.DELETE_WARNING }}「{{ member?.fullName }}」
           </p>
           <div class="modal-actions">
             <button class="btn btn-secondary" @click="showDeleteModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
@@ -315,6 +359,47 @@ const handleDelete = async () => {
   align-items: center;
   justify-content: center;
   padding: var(--space-3xl);
+}
+
+/* Error State */
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3xl);
+  text-align: center;
+  min-height: 400px;
+}
+
+.error-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-full);
+  background: rgba(239, 68, 68, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-error);
+  margin-bottom: var(--space-lg);
+}
+
+.error-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.error-desc {
+  font-size: 15px;
+  margin-bottom: var(--space-xl);
+  max-width: 400px;
+}
+
+.error-actions {
+  display: flex;
+  gap: var(--space-md);
 }
 
 .loading-spinner-large {

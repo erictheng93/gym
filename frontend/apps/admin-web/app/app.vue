@@ -51,7 +51,9 @@ onMounted(() => {
     <NuxtPage />
   </NuxtLayout>
 
-  <!-- Global Components -->
-  <ToastContainer />
-  <ConfirmDialog />
+  <!-- Global Components (ClientOnly to prevent hydration mismatch from Teleport) -->
+  <ClientOnly>
+    <ToastContainer />
+    <ConfirmDialog />
+  </ClientOnly>
 </template>

@@ -53,7 +53,10 @@ onMounted(() => {
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
-    <ToastContainer />
+    <!-- ClientOnly to prevent hydration mismatch from Teleport -->
+    <ClientOnly>
+      <ToastContainer />
+    </ClientOnly>
   </div>
 </template>
 

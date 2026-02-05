@@ -15,15 +15,23 @@ const employee = ref<Awaited<ReturnType<typeof getEmployee>> | null>(null)
 const isLoading = ref(true)
 const isDeleting = ref(false)
 const showDeleteModal = ref(false)
+const loadError = ref(false)
 
 const employeeId = computed(() => route.params.employeeId as string)
 
 const loadEmployee = async () => {
   isLoading.value = true
+  loadError.value = false
   try {
     employee.value = await getEmployee(employeeId.value)
+    if (!employee.value) {
+      loadError.value = true
+      useToast().error(MESSAGES.ERRORS.GENERIC)
+      return
+    }
   } catch (error) {
     console.error('Failed to load employee:', error)
+    loadError.value = true
     useToast().error(MESSAGES.ERRORS.GENERIC)
   } finally {
     isLoading.value = false
@@ -47,12 +55,13 @@ const formatCurrency = (amount: number | null) => {
 }
 
 const getStatusBadge = (status: string) => {
+  const normalizedStatus = status?.toUpperCase()
   const map: Record<string, { label: string; class: string }> = {
     ACTIVE: { label: '在職', class: 'badge-success' },
     RESIGNED: { label: '離職', class: 'badge-error' },
     LEAVE: { label: '留停', class: 'badge-warning' }
   }
-  return map[status] || { label: status, class: '' }
+  return map[normalizedStatus] || { label: status, class: '' }
 }
 
 const getEmploymentTypeBadge = (type: string) => {
@@ -89,6 +98,34 @@ const handleDelete = async () => {
       <p class="text-secondary mt-md">載入中...</p>
     </div>
 
+    <!-- Error State -->
+    <div v-else-if="loadError" class="error-container">
+      <div class="error-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" x2="12" y1="8" y2="12" />
+          <line x1="12" x2="12.01" y1="16" y2="16" />
+        </svg>
+      </div>
+      <h2 class="error-title">無法載入員工資料</h2>
+      <p class="error-desc text-secondary">員工可能不存在或您沒有權限查看</p>
+      <div class="error-actions">
+        <button class="btn btn-secondary" @click="router.back()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          返回
+        </button>
+        <button class="btn btn-primary" @click="loadEmployee">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+          重試
+        </button>
+      </div>
+    </div>
+
     <template v-else-if="employee">
       <!-- Header -->
       <header class="page-header">
@@ -118,27 +155,27 @@ const handleDelete = async () => {
       <!-- Profile Hero -->
       <section class="profile-hero glass-card">
         <div class="profile-avatar-large">
-          {{ employee.full_name[0] }}
+          {{ employee.fullName?.[0] || '?' }}
         </div>
         <div class="profile-info">
           <div class="profile-header-row">
-            <h1 class="text-display">{{ employee.full_name }}</h1>
-            <span :class="['badge badge-large', getStatusBadge(employee.employment_status).class]">
-              {{ getStatusBadge(employee.employment_status).label }}
+            <h1 class="text-display">{{ employee.fullName }}</h1>
+            <span :class="['badge badge-large', getStatusBadge(employee.status).class]">
+              {{ getStatusBadge(employee.status).label }}
             </span>
           </div>
           <div class="profile-meta">
-            <span v-if="employee.employee_code" class="meta-item">
+            <span v-if="employee.employeeCode" class="meta-item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="20" height="14" x="2" y="5" rx="2" /><line x1="2" x2="22" y1="10" y2="10" />
               </svg>
-              {{ employee.employee_code }}
+              {{ employee.employeeCode }}
             </span>
-            <span v-if="employee.job_title" class="meta-item">
+            <span v-if="employee.jobTitle" class="meta-item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="20" height="14" x="2" y="7" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
               </svg>
-              {{ employee.job_title.name }}
+              {{ employee.jobTitle.name }}
             </span>
             <span v-if="employee.branch" class="meta-item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -146,11 +183,11 @@ const handleDelete = async () => {
               </svg>
               {{ employee.branch.name }}
             </span>
-            <span v-if="employee.date_created" class="meta-item">
+            <span v-if="employee.hireDate" class="meta-item">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
               </svg>
-              {{ formatDate(employee.date_created) }} 加入
+              {{ formatDate(employee.hireDate) }} 加入
             </span>
           </div>
         </div>
@@ -169,14 +206,14 @@ const handleDelete = async () => {
           <div class="info-grid">
             <div class="info-item">
               <label>任職狀態</label>
-              <span :class="['badge', getStatusBadge(employee.employment_status).class]">
-                {{ getStatusBadge(employee.employment_status).label }}
+              <span :class="['badge', getStatusBadge(employee.status).class]">
+                {{ getStatusBadge(employee.status).label }}
               </span>
             </div>
             <div class="info-item">
               <label>聘用類型</label>
-              <span :class="['badge', getEmploymentTypeBadge(employee.employment_type).class]">
-                {{ getEmploymentTypeBadge(employee.employment_type).label }}
+              <span :class="['badge', getEmploymentTypeBadge(employee.employmentType).class]">
+                {{ getEmploymentTypeBadge(employee.employmentType).label }}
               </span>
             </div>
             <div class="info-item">
@@ -185,7 +222,7 @@ const handleDelete = async () => {
             </div>
             <div class="info-item">
               <label>職位</label>
-              <span>{{ employee.job_title?.name || '—' }}</span>
+              <span>{{ employee.jobTitle?.name || '—' }}</span>
             </div>
           </div>
         </section>
@@ -201,7 +238,7 @@ const handleDelete = async () => {
           <div class="info-grid">
             <div class="info-item info-item-full">
               <label>基本薪資</label>
-              <span class="salary-amount">{{ formatCurrency(employee.basic_salary) }}</span>
+              <span class="salary-amount">{{ formatCurrency(employee.basicSalary) }}</span>
             </div>
           </div>
         </section>
@@ -217,11 +254,11 @@ const handleDelete = async () => {
           <div class="info-grid">
             <div class="info-item">
               <label>建立日期</label>
-              <span>{{ formatDate(employee.date_created) }}</span>
+              <span>{{ formatDate(employee.createdAt) }}</span>
             </div>
             <div class="info-item">
               <label>最後更新</label>
-              <span>{{ formatDate(employee.date_updated) }}</span>
+              <span>{{ formatDate(employee.updatedAt) }}</span>
             </div>
           </div>
         </section>
@@ -239,7 +276,7 @@ const handleDelete = async () => {
           </div>
           <h3 class="modal-title">確定要刪除嗎？</h3>
           <p class="modal-desc text-secondary">
-            刪除後將無法恢復員工「{{ employee?.full_name }}」的資料。
+            刪除後將無法恢復員工「{{ employee?.fullName }}」的資料。
           </p>
           <div class="modal-actions">
             <button class="btn btn-secondary" @click="showDeleteModal = false">取消</button>
@@ -279,6 +316,47 @@ const handleDelete = async () => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Error State */
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3xl);
+  text-align: center;
+  min-height: 400px;
+}
+
+.error-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-full);
+  background: rgba(239, 68, 68, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-error);
+  margin-bottom: var(--space-lg);
+}
+
+.error-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.error-desc {
+  font-size: 15px;
+  margin-bottom: var(--space-xl);
+  max-width: 400px;
+}
+
+.error-actions {
+  display: flex;
+  gap: var(--space-md);
 }
 
 /* Header */

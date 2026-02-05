@@ -1,5 +1,5 @@
 import { db } from './index.js';
-import { tenants, branches, jobTitles, users, employees, members, memberCredentials } from './schema.js';
+import { tenants, branches, jobTitles, users, employees, members, memberCredentials, membershipPlans, contracts, payments } from './schema.js';
 import { hash } from '@node-rs/argon2';
 
 const ARGON2_OPTIONS = {
@@ -203,9 +203,126 @@ async function seed() {
   }
   console.log();
 
+  // 7. 建立會籍方案
+  console.log('📋 建立會籍方案...');
+  const planData = [
+    { name: '月費會員', code: 'MONTHLY', planType: 'TIME_BASED' as const, durationMonths: 1, price: '1500', description: '每月自動續約' },
+    { name: '季費會員', code: 'QUARTERLY', planType: 'TIME_BASED' as const, durationMonths: 3, price: '3999', description: '一次購買三個月' },
+    { name: '年費會員', code: 'YEARLY', planType: 'TIME_BASED' as const, durationMonths: 12, price: '12000', description: '年繳優惠方案' },
+    { name: '10堂課程包', code: 'CLASS10', planType: 'COUNT_BASED' as const, classCounts: 10, price: '5000', description: '10堂教練課程' },
+    { name: '20堂課程包', code: 'CLASS20', planType: 'COUNT_BASED' as const, classCounts: 20, price: '8800', description: '20堂教練課程，優惠價' },
+  ];
+
+  const createdPlans = await db.insert(membershipPlans).values(
+    planData.map(p => ({
+      name: p.name,
+      code: p.code,
+      planType: p.planType,
+      durationMonths: p.durationMonths,
+      classCounts: p.classCounts,
+      price: p.price,
+      description: p.description,
+      isActive: true,
+      tenantId: tenant.id,
+    }))
+  ).returning();
+
+  createdPlans.forEach(p => {
+    console.log(`  ✅ ${p.name} - $${p.price}`);
+  });
+  console.log();
+
+  const monthlyPlan = createdPlans.find(p => p.code === 'MONTHLY')!;
+  const yearlyPlan = createdPlans.find(p => p.code === 'YEARLY')!;
+  const class10Plan = createdPlans.find(p => p.code === 'CLASS10')!;
+
+  // 8. 建立合約
+  console.log('📝 建立合約...');
+
+  // 取得已建立的會員
+  const existingMembers = await db.select().from(members);
+
+  const today = new Date();
+  const oneMonthAgo = new Date(today);
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  const threeMonthsAgo = new Date(today);
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const oneYearFromNow = new Date(today);
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+  const oneMonthFromNow = new Date(today);
+  oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+  const sixMonthsFromNow = new Date(today);
+  sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+
+  const contractData = [
+    { member: existingMembers[0], plan: yearlyPlan, startDate: threeMonthsAgo, endDate: oneYearFromNow, status: 'ACTIVE' as const },
+    { member: existingMembers[1], plan: monthlyPlan, startDate: oneMonthAgo, endDate: oneMonthFromNow, status: 'ACTIVE' as const },
+    { member: existingMembers[2], plan: class10Plan, startDate: oneMonthAgo, endDate: sixMonthsFromNow, status: 'ACTIVE' as const, remainingCounts: 7 },
+    { member: existingMembers[3], plan: yearlyPlan, startDate: threeMonthsAgo, endDate: oneYearFromNow, status: 'ACTIVE' as const },
+  ];
+
+  const createdContracts = [];
+  for (let i = 0; i < contractData.length; i++) {
+    const c = contractData[i];
+    const contractNo = `CON${String(i + 1).padStart(6, '0')}`;
+    const endDateStr = c.endDate.toISOString().split('T')[0];
+    const [contract] = await db.insert(contracts).values({
+      contractNo,
+      memberId: c.member.id,
+      planId: c.plan.id,
+      branchId: c.member.branchId!,
+      status: c.status,
+      startDate: c.startDate.toISOString().split('T')[0],
+      originalEndDate: endDateStr,
+      endDate: endDateStr,
+      totalAmount: c.plan.price!,
+      paidAmount: c.plan.price!,
+      remainingCounts: c.remainingCounts,
+      tenantId: tenant.id,
+    }).returning();
+    createdContracts.push(contract);
+    console.log(`  ✅ ${contractNo} - ${c.member.fullName} (${c.plan.name})`);
+  }
+  console.log();
+
+  // 9. 建立付款記錄
+  console.log('💰 建立付款記錄...');
+
+  const paymentData = [
+    { contract: createdContracts[0], amount: '12000', date: threeMonthsAgo, method: 'CREDIT_CARD' as const },
+    { contract: createdContracts[1], amount: '1500', date: oneMonthAgo, method: 'CASH' as const },
+    { contract: createdContracts[2], amount: '5000', date: oneMonthAgo, method: 'BANK_TRANSFER' as const },
+    { contract: createdContracts[3], amount: '12000', date: threeMonthsAgo, method: 'CREDIT_CARD' as const },
+    // 本月的額外收入
+    { contract: createdContracts[1], amount: '1500', date: today, method: 'CASH' as const },
+  ];
+
+  for (let i = 0; i < paymentData.length; i++) {
+    const p = paymentData[i];
+    await db.insert(payments).values({
+      memberId: p.contract.memberId,
+      contractId: p.contract.id,
+      branchId: p.contract.branchId,
+      amount: p.amount,
+      type: 'INCOME',
+      paymentMethod: p.method,
+      paymentDate: p.date,
+      tenantId: tenant.id,
+    });
+    console.log(`  ✅ $${p.amount} - ${p.method}`);
+  }
+  console.log();
+
   // 總結
   console.log('═'.repeat(50));
   console.log('🎉 種子資料建立完成！\n');
+  console.log('📊 資料統計：');
+  console.log('─'.repeat(50));
+  console.log(`  👥 會員: ${existingMembers.length} 人 (全部 ACTIVE)`);
+  console.log(`  📝 合約: ${createdContracts.length} 份 (全部 ACTIVE)`);
+  console.log(`  💰 付款: ${paymentData.length} 筆`);
+  console.log(`  📋 方案: ${createdPlans.length} 種`);
+  console.log();
   console.log('📋 登入帳號一覽：');
   console.log('─'.repeat(50));
   console.log('【Admin Web - 管理後台】');
