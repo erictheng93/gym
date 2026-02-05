@@ -105,6 +105,28 @@ const handleSave = async () => {
       </button>
     </header>
 
+    <!-- Quick Links -->
+    <div class="quick-links">
+      <NuxtLink to="/admin/settings/branding" class="quick-link-card">
+        <div class="quick-link-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+            <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor" />
+            <circle cx="17.5" cy="10.5" r="0.5" fill="currentColor" />
+            <circle cx="8.5" cy="7.5" r="0.5" fill="currentColor" />
+            <circle cx="6.5" cy="12.5" r="0.5" fill="currentColor" />
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z" />
+          </svg>
+        </div>
+        <div class="quick-link-content">
+          <span class="quick-link-title">品牌設定</span>
+          <span class="quick-link-description">自訂 Launch Screen 的品牌名稱和顏色</span>
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" class="quick-link-arrow">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </NuxtLink>
+    </div>
+
     <div class="settings-grid">
       <!-- General Settings -->
       <section class="settings-section">
@@ -526,6 +548,65 @@ const handleSave = async () => {
   transform: translateX(20px);
 }
 
+/* Quick Links */
+.quick-links {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.quick-link-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: all var(--duration-fast) ease;
+}
+
+.quick-link-card:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.quick-link-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quick-link-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.quick-link-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.quick-link-description {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.quick-link-arrow {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
 @media (max-width: 1024px) {
   .settings-grid {
     grid-template-columns: 1fr;
@@ -544,6 +625,10 @@ const handleSave = async () => {
 
   .page-header .btn {
     width: 100%;
+  }
+
+  .quick-links {
+    flex-direction: column;
   }
 
   .form-grid {
