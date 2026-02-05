@@ -197,4 +197,76 @@ test.describe('登录流程 E2E', () => {
     })
     expect(sessionAfter).toBeNull()
   })
+
+  test('Hard refresh 不應該閃爍到登入頁面', async ({ page }) => {
+    // 先登录
+    await login(page, TEST_USERS.admin)
+
+    // 确认已在首页
+    await expect(page).not.toHaveURL('/login')
+    const navigation = page.locator('nav, [role="navigation"]').first()
+    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
+
+    // 验证 localStorage 有 session 数据
+    const sessionBeforeRefresh = await page.evaluate(() => {
+      return localStorage.getItem('gym-nexus-session')
+    })
+    expect(sessionBeforeRefresh).toBeTruthy()
+    console.log('[Test] Session before refresh:', sessionBeforeRefresh ? 'exists' : 'missing')
+
+    // 执行 hard refresh
+    await page.reload({ waitUntil: 'domcontentloaded' })
+
+    // 立即检查 URL - 关键测试点
+    const urlImmediatelyAfterRefresh = page.url()
+    console.log('[Test] URL immediately after refresh:', urlImmediatelyAfterRefresh)
+
+    // 等待网络空闲
+    await page.waitForLoadState('networkidle')
+
+    // 验证最终 URL 不是登入页
+    const finalUrl = page.url()
+    console.log('[Test] Final URL:', finalUrl)
+
+    // 关键断言：刷新后不应该在登入页
+    expect(finalUrl).not.toContain('/login')
+
+    // 验证导航仍然可见
+    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
+  })
+
+  test('Hard refresh 後應該立即顯示 Dashboard 內容', async ({ page }) => {
+    // 先登录
+    await login(page, TEST_USERS.admin)
+
+    // 确认已在首页并等待内容完全加载
+    await expect(page).not.toHaveURL('/login')
+    const navigation = page.locator('nav, [role="navigation"]').first()
+    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
+
+    // 记录刷新前的 URL
+    const urlBeforeRefresh = page.url()
+
+    // 执行 hard refresh 并测量时间
+    const startTime = Date.now()
+    await page.reload({ waitUntil: 'domcontentloaded' })
+
+    // 立即检查 URL - 应该不是登入页面
+    const urlAfterDomLoaded = page.url()
+    expect(urlAfterDomLoaded).not.toContain('/login')
+
+    // 等待网络空闲
+    await page.waitForLoadState('networkidle')
+    const endTime = Date.now()
+
+    // 验证最终 URL
+    await expect(page).not.toHaveURL('/login')
+
+    // 验证导航可见
+    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
+
+    // 记录加载时间（用于调试）
+    console.log(`Hard refresh completed in ${endTime - startTime}ms`)
+    console.log(`URL before: ${urlBeforeRefresh}, URL after DOM: ${urlAfterDomLoaded}, Final URL: ${page.url()}`)
+  })
 })
