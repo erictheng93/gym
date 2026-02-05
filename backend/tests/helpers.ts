@@ -71,6 +71,10 @@ export async function createTestFixtures() {
   }).onConflictDoNothing();
 
   // Create employee linked to user (with all required fields)
+  // First delete any existing employee with this id or employeeCode to ensure clean state
+  await db.delete(employees).where(eq(employees.id, TEST_EMPLOYEE_ID));
+  await db.delete(employees).where(eq(employees.employeeCode, 'EMP001'));
+
   await db.insert(employees).values({
     id: TEST_EMPLOYEE_ID,
     fullName: 'Test Admin',
@@ -83,7 +87,7 @@ export async function createTestFixtures() {
     employmentType: 'FULL_TIME',
     hireDate: todayStr,
     tenantId: TEST_TENANT_ID,
-  }).onConflictDoNothing();
+  });
 
   // Update user with employeeId
   await db.update(users).set({
@@ -145,8 +149,12 @@ export async function createTestFixtures() {
  * Clean up test fixtures
  */
 export async function cleanupTestFixtures() {
-  // Delete in reverse order of dependencies
+  // First unlink all employees from users to avoid FK constraint issues
+  await db.update(employees).set({ userId: null }).where(eq(employees.branchId, TEST_BRANCH_ID));
+
+  // Delete sessions first
   await db.delete(sessions).where(eq(sessions.userId, TEST_USER_ID));
+
   // Delete all check-ins for the test branch (including ones created during tests)
   await db.delete(checkIns).where(eq(checkIns.branchId, TEST_BRANCH_ID));
   // Delete all contracts for the test branch (including ones created during tests)
@@ -155,8 +163,14 @@ export async function cleanupTestFixtures() {
   await db.delete(members).where(eq(members.branchId, TEST_BRANCH_ID));
   // Delete all membership plans for the test branch (including ones created during tests)
   await db.delete(membershipPlans).where(eq(membershipPlans.branchId, TEST_BRANCH_ID));
-  await db.delete(employees).where(eq(employees.id, TEST_EMPLOYEE_ID));
+
+  // Delete all employees for the test branch (must be before users and job_titles)
+  await db.delete(employees).where(eq(employees.branchId, TEST_BRANCH_ID));
+
+  // Now safe to delete users
   await db.delete(users).where(eq(users.id, TEST_USER_ID));
+
+  // Finally delete supporting tables
   await db.delete(jobTitles).where(eq(jobTitles.id, TEST_JOB_TITLE_ID));
   await db.delete(branches).where(eq(branches.id, TEST_BRANCH_ID));
   await db.delete(tenants).where(eq(tenants.id, TEST_TENANT_ID));

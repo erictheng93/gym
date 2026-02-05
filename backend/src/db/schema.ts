@@ -251,16 +251,18 @@ export const contracts = pgTable('contracts', {
 
 export const contractLogs = pgTable('contract_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
+  status: varchar('status', { length: 20 }).default('active'),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
   contractId: uuid('contract_id').notNull().references(() => contracts.id),
   logType: varchar('log_type', { length: 20 }).notNull().$type<typeof LOG_TYPE[number]>(),
-  startDate: date('start_date').notNull(),
-  endDate: date('end_date').notNull(),
-  days: integer('days').notNull(),
-  reason: varchar('reason', { length: 255 }),
+  startDate: date('start_date'),
+  endDate: date('end_date'),
+  daysAffected: integer('days_affected'),
+  reason: text('reason'),
+  createdByEmployee: uuid('created_by_employee').references(() => employees.id),
+  branchId: uuid('branch_id').references(() => branches.id),
   originalMemberId: uuid('original_member_id').references(() => members.id),
   targetMemberId: uuid('target_member_id').references(() => members.id),
-  createdBy: uuid('created_by').references(() => employees.id),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   tenantId: uuid('tenant_id').references(() => tenants.id),
 }, (table) => [
   index('idx_contract_logs_contract').on(table.contractId),
@@ -422,8 +424,8 @@ export const CHECKIN_TYPE = ['ENTRY', 'CLASS', 'FACILITY'] as const;
 export const checkIns = pgTable('check_ins', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: varchar('status', { length: 20 }).default('active'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }),
+  dateCreated: timestamp('date_created', { withTimezone: true }).defaultNow(),
+  dateUpdated: timestamp('date_updated', { withTimezone: true }),
   memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
   branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
   contractId: uuid('contract_id').references(() => contracts.id, { onDelete: 'set null' }),
@@ -999,9 +1001,10 @@ export const memberSocialAccountsRelations = relations(memberSocialAccounts, ({ 
 export const classReviews = pgTable('class_reviews', {
   id: uuid('id').primaryKey().defaultRandom(),
   memberId: uuid('member_id').notNull().references(() => members.id, { onDelete: 'cascade' }),
-  classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  classId: uuid('class_id').references(() => classes.id, { onDelete: 'cascade' }),
   sessionId: uuid('session_id').references(() => classSessions.id, { onDelete: 'set null' }),
   bookingId: uuid('booking_id').references(() => bookings.id, { onDelete: 'set null' }),
+  coachId: uuid('coach_id').references(() => employees.id, { onDelete: 'set null' }),
   rating: integer('rating').notNull(), // 1-5
   comment: text('comment'),
   isAnonymous: boolean('is_anonymous').default(false),

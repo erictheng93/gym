@@ -26,7 +26,13 @@ import {
 async function createStaffUser() {
   const passwordHash = await hash(TEST_STAFF_PASSWORD);
 
-  // Create staff employee first
+  // First clean up any existing data to ensure clean state
+  await db.delete(sessions).where(eq(sessions.userId, TEST_STAFF_USER_ID));
+  await db.delete(users).where(eq(users.id, TEST_STAFF_USER_ID));
+  await db.delete(employees).where(eq(employees.id, TEST_STAFF_EMPLOYEE_ID));
+  await db.delete(employees).where(eq(employees.employeeCode, 'EMP002'));
+
+  // Create staff employee first (without userId link initially)
   await db.insert(employees).values({
     id: TEST_STAFF_EMPLOYEE_ID,
     fullName: 'Test Staff',
@@ -38,9 +44,9 @@ async function createStaffUser() {
     employmentType: 'FULL_TIME',
     hireDate: new Date().toISOString().split('T')[0],
     tenantId: TEST_TENANT_ID,
-  }).onConflictDoNothing();
+  });
 
-  // Create staff user
+  // Create staff user with employeeId link
   await db.insert(users).values({
     id: TEST_STAFF_USER_ID,
     email: TEST_STAFF_EMAIL,
@@ -50,9 +56,9 @@ async function createStaffUser() {
     employeeId: TEST_STAFF_EMPLOYEE_ID,
     isActive: true,
     emailVerified: true,
-  }).onConflictDoNothing();
+  });
 
-  // Link employee to user
+  // Update employee with userId to complete bidirectional link
   await db.update(employees).set({
     userId: TEST_STAFF_USER_ID,
   }).where(eq(employees.id, TEST_STAFF_EMPLOYEE_ID));
@@ -60,6 +66,10 @@ async function createStaffUser() {
 
 // Helper to create an unlinked employee
 async function createUnlinkedEmployee() {
+  // First delete any existing employee with this id or employeeCode to ensure clean state
+  await db.delete(employees).where(eq(employees.id, TEST_UNLINKED_EMPLOYEE_ID));
+  await db.delete(employees).where(eq(employees.employeeCode, 'EMP003'));
+
   await db.insert(employees).values({
     id: TEST_UNLINKED_EMPLOYEE_ID,
     fullName: 'Unlinked Employee',
@@ -71,7 +81,8 @@ async function createUnlinkedEmployee() {
     employmentType: 'FULL_TIME',
     hireDate: new Date().toISOString().split('T')[0],
     tenantId: TEST_TENANT_ID,
-  }).onConflictDoNothing();
+    userId: null, // Explicitly unlinked
+  });
 }
 
 // Helper to get staff auth token
@@ -94,17 +105,25 @@ async function getStaffAuthToken(): Promise<string> {
 
 // Cleanup helper for users created during tests
 async function cleanupTestUsers() {
+  // First unlink all test employees from users to avoid FK constraint issues
+  await db.update(employees).set({ userId: null }).where(eq(employees.id, TEST_STAFF_EMPLOYEE_ID));
+  await db.update(employees).set({ userId: null }).where(eq(employees.id, TEST_UNLINKED_EMPLOYEE_ID));
+
   // Clean up any test-created users (excluding the main admin)
   const testEmails = [
     'newuser@test.test',
     'updated@test.test',
     'duplicate@test.test',
     'linkeduser@test.test',
+    'linked-delete@test.test',
+    'resetpw@test.test',
   ];
 
   for (const email of testEmails) {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     if (user) {
+      // Unlink any employees referencing this user
+      await db.update(employees).set({ userId: null }).where(eq(employees.userId, user.id));
       await db.delete(sessions).where(eq(sessions.userId, user.id));
       await db.delete(users).where(eq(users.id, user.id));
     }

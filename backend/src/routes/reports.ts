@@ -1240,20 +1240,20 @@ app.get('/coach-performance', async (c) => {
     .groupBy(coachMemberAssignments.coachId),
 
     // Reviews (average rating and count)
+    // Use coachId column directly - more reliable than joining through classes
     db.select({
-      instructorId: classSessions.instructorId,
+      instructorId: classReviews.coachId,
       avgRating: avg(classReviews.rating),
       reviewCount: count(),
     })
     .from(classReviews)
-    .innerJoin(classSessions, eq(classReviews.sessionId, classSessions.id))
     .where(and(
-      isNotNull(classSessions.instructorId),
-      inArray(classSessions.instructorId, coachIdList),
+      isNotNull(classReviews.coachId),
+      inArray(classReviews.coachId, coachIdList),
       gte(classReviews.createdAt, startDate),
       lte(classReviews.createdAt, endDate)
     ))
-    .groupBy(classSessions.instructorId),
+    .groupBy(classReviews.coachId),
 
     // Booking stats (attendance rate)
     db.select({
@@ -1521,20 +1521,20 @@ app.get('/coach-performance/export', async (c) => {
     ))
     .groupBy(coachMemberAssignments.coachId),
 
+    // Use coachId column directly - more reliable than joining through classes
     db.select({
-      instructorId: classSessions.instructorId,
+      instructorId: classReviews.coachId,
       avgRating: avg(classReviews.rating),
       reviewCount: count(),
     })
     .from(classReviews)
-    .innerJoin(classSessions, eq(classReviews.sessionId, classSessions.id))
     .where(and(
-      isNotNull(classSessions.instructorId),
-      inArray(classSessions.instructorId, coachIdList),
+      isNotNull(classReviews.coachId),
+      inArray(classReviews.coachId, coachIdList),
       gte(classReviews.createdAt, startDate),
       lte(classReviews.createdAt, endDate)
     ))
-    .groupBy(classSessions.instructorId),
+    .groupBy(classReviews.coachId),
 
     db.select({
       instructorId: classSessions.instructorId,

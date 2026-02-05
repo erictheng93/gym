@@ -229,7 +229,7 @@ app.get('/:id', async (c) => {
     .select()
     .from(contractLogs)
     .where(eq(contractLogs.contractId, id))
-    .orderBy(desc(contractLogs.createdAt));
+    .orderBy(desc(contractLogs.dateCreated));
 
   const contractPayments = await db
     .select()
@@ -460,7 +460,7 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
     logType: 'PAUSE',
     startDate: data.startDate,
     endDate: data.endDate,
-    days: daysAffected,
+    daysAffected: daysAffected,
     reason: data.reason,
     tenantId: tenantId,
   });
@@ -514,7 +514,7 @@ app.post('/:id/resume', async (c) => {
     logType: 'RESUME',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
-    days: 0,
+    daysAffected: 0,
     tenantId: tenantId,
   });
 
