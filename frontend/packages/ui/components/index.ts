@@ -5,6 +5,7 @@ export { default as FilterBar } from './layout/FilterBar.vue'
 
 // Data Display Components
 export { default as DataTable } from './data-display/DataTable.vue'
+export { default as DataList } from './data-display/DataList.vue'
 export { default as DataPagination } from './data-display/DataPagination.vue'
 export { default as StatsBar } from './data-display/StatsBar.vue'
 export { default as StatsGrid } from './data-display/StatsGrid.vue'
@@ -27,3 +28,4 @@ export { default as FormDatePicker } from './form/FormDatePicker.vue'
 export { default as FormRadioGroup } from './form/FormRadioGroup.vue'
 export { default as FormCheckbox } from './form/FormCheckbox.vue'
 export { default as FormTagInput } from './form/FormTagInput.vue'
+export { default as FormColorPicker } from './form/FormColorPicker.vue'

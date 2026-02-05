@@ -31,3 +31,20 @@ export {
   getStatusBadge
 } from './status-badges'
 export type { BadgeVariant, StatusConfig, StatusType } from './status-badges'
+
+// Branding CSS utilities
+export {
+  DEFAULT_BRANDING,
+  generateLaunchScreenCSS,
+  generateAppCriticalCSS,
+  getFullBrandName,
+  getAppColors,
+  getAppThemeSelector
+} from './branding-css'
+export type {
+  TenantBranding,
+  AppType,
+  GradientColors,
+  AppColors,
+  ThemeSelector
+} from './branding-css'

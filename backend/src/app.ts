@@ -72,6 +72,9 @@ import hrPerformanceRoutes from './routes/hr-performance.js';
 // Tenant routes
 import tenantRoutes from './routes/tenant.js';
 
+// Public routes (no auth required)
+import brandingRoutes from './routes/branding.js';
+
 type Variables = AuthVariables & TenantVariables;
 
 const app = new Hono<{ Variables: Variables }>();
@@ -92,6 +95,9 @@ app.use('*', secureHeaders());
 app.use('*', compress());
 app.use('*', logger());
 app.use('*', apiLogger);
+
+// Public routes (before auth middleware)
+app.route('/api/public/branding', brandingRoutes);
 
 app.use('*', authMiddleware);
 app.use('*', tenantMiddleware);

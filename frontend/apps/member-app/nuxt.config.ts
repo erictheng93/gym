@@ -30,7 +30,10 @@ export default defineNuxtConfig({
       { from: '@shared/utils/status-badges', name: 'getMemberStatusBadge' },
       { from: '@shared/utils/status-badges', name: 'getContractStatusBadge' },
       { from: '@shared/utils/status-badges', name: 'getPaymentStatusBadge' },
-      { from: '@shared/utils/status-badges', name: 'getStatusBadge' }
+      { from: '@shared/utils/status-badges', name: 'getStatusBadge' },
+      // Branding composable
+      { from: '@shared/composables/useBranding', name: 'useBranding' },
+      { from: '@shared/composables/useBranding', name: 'DEFAULT_BRANDING' }
     ]
   },
 
@@ -59,6 +62,15 @@ export default defineNuxtConfig({
       htmlAttrs: {
         lang: 'zh-TW'
       },
+      // Critical inline script to prevent theme flash on hard refresh
+      // This runs synchronously before CSS loads to set the correct theme class
+      script: [
+        {
+          innerHTML: `(function(){try{var t=localStorage.getItem('gym-nexus-theme')||'dark';var r=t==='system'?(window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):t;document.documentElement.classList.add('theme-'+r);document.documentElement.style.colorScheme=r;}catch(e){}})()`,
+          tagPosition: 'head'
+        }
+      ],
+      // Note: Critical CSS is now injected dynamically via server/plugins/branding.ts
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover' },

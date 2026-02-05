@@ -38,7 +38,10 @@ export default defineNuxtConfig({
       { from: '@shared/utils/status-badges', name: 'getEmployeeStatusBadge' },
       { from: '@shared/utils/status-badges', name: 'getEmploymentTypeBadge' },
       { from: '@shared/utils/status-badges', name: 'getLeaveStatusBadge' },
-      { from: '@shared/utils/status-badges', name: 'getStatusBadge' }
+      { from: '@shared/utils/status-badges', name: 'getStatusBadge' },
+      // Branding composable
+      { from: '@shared/composables/useBranding', name: 'useBranding' },
+      { from: '@shared/composables/useBranding', name: 'DEFAULT_BRANDING' }
       // Note: Form validation utilities (useFormValidation, required, email, etc.)
       // are auto-imported via the UI layer (extends: ['../../packages/ui'])
     ]
@@ -100,6 +103,15 @@ export default defineNuxtConfig({
       htmlAttrs: {
         lang: 'zh-TW'
       },
+      // Critical inline script to prevent theme flash on hard refresh
+      // This runs synchronously before CSS loads to set the correct theme attribute
+      script: [
+        {
+          innerHTML: `(function(){try{var t=localStorage.getItem('gym-nexus-theme')||'dark';var r=t==='system'?(window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):t;document.documentElement.setAttribute('data-theme',r);}catch(e){}})()`,
+          tagPosition: 'head'
+        }
+      ],
+      // Note: Critical CSS is now injected dynamically via server/plugins/branding.ts
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover' },

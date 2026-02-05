@@ -3,6 +3,8 @@ import { db, tenants, members, employees, branches } from '../db/index.js';
 import { eq, count } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { validateBranding, mergeBranding } from '../types/branding.js';
+import type { TenantBranding } from '../types/branding.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -203,6 +205,127 @@ app.get('/quota/check/:resource', async (c) => {
       available: Math.max(0, limit - currentCount),
     },
   });
+});
+
+/**
+ * PATCH /api/tenant/settings
+ * Update tenant settings (including branding)
+ *
+ * Request body can include:
+ * - branding: TenantBranding configuration
+ * - other settings as needed
+ */
+app.patch('/settings', async (c) => {
+  const tenantId = c.get('tenantId');
+
+  if (!tenantId) {
+    return c.json({ success: false, error: '無租戶上下文' }, 400);
+  }
+
+  try {
+    const body = await c.req.json();
+    const { branding, ...otherSettings } = body;
+
+    // Fetch current tenant settings
+    const [tenant] = await db
+      .select({
+        settings: tenants.settings
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (!tenant) {
+      return c.json({ success: false, error: '找不到租戶' }, 404);
+    }
+
+    const currentSettings = (tenant.settings || {}) as Record<string, unknown>;
+
+    // Validate and merge branding if provided
+    let newBranding: TenantBranding | undefined;
+    if (branding) {
+      const validationErrors = validateBranding(branding);
+      if (validationErrors.length > 0) {
+        return c.json({
+          success: false,
+          error: '品牌設定格式錯誤',
+          details: validationErrors
+        }, 400);
+      }
+      // Merge with existing branding or defaults
+      const existingBranding = currentSettings.branding as Partial<TenantBranding> | undefined;
+      newBranding = mergeBranding({ ...existingBranding, ...branding });
+    }
+
+    // Build new settings object
+    const newSettings = {
+      ...currentSettings,
+      ...otherSettings,
+      ...(newBranding && { branding: newBranding })
+    };
+
+    // Update tenant settings
+    await db
+      .update(tenants)
+      .set({
+        settings: newSettings,
+        updatedAt: new Date()
+      })
+      .where(eq(tenants.id, tenantId));
+
+    return c.json({
+      success: true,
+      message: '設定已更新',
+      data: { settings: newSettings }
+    });
+  } catch (error) {
+    console.error('[Tenant API] Error updating settings:', error);
+    return c.json({
+      success: false,
+      error: '更新設定失敗'
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/tenant/settings/branding
+ * Get current tenant branding configuration
+ */
+app.get('/settings/branding', async (c) => {
+  const tenantId = c.get('tenantId');
+
+  if (!tenantId) {
+    return c.json({ success: false, error: '無租戶上下文' }, 400);
+  }
+
+  try {
+    const [tenant] = await db
+      .select({
+        settings: tenants.settings
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (!tenant) {
+      return c.json({ success: false, error: '找不到租戶' }, 404);
+    }
+
+    const settings = (tenant.settings || {}) as Record<string, unknown>;
+    const brandingData = settings.branding as Partial<TenantBranding> | undefined;
+    const branding = mergeBranding(brandingData || {});
+
+    return c.json({
+      success: true,
+      data: branding
+    });
+  } catch (error) {
+    console.error('[Tenant API] Error fetching branding:', error);
+    return c.json({
+      success: false,
+      error: '獲取品牌設定失敗'
+    }, 500);
+  }
 });
 
 export default app;
