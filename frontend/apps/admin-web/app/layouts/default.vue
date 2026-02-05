@@ -95,6 +95,10 @@ const menuItems = [
         to: '/admin/roles'
       },
       {
+        label: '品牌設定',
+        to: '/admin/branding'
+      },
+      {
         label: '系統設定',
         to: '/admin/settings'
       },
