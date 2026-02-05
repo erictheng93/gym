@@ -8,6 +8,9 @@ import { VALIDATION } from '~/constants'
 // 電話驗證正則表達式
 const phoneRegex = /^[0-9]{8,15}$/
 
+// UUID 驗證正則表達式 (Zod v4 compatible)
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // 會員狀態枚舉
 export const MemberStatusEnum = z.enum(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'BANNED', 'INACTIVE'])
 
@@ -25,9 +28,8 @@ export const memberBaseSchema = z.object({
 
   phone: z
     .string()
-    .regex(phoneRegex, VALIDATION.PHONE_INVALID)
-    .nullable()
-    .optional(),
+    .min(1, VALIDATION.REQUIRED)
+    .regex(phoneRegex, VALIDATION.PHONE_INVALID),
 
   email: z
     .string()
@@ -60,7 +62,7 @@ export const memberBaseSchema = z.object({
 
   branch_id: z
     .string()
-    .uuid(VALIDATION.BRANCH_INVALID)
+    .regex(uuidRegex, VALIDATION.BRANCH_INVALID)
     .nullable()
     .optional(),
 
@@ -84,7 +86,7 @@ export const memberBaseSchema = z.object({
 
   sales_person_id: z
     .string()
-    .uuid(VALIDATION.UUID_INVALID)
+    .regex(uuidRegex, VALIDATION.UUID_INVALID)
     .nullable()
     .optional(),
 })
@@ -95,7 +97,7 @@ export const memberBaseSchema = z.object({
 export const createMemberSchema = memberBaseSchema.extend({
   branch_id: z
     .string({ error: VALIDATION.BRANCH_REQUIRED })
-    .uuid(VALIDATION.BRANCH_INVALID),
+    .regex(uuidRegex, VALIDATION.BRANCH_INVALID),
 })
 
 /**

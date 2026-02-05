@@ -63,8 +63,6 @@ const selectOption = (value: string | number) => {
   }
 }
 
-// Generate unique name for radio group
-const groupName = `radio-group-${Math.random().toString(36).slice(2, 9)}`
 </script>
 
 <template>
@@ -76,26 +74,20 @@ const groupName = `radio-group-${Math.random().toString(36).slice(2, 9)}`
     :disabled="disabled"
   >
     <div class="radio-group" :class="[`variant-${variant}`]">
-      <label
+      <button
         v-for="option in options"
         :key="option.value"
+        type="button"
         class="radio-option"
         :class="{
           active: modelValue === option.value,
           disabled: option.disabled || disabled
         }"
+        :disabled="option.disabled || disabled"
         @click="selectOption(option.value)"
       >
-        <input
-          type="radio"
-          :name="groupName"
-          :value="option.value"
-          :checked="modelValue === option.value"
-          :disabled="option.disabled || disabled"
-          class="radio-input"
-        />
         <span class="radio-label">{{ option.label }}</span>
-      </label>
+      </button>
     </div>
   </FormField>
 </template>
@@ -107,12 +99,6 @@ const groupName = `radio-group-${Math.random().toString(36).slice(2, 9)}`
   flex-wrap: wrap;
 }
 
-.radio-input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .radio-option {
   display: flex;
   align-items: center;
@@ -122,6 +108,9 @@ const groupName = `radio-group-${Math.random().toString(36).slice(2, 9)}`
   font-weight: 500;
   transition: all var(--duration-fast) var(--ease-out);
   user-select: none;
+  border: none;
+  background: none;
+  outline: none;
 }
 
 .radio-option.disabled {

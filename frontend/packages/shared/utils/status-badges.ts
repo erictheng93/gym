@@ -21,7 +21,8 @@ export const MEMBER_STATUS: Record<string, StatusConfig> = {
   BANNED: { label: '停權', variant: 'error' }
 }
 
-export function getMemberStatusBadge(status: string): StatusConfig {
+export function getMemberStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return MEMBER_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -36,7 +37,8 @@ export const CONTRACT_STATUS: Record<string, StatusConfig> = {
   TERMINATED: { label: '已終止', variant: 'error' }
 }
 
-export function getContractStatusBadge(status: string): StatusConfig {
+export function getContractStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return CONTRACT_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -49,7 +51,8 @@ export const PAYMENT_STATUS: Record<string, StatusConfig> = {
   PAID: { label: '已付清', variant: 'success' }
 }
 
-export function getPaymentStatusBadge(status: string): StatusConfig {
+export function getPaymentStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return PAYMENT_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -62,7 +65,8 @@ export const EMPLOYEE_STATUS: Record<string, StatusConfig> = {
   LEAVE: { label: '留停', variant: 'warning' }
 }
 
-export function getEmployeeStatusBadge(status: string): StatusConfig {
+export function getEmployeeStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return EMPLOYEE_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -75,7 +79,8 @@ export const EMPLOYMENT_TYPE: Record<string, StatusConfig> = {
   FREELANCE: { label: '外包', variant: 'default' }
 }
 
-export function getEmploymentTypeBadge(type: string): StatusConfig {
+export function getEmploymentTypeBadge(type: string | undefined | null): StatusConfig {
+  if (!type) return { label: '未設定', variant: 'default' }
   return EMPLOYMENT_TYPE[type] || { label: type, variant: 'default' }
 }
 
@@ -89,7 +94,8 @@ export const LEAVE_STATUS: Record<string, StatusConfig> = {
   CANCELLED: { label: '已取消', variant: 'default' }
 }
 
-export function getLeaveStatusBadge(status: string): StatusConfig {
+export function getLeaveStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return LEAVE_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -102,7 +108,8 @@ export const SESSION_STATUS: Record<string, StatusConfig> = {
   CANCELLED: { label: '已取消', variant: 'error' }
 }
 
-export function getSessionStatusBadge(status: string): StatusConfig {
+export function getSessionStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return SESSION_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -117,7 +124,8 @@ export const BOOKING_STATUS: Record<string, StatusConfig> = {
   NO_SHOW: { label: '未出席', variant: 'error' }
 }
 
-export function getBookingStatusBadge(status: string): StatusConfig {
+export function getBookingStatusBadge(status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   return BOOKING_STATUS[status] || { label: status, variant: 'default' }
 }
 
@@ -130,7 +138,8 @@ export const DIFFICULTY_LEVEL: Record<string, StatusConfig> = {
   ADVANCED: { label: '進階', variant: 'error' }
 }
 
-export function getDifficultyBadge(level: string): StatusConfig {
+export function getDifficultyBadge(level: string | undefined | null): StatusConfig {
+  if (!level) return { label: '未設定', variant: 'default' }
   return DIFFICULTY_LEVEL[level] || { label: level, variant: 'default' }
 }
 
@@ -158,7 +167,8 @@ const STATUS_GETTERS: Record<StatusType, (status: string) => StatusConfig> = {
  * const { label, variant } = getStatusBadge('member', 'ACTIVE')
  * // { label: '有效', variant: 'success' }
  */
-export function getStatusBadge(type: StatusType, status: string): StatusConfig {
+export function getStatusBadge(type: StatusType, status: string | undefined | null): StatusConfig {
+  if (!status) return { label: '未設定', variant: 'default' }
   const getter = STATUS_GETTERS[type]
   return getter ? getter(status) : { label: status, variant: 'default' }
 }

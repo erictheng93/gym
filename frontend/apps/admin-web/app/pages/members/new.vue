@@ -56,6 +56,14 @@ const branchOptions = computed(() =>
   branches.value.map(b => ({ value: b.id, label: b.name }))
 )
 
+// Gender computed with proper null handling
+const genderValue = computed({
+  get: () => form.gender || '',
+  set: (v: string | number) => {
+    form.gender = (v === '' ? null : v as 'M' | 'F' | 'O')
+  }
+})
+
 // Initial load
 onMounted(async () => {
   await Promise.all([
@@ -69,6 +77,29 @@ onMounted(async () => {
     form.branch_id = firstBranch.id
   }
 })
+
+// Transform snake_case to camelCase for API
+const transformToCamelCase = (data: typeof form) => {
+  // Map frontend field names (snake_case) to backend field names (camelCase)
+  const genderMap: Record<string, string> = {
+    M: 'MALE',
+    F: 'FEMALE',
+    O: 'OTHER'
+  }
+
+  return {
+    fullName: data.full_name,
+    phone: data.phone || '',
+    email: data.email || null,
+    gender: data.gender ? genderMap[data.gender] : null,
+    birthday: data.birthday || null,
+    branchId: data.branch_id,
+    emergencyContact: data.emergency_contact || null,
+    emergencyPhone: data.emergency_phone || null,
+    tags: data.tags || [],
+    joinDate: new Date().toISOString().split('T')[0]
+  }
+}
 
 // Form submission
 const handleSubmit = async () => {
@@ -86,14 +117,7 @@ const handleSubmit = async () => {
 
   await submit(
     async () => {
-      const memberData = {
-        ...form,
-        gender: form.gender || null,
-        birthday: form.birthday || null,
-        height: form.height || null,
-        branch_id: form.branch_id || null,
-        join_date: new Date().toISOString().split('T')[0]
-      }
+      const memberData = transformToCamelCase(form)
 
       const result = await createMember(memberData)
       if (!result) {
@@ -168,11 +192,10 @@ const handleSubmit = async () => {
           />
 
           <FormRadioGroup
-            :model-value="form.gender ?? undefined"
+            v-model="genderValue"
             :label="MESSAGES.FORM.GENDER"
             :options="genderOptions"
             allow-empty
-            @update:model-value="(v: string | number | undefined) => form.gender = (v as 'M' | 'F' | 'O' | null) ?? null"
           />
 
           <FormDatePicker
@@ -215,7 +238,8 @@ const handleSubmit = async () => {
             v-model="form.phone"
             :label="MESSAGES.FORM.PHONE"
             type="tel"
-            placeholder="0912-345-678"
+            placeholder="0912345678"
+            :required="true"
             :error="errors.phone"
           />
 
