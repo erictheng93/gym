@@ -137,7 +137,7 @@ const getStatusBadge = (status: string) => {
     <!-- Header -->
     <header class="dashboard-header">
       <div class="header-content">
-        <h1 class="text-display">{{ greeting }}，{{ userName }}</h1>
+        <h1 class="text-display">{{ greeting }}，<ClientOnly fallback="">{{ userName }}</ClientOnly></h1>
         <p class="text-title-3 text-secondary">{{ PAGES.DASHBOARD.WELCOME }}</p>
       </div>
       <div class="header-date">

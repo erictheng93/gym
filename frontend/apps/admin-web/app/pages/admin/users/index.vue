@@ -15,6 +15,10 @@ const searchQuery = ref('')
 const filterRole = ref<string>('')
 const filterStatus = ref<string>('')
 
+// Modal state
+const showModal = ref(false)
+const selectedUser = ref<typeof users.value[0] | null>(null)
+
 // Role labels
 const roleLabels: Record<string, string> = {
   admin: '管理員',
@@ -86,6 +90,29 @@ const formatDate = (dateStr: string | null) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// Row click handler - open modal
+const handleRowClick = (user: typeof users.value[0]) => {
+  selectedUser.value = user
+  showModal.value = true
+}
+
+// Get user initials from email
+const getUserInitial = (email: string) => {
+  return email.charAt(0).toUpperCase()
+}
+
+// Get role badge color class
+const getRoleBadgeClass = (role: string) => {
+  const classes: Record<string, string> = {
+    admin: 'badge-error',
+    super_admin: 'badge-error',
+    manager: 'badge-warning',
+    coach: 'badge-info',
+    staff: 'badge-default'
+  }
+  return classes[role] || 'badge-default'
 }
 
 // Load data on mount
@@ -207,7 +234,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="user in users" :key="user.id">
+          <tr v-for="user in users" :key="user.id" class="clickable-row" @click="handleRowClick(user)">
             <td>
               <div class="user-email">
                 <span class="email">{{ user.email }}</span>
@@ -239,7 +266,7 @@ onMounted(() => {
             <td class="text-secondary">{{ formatDate(user.lastLoginAt) }}</td>
             <td class="text-secondary">{{ formatDate(user.createdAt) }}</td>
             <td>
-              <div class="action-buttons">
+              <div class="action-buttons" @click.stop>
                 <button
                   class="btn btn-sm btn-ghost"
                   :class="user.isActive ? 'text-warning' : 'text-success'"
@@ -307,6 +334,147 @@ onMounted(() => {
         下一頁
       </button>
     </div>
+
+    <!-- User Detail Modal -->
+    <AppModal v-model="showModal" max-width="lg">
+      <template #header>
+        <!-- Empty header, using custom hero instead -->
+      </template>
+
+      <div class="user-modal-content">
+        <!-- Hero Section -->
+        <div class="user-hero">
+          <div class="hero-avatar-wrapper">
+            <div class="hero-avatar" :class="selectedUser?.isActive ? 'avatar-active' : 'avatar-inactive'">
+              {{ getUserInitial(selectedUser?.email || '') }}
+            </div>
+            <div class="hero-status-indicator" :class="selectedUser?.isActive ? 'status-active' : 'status-inactive'" />
+          </div>
+          <div class="hero-info">
+            <h2 class="hero-email">{{ selectedUser?.email }}</h2>
+            <div class="hero-meta">
+              <span class="badge" :class="getRoleBadgeClass(selectedUser?.role || '')">
+                {{ roleLabels[selectedUser?.role || ''] || selectedUser?.role }}
+              </span>
+              <span class="hero-divider">•</span>
+              <span class="badge" :class="selectedUser?.isActive ? 'badge-success' : 'badge-error'">
+                {{ selectedUser?.isActive ? '啟用' : '停用' }}
+              </span>
+              <template v-if="selectedUser?.emailVerified">
+                <span class="hero-divider">•</span>
+                <span class="verified-indicator">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                  </svg>
+                  已驗證
+                </span>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info Cards -->
+        <div class="info-cards">
+          <!-- Account Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <div class="card-icon card-icon-blue">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </div>
+              <span class="card-title">帳號資訊</span>
+            </div>
+            <div class="card-body">
+              <div class="card-row">
+                <span class="card-label">Email</span>
+                <span class="card-value">
+                  <a :href="`mailto:${selectedUser?.email}`" class="email-link">{{ selectedUser?.email }}</a>
+                </span>
+              </div>
+              <div class="card-row">
+                <span class="card-label">角色</span>
+                <span class="card-value">{{ roleLabels[selectedUser?.role || ''] || selectedUser?.role }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Employee Card -->
+          <div class="info-card">
+            <div class="card-header">
+              <div class="card-icon card-icon-green">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="20" height="14" x="2" y="7" rx="2" ry="2" />
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                </svg>
+              </div>
+              <span class="card-title">關聯員工</span>
+            </div>
+            <div class="card-body">
+              <template v-if="selectedUser?.employee">
+                <div class="card-row">
+                  <span class="card-label">姓名</span>
+                  <span class="card-value">{{ selectedUser.employee.fullName }}</span>
+                </div>
+                <div class="card-row">
+                  <span class="card-label">員工編號</span>
+                  <span class="card-value">
+                    <code class="employee-code">{{ selectedUser.employee.employeeCode }}</code>
+                  </span>
+                </div>
+              </template>
+              <template v-else>
+                <div class="empty-employee">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 12h8" />
+                  </svg>
+                  <span>未關聯員工</span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- System Info Card -->
+          <div class="info-card info-card-wide">
+            <div class="card-header">
+              <div class="card-icon card-icon-purple">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <span class="card-title">系統資訊</span>
+            </div>
+            <div class="card-body card-body-grid">
+              <div class="card-row">
+                <span class="card-label">建立時間</span>
+                <span class="card-value">{{ formatDate(selectedUser?.createdAt || null) }}</span>
+              </div>
+              <div class="card-row">
+                <span class="card-label">最後登入</span>
+                <span class="card-value">{{ formatDate(selectedUser?.lastLoginAt || null) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="modal-actions">
+          <button class="action-btn action-btn-secondary" @click="showModal = false">
+            關閉
+          </button>
+          <NuxtLink :to="`/admin/users/${selectedUser?.id}`" class="action-btn action-btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+            編輯使用者
+          </NuxtLink>
+        </div>
+      </div>
+    </AppModal>
   </div>
 </template>
 
@@ -601,6 +769,312 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
+/* Clickable Row */
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: var(--color-bg-tertiary);
+}
+
+/* ========================================
+   User Modal - Apple Style Design
+   ======================================== */
+
+.user-modal-content {
+  padding: var(--space-md);
+}
+
+/* Hero Section */
+.user-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-lg) 0 var(--space-xl);
+  background: linear-gradient(180deg, var(--color-bg-secondary) 0%, transparent 100%);
+  border-radius: var(--radius-xl);
+  margin: calc(-1 * var(--space-md));
+  margin-bottom: var(--space-lg);
+}
+
+.hero-avatar-wrapper {
+  position: relative;
+  margin-bottom: var(--space-md);
+}
+
+.hero-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: white;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.hero-avatar.avatar-active {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.hero-avatar.avatar-inactive {
+  background: linear-gradient(135deg, #9ca3af, #6b7280);
+}
+
+.hero-status-indicator {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid var(--color-bg-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.hero-status-indicator.status-active {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
+.hero-status-indicator.status-inactive {
+  background: linear-gradient(135deg, #9ca3af, #6b7280);
+}
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.hero-email {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+  word-break: break-all;
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hero-divider {
+  color: var(--color-text-quaternary);
+  font-size: 12px;
+}
+
+.verified-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #10b981;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Badge variants */
+.badge-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.badge-default {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+/* Info Cards */
+.info-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.info-card {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border);
+  transition: all 0.2s ease;
+}
+
+.info-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+.info-card-wide {
+  grid-column: span 2;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.card-icon-blue {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05));
+  color: #3b82f6;
+}
+
+.card-icon-green {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
+  color: #10b981;
+}
+
+.card-icon-purple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(139, 92, 246, 0.05));
+  color: #8b5cf6;
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.card-body-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+
+.card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.email-link {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+  word-break: break-all;
+}
+
+.email-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.employee-code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-tertiary);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+
+.empty-employee {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  color: var(--color-text-tertiary);
+}
+
+.empty-employee svg {
+  opacity: 0.5;
+}
+
+/* Modal Actions */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  border: none;
+}
+
+.action-btn-secondary {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.action-btn-secondary:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border-strong);
+}
+
+.action-btn-primary {
+  background: linear-gradient(135deg, var(--color-accent), #2563eb);
+  color: white;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+}
+
+.action-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.action-btn-primary:active {
+  transform: translateY(0);
+}
+
 @media (max-width: 768px) {
   .page-header {
     flex-direction: column;
@@ -622,6 +1096,27 @@ onMounted(() => {
   .data-table th,
   .data-table td {
     padding: var(--space-sm);
+  }
+
+  /* Modal responsive */
+  .info-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .info-card-wide {
+    grid-column: span 1;
+  }
+
+  .card-body-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    width: 100%;
   }
 }
 </style>
