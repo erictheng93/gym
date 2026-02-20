@@ -1,27 +1,23 @@
 import 'dotenv/config';
 import { beforeAll, afterAll } from 'vitest';
 
-// Flag to track database connection status
-export let isDbConnected = false;
+// Track whether DB is available for integration tests
+export let dbAvailable = false;
 
-// Test database connection check
+// Test database connection check (non-fatal for unit tests)
 beforeAll(async () => {
   try {
-    // Dynamic import to avoid errors if DB env vars are missing
     const { db } = await import('../src/db/index.js');
-    // Verify database connection
     await db.execute('SELECT 1 as connected');
-    isDbConnected = true;
+    dbAvailable = true;
     console.log('✅ Test database connected');
   } catch (error) {
-    isDbConnected = false;
-    console.warn('⚠️ Test database not available - integration tests will be skipped');
-    // Don't throw - allow unit tests to run
+    dbAvailable = false;
+    console.warn('⚠️ Database not available — unit tests will still run');
   }
 });
 
 // Cleanup after all tests
 afterAll(async () => {
-  // Close database connections if needed
   console.log('✅ Test cleanup complete');
 });

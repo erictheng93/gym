@@ -93,10 +93,12 @@ const mockSession = {
   coach: stateStore.get('coach') || { value: null },
   isAuthenticated: { get value() { return !!stateStore.get('coach')?.value } },
   isLoading: { value: false },
+  isAuthChecking: { value: true },
   displayName: { get value() { return (stateStore.get('coach')?.value as CoachData)?.full_name ?? '教練' } },
   fetchCoach: vi.fn().mockResolvedValue(true),
   clearSession: vi.fn(),
   setLoading: vi.fn(),
+  setAuthChecking: vi.fn(),
 }
 
 vi.stubGlobal('useCoachTokens', () => mockTokens)
@@ -109,6 +111,9 @@ vi.stubGlobal('useCoachSession', () => {
     coach: stateStore.get('coach')!,
     isAuthenticated: { get value() { return !!stateStore.get('coach')?.value } },
     displayName: { get value() { return (stateStore.get('coach')?.value as CoachData)?.full_name ?? '教練' } },
+    branchName: { get value() { return (stateStore.get('coach')?.value as CoachData)?.branch_name ?? null } },
+    studentCount: { get value() { return (stateStore.get('coach')?.value as CoachData)?.stats?.student_count ?? 0 } },
+    todayClassCount: { get value() { return (stateStore.get('coach')?.value as CoachData)?.stats?.today_class_count ?? 0 } },
   }
 })
 
@@ -312,22 +317,63 @@ describe('useCoachAuth', () => {
       const auth = useCoachAuth()
 
       const expectedProperties = [
-        // State
+        // State (from useCoachSession)
         'coach',
         'isAuthenticated',
         'isLoading',
+        'isAuthChecking',
         'displayName',
+        'branchName',
+        'studentCount',
+        'todayClassCount',
+        // Token state (from useCoachTokens)
+        'accessToken',
         // Methods
         'login',
         'logout',
         'checkAuth',
         'changePassword',
         'getAuthHeader',
+        'fetchCoach',
+        'refreshAccessToken',
       ]
 
       for (const prop of expectedProperties) {
         expect(auth).toHaveProperty(prop)
       }
+    })
+  })
+
+  describe('forwarded session properties', () => {
+    it('should forward branchName from session', () => {
+      const auth = useCoachAuth()
+      expect(auth.branchName).toBeDefined()
+    })
+
+    it('should forward studentCount from session', () => {
+      const auth = useCoachAuth()
+      expect(auth.studentCount).toBeDefined()
+    })
+
+    it('should forward todayClassCount from session', () => {
+      const auth = useCoachAuth()
+      expect(auth.todayClassCount).toBeDefined()
+    })
+
+    it('should forward accessToken from tokens', () => {
+      const auth = useCoachAuth()
+      expect(auth.accessToken).toBeDefined()
+      expect(auth.accessToken.value).toBeNull()
+    })
+
+    it('should forward fetchCoach from session', () => {
+      const auth = useCoachAuth()
+      expect(typeof auth.fetchCoach).toBe('function')
+    })
+
+    it('should forward refreshAccessToken from tokens', () => {
+      const auth = useCoachAuth()
+      expect(typeof auth.refreshAccessToken).toBe('function')
     })
   })
 })
