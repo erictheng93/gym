@@ -153,8 +153,15 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
   }
 
   const [newLog] = await db.insert(contractLogs).values({
-    ...data,
-    createdBy: user.employeeId,
+    contractId: data.contractId,
+    logType: data.logType,
+    startDate: data.startDate,
+    endDate: data.endDate,
+    daysAffected: data.days,
+    reason: data.reason,
+    originalMemberId: data.originalMemberId,
+    targetMemberId: data.targetMemberId,
+    createdByEmployee: user.employeeId,
     tenantId,
   }).returning();
 

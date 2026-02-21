@@ -47,7 +47,7 @@ describe('Contract Logs API', () => {
       expect(data.success).toBe(true);
       expect(data.data.contractId).toBe(TEST_CONTRACT_ID);
       expect(data.data.logType).toBe('PAUSE');
-      expect(data.data.days).toBe(7);
+      expect(data.data.daysAffected).toBe(7);
       expect(data.data.reason).toBe('Vacation');
 
       createdLogId = data.data.id;
