@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
+import { db, bookings, classSessions, members } from '../src/db/index.js';
 import {
   createCoachTestFixtures,
   cleanupCoachTestFixtures,
   getCoachToken,
   TEST_COACH_SESSION_ID,
+  TEST_COACH_CLASS_ID,
+  TEST_COACH_EMPLOYEE_ID,
   TEST_BOOKING_ID,
+  TEST_SESSION_ID,
   TEST_TENANT_ID,
+  TEST_BRANCH_ID,
+  TEST_MEMBER_ID,
 } from './helpers.js';
 
 // =============================================================================
@@ -173,6 +179,17 @@ describe('Coach Profile, Schedule & Classes API', () => {
       expect(json.data).toHaveProperty('lesson_plan');
     });
 
+    it('GET /api/coach/classes/:id for another coach\'s session should return 403', async () => {
+      // TEST_SESSION_ID belongs to TEST_EMPLOYEE_ID, not TEST_COACH_EMPLOYEE_ID
+      const response = await makeCoachRequest(`/api/coach/classes/${TEST_SESSION_ID}`);
+
+      expect(response.status).toBe(403);
+
+      const json = await response.json();
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('FORBIDDEN');
+    });
+
     it('GET /api/coach/classes/:id for non-existent session should return 404', async () => {
       const fakeId = '00000000-0000-0000-0000-ffffffffffff';
       const response = await makeCoachRequest(`/api/coach/classes/${fakeId}`);
@@ -203,6 +220,38 @@ describe('Coach Profile, Schedule & Classes API', () => {
       const json = await response.json();
       expect(json.success).toBe(true);
       expect(json.status).toBe('ATTENDED');
+    });
+
+    it('POST /api/coach/classes/:id/attendance (attended=false) should mark NO_SHOW', async () => {
+      // Create a fresh booking for the NO_SHOW test
+      const [noShowMember] = await db.insert(members).values({
+        fullName: 'No Show Member',
+        phone: '0977888999',
+        memberCode: 'M-NOSHOW-01',
+        branchId: TEST_BRANCH_ID,
+        status: 'ACTIVE',
+        joinDate: new Date().toISOString().split('T')[0],
+        tenantId: TEST_TENANT_ID,
+      }).returning();
+
+      const [noShowBooking] = await db.insert(bookings).values({
+        sessionId: TEST_COACH_SESSION_ID,
+        memberId: noShowMember.id,
+        bookingStatus: 'CONFIRMED',
+      }).returning();
+
+      const response = await makeCoachRequest(`/api/coach/classes/${noShowBooking.id}/attendance`, {
+        method: 'POST',
+        body: JSON.stringify({
+          attended: false,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+
+      const json = await response.json();
+      expect(json.success).toBe(true);
+      expect(json.status).toBe('NO_SHOW');
     });
 
     it('POST /api/coach/classes/:id/attendance for non-existent booking should return 404', async () => {
