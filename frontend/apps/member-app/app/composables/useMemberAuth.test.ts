@@ -98,12 +98,14 @@ const mockSession = {
   member: stateStore.get('member') || { value: null },
   isAuthenticated: { get value() { return !!stateStore.get('member')?.value } },
   isLoading: { value: false },
+  isAuthChecking: { value: true },
   activeContract: { get value() { return (stateStore.get('member')?.value as MemberData)?.activeContract ?? null } },
   displayName: { get value() { return (stateStore.get('member')?.value as MemberData)?.full_name ?? '會員' } },
   memberStatus: { get value() { return (stateStore.get('member')?.value as MemberData)?.member_status ?? null } },
   fetchMember: vi.fn().mockResolvedValue(true),
   clearSession: vi.fn(),
   setLoading: vi.fn(),
+  setAuthChecking: vi.fn(),
   updateMemberData: vi.fn(),
 }
 
@@ -131,9 +133,11 @@ vi.stubGlobal('useAuthSession', () => {
     ...mockSession,
     member: stateStore.get('member')!,
     isAuthenticated: { get value() { return !!stateStore.get('member')?.value } },
+    isAuthChecking: mockSession.isAuthChecking,
     activeContract: { get value() { return (stateStore.get('member')?.value as MemberData)?.activeContract ?? null } },
     displayName: { get value() { return (stateStore.get('member')?.value as MemberData)?.full_name ?? '會員' } },
     memberStatus: { get value() { return (stateStore.get('member')?.value as MemberData)?.member_status ?? null } },
+    setAuthChecking: mockSession.setAuthChecking,
   }
 })
 vi.stubGlobal('useAuthMethods', () => mockMethods)

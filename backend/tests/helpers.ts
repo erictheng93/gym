@@ -23,6 +23,15 @@ export const TEST_UNLINKED_EMPLOYEE_ID = '00000000-0000-0000-0000-00000000000b';
 // Additional plan IDs
 export const TEST_COUNT_PLAN_ID = '00000000-0000-0000-0000-00000000000c';
 
+// Tenant B IDs (for cross-tenant isolation tests)
+export const TEST_TENANT_B_ID = '00000000-0000-0000-0000-0000000000b0';
+export const TEST_BRANCH_B_ID = '00000000-0000-0000-0000-0000000000b1';
+export const TEST_JOB_TITLE_B_ID = '00000000-0000-0000-0000-0000000000b2';
+export const TEST_EMPLOYEE_B_ID = '00000000-0000-0000-0000-0000000000b3';
+export const TEST_MEMBER_B_ID = '00000000-0000-0000-0000-0000000000b4';
+export const TEST_PLAN_B_ID = '00000000-0000-0000-0000-0000000000b5';
+export const TEST_CONTRACT_B_ID = '00000000-0000-0000-0000-0000000000b6';
+
 // Class/session IDs
 export const TEST_CLASS_ID = '00000000-0000-0000-0000-000000000010';
 export const TEST_SCHEDULE_ID = '00000000-0000-0000-0000-000000000011';
@@ -182,6 +191,88 @@ export async function createTestFixtures() {
     tenantId: TEST_TENANT_ID,
   }).onConflictDoNothing();
 
+  // =========================================================================
+  // Tenant B fixtures (for cross-tenant isolation tests)
+  // =========================================================================
+  await db.insert(tenants).values({
+    id: TEST_TENANT_B_ID,
+    name: 'Other Gym',
+    slug: 'other-gym',
+    email: 'admin@other-gym.test',
+    status: 'active',
+  }).onConflictDoNothing();
+
+  await db.insert(branches).values({
+    id: TEST_BRANCH_B_ID,
+    name: 'Other Branch',
+    code: 'OTH001',
+    type: 'HEADQUARTER',
+    tenantId: TEST_TENANT_B_ID,
+    status: 'published',
+  }).onConflictDoNothing();
+
+  await db.insert(jobTitles).values({
+    id: TEST_JOB_TITLE_B_ID,
+    name: 'Staff',
+    code: 'STAFF_B',
+    permissionsConfig: '{}',
+    tenantId: TEST_TENANT_B_ID,
+  }).onConflictDoNothing();
+
+  await db.insert(employees).values({
+    id: TEST_EMPLOYEE_B_ID,
+    fullName: 'Other Employee',
+    employeeCode: 'OEMP01',
+    branchId: TEST_BRANCH_B_ID,
+    jobTitleId: TEST_JOB_TITLE_B_ID,
+    status: 'ACTIVE',
+    employmentType: 'FULL_TIME',
+    hireDate: todayStr,
+    tenantId: TEST_TENANT_B_ID,
+  }).onConflictDoNothing();
+
+  await db.insert(members).values({
+    id: TEST_MEMBER_B_ID,
+    fullName: 'Other Member',
+    phone: '0999888777',
+    memberCode: 'OM0001',
+    branchId: TEST_BRANCH_B_ID,
+    status: 'ACTIVE',
+    joinDate: todayStr,
+    tenantId: TEST_TENANT_B_ID,
+  }).onConflictDoNothing();
+
+  await db.insert(membershipPlans).values({
+    id: TEST_PLAN_B_ID,
+    name: 'Other Plan',
+    code: 'OPLAN1',
+    planType: 'TIME_BASED',
+    durationMonths: 1,
+    price: '1000',
+    tenantId: TEST_TENANT_B_ID,
+    branchId: TEST_BRANCH_B_ID,
+    isActive: true,
+    allowPause: true,
+    allowTransfer: false,
+  }).onConflictDoNothing();
+
+  await db.insert(contracts).values({
+    id: TEST_CONTRACT_B_ID,
+    contractNo: 'OC00001',
+    memberId: TEST_MEMBER_B_ID,
+    planId: TEST_PLAN_B_ID,
+    startDate: todayStr,
+    originalEndDate: endDateStr,
+    endDate: endDateStr,
+    status: 'ACTIVE',
+    totalAmount: '1000',
+    paidAmount: '0',
+    paymentStatus: 'UNPAID',
+    termsAccepted: true,
+    branchId: TEST_BRANCH_B_ID,
+    tenantId: TEST_TENANT_B_ID,
+  }).onConflictDoNothing();
+
   // Create test class
   await db.insert(classes).values({
     id: TEST_CLASS_ID,
@@ -255,6 +346,14 @@ export async function cleanupTestFixtures() {
   // Delete all branches for the test tenant
   await db.delete(branches).where(eq(branches.tenantId, TEST_TENANT_ID));
   await db.delete(tenants).where(eq(tenants.id, TEST_TENANT_ID));
+  // Clean up Tenant B (cross-tenant isolation fixtures)
+  await db.delete(contracts).where(eq(contracts.tenantId, TEST_TENANT_B_ID));
+  await db.delete(members).where(eq(members.tenantId, TEST_TENANT_B_ID));
+  await db.delete(membershipPlans).where(eq(membershipPlans.tenantId, TEST_TENANT_B_ID));
+  await db.delete(employees).where(eq(employees.tenantId, TEST_TENANT_B_ID));
+  await db.delete(jobTitles).where(eq(jobTitles.tenantId, TEST_TENANT_B_ID));
+  await db.delete(branches).where(eq(branches.tenantId, TEST_TENANT_B_ID));
+  await db.delete(tenants).where(eq(tenants.id, TEST_TENANT_B_ID));
 }
 
 /**
