@@ -48,6 +48,7 @@ import {
   verifyStripeWebhook,
   verifyECPayWebhook,
   verifyLinePayWebhook,
+  getErrorMessage,
 } from '../src/services/payment.js';
 
 // =============================================================================
@@ -111,6 +112,27 @@ describe('Payment Service', () => {
       expect(isGatewayEnabled('stripe')).toBe(true);
       expect(isGatewayEnabled('ecpay')).toBe(true);
       expect(isGatewayEnabled('linepay')).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getErrorMessage
+  // ---------------------------------------------------------------------------
+
+  describe('getErrorMessage', () => {
+    it('Error 物件應該回傳 error.message', () => {
+      expect(getErrorMessage(new Error('DB failed'))).toBe('DB failed');
+    });
+
+    it('非 Error 物件應該回傳 fallback', () => {
+      expect(getErrorMessage('string error')).toBe('Unknown error');
+      expect(getErrorMessage(42)).toBe('Unknown error');
+      expect(getErrorMessage(null)).toBe('Unknown error');
+      expect(getErrorMessage(undefined)).toBe('Unknown error');
+    });
+
+    it('自訂 fallback 應該生效', () => {
+      expect(getErrorMessage('oops', 'Stripe error')).toBe('Stripe error');
     });
   });
 
@@ -1061,6 +1083,134 @@ describe('Payment Service', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not configured');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // || fallback branch coverage
+  // ---------------------------------------------------------------------------
+
+  describe('fallback branch coverage', () => {
+    it('Stripe API 錯誤無 message 應該 fallback 到 Stripe error', async () => {
+      initPaymentService({ stripe: { secretKey: 'sk_test_123' } });
+
+      const mockPaymentRecord = { id: 'payment-fb-1' };
+      mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
+      mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: {} }), // no message field
+      });
+
+      const result = await createPayment({
+        gateway: 'stripe',
+        amount: 1000,
+        contractId: 'contract-1',
+        memberId: 'member-1',
+        branchId: 'branch-1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Stripe error');
+    });
+
+    it('ECPay 不帶 description 應該使用預設值', async () => {
+      initPaymentService({
+        ecpay: { merchantId: '2000132', hashKey: '5294y06JbISpM5x9', hashIv: 'v77hoKGq4kWxNNIS' },
+      });
+
+      const mockPaymentRecord = { id: 'payment-fb-2' };
+      mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
+      mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
+
+      const result = await createPayment({
+        gateway: 'ecpay',
+        amount: 500,
+        contractId: 'contract-1',
+        memberId: 'member-1',
+        branchId: 'branch-1',
+        // no description — triggers || fallback
+      });
+
+      expect(result.success).toBe(true);
+      // Description is URL-encoded in the form HTML
+      expect(result.checkoutUrl).toContain('Gym%20Nexus%20Payment');
+    });
+
+    it('LINE Pay API 錯誤無 returnMessage 應該 fallback', async () => {
+      initPaymentService({
+        linepay: { channelId: 'ch_test', channelSecret: 'secret_test' },
+      });
+
+      const mockPaymentRecord = { id: 'payment-fb-3' };
+      mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
+      mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          returnCode: '1101',
+          returnMessage: '', // empty string — triggers || fallback
+        }),
+      });
+
+      const result = await createPayment({
+        gateway: 'linepay',
+        amount: 1000,
+        contractId: 'contract-1',
+        memberId: 'member-1',
+        branchId: 'branch-1',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('LINE Pay error');
+    });
+
+    it('未知 paymentMethod 退款應該走 manual 路線', async () => {
+      initPaymentService({ stripe: { secretKey: 'sk_test' } });
+
+      mockSelectLimit.mockResolvedValueOnce([{
+        id: 'payment-1',
+        type: 'INCOME',
+        amount: '3000',
+        paymentMethod: 'BITCOIN', // unknown method → map fallback → 'manual'
+        contractId: 'contract-1',
+        memberId: 'member-1',
+        branchId: 'branch-1',
+        tenantId: 'tenant-1',
+      }]);
+
+      const result = await processRefund({ paymentId: 'payment-1' });
+
+      // Manual refund path — always succeeds
+      expect(result.success).toBe(true);
+      expect(result.refundId).toBeDefined();
+    });
+
+    it('branch 無 tenantId 應該回傳 null', async () => {
+      initPaymentService({ stripe: { secretKey: 'sk_test_123' } });
+
+      const mockPaymentRecord = { id: 'payment-fb-4' };
+      mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
+      // Branch found but tenantId is null
+      mockSelectLimit.mockResolvedValueOnce([{ tenantId: null }]);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'cs_test', url: 'https://checkout.stripe.com/x' }),
+      });
+
+      const result = await createPayment({
+        gateway: 'stripe',
+        amount: 1000,
+        contractId: 'contract-1',
+        memberId: 'member-1',
+        branchId: 'branch-1',
+      });
+
+      // Payment should still succeed, just with null tenantId
+      expect(result.success).toBe(true);
     });
   });
 });

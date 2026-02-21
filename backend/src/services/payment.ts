@@ -98,6 +98,13 @@ let config: PaymentConfig = {
 
 // Initialization state (checked by isGatewayEnabled)
 
+/**
+ * Extract error message from unknown catch value
+ */
+export function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 // -----------------------------------------------------------------------------
 // Initialization
 // -----------------------------------------------------------------------------
@@ -219,7 +226,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
 
   } catch (error) {
     console.error('[PaymentService] Create payment error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return { success: false, error: getErrorMessage(error) };
   }
 }
 
@@ -248,7 +255,7 @@ export async function getPaymentStatus(paymentId: string): Promise<PaymentResult
     };
 
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return { success: false, error: getErrorMessage(error) };
   }
 }
 
@@ -311,7 +318,7 @@ export async function processRefund(options: RefundOptions): Promise<RefundResul
     return result;
 
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return { success: false, error: getErrorMessage(error) };
   }
 }
 
@@ -362,7 +369,7 @@ async function processStripePayment(
     };
 
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Stripe error' };
+    return { success: false, error: getErrorMessage(error, 'Stripe error') };
   }
 }
 
@@ -433,7 +440,7 @@ async function processECPayPayment(
 
   /* v8 ignore start -- defensive: ECPay API integration pending */
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'ECPay error' };
+    return { success: false, error: getErrorMessage(error, 'ECPay error') };
   }
   /* v8 ignore stop */
 }
@@ -547,7 +554,7 @@ async function processLinePayPayment(
     };
 
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'LINE Pay error' };
+    return { success: false, error: getErrorMessage(error, 'LINE Pay error') };
   }
 }
 
@@ -665,7 +672,7 @@ function gatewayToPaymentMethod(gateway: PaymentGateway): PaymentMethod {
     linepay: 'LINE_PAY',
     manual: 'CASH',
   };
-  return map[gateway] || 'OTHER';
+  return map[gateway];
 }
 
 function paymentMethodToGateway(method: string | null): PaymentGateway {
