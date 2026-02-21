@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
+import { dbAvailable } from './setup.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -10,15 +11,18 @@ import {
 
 describe('Auth API', () => {
   beforeAll(async () => {
+    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
+    if (!dbAvailable) return;
     await cleanupTestFixtures();
   });
 
   describe('POST /api/auth/login', () => {
     it('should login successfully with valid credentials', async () => {
+      if (!dbAvailable) return;
       const response = await app.request('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,6 +44,7 @@ describe('Auth API', () => {
     });
 
     it('should reject invalid email', async () => {
+      if (!dbAvailable) return;
       const response = await app.request('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,6 +61,7 @@ describe('Auth API', () => {
     });
 
     it('should reject invalid password', async () => {
+      if (!dbAvailable) return;
       const response = await app.request('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,6 +93,7 @@ describe('Auth API', () => {
 
   describe('GET /api/auth/me', () => {
     it('should return current user with valid token', async () => {
+      if (!dbAvailable) return;
       // Login first
       const loginResponse = await app.request('/api/auth/login', {
         method: 'POST',
@@ -125,6 +132,7 @@ describe('Auth API', () => {
     });
 
     it('should reject request with invalid token', async () => {
+      if (!dbAvailable) return;
       const response = await app.request('/api/auth/me', {
         method: 'GET',
         headers: {
@@ -138,6 +146,7 @@ describe('Auth API', () => {
 
   describe('POST /api/auth/logout', () => {
     it('should logout successfully', async () => {
+      if (!dbAvailable) return;
       // Login first
       const loginResponse = await app.request('/api/auth/login', {
         method: 'POST',
