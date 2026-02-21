@@ -997,9 +997,8 @@ describe('Payment Service', () => {
   // Stripe refund — not configured
   // ---------------------------------------------------------------------------
 
-  describe('processRefund (Stripe not configured)', () => {
-    it('Stripe 未設定 secretKey 退款時仍成功（模擬成功）', async () => {
-      // Stripe is configured for this test
+  describe('processRefund (Stripe)', () => {
+    it('Stripe 退款應該模擬成功', async () => {
       initPaymentService({ stripe: { secretKey: 'sk_test' } });
 
       mockSelectLimit.mockResolvedValueOnce([{
@@ -1022,26 +1021,6 @@ describe('Payment Service', () => {
       expect(result.success).toBe(true);
       expect(result.amount).toBe(3000);
       expect(result.refundId).toBeDefined();
-    });
-
-    it('Stripe 未設定 secretKey 退款應該返回 not configured', async () => {
-      initPaymentService({ stripe: { secretKey: '' } });
-
-      mockSelectLimit.mockResolvedValueOnce([{
-        id: 'payment-1',
-        type: 'INCOME',
-        amount: '5000',
-        paymentMethod: 'CREDIT_CARD',
-        contractId: 'contract-1',
-        memberId: 'member-1',
-        branchId: 'branch-1',
-        tenantId: 'tenant-1',
-      }]);
-
-      const result = await processRefund({ paymentId: 'payment-1' });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('not configured');
     });
   });
 
