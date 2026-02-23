@@ -95,28 +95,28 @@ describe('Auth Workflow Integration', () => {
 
   describe('Session Persistence', () => {
     it('should verify session on checkAuth', async () => {
-      const meResponse = {
-        id: 'user-1',
-        email: 'admin@gym.com',
-        role: 'admin',
-        employeeId: 'emp-1',
-        tenantId: 'tenant-1',
-        isActive: true,
-        employee: {
-          id: 'emp-1',
-          fullName: '管理員',
-          employeeCode: 'ADMIN001',
-          phone: null,
-          branchId: 'branch-1',
-          branchName: '總店',
-          jobTitleId: 'job-1',
-          jobTitleName: '系統管理員'
-        }
-      }
-
       mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
         success: true,
-        data: meResponse
+        data: {
+          user: {
+            id: 'user-1',
+            email: 'admin@gym.com',
+            role: 'admin',
+            employeeId: 'emp-1',
+            tenantId: 'tenant-1',
+            isActive: true,
+          },
+          employee: {
+            id: 'emp-1',
+            fullName: '管理員',
+            employeeCode: 'ADMIN001',
+            phone: null,
+            branchId: 'branch-1',
+            branchName: '總店',
+            jobTitleId: 'job-1',
+            jobTitleName: '系統管理員'
+          }
+        }
       }))
 
       const { useAuth } = await import('~/composables/useAuth')

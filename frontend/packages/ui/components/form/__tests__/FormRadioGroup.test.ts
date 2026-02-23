@@ -228,39 +228,37 @@ describe('FormRadioGroup', () => {
     })
   })
 
-  describe('Radio 輸入元素', () => {
-    it('應該渲染隱藏的 radio input', () => {
+  describe('Radio 按鈕元素', () => {
+    it('應該渲染所有 radio 按鈕', () => {
       const wrapper = mountFormRadioGroup()
-      const inputs = wrapper.findAll('input[type="radio"]')
+      const buttons = wrapper.findAll('.radio-option')
 
-      expect(inputs.length).toBe(3)
-      inputs.forEach(input => {
-        expect(input.classes()).toContain('radio-input')
+      expect(buttons.length).toBe(3)
+      buttons.forEach(button => {
+        expect(button.element.tagName).toBe('BUTTON')
+        expect(button.attributes('type')).toBe('button')
       })
     })
 
-    it('應該設置正確的 checked 狀態', () => {
+    it('應該設置正確的 active 狀態', () => {
       const wrapper = mountFormRadioGroup({
         modelValue: 'F'
       })
 
-      const inputs = wrapper.findAll('input[type="radio"]')
-      expect((inputs[0]!.element as HTMLInputElement).checked).toBe(false)
-      expect((inputs[1]!.element as HTMLInputElement).checked).toBe(true)
-      expect((inputs[2]!.element as HTMLInputElement).checked).toBe(false)
+      const buttons = wrapper.findAll('.radio-option')
+      expect(buttons[0]!.classes()).not.toContain('active')
+      expect(buttons[1]!.classes()).toContain('active')
+      expect(buttons[2]!.classes()).not.toContain('active')
     })
 
-    it('應該使用唯一的 name 屬性', () => {
-      const wrapper = mountFormRadioGroup()
-      const inputs = wrapper.findAll('input[type="radio"]')
+    it('應該正確設置 disabled 屬性', () => {
+      const wrapper = mountFormRadioGroup({
+        disabled: true
+      })
 
-      const name = inputs[0]!.attributes('name')
-      expect(name).toBeTruthy()
-      expect(name).toMatch(/^radio-group-/)
-
-      // All inputs should have the same name
-      inputs.forEach(input => {
-        expect(input.attributes('name')).toBe(name)
+      const buttons = wrapper.findAll('.radio-option')
+      buttons.forEach(button => {
+        expect(button.attributes('disabled')).toBeDefined()
       })
     })
   })
