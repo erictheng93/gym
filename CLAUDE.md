@@ -16,19 +16,19 @@ Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
 ### Backend (Hono.js + Drizzle)
 ```bash
 cd backend
-pnpm install
-pnpm dev                        # Development with hot reload (http://localhost:8056)
-pnpm build                      # Build for production
-pnpm start                      # Run production build
-pnpm db:generate                # Generate migrations
-pnpm db:migrate                 # Run migrations
-pnpm db:push                    # Push schema changes to database
-pnpm db:studio                  # Open Drizzle Studio
-pnpm db:seed                    # Seed database with test data
-pnpm test                       # Run tests
-pnpm test:coverage              # Run tests with coverage
-pnpm lint                       # Lint source code
-pnpm typecheck                  # TypeScript type checking
+bun install
+bun run dev                     # Development with hot reload (http://localhost:8056)
+bun run build                   # Build for production
+bun run start                   # Run production build
+bun run db:generate             # Generate migrations
+bun run db:migrate              # Run migrations
+bun run db:push                 # Push schema changes to database
+bun run db:studio               # Open Drizzle Studio
+bun run db:seed                 # Seed database with test data
+bun run test                    # Run tests
+bun run test:coverage           # Run tests with coverage
+bun run lint                    # Lint source code
+bun run typecheck               # TypeScript type checking
 ```
 
 ### Frontend (Nuxt 3)
@@ -307,8 +307,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 **Backend Tests:**
 ```bash
 cd backend
-pnpm test                    # Run all tests
-pnpm test:coverage           # Run with coverage report
+bun run test                 # Run all tests
+bun run test:coverage        # Run with coverage report
 ```
 
 **Frontend Tests:**
