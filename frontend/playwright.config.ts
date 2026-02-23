@@ -27,7 +27,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm run dev',
+    command: 'bun run dev',
     url: TestEnv.baseUrl,
     reuseExistingServer: !TestEnv.isCI,
     timeout: 120000,

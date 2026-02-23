@@ -8,7 +8,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "generate:icons": "node scripts/generate-pwa-icons.mjs"
+    "generate:icons": "node scripts/generate-pwa-icons.mjs",
+    "typecheck": "nuxi typecheck"
   },
   "dependencies": {
     "@gym-nexus/hr-composables": "workspace:*",

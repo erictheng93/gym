@@ -9,7 +9,7 @@ Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
 - **Database:** PostgreSQL 17 + PostGIS 3.4
 - **Frontend:** Nuxt 3 (monorepo with member-app, admin-web, coach-app)
 - **Infrastructure:** Cloudflare (Pages, Workers, R2) + VPS (Coolify)
-- **Package Manager:** pnpm (必須使用 pnpm，不要使用 npm 或 yarn)
+- **Package Manager:** bun (必須使用 bun，不要使用 npm、yarn 或 pnpm)
 
 ## Development Commands
 
@@ -34,16 +34,16 @@ pnpm typecheck                  # TypeScript type checking
 ### Frontend (Nuxt 3)
 ```bash
 cd frontend
-pnpm install
-pnpm dev                        # All apps in parallel
-pnpm dev:admin                  # Admin web only (http://localhost:3001)
-pnpm dev:member                 # Member app only (http://localhost:3002)
-pnpm dev:coach                  # Coach app only (http://localhost:3003)
-pnpm build                      # Build all apps for production
-pnpm lint                       # Lint all packages
-pnpm typecheck                  # TypeScript type checking
-pnpm test                       # Run unit tests
-pnpm test:e2e                   # Run Playwright E2E tests
+bun install
+bun run dev                     # All apps in parallel
+bun run dev:admin               # Admin web only (http://localhost:3001)
+bun run dev:member              # Member app only (http://localhost:3002)
+bun run dev:coach               # Coach app only (http://localhost:3003)
+bun run build                   # Build all apps for production
+bun run lint                    # Lint all packages
+bun run typecheck               # TypeScript type checking
+bun run test                    # Run unit tests
+bun run test:e2e                # Run Playwright E2E tests
 ```
 
 ## Architecture
@@ -314,8 +314,8 @@ pnpm test:coverage           # Run with coverage report
 **Frontend Tests:**
 ```bash
 cd frontend
-pnpm test                    # Run Vitest unit tests
-pnpm test:e2e                # Run Playwright E2E tests
+bun run test                 # Run Vitest unit tests
+bun run test:e2e             # Run Playwright E2E tests
 ```
 
 **E2E Tests Location:** `frontend/e2e/`

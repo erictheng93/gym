@@ -23,43 +23,28 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: |
           cd frontend
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
 
       - name: Run linter
         run: |
           cd frontend
-          pnpm lint
+          bun run lint
 
       - name: Run type check
         run: |
           cd frontend
-          pnpm typecheck
+          bun run typecheck
 
       - name: Run tests with coverage
         run: |
           cd frontend
-          pnpm test --coverage
+          bun run test --coverage
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
@@ -86,33 +71,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: |
           cd frontend
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
 
       - name: Build all apps
         run: |
           cd frontend
-          pnpm build
+          bun run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -164,38 +134,23 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: |
           cd frontend
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: |
           cd frontend
-          pnpm exec playwright install --with-deps chromium
+          bunx playwright install --with-deps chromium
 
       - name: Run E2E tests
         run: |
           cd frontend
-          pnpm test:e2e
+          bun run test:e2e
         env:
           # E2E test environment variables
           TEST_MEMBER_EMAIL: ${{ secrets.TEST_MEMBER_EMAIL }}
