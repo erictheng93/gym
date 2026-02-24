@@ -62,9 +62,9 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
     logType: 'EXTEND',
     startDate: today,
     endDate: newEndDate.toISOString().split('T')[0],
-    days: data.days,
+    daysAffected: data.days,
     reason: `因暫停自動展延 ${data.days} 天`,
-    createdBy: data.createdBy,
+    createdByEmployee: data.createdBy,
     tenantId: data.tenantId,
   });
 

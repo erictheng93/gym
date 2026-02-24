@@ -95,11 +95,6 @@ const handleRowClick = (member: typeof members.value[0]) => {
   showModal.value = true
 }
 
-// Navigate to detail page
-const goToDetail = (id: string) => {
-  navigateTo(`/members/${id}`)
-}
-
 // Batch action handlers
 const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE') => {
   if (selectedIds.value.length === 0) return

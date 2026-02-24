@@ -462,9 +462,9 @@ app.post(
           logType: 'CLASS_USED',
           startDate: session.sessionDate,
           endDate: session.sessionDate,
-          days: 1,
+          daysAffected: 1,
           reason: `課程點名 - ${session.sessionDate}`,
-          createdBy: coach.id,
+          createdByEmployee: coach.id,
         });
       }
     }

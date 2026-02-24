@@ -258,7 +258,7 @@ describe('useFormValidation', () => {
     })
 
     it('應該更新初始快照', () => {
-      const { formData, reset, isDirty } = useFormValidation(basicSchema, initialData)
+      const { reset, isDirty } = useFormValidation(basicSchema, initialData)
 
       reset({ name: 'New Initial' })
 
@@ -276,7 +276,7 @@ describe('useFormValidation', () => {
     })
 
     it('應該在 validateOnChange 時觸發防抖驗證', async () => {
-      const { formData, setFieldValue, errors } = useFormValidation(
+      const { setFieldValue, errors } = useFormValidation(
         basicSchema,
         initialData,
         { validateOnChange: true, debounce: 300 }
@@ -424,7 +424,7 @@ describe('useFormValidation', () => {
         path: ['confirmPassword']
       })
 
-      const { formData, validate, errors } = useFormValidation(schemaWithRefine, {
+      const { validate, errors } = useFormValidation(schemaWithRefine, {
         password: 'password123',
         confirmPassword: 'different'
       })

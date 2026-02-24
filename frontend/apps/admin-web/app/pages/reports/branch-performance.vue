@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MESSAGES, PAGES } from '~/constants'
+import { MESSAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
 import type { BranchPerformanceReport } from '~/composables/useReports'
 

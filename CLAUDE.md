@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Gym Nexus is a multi-branch gym management system (CRM/ERP) built with:
 - **Backend:** Hono.js API on Node.js with Drizzle ORM
 - **Database:** PostgreSQL 17 + PostGIS 3.4
-- **Frontend:** Nuxt 3 (monorepo with member-app, admin-web, coach-app)
+- **Frontend:** Nuxt 4 (monorepo with member-app, admin-web, coach-app)
 - **Infrastructure:** Cloudflare (Pages, Workers, R2) + VPS (Coolify)
 - **Package Manager:** bun (必須使用 bun，不要使用 npm、yarn 或 pnpm)
 
@@ -31,7 +31,7 @@ bun run lint                    # Lint source code
 bun run typecheck               # TypeScript type checking
 ```
 
-### Frontend (Nuxt 3)
+### Frontend (Nuxt 4)
 ```bash
 cd frontend
 bun install
@@ -53,8 +53,8 @@ bun run test:e2e                # Run Playwright E2E tests
 gym-nexus/
 ├── backend/                    # Hono.js API
 │   ├── src/
-│   │   ├── routes/            # API route handlers (46 routes)
-│   │   ├── services/          # Business logic services (9 services)
+│   │   ├── routes/            # API route handlers (49 routes)
+│   │   ├── services/          # Business logic services (10 services)
 │   │   ├── middleware/        # Auth, CSRF, rate limiting (7 middleware)
 │   │   ├── db/                # Drizzle schema and migrations
 │   │   ├── hooks/             # Business event hooks (7 hooks)
@@ -86,9 +86,9 @@ gym-nexus/
 - Drizzle ORM 0.38.x (type-safe database access)
 - Lucia Auth 3.x (session-based staff auth)
 - JWT (member/coach auth with X-Member-Token/X-Coach-Token)
-- Node.js 22
+- Node.js >=20
 
-**Route Files (46 routes):**
+**Route Files (49 routes):**
 | Category | Files | Description |
 |----------|-------|-------------|
 | Auth | auth, member-auth, member-otp, member-oauth, coach-auth | Multi-type authentication |
@@ -99,9 +99,10 @@ gym-nexus/
 | Member App | member-profile, member-push, member-notifications, member-reviews, member-check-in, member-workouts, member-goals, member-measurements, member-issues | Full member functionality |
 | Coach App | coach-profile, coach-students, coach-lesson-plans, coach-teaching-materials | Coach functionality |
 | System | dashboard, reports, notifications, files, pdf, health | System utilities |
-| HR | hr-payroll, hr-performance | Human resources |
+| HR | hr-payroll, hr-performance, shift-schedules | Human resources |
+| Tenant | admin-tenants, branding | Multi-tenant management |
 
-**Services (9 services):**
+**Services (10 services):**
 - `email.ts` - SMTP email with templates
 - `push.ts` - Web push notifications (VAPID)
 - `line.ts` - LINE Messaging API (Flex messages, multicast)
@@ -109,6 +110,7 @@ gym-nexus/
 - `payment.ts` - Multi-gateway (Stripe, ECPay, LINE Pay, Manual)
 - `pdf.ts` - PDF generation (Puppeteer)
 - `files.ts` - S3/R2 file storage
+- `export.ts` - CSV/Excel report export (payroll, revenue, members, contracts)
 - `member-jwt.ts` - Member JWT token generation/validation
 - `coach-jwt.ts` - Coach JWT token generation/validation
 
@@ -130,7 +132,7 @@ gym-nexus/
 - `notifications.ts` - Notification trigger hooks
 - `utils.ts` - Hook utility functions
 
-### Database Schema (Drizzle - 51 tables)
+### Database Schema (Drizzle - 53 tables)
 
 **Authentication & Multi-tenant:**
 - `users` - Staff user accounts
@@ -181,6 +183,8 @@ gym-nexus/
 - `promotionRecords` - Promotions/raises
 - `performanceReviews` - Performance tracking
 - `kpiTemplates` - KPI templates
+- `shiftSchedules` - Shift schedule definitions
+- `employeeShifts` - Employee shift assignments
 
 **Marketing Tables:**
 - `leads` - Lead management
@@ -247,6 +251,7 @@ gym-nexus/
 /api/bookings/*             - Booking management
 /api/hr/payroll/*           - HR payroll
 /api/hr/performance/*       - HR performance
+/api/shift-schedules/*      - Staff shift scheduling
 /api/leads/*                - Lead management
 /api/campaigns/*            - Campaign management
 /api/coupons/*              - Coupon management
@@ -255,6 +260,8 @@ gym-nexus/
 /api/notifications/*        - System notifications
 /api/files/*                - File management
 /api/tenant/*               - Tenant configuration
+/api/admin/tenants/*        - Multi-tenant administration
+/api/branding/*             - Tenant branding configuration
 /api/health                 - Health check
 ```
 

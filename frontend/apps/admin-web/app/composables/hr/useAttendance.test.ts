@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mockFetchInstance } from '@test/setup'
-import { useAttendance, type AttendanceRecord } from './useAttendance'
+import { useAttendance } from './useAttendance'
 import type { Attendance, Employee } from '~/types/schema'
 
 describe('useAttendance', () => {
@@ -283,7 +283,7 @@ describe('useAttendance', () => {
         total: 1
       })
 
-      const { performCheckIn, todayAttendances, todayCount } = useAttendance()
+      const { performCheckIn } = useAttendance()
 
       const result = await performCheckIn({
         employeeId: 'emp-1',
@@ -320,7 +320,7 @@ describe('useAttendance', () => {
 
       const { performCheckIn } = useAttendance()
 
-      const result = await performCheckIn({
+      const _result = await performCheckIn({
         employeeId: 'emp-1'
       })
 
@@ -380,7 +380,7 @@ describe('useAttendance', () => {
         total: 1
       })
 
-      const { performCheckIn, todayAttendances, todayCount } = useAttendance()
+      const { performCheckIn, todayCount } = useAttendance()
 
       const initialCount = todayCount.value
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, shiftSchedules, employeeShifts, employees, branches } from '../db/index.js';
-import { eq, and, desc, asc, sql, gte, lte, isNull, or } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, lte, or } from 'drizzle-orm';
 import { authMiddleware, requireAuth } from '../middleware/index.js';
 import type { AuthVariables } from '../middleware/index.js';
 
@@ -30,7 +30,7 @@ app.get('/', async (c) => {
 
     // Filter by status (exclude archived by default)
     if (status) {
-      conditions.push(eq(shiftSchedules.status, status));
+      conditions.push(eq(shiftSchedules.status, status as 'draft' | 'published' | 'archived'));
     } else {
       conditions.push(
         or(

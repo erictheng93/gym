@@ -232,7 +232,7 @@ describe('useCoachSession', () => {
         data: mockCoach,
       })
 
-      const { fetchCoach, coach } = useCoachSession()
+      const { fetchCoach } = useCoachSession()
       const result = await fetchCoach()
 
       expect(result).toBe(true)

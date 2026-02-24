@@ -78,6 +78,7 @@ export default tseslint.config(
         CanvasRenderingContext2D: 'readonly',
         Image: 'readonly',
         requestAnimationFrame: 'readonly',
+        requestIdleCallback: 'readonly',
         confirm: 'readonly',
         alert: 'readonly',
         Blob: 'readonly',
@@ -140,6 +141,7 @@ export default tseslint.config(
         useTenant: 'readonly',
         useUsers: 'readonly',
         useWorkouts: 'readonly',
+        useBranding: 'readonly',
         useHR: 'readonly',
         // Form validation helpers
         required: 'readonly',

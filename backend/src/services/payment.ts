@@ -410,7 +410,7 @@ async function processECPayPayment(
     }).replace(/\//g, '/');
 
     const params: Record<string, string> = {
-      MerchantID: config.ecpay.merchantId,
+      MerchantID: config.ecpay.merchantId!,
       MerchantTradeNo: merchantTradeNo,
       MerchantTradeDate: merchantTradeDate,
       PaymentType: 'aio',
@@ -529,7 +529,7 @@ async function processLinePayPayment(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-LINE-ChannelId': config.linepay.channelId,
+        'X-LINE-ChannelId': config.linepay.channelId!,
         'X-LINE-Authorization-Nonce': nonce,
         'X-LINE-Authorization': signature,
       },

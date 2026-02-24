@@ -217,7 +217,7 @@ describe('useApi', () => {
       const promise1 = request(mockFn, { cacheKey: 'no-dedupe', dedupe: false })
       const promise2 = request(mockFn, { cacheKey: 'no-dedupe', dedupe: false })
 
-      const [result1, result2] = await Promise.all([promise1, promise2])
+      const [_result1, _result2] = await Promise.all([promise1, promise2])
 
       expect(mockFn).toHaveBeenCalledTimes(2)
     })
