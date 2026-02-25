@@ -1,0 +1,36 @@
+/**
+ * Offline Sync Plugin
+ * Initializes online/offline detection and background sync capabilities
+ */
+
+export default defineNuxtPlugin(() => {
+  const { setupListeners, syncPendingRequests, hasPendingRequests } = useOfflineSync()
+
+  // Set up online/offline listeners
+  setupListeners()
+
+  // Register service worker for background sync if available
+  const registration = (window as any).registration
+  if ('serviceWorker' in navigator && registration && 'sync' in registration) {
+    // Use Background Sync API when available
+    navigator.serviceWorker.ready.then(registration => {
+      // Register periodic background sync
+      if ('periodicSync' in registration) {
+        (registration as any).periodicSync.register('sync-pending-requests', {
+          minInterval: 5 * 60 * 1000, // 5 minutes
+        }).catch(() => {
+          // Periodic sync not available, fall back to manual
+        })
+      }
+    })
+  }
+
+  // Sync on visibility change (when user returns to the app)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && hasPendingRequests.value) {
+        syncPendingRequests()
+      }
+    })
+  }
+})

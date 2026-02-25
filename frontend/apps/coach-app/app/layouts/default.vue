@@ -94,6 +94,9 @@
         <slot />
       </main>
 
+      <!-- Offline Sync Status -->
+      <OfflineSyncIndicator v-if="isAuthenticated" />
+
       <!-- iOS-Style Bottom Tab Bar -->
       <nav v-if="isAuthenticated" class="tab-bar">
         <NuxtLink
@@ -131,8 +134,8 @@ const isActiveRoute = (path: string) => {
 const getInitials = (name: string) => {
   if (!name) return '?'
   const parts = name.trim().split(' ')
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+  if (parts.length === 1) return (parts[0] ?? '').charAt(0).toUpperCase()
+  return ((parts[0] ?? '').charAt(0) + (parts[parts.length - 1] ?? '').charAt(0)).toUpperCase()
 }
 
 const handleLogout = () => {

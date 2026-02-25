@@ -6,11 +6,13 @@ definePageMeta({
 })
 
 const { member } = useMemberAuth()
+const { isOnline, getCache, setCache } = useOfflineSync()
 const toast = useToast()
 
 const qrCodeDataUrl = ref('')
 const qrExpiry = ref<Date | null>(null)
 const timeRemaining = ref(0)
+const isQrOffline = ref(false)
 
 // Pull-to-refresh
 const isPulling = ref(false)
@@ -19,9 +21,51 @@ const isRefreshing = ref(false)
 const startTouchY = ref(0)
 const PULL_THRESHOLD = 80
 
+// QR data cache settings
+const QR_DATA_CACHE_KEY = 'member:qr-data'
+const QR_DATA_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+interface QrCacheData {
+  memberCode: string
+  contractId: string | null
+  memberStatus: string
+}
+
+// Cache QR-relevant data for offline use
+const cacheQrData = async () => {
+  if (!member.value) return
+  const data: QrCacheData = {
+    memberCode: member.value.member_code,
+    contractId: member.value.activeContract?.id || null,
+    memberStatus: member.value.member_status,
+  }
+  await setCache(QR_DATA_CACHE_KEY, data, QR_DATA_TTL)
+}
+
 // 生成入場 QR Code
 const generateQRCode = async () => {
-  if (!member.value) return
+  isQrOffline.value = false
+
+  let memberCode: string | undefined
+  let contractId: string | null | undefined
+
+  if (member.value) {
+    memberCode = member.value.member_code
+    contractId = member.value.activeContract?.id || null
+    // Proactively cache for offline use
+    await cacheQrData()
+  } else {
+    // Try offline cache
+    const cached = await getCache<QrCacheData>(QR_DATA_CACHE_KEY)
+    if (cached) {
+      memberCode = cached.memberCode
+      contractId = cached.contractId
+      isQrOffline.value = true
+    } else {
+      toast.error('無法產生入場 QR Code，請連線後重試')
+      return
+    }
+  }
 
   // QR Code 有效期 3 分鐘 (180 秒)
   const expiry = new Date(Date.now() + 180 * 1000)
@@ -29,9 +73,9 @@ const generateQRCode = async () => {
 
   // QR Code 內容: member_code + timestamp + signature (簡化版)
   const payload = JSON.stringify({
-    m: member.value.member_code,
+    m: memberCode,
     t: expiry.getTime(),
-    c: member.value.activeContract?.id || null
+    c: contractId
   })
 
   try {
@@ -101,7 +145,12 @@ const handleTouchEnd = async () => {
 }
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
+  // Proactively cache QR data when member is loaded
+  if (member.value) {
+    await cacheQrData()
+  }
+
   generateQRCode()
 
   // 每秒更新倒數
@@ -197,6 +246,10 @@ const contractStatusText = computed(() => {
         </div>
 
         <p class="member-code" aria-label="會員編號">{{ member?.member_code }}</p>
+
+        <p v-if="isQrOffline" class="offline-hint" role="status" aria-live="polite">
+          離線模式 - 使用快取資料
+        </p>
 
         <!-- Progress dots - Apple Watch style -->
         <div
@@ -472,6 +525,17 @@ const contractStatusText = computed(() => {
   color: var(--color-text-secondary);
   letter-spacing: 2px;
   margin-bottom: 16px;
+}
+
+.offline-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: #ff9500;
+  background: rgba(255, 149, 0, 0.1);
+  padding: 4px 12px;
+  border-radius: 12px;
+  display: inline-block;
+  margin-bottom: 12px;
 }
 
 /* Progress dots - Apple Watch style */

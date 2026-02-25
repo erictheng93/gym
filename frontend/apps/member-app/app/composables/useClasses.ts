@@ -76,25 +76,47 @@ interface SessionsResponse {
   total?: number
 }
 
+// Cache settings
+const CACHE_KEY_CLASSES = 'member:classes'
+const CACHE_KEY_SCHEDULE = 'member:class-schedule'
+const CACHE_KEY_SESSIONS = 'member:class-sessions'
+const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
 export const useClasses = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
   const { getAuthHeader } = useMemberAuth()
+  const { isOnline, getCache, setCache } = useOfflineSync()
 
   const classes = useState<GymClass[]>('gym_classes', () => [])
   const schedules = useState<ClassSchedule[]>('class_schedules', () => [])
   const upcomingSessions = useState<ClassSession[]>('upcoming_sessions', () => [])
   const isLoading = useState('classes_loading', () => false)
+  const isOfflineData = useState('classes_is_offline', () => false)
 
   /**
-   * Fetch all active classes (with request deduplication)
+   * Fetch all active classes (with request deduplication and offline cache)
    */
   const fetchClasses = async (branchId?: string) => {
-    const cacheKey = `classes-${branchId || 'all'}`
+    const dedupKey = `classes-${branchId || 'all'}`
+    const cacheKey = `${CACHE_KEY_CLASSES}:${branchId || 'all'}`
 
-    return deduplicateRequest(cacheKey, async () => {
+    return deduplicateRequest(dedupKey, async () => {
       isLoading.value = true
+      isOfflineData.value = false
+
       try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<GymClass[]>(cacheKey)
+          if (cached) {
+            classes.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
         const params = new URLSearchParams()
         if (branchId) params.append('branch_id', branchId)
 
@@ -104,9 +126,17 @@ export const useClasses = () => {
 
         if (response.success) {
           classes.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
         }
         return response.data
       } catch {
+        // Network error fallback to cache
+        const cached = await getCache<GymClass[]>(cacheKey)
+        if (cached) {
+          classes.value = cached
+          isOfflineData.value = true
+          return cached
+        }
         return []
       } finally {
         isLoading.value = false
@@ -115,14 +145,28 @@ export const useClasses = () => {
   }
 
   /**
-   * Fetch weekly schedule (with request deduplication)
+   * Fetch weekly schedule (with request deduplication and offline cache)
    */
   const fetchWeeklySchedule = async (branchId?: string) => {
-    const cacheKey = `schedule-${branchId || 'all'}`
+    const dedupKey = `schedule-${branchId || 'all'}`
+    const cacheKey = `${CACHE_KEY_SCHEDULE}:${branchId || 'all'}`
 
-    return deduplicateRequest(cacheKey, async () => {
+    return deduplicateRequest(dedupKey, async () => {
       isLoading.value = true
+      isOfflineData.value = false
+
       try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<ClassSchedule[]>(cacheKey)
+          if (cached) {
+            schedules.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
         const params = new URLSearchParams()
         if (branchId) params.append('branch_id', branchId)
 
@@ -132,9 +176,17 @@ export const useClasses = () => {
 
         if (response.success) {
           schedules.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
         }
         return response.data
       } catch {
+        // Network error fallback to cache
+        const cached = await getCache<ClassSchedule[]>(cacheKey)
+        if (cached) {
+          schedules.value = cached
+          isOfflineData.value = true
+          return cached
+        }
         return []
       } finally {
         isLoading.value = false
@@ -143,7 +195,7 @@ export const useClasses = () => {
   }
 
   /**
-   * Fetch upcoming sessions for a date range
+   * Fetch upcoming sessions for a date range (with offline cache)
    */
   const fetchUpcomingSessions = async (options?: {
     branchId?: string
@@ -152,7 +204,22 @@ export const useClasses = () => {
     limit?: number
   }) => {
     isLoading.value = true
+    isOfflineData.value = false
+
+    const cacheKey = `${CACHE_KEY_SESSIONS}:${JSON.stringify(options || {})}`
+
     try {
+      // If offline, try cached data
+      if (!isOnline.value) {
+        const cached = await getCache<ClassSession[]>(cacheKey)
+        if (cached) {
+          upcomingSessions.value = cached
+          isOfflineData.value = true
+          return cached
+        }
+        return []
+      }
+
       const params = new URLSearchParams()
       if (options?.branchId) params.append('branch_id', options.branchId)
       if (options?.startDate) params.append('start_date', options.startDate)
@@ -165,9 +232,17 @@ export const useClasses = () => {
 
       if (response.success) {
         upcomingSessions.value = response.data
+        await setCache(cacheKey, response.data, CACHE_TTL)
       }
       return response.data
     } catch {
+      // Network error fallback to cache
+      const cached = await getCache<ClassSession[]>(cacheKey)
+      if (cached) {
+        upcomingSessions.value = cached
+        isOfflineData.value = true
+        return cached
+      }
       return []
     } finally {
       isLoading.value = false
@@ -279,6 +354,8 @@ export const useClasses = () => {
     schedules,
     upcomingSessions,
     isLoading,
+    isOfflineData,
+    isOnline,
     fetchClasses,
     fetchWeeklySchedule,
     fetchUpcomingSessions,

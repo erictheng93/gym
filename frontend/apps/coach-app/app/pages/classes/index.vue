@@ -150,7 +150,7 @@ const weekDays = computed(() => {
   for (let i = -3; i <= 3; i++) {
     const date = new Date(today)
     date.setDate(today.getDate() + i)
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = date.toISOString().split('T')[0] ?? ''
 
     days.push({
       date: dateStr,

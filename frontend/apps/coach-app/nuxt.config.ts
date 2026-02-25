@@ -133,18 +133,19 @@ export default defineNuxtConfig({
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
       runtimeCaching: [
         {
-          // API 請求 - Network First
-          urlPattern: /^https:\/\/.*\/items\/.*/i,
+          // Coach API 請求 - Network First with timeout for offline support
+          urlPattern: /\/api\/coach\/.*/i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'api-cache',
+            cacheName: 'coach-api-cache',
             expiration: {
-              maxEntries: 50,
+              maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24
             },
             cacheableResponse: {
               statuses: [0, 200]
-            }
+            },
+            networkTimeoutSeconds: 5,
           }
         },
         {
@@ -154,8 +155,20 @@ export default defineNuxtConfig({
           options: {
             cacheName: 'image-cache',
             expiration: {
-              maxEntries: 30,
+              maxEntries: 50,
               maxAgeSeconds: 60 * 60 * 24 * 7
+            }
+          }
+        },
+        {
+          // 字型 - Cache First (long-lived)
+          urlPattern: /\.(?:woff2?|ttf|otf|eot)$/i,
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'font-cache',
+            expiration: {
+              maxEntries: 20,
+              maxAgeSeconds: 60 * 60 * 24 * 365
             }
           }
         }

@@ -72,6 +72,30 @@ vi.stubGlobal('useCoachTokens', () => ({
   refreshAccessToken: mockRefreshAccessToken,
 }))
 
+// Mock useOfflineSync
+const mockGetCache = vi.fn().mockResolvedValue(null)
+const mockSetCache = vi.fn().mockResolvedValue(undefined)
+vi.stubGlobal('useOfflineSync', () => ({
+  getCache: mockGetCache,
+  setCache: mockSetCache,
+  isOnline: { value: true },
+  isSyncing: { value: false },
+  pendingCount: { value: 0 },
+  lastSyncAt: { value: null },
+  hasPendingRequests: { value: false },
+  syncStatusLabel: { value: '已同步' },
+  setupListeners: vi.fn(),
+  queueRequest: vi.fn(),
+  removeFromQueue: vi.fn(),
+  getPendingRequests: vi.fn().mockResolvedValue([]),
+  syncPendingRequests: vi.fn().mockResolvedValue({ success: true, synced: 0, failed: 0, errors: [] }),
+  clearQueue: vi.fn(),
+  deleteCache: vi.fn(),
+  clearCache: vi.fn(),
+  queueMarkAttendance: vi.fn(),
+  queueCancelClass: vi.fn(),
+}))
+
 // Import after mocks
 import { useCoachSession } from './useCoachSession'
 
@@ -82,6 +106,8 @@ describe('useCoachSession', () => {
     cookieStore.clear()
     mockFetch.mockReset()
     mockRefreshAccessToken.mockReset()
+    mockGetCache.mockReset().mockResolvedValue(null)
+    mockSetCache.mockReset().mockResolvedValue(undefined)
   })
 
   describe('initial state', () => {

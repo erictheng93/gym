@@ -113,7 +113,7 @@
               </span>
             </div>
             <p class="student-meta">
-              {{ student.member_code }} · {{ formatPhone(student.phone) }}
+              {{ student.member_code }} · {{ formatPhone(student.phone ?? '') }}
             </p>
 
             <!-- Stats & Tags -->

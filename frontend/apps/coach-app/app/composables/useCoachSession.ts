@@ -15,6 +15,10 @@ export const useCoachSession = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
   const { refreshAccessToken, accessToken } = useCoachTokens()
+  const { getCache, setCache } = useOfflineSync()
+
+  const PROFILE_CACHE_KEY = 'coach:profile'
+  const PROFILE_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 
   const coach = useState<Coach | null>('current_coach', () => null)
   const isAuthenticated = computed(() => !!coach.value)
@@ -63,6 +67,8 @@ export const useCoachSession = () => {
 
       if (response.success && response.data) {
         coach.value = response.data
+        // Cache profile for offline fallback
+        await setCache(PROFILE_CACHE_KEY, response.data, PROFILE_CACHE_TTL)
         return true
       } else {
         coach.value = null
@@ -75,6 +81,13 @@ export const useCoachSession = () => {
         if (refreshed) {
           return await fetchCoach(undefined, retryCount + 1)
         }
+      }
+
+      // Fallback to cached profile (prevents offline redirect to login)
+      const cached = await getCache<Coach>(PROFILE_CACHE_KEY)
+      if (cached) {
+        coach.value = cached
+        return true
       }
 
       coach.value = null

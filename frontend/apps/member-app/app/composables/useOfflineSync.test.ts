@@ -241,4 +241,37 @@ describe('useOfflineSync', () => {
       expect(() => setupListeners()).not.toThrow()
     })
   })
+
+  describe('workout queue helpers', () => {
+    it('should reject queueCreateWorkout when IndexedDB is not available', async () => {
+      const { queueCreateWorkout } = useOfflineSync()
+
+      await expect(queueCreateWorkout(
+        { date: '2024-01-15', duration: 60 },
+        'http://localhost:8056',
+        { 'X-Member-Token': 'test' }
+      )).rejects.toThrow('IndexedDB not available')
+    })
+
+    it('should reject queueUpdateWorkout when IndexedDB is not available', async () => {
+      const { queueUpdateWorkout } = useOfflineSync()
+
+      await expect(queueUpdateWorkout(
+        'workout-123',
+        { duration: 90 },
+        'http://localhost:8056',
+        { 'X-Member-Token': 'test' }
+      )).rejects.toThrow('IndexedDB not available')
+    })
+
+    it('should reject queueDeleteWorkout when IndexedDB is not available', async () => {
+      const { queueDeleteWorkout } = useOfflineSync()
+
+      await expect(queueDeleteWorkout(
+        'workout-123',
+        'http://localhost:8056',
+        { 'X-Member-Token': 'test' }
+      )).rejects.toThrow('IndexedDB not available')
+    })
+  })
 })

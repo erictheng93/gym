@@ -90,21 +90,29 @@ vi.stubGlobal('$fetch', mockFetch)
 // Mock useMemberAuth
 const mockMemberRef = { value: mockMember }
 const mockGetAuthHeader = vi.fn(() => ({ 'X-Member-Token': 'test-token' }))
+const mockAccessToken = { value: 'test-token' }
 
 vi.stubGlobal('useMemberAuth', () => ({
   member: mockMemberRef,
   getAuthHeader: mockGetAuthHeader,
+  accessToken: mockAccessToken,
 }))
 
 // Mock useOfflineSync
 const mockIsOnline = { value: true }
 const mockGetCache = vi.fn().mockResolvedValue(null)
 const mockSetCache = vi.fn().mockResolvedValue(undefined)
+const mockQueueCreateWorkout = vi.fn().mockResolvedValue('queue-id-1')
+const mockQueueUpdateWorkout = vi.fn().mockResolvedValue('queue-id-2')
+const mockQueueDeleteWorkout = vi.fn().mockResolvedValue('queue-id-3')
 
 vi.stubGlobal('useOfflineSync', () => ({
   isOnline: mockIsOnline,
   getCache: mockGetCache,
   setCache: mockSetCache,
+  queueCreateWorkout: mockQueueCreateWorkout,
+  queueUpdateWorkout: mockQueueUpdateWorkout,
+  queueDeleteWorkout: mockQueueDeleteWorkout,
 }))
 
 // Import after mocks
@@ -118,6 +126,9 @@ describe('useWorkouts', () => {
     mockMemberRef.value = mockMember
     mockIsOnline.value = true
     mockGetCache.mockResolvedValue(null)
+    mockQueueCreateWorkout.mockResolvedValue('queue-id-1')
+    mockQueueUpdateWorkout.mockResolvedValue('queue-id-2')
+    mockQueueDeleteWorkout.mockResolvedValue('queue-id-3')
   })
 
   describe('initialization', () => {
@@ -421,12 +432,44 @@ describe('useWorkouts', () => {
 
     it('should handle create error', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Server error'))
+      mockQueueCreateWorkout.mockRejectedValueOnce(new Error('IndexedDB not available'))
 
       const { createWorkout } = useWorkouts()
       const result = await createWorkout({ duration: 60 })
 
       expect(result.success).toBe(false)
       expect(result.message).toBeTruthy()
+    })
+
+    it('should queue workout when offline', async () => {
+      mockIsOnline.value = false
+
+      const { createWorkout, workouts, totalWorkouts } = useWorkouts()
+      const result = await createWorkout({ duration: 60, calories: 300 })
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('已排入待同步')
+      expect(result.data?.id).toMatch(/^pending-/)
+      expect(workouts.value).toHaveLength(1)
+      expect(totalWorkouts.value).toBe(1)
+      expect(mockQueueCreateWorkout).toHaveBeenCalledWith(
+        { duration: 60, calories: 300 },
+        'http://localhost:8056',
+        { 'X-Member-Token': 'test-token' }
+      )
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should fallback to queue on network error', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      const { createWorkout, workouts } = useWorkouts()
+      const result = await createWorkout({ duration: 60 })
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('網路異常，已排入待同步')
+      expect(workouts.value).toHaveLength(1)
+      expect(mockQueueCreateWorkout).toHaveBeenCalled()
     })
   })
 
@@ -467,12 +510,45 @@ describe('useWorkouts', () => {
 
     it('should handle update error', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Update failed'))
+      mockQueueUpdateWorkout.mockRejectedValueOnce(new Error('IndexedDB not available'))
 
       const { updateWorkout } = useWorkouts()
       const result = await updateWorkout('workout-1', { duration: 90 })
 
       expect(result.success).toBe(false)
       expect(result.message).toBeTruthy()
+    })
+
+    it('should queue update when offline', async () => {
+      mockIsOnline.value = false
+      stateStore.set('member_workouts', { value: [{ ...mockWorkout }] })
+
+      const { updateWorkout, workouts } = useWorkouts()
+      const result = await updateWorkout('workout-1', { duration: 90 })
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('已排入待同步')
+      expect(workouts.value[0]!.duration).toBe(90)
+      expect(mockQueueUpdateWorkout).toHaveBeenCalledWith(
+        'workout-1',
+        { duration: 90 },
+        'http://localhost:8056',
+        { 'X-Member-Token': 'test-token' }
+      )
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should fallback to queue on network error during update', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      stateStore.set('member_workouts', { value: [{ ...mockWorkout }] })
+
+      const { updateWorkout, workouts } = useWorkouts()
+      const result = await updateWorkout('workout-1', { duration: 90 })
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('網路異常，已排入待同步')
+      expect(workouts.value[0]!.duration).toBe(90)
+      expect(mockQueueUpdateWorkout).toHaveBeenCalled()
     })
   })
 
@@ -516,12 +592,49 @@ describe('useWorkouts', () => {
 
     it('should handle delete error', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Delete failed'))
+      mockQueueDeleteWorkout.mockRejectedValueOnce(new Error('IndexedDB not available'))
 
       const { deleteWorkout } = useWorkouts()
       const result = await deleteWorkout('workout-1')
 
       expect(result.success).toBe(false)
       expect(result.message).toBeTruthy()
+    })
+
+    it('should queue delete when offline', async () => {
+      mockIsOnline.value = false
+      stateStore.set('member_workouts', { value: [{ ...mockWorkout }, { ...mockWorkout2 }] })
+      stateStore.set('member_workouts_total', { value: 2 })
+
+      const { deleteWorkout, workouts, totalWorkouts } = useWorkouts()
+      const result = await deleteWorkout('workout-1')
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('已排入待同步')
+      expect(workouts.value).toHaveLength(1)
+      expect(workouts.value[0]!.id).toBe('workout-2')
+      expect(totalWorkouts.value).toBe(1)
+      expect(mockQueueDeleteWorkout).toHaveBeenCalledWith(
+        'workout-1',
+        'http://localhost:8056',
+        { 'X-Member-Token': 'test-token' }
+      )
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should fallback to queue on network error during delete', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      stateStore.set('member_workouts', { value: [{ ...mockWorkout }] })
+      stateStore.set('member_workouts_total', { value: 1 })
+
+      const { deleteWorkout, workouts, totalWorkouts } = useWorkouts()
+      const result = await deleteWorkout('workout-1')
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('網路異常，已排入待同步')
+      expect(workouts.value).toHaveLength(0)
+      expect(totalWorkouts.value).toBe(0)
+      expect(mockQueueDeleteWorkout).toHaveBeenCalled()
     })
   })
 

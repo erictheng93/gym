@@ -61,8 +61,8 @@ interface StatsResponse {
 export const useWorkouts = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
-  const { getAuthHeader, member } = useMemberAuth()
-  const { isOnline, getCache, setCache } = useOfflineSync()
+  const { getAuthHeader, member, accessToken } = useMemberAuth()
+  const { isOnline, getCache, setCache, queueCreateWorkout: queueCreate, queueUpdateWorkout: queueUpdate, queueDeleteWorkout: queueDelete } = useOfflineSync()
 
   const workouts = useState<Workout[]>('member_workouts', () => [])
   const totalWorkouts = useState<number>('member_workouts_total', () => 0)
@@ -170,7 +170,27 @@ export const useWorkouts = () => {
   }
 
   /**
-   * Record a new workout
+   * Create an optimistic workout entry for offline use
+   */
+  const createOptimisticWorkout = (queueId: string, data: {
+    date?: string
+    duration?: number | null
+    calories?: number | null
+    exercises?: Exercise[]
+    notes?: string
+  }): Workout => ({
+    id: `pending-${queueId}`,
+    member_id: member.value!.id,
+    date: data.date || new Date().toISOString().split('T')[0],
+    duration: data.duration ?? null,
+    calories: data.calories ?? null,
+    exercises: data.exercises ?? null,
+    notes: data.notes ?? null,
+    created_at: new Date().toISOString(),
+  })
+
+  /**
+   * Record a new workout (with offline queue support)
    */
   const createWorkout = async (data: {
     date?: string
@@ -181,6 +201,23 @@ export const useWorkouts = () => {
   }): Promise<WorkoutResult> => {
     if (!member.value) {
       return { success: false, message: '請先登入' }
+    }
+
+    // If offline, queue the request
+    if (!isOnline.value) {
+      try {
+        const queueId = await queueCreate(
+          data as Record<string, unknown>,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        const optimistic = createOptimisticWorkout(queueId, data)
+        workouts.value.unshift(optimistic)
+        totalWorkouts.value++
+        return { success: true, message: '已排入待同步', data: optimistic }
+      } catch (error: unknown) {
+        return { success: false, message: extractErrorMessage(error, '無法排入待同步清單') }
+      }
     }
 
     try {
@@ -197,15 +234,35 @@ export const useWorkouts = () => {
 
       return response
     } catch (error: unknown) {
-      return {
-        success: false,
-        message: extractErrorMessage(error, '記錄運動失敗'),
+      // Network error fallback: queue the request
+      try {
+        const queueId = await queueCreate(
+          data as Record<string, unknown>,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        const optimistic = createOptimisticWorkout(queueId, data)
+        workouts.value.unshift(optimistic)
+        totalWorkouts.value++
+        return { success: true, message: '網路異常，已排入待同步', data: optimistic }
+      } catch {
+        return { success: false, message: extractErrorMessage(error, '記錄運動失敗') }
       }
     }
   }
 
   /**
-   * Update a workout
+   * Optimistically merge update data into local workout
+   */
+  const optimisticMergeWorkout = (id: string, data: Record<string, unknown>) => {
+    const index = workouts.value.findIndex(w => w.id === id)
+    if (index !== -1) {
+      workouts.value[index] = { ...workouts.value[index]!, ...data } as Workout
+    }
+  }
+
+  /**
+   * Update a workout (with offline queue support)
    */
   const updateWorkout = async (
     id: string,
@@ -219,6 +276,22 @@ export const useWorkouts = () => {
   ): Promise<WorkoutResult> => {
     if (!member.value) {
       return { success: false, message: '請先登入' }
+    }
+
+    // If offline, queue the request
+    if (!isOnline.value) {
+      try {
+        await queueUpdate(
+          id,
+          data as Record<string, unknown>,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        optimisticMergeWorkout(id, data as Record<string, unknown>)
+        return { success: true, message: '已排入待同步' }
+      } catch (error: unknown) {
+        return { success: false, message: extractErrorMessage(error, '無法排入待同步清單') }
+      }
     }
 
     try {
@@ -237,19 +310,51 @@ export const useWorkouts = () => {
 
       return response
     } catch (error: unknown) {
-      return {
-        success: false,
-        message: extractErrorMessage(error, '更新運動記錄失敗'),
+      // Network error fallback: queue the request
+      try {
+        await queueUpdate(
+          id,
+          data as Record<string, unknown>,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        optimisticMergeWorkout(id, data as Record<string, unknown>)
+        return { success: true, message: '網路異常，已排入待同步' }
+      } catch {
+        return { success: false, message: extractErrorMessage(error, '更新運動記錄失敗') }
       }
     }
   }
 
   /**
-   * Delete a workout
+   * Optimistically remove a workout from local state
+   */
+  const optimisticRemoveWorkout = (id: string) => {
+    workouts.value = workouts.value.filter(w => w.id !== id)
+    totalWorkouts.value = Math.max(0, totalWorkouts.value - 1)
+  }
+
+  /**
+   * Delete a workout (with offline queue support)
    */
   const deleteWorkout = async (id: string): Promise<WorkoutResult> => {
     if (!member.value) {
       return { success: false, message: '請先登入' }
+    }
+
+    // If offline, queue the request
+    if (!isOnline.value) {
+      try {
+        await queueDelete(
+          id,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        optimisticRemoveWorkout(id)
+        return { success: true, message: '已排入待同步' }
+      } catch (error: unknown) {
+        return { success: false, message: extractErrorMessage(error, '無法排入待同步清單') }
+      }
     }
 
     try {
@@ -259,15 +364,22 @@ export const useWorkouts = () => {
       })
 
       if (response.success) {
-        workouts.value = workouts.value.filter(w => w.id !== id)
-        totalWorkouts.value = Math.max(0, totalWorkouts.value - 1)
+        optimisticRemoveWorkout(id)
       }
 
       return response
     } catch (error: unknown) {
-      return {
-        success: false,
-        message: extractErrorMessage(error, '刪除運動記錄失敗'),
+      // Network error fallback: queue the request
+      try {
+        await queueDelete(
+          id,
+          apiUrl,
+          { 'X-Member-Token': accessToken.value || '' }
+        )
+        optimisticRemoveWorkout(id)
+        return { success: true, message: '網路異常，已排入待同步' }
+      } catch {
+        return { success: false, message: extractErrorMessage(error, '刪除運動記錄失敗') }
       }
     }
   }

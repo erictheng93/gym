@@ -95,6 +95,19 @@ vi.stubGlobal('useCoachAuth', () => ({
   getAuthHeader: () => ({ 'X-Coach-Token': 'test-token' }),
 }))
 
+// Mock useOfflineSync
+const mockGetCache = vi.fn().mockResolvedValue(null)
+const mockSetCache = vi.fn().mockResolvedValue(undefined)
+const mockQueueMarkAttendance = vi.fn().mockResolvedValue('queue-id-1')
+const mockQueueCancelClass = vi.fn().mockResolvedValue('queue-id-2')
+vi.stubGlobal('useOfflineSync', () => ({
+  isOnline: { value: true },
+  getCache: mockGetCache,
+  setCache: mockSetCache,
+  queueMarkAttendance: mockQueueMarkAttendance,
+  queueCancelClass: mockQueueCancelClass,
+}))
+
 // Import after mocks
 import { useCoachClasses } from './useCoachClasses'
 
@@ -102,6 +115,10 @@ describe('useCoachClasses', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFetch.mockReset()
+    mockGetCache.mockReset().mockResolvedValue(null)
+    mockSetCache.mockReset().mockResolvedValue(undefined)
+    mockQueueMarkAttendance.mockReset().mockResolvedValue('queue-id-1')
+    mockQueueCancelClass.mockReset().mockResolvedValue('queue-id-2')
   })
 
   describe('fetchClasses', () => {
@@ -294,10 +311,25 @@ describe('useCoachClasses', () => {
       )
     })
 
-    it('should handle attendance error', async () => {
+    it('should queue attendance when network fails (offline fallback)', async () => {
       mockFetch.mockRejectedValueOnce({
         data: { message: '點名失敗' },
       })
+
+      const { markAttendance } = useCoachClasses()
+      const result = await markAttendance('class-1', { attended: true })
+
+      // Network error triggers offline queue fallback
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('網路異常，點名已排入待同步清單')
+      expect(mockQueueMarkAttendance).toHaveBeenCalled()
+    })
+
+    it('should return error when both network and queue fail', async () => {
+      mockFetch.mockRejectedValueOnce({
+        data: { message: '點名失敗' },
+      })
+      mockQueueMarkAttendance.mockRejectedValueOnce(new Error('Queue failed'))
 
       const { markAttendance } = useCoachClasses()
       const result = await markAttendance('class-1', { attended: true })
@@ -327,10 +359,25 @@ describe('useCoachClasses', () => {
       )
     })
 
-    it('should handle cancel error', async () => {
+    it('should queue cancel when network fails (offline fallback)', async () => {
       mockFetch.mockRejectedValueOnce({
         data: { message: '取消課程失敗' },
       })
+
+      const { cancelClass } = useCoachClasses()
+      const result = await cancelClass('class-1', 'reason')
+
+      // Network error triggers offline queue fallback
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('網路異常，取消請求已排入待同步清單')
+      expect(mockQueueCancelClass).toHaveBeenCalled()
+    })
+
+    it('should return error when both network and queue fail', async () => {
+      mockFetch.mockRejectedValueOnce({
+        data: { message: '取消課程失敗' },
+      })
+      mockQueueCancelClass.mockRejectedValueOnce(new Error('Queue failed'))
 
       const { cancelClass } = useCoachClasses()
       const result = await cancelClass('class-1', 'reason')

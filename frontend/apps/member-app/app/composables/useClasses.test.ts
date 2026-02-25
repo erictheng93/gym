@@ -36,6 +36,17 @@ vi.stubGlobal('useMemberAuth', () => ({
   getAuthHeader: () => ({ 'X-Member-Token': 'mock-token' }),
 }))
 
+// Mock useOfflineSync
+const mockIsOnline = { value: true }
+const mockGetCache = vi.fn().mockResolvedValue(null)
+const mockSetCache = vi.fn().mockResolvedValue(undefined)
+
+vi.stubGlobal('useOfflineSync', () => ({
+  isOnline: mockIsOnline,
+  getCache: mockGetCache,
+  setCache: mockSetCache,
+}))
+
 // Import after mocks
 import { useClasses } from './useClasses'
 
@@ -43,6 +54,8 @@ describe('useClasses', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     stateStore.clear()
+    mockIsOnline.value = true
+    mockGetCache.mockResolvedValue(null)
   })
 
   describe('fetchClasses', () => {
@@ -106,6 +119,64 @@ describe('useClasses', () => {
 
       expect(result).toEqual([])
     })
+
+    it('should cache data after successful fetch', async () => {
+      const mockData: GymClass[] = [
+        { id: 'class-1', name: 'Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
+      ]
+
+      const { fetchClasses } = useClasses()
+
+      mockFetch.mockResolvedValueOnce({ success: true, data: mockData })
+
+      await fetchClasses()
+
+      expect(mockSetCache).toHaveBeenCalledWith(
+        expect.stringContaining('member:classes:'),
+        mockData,
+        10 * 60 * 1000
+      )
+    })
+
+    it('should use cached data when offline', async () => {
+      mockIsOnline.value = false
+      const cachedData: GymClass[] = [
+        { id: 'class-1', name: 'Cached Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
+      ]
+      mockGetCache.mockResolvedValueOnce(cachedData)
+
+      const { fetchClasses, classes, isOfflineData } = useClasses()
+      const result = await fetchClasses()
+
+      expect(result).toEqual(cachedData)
+      expect(classes.value).toEqual(cachedData)
+      expect(isOfflineData.value).toBe(true)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should return empty array when offline with no cache', async () => {
+      mockIsOnline.value = false
+      mockGetCache.mockResolvedValueOnce(null)
+
+      const { fetchClasses } = useClasses()
+      const result = await fetchClasses()
+
+      expect(result).toEqual([])
+    })
+
+    it('should fallback to cache on network error', async () => {
+      const cachedData: GymClass[] = [
+        { id: 'class-1', name: 'Cached Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
+      ]
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockGetCache.mockResolvedValueOnce(cachedData)
+
+      const { fetchClasses, isOfflineData } = useClasses()
+      const result = await fetchClasses()
+
+      expect(result).toEqual(cachedData)
+      expect(isOfflineData.value).toBe(true)
+    })
   })
 
   describe('fetchWeeklySchedule', () => {
@@ -147,6 +218,52 @@ describe('useClasses', () => {
 
       expect(result).toEqual([])
     })
+
+    it('should use cached schedule when offline', async () => {
+      mockIsOnline.value = false
+      const cachedSchedule: ClassSchedule[] = [
+        { id: 's1', class_id: 'c1', day_of_week: 1, start_time: '09:00', end_time: '10:00', is_active: true },
+      ]
+      mockGetCache.mockResolvedValueOnce(cachedSchedule)
+
+      const { fetchWeeklySchedule, schedules, isOfflineData } = useClasses()
+      const result = await fetchWeeklySchedule()
+
+      expect(result).toEqual(cachedSchedule)
+      expect(schedules.value).toEqual(cachedSchedule)
+      expect(isOfflineData.value).toBe(true)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should cache schedule after successful fetch', async () => {
+      const scheduleData: ClassSchedule[] = [
+        { id: 's1', class_id: 'c1', day_of_week: 1, start_time: '09:00', end_time: '10:00', is_active: true },
+      ]
+      mockFetch.mockResolvedValueOnce({ success: true, data: scheduleData })
+
+      const { fetchWeeklySchedule } = useClasses()
+      await fetchWeeklySchedule()
+
+      expect(mockSetCache).toHaveBeenCalledWith(
+        expect.stringContaining('member:class-schedule:'),
+        scheduleData,
+        10 * 60 * 1000
+      )
+    })
+
+    it('should fallback to cache on network error for schedule', async () => {
+      const cachedSchedule: ClassSchedule[] = [
+        { id: 's1', class_id: 'c1', day_of_week: 1, start_time: '09:00', end_time: '10:00', is_active: true },
+      ]
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockGetCache.mockResolvedValueOnce(cachedSchedule)
+
+      const { fetchWeeklySchedule, isOfflineData } = useClasses()
+      const result = await fetchWeeklySchedule()
+
+      expect(result).toEqual(cachedSchedule)
+      expect(isOfflineData.value).toBe(true)
+    })
   })
 
   describe('fetchUpcomingSessions', () => {
@@ -182,6 +299,83 @@ describe('useClasses', () => {
       )
       expect(result).toHaveLength(1)
       expect(upcomingSessions.value).toEqual(mockSessionsData)
+    })
+
+    it('should use cached sessions when offline', async () => {
+      mockIsOnline.value = false
+      const cachedSessions: ClassSession[] = [
+        {
+          id: 'session-1',
+          schedule_id: 'schedule-1',
+          session_date: '2024-01-15',
+          current_count: 10,
+          waitlist_count: 2,
+          session_status: 'SCHEDULED',
+        },
+      ]
+      mockGetCache.mockResolvedValueOnce(cachedSessions)
+
+      const { fetchUpcomingSessions, upcomingSessions, isOfflineData } = useClasses()
+      const result = await fetchUpcomingSessions({ branchId: 'branch-1' })
+
+      expect(result).toEqual(cachedSessions)
+      expect(upcomingSessions.value).toEqual(cachedSessions)
+      expect(isOfflineData.value).toBe(true)
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should return empty when offline with no cache for sessions', async () => {
+      mockIsOnline.value = false
+      mockGetCache.mockResolvedValueOnce(null)
+
+      const { fetchUpcomingSessions } = useClasses()
+      const result = await fetchUpcomingSessions()
+
+      expect(result).toEqual([])
+    })
+
+    it('should cache sessions after successful fetch', async () => {
+      const sessionsData: ClassSession[] = [
+        {
+          id: 'session-1',
+          schedule_id: 'schedule-1',
+          session_date: '2024-01-15',
+          current_count: 5,
+          waitlist_count: 0,
+          session_status: 'SCHEDULED',
+        },
+      ]
+      mockFetch.mockResolvedValueOnce({ success: true, data: sessionsData })
+
+      const { fetchUpcomingSessions } = useClasses()
+      await fetchUpcomingSessions()
+
+      expect(mockSetCache).toHaveBeenCalledWith(
+        expect.stringContaining('member:class-sessions:'),
+        sessionsData,
+        10 * 60 * 1000
+      )
+    })
+
+    it('should fallback to cache on network error for sessions', async () => {
+      const cachedSessions: ClassSession[] = [
+        {
+          id: 'session-1',
+          schedule_id: 'schedule-1',
+          session_date: '2024-01-15',
+          current_count: 10,
+          waitlist_count: 0,
+          session_status: 'SCHEDULED',
+        },
+      ]
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      mockGetCache.mockResolvedValueOnce(cachedSessions)
+
+      const { fetchUpcomingSessions, isOfflineData } = useClasses()
+      const result = await fetchUpcomingSessions()
+
+      expect(result).toEqual(cachedSessions)
+      expect(isOfflineData.value).toBe(true)
     })
   })
 

@@ -1,9 +1,10 @@
 /**
  * useOfflineSync composable
  * Provides offline capabilities with IndexedDB caching and request queuing
+ * Adapted from member-app for coach-app attendance operations
  */
 
-const DB_NAME = 'gym-nexus-member'
+const DB_NAME = 'gym-nexus-coach'
 const DB_VERSION = 1
 const STORES = {
   cache: 'cache',
@@ -19,8 +20,9 @@ export interface QueuedRequest {
   timestamp: number
   retryCount: number
   maxRetries: number
-  type: 'booking' | 'review' | 'workout' | 'other'
-  optimisticId?: string // For optimistic updates
+  type: 'attendance' | 'cancel_class' | 'other'
+  optimisticId?: string
+  description?: string
 }
 
 export interface CacheEntry<T = unknown> {
@@ -84,12 +86,12 @@ const initDB = (): Promise<IDBDatabase> => {
 
 export const useOfflineSync = () => {
   // Online status - use reactive ref for SSR compatibility
-  const isOnline = useState<boolean>('offline_sync_online', () =>
+  const isOnline = useState<boolean>('coach_offline_sync_online', () =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   )
-  const pendingCount = useState<number>('offline_sync_pending_count', () => 0)
-  const isSyncing = useState<boolean>('offline_sync_syncing', () => false)
-  const lastSyncAt = useState<number | null>('offline_sync_last', () => null)
+  const pendingCount = useState<number>('coach_offline_sync_pending_count', () => 0)
+  const isSyncing = useState<boolean>('coach_offline_sync_syncing', () => false)
+  const lastSyncAt = useState<number | null>('coach_offline_sync_last', () => null)
 
   /**
    * Set up online/offline listeners (client-side only)
@@ -418,99 +420,48 @@ export const useOfflineSync = () => {
   }
 
   // ===================
-  // High-level API helpers for bookings and reviews
+  // High-level API helpers for attendance operations
   // ===================
 
   /**
-   * Queue a booking cancellation for offline sync
+   * Queue an attendance mark for offline sync
    */
-  const queueCancelBooking = async (
+  const queueMarkAttendance = async (
     bookingId: string,
+    data: { attended: boolean; notes?: string; class_record?: Record<string, unknown> },
     apiUrl: string,
     headers: Record<string, string>
   ): Promise<string> => {
     return queueRequest({
-      url: `${apiUrl}/api/member/bookings/${bookingId}`,
-      method: 'DELETE',
+      url: `${apiUrl}/api/coach/classes/${bookingId}/attendance`,
+      method: 'POST',
       headers,
+      body: data,
       maxRetries: 3,
-      type: 'booking',
+      type: 'attendance',
       optimisticId: bookingId,
+      description: data.attended ? '標記出席' : '標記未到',
     })
   }
 
   /**
-   * Queue a review submission for offline sync
+   * Queue a class cancellation for offline sync
    */
-  const queueSubmitReview = async (
-    payload: { booking_id: string; rating: number; comment?: string },
+  const queueCancelClass = async (
+    sessionId: string,
+    reason: string,
     apiUrl: string,
     headers: Record<string, string>
   ): Promise<string> => {
     return queueRequest({
-      url: `${apiUrl}/api/member/reviews`,
+      url: `${apiUrl}/api/coach/classes/${sessionId}/cancel`,
       method: 'POST',
       headers,
-      body: payload,
+      body: { reason },
       maxRetries: 3,
-      type: 'review',
-      optimisticId: payload.booking_id,
-    })
-  }
-
-  /**
-   * Queue a workout creation for offline sync
-   */
-  const queueCreateWorkout = async (
-    payload: Record<string, unknown>,
-    apiUrl: string,
-    headers: Record<string, string>
-  ): Promise<string> => {
-    return queueRequest({
-      url: `${apiUrl}/api/member/workouts`,
-      method: 'POST',
-      headers,
-      body: payload,
-      maxRetries: 5,
-      type: 'workout',
-    })
-  }
-
-  /**
-   * Queue a workout update for offline sync
-   */
-  const queueUpdateWorkout = async (
-    workoutId: string,
-    payload: Record<string, unknown>,
-    apiUrl: string,
-    headers: Record<string, string>
-  ): Promise<string> => {
-    return queueRequest({
-      url: `${apiUrl}/api/member/workouts/${workoutId}`,
-      method: 'PUT',
-      headers,
-      body: payload,
-      maxRetries: 5,
-      type: 'workout',
-      optimisticId: workoutId,
-    })
-  }
-
-  /**
-   * Queue a workout deletion for offline sync
-   */
-  const queueDeleteWorkout = async (
-    workoutId: string,
-    apiUrl: string,
-    headers: Record<string, string>
-  ): Promise<string> => {
-    return queueRequest({
-      url: `${apiUrl}/api/member/workouts/${workoutId}`,
-      method: 'DELETE',
-      headers,
-      maxRetries: 3,
-      type: 'workout',
-      optimisticId: workoutId,
+      type: 'cancel_class',
+      optimisticId: sessionId,
+      description: '取消課程',
     })
   }
 
@@ -553,10 +504,7 @@ export const useOfflineSync = () => {
     clearCache,
 
     // High-level helpers
-    queueCancelBooking,
-    queueSubmitReview,
-    queueCreateWorkout,
-    queueUpdateWorkout,
-    queueDeleteWorkout,
+    queueMarkAttendance,
+    queueCancelClass,
   }
 }
