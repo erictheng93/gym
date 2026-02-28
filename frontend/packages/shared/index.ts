@@ -26,6 +26,10 @@ export type {
 // Composables
 export { useTenant } from './composables'
 export type { TenantInfo, TenantQuota } from './composables'
+export { createOfflineSync } from './composables'
+
+// Offline sync types
+export type { QueuedRequest, CacheEntry, SyncResult, OfflineSyncConfig } from './types'
 
 // Utils - Formatters
 export {
@@ -33,7 +37,11 @@ export {
   formatRelativeTime,
   formatCurrency,
   formatNumber,
-  formatPhone
+  formatPhone,
+  DAY_OF_WEEK_NAMES,
+  DAY_OF_WEEK_NAMES_MONDAY_FIRST,
+  getDayName,
+  formatDateWithDay
 } from './utils'
 export type { DateFormatOptions } from './utils'
 

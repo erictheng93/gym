@@ -11,6 +11,14 @@ let stateStore: Map<string, { value: unknown }>
 // Setup global mocks
 vi.stubGlobal('navigator', { onLine: true })
 
+vi.stubGlobal('useRuntimeConfig', () => ({
+  public: { apiBaseUrl: 'http://localhost:8056' },
+}))
+
+vi.stubGlobal('useAuthTokens', () => ({
+  getAuthHeader: () => ({ 'X-Member-Token': 'token123' }),
+}))
+
 vi.stubGlobal('useState', (key: string, init?: () => unknown) => {
   if (!stateStore.has(key)) {
     stateStore.set(key, { value: init ? init() : undefined })
@@ -375,8 +383,6 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const requestId = await queueCancelBooking(
         'booking-123',
-        'http://localhost:8056',
-        { 'X-Member-Token': 'token123' }
       )
 
       expect(requestId).toBeDefined()
@@ -400,8 +406,6 @@ describe('useOfflineSync with IndexedDB', () => {
 
       const requestId = await queueSubmitReview(
         reviewPayload,
-        'http://localhost:8056',
-        { 'X-Member-Token': 'token123' }
       )
 
       expect(requestId).toBeDefined()

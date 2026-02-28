@@ -6,7 +6,7 @@ definePageMeta({
 })
 
 const { member } = useMemberAuth()
-const { isOnline, getCache, setCache } = useOfflineSync()
+const { getCache, setCache } = useOfflineSync()
 const toast = useToast()
 
 const qrCodeDataUrl = ref('')
@@ -146,11 +146,6 @@ const handleTouchEnd = async () => {
 
 // 初始化
 onMounted(async () => {
-  // Proactively cache QR data when member is loaded
-  if (member.value) {
-    await cacheQrData()
-  }
-
   generateQRCode()
 
   // 每秒更新倒數

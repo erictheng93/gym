@@ -4,7 +4,11 @@ export {
   formatRelativeTime,
   formatCurrency,
   formatNumber,
-  formatPhone
+  formatPhone,
+  DAY_OF_WEEK_NAMES,
+  DAY_OF_WEEK_NAMES_MONDAY_FIRST,
+  getDayName,
+  formatDateWithDay
 } from './formatters'
 export type { DateFormatOptions } from './formatters'
 

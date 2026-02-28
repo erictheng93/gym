@@ -9,14 +9,11 @@ export default defineNuxtPlugin(() => {
   // Set up online/offline listeners
   setupListeners()
 
-  // Register service worker for background sync if available
-  const registration = (window as any).registration
-  if ('serviceWorker' in navigator && registration && 'sync' in registration) {
-    // Use Background Sync API when available
-    navigator.serviceWorker.ready.then(registration => {
-      // Register periodic background sync
-      if ('periodicSync' in registration) {
-        (registration as any).periodicSync.register('sync-pending-requests', {
+  // Register periodic background sync if available
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then((reg) => {
+      if ('periodicSync' in reg) {
+        (reg as any).periodicSync.register('sync-pending-requests', {
           minInterval: 5 * 60 * 1000, // 5 minutes
         }).catch(() => {
           // Periodic sync not available, fall back to manual

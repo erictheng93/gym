@@ -27,3 +27,10 @@ export type {
   DatabaseSchema,
   DatabaseSchema as DbSchema,
 } from './schema'
+
+export type {
+  QueuedRequest,
+  CacheEntry,
+  SyncResult,
+  OfflineSyncConfig,
+} from './offline-sync'

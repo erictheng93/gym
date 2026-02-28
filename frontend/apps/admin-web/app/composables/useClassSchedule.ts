@@ -6,9 +6,7 @@
 import type { ClassSchedule, ClassSession } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
-
-// 星期幾的中文名稱
-export const DAY_OF_WEEK_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
+import { DAY_OF_WEEK_NAMES } from '@gym-nexus/shared'
 
 export const useClassSchedule = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()

@@ -5,7 +5,7 @@
  * 週視圖顯示課程場次
  */
 import { MESSAGES, PAGES } from '~/constants'
-import { getSessionStatusBadge } from '@gym-nexus/shared'
+import { getSessionStatusBadge, DAY_OF_WEEK_NAMES_MONDAY_FIRST } from '@gym-nexus/shared'
 import type { ClassSession } from '~/types/schema'
 
 definePageMeta({
@@ -25,7 +25,7 @@ const currentWeekStart = ref(getMonday(new Date()))
 const stats = ref({ scheduled: 0, completed: 0, cancelled: 0 })
 
 // Day names
-const dayNames = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
+const dayNames = DAY_OF_WEEK_NAMES_MONDAY_FIRST
 
 // Get Monday of a given date
 function getMonday(d: Date) {

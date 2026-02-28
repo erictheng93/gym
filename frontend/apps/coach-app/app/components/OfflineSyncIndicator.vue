@@ -12,32 +12,30 @@ const {
   syncStatusLabel,
   syncPendingRequests,
   getPendingRequests,
-  setupListeners,
 } = useOfflineSync()
 
 const toast = useToast()
 const showDetails = ref(false)
 const pendingItems = ref<Array<{ id: string; description?: string; type: string; timestamp: number }>>([])
 
-// Initialize listeners on mount
-onMounted(() => {
-  setupListeners()
-})
+const refreshPendingItems = async () => {
+  try {
+    const requests = await getPendingRequests()
+    pendingItems.value = requests.map(r => ({
+      id: r.id,
+      description: r.description,
+      type: r.type,
+      timestamp: r.timestamp,
+    }))
+  } catch {
+    pendingItems.value = []
+  }
+}
 
 // Load pending items when details panel opens
 watch(showDetails, async (open) => {
   if (open) {
-    try {
-      const requests = await getPendingRequests()
-      pendingItems.value = requests.map(r => ({
-        id: r.id,
-        description: r.description,
-        type: r.type,
-        timestamp: r.timestamp,
-      }))
-    } catch {
-      pendingItems.value = []
-    }
+    await refreshPendingItems()
   }
 })
 
@@ -54,18 +52,7 @@ const handleManualSync = async () => {
     toast.error(`${result.failed} 項同步失敗`)
   }
 
-  // Refresh pending items
-  try {
-    const requests = await getPendingRequests()
-    pendingItems.value = requests.map(r => ({
-      id: r.id,
-      description: r.description,
-      type: r.type,
-      timestamp: r.timestamp,
-    }))
-  } catch {
-    pendingItems.value = []
-  }
+  await refreshPendingItems()
 }
 
 // Status color

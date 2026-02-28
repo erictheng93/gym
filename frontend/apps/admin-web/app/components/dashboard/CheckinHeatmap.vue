@@ -3,6 +3,7 @@
  * Checkin Heatmap Component
  * 24x7 打卡熱力圖
  */
+import { DAY_OF_WEEK_NAMES } from '@gym-nexus/shared'
 
 interface Props {
   data?: number[][] // 7x24 matrix
@@ -15,7 +16,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const { getHeatmapColor } = useCharts()
 
-const dayLabels = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
+const dayLabels = DAY_OF_WEEK_NAMES
 const hourLabels = Array.from({ length: 24 }, (_, i) => `${i}`)
 
 // 計算最大值

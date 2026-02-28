@@ -14,6 +14,14 @@ const stateStore = new Map<string, { value: unknown }>()
 vi.stubGlobal('indexedDB', undefined) // Disable IndexedDB for simpler testing
 vi.stubGlobal('navigator', { onLine: true })
 
+vi.stubGlobal('useRuntimeConfig', () => ({
+  public: { apiBaseUrl: 'http://localhost:8056' },
+}))
+
+vi.stubGlobal('useAuthTokens', () => ({
+  getAuthHeader: () => ({ 'X-Member-Token': 'test' }),
+}))
+
 vi.stubGlobal('useState', (key: string, init?: () => unknown) => {
   if (!stateStore.has(key)) {
     stateStore.set(key, { value: init ? init() : undefined })
@@ -193,8 +201,6 @@ describe('useOfflineSync', () => {
 
       await expect(queueCancelBooking(
         'booking-123',
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })
 
@@ -203,8 +209,6 @@ describe('useOfflineSync', () => {
 
       await expect(queueSubmitReview(
         { booking_id: 'b1', rating: 5 },
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })
   })
@@ -248,8 +252,6 @@ describe('useOfflineSync', () => {
 
       await expect(queueCreateWorkout(
         { date: '2024-01-15', duration: 60 },
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })
 
@@ -259,8 +261,6 @@ describe('useOfflineSync', () => {
       await expect(queueUpdateWorkout(
         'workout-123',
         { duration: 90 },
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })
 
@@ -269,8 +269,6 @@ describe('useOfflineSync', () => {
 
       await expect(queueDeleteWorkout(
         'workout-123',
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test' }
       )).rejects.toThrow('IndexedDB not available')
     })
   })

@@ -244,7 +244,7 @@ export const useCoachClasses = () => {
     // Offline: queue directly
     if (!isOnline.value) {
       try {
-        await queueMarkAttendance(classId, data, apiUrl, getAuthHeader())
+        await queueMarkAttendance(classId, data)
         return {
           success: true,
           message: '點名已排入待同步清單，將在連線後自動處理',
@@ -271,7 +271,7 @@ export const useCoachClasses = () => {
     } catch (error: unknown) {
       // Network error while online: queue as fallback
       try {
-        await queueMarkAttendance(classId, data, apiUrl, getAuthHeader())
+        await queueMarkAttendance(classId, data)
         return {
           success: true,
           message: '網路異常，點名已排入待同步清單',
@@ -294,7 +294,7 @@ export const useCoachClasses = () => {
     // Offline: queue directly
     if (!isOnline.value) {
       try {
-        await queueCancelClass(classId, reason, apiUrl, getAuthHeader())
+        await queueCancelClass(classId, reason)
         return {
           success: true,
           message: '取消請求已排入待同步清單，將在連線後自動處理',
@@ -319,7 +319,7 @@ export const useCoachClasses = () => {
     } catch (error: unknown) {
       // Network error while online: queue as fallback
       try {
-        await queueCancelClass(classId, reason, apiUrl, getAuthHeader())
+        await queueCancelClass(classId, reason)
         return {
           success: true,
           message: '網路異常，取消請求已排入待同步清單',

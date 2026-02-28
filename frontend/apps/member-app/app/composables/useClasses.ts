@@ -4,6 +4,7 @@
  */
 
 import { deduplicateRequest } from '../utils/debounce'
+import { getDayName } from '@gym-nexus/shared'
 
 export interface GymClass {
   id: string
@@ -307,14 +308,6 @@ export const useClasses = () => {
    */
   const formatTimeRange = (startTime: string, endTime: string): string => {
     return `${startTime.slice(0, 5)} - ${endTime.slice(0, 5)}`
-  }
-
-  /**
-   * Get day name in Traditional Chinese
-   */
-  const getDayName = (dayOfWeek: number): string => {
-    const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
-    return days[dayOfWeek] || ''
   }
 
   /**

@@ -90,12 +90,10 @@ vi.stubGlobal('$fetch', mockFetch)
 // Mock useMemberAuth
 const mockMemberRef = { value: mockMember }
 const mockGetAuthHeader = vi.fn(() => ({ 'X-Member-Token': 'test-token' }))
-const mockAccessToken = { value: 'test-token' }
 
 vi.stubGlobal('useMemberAuth', () => ({
   member: mockMemberRef,
   getAuthHeader: mockGetAuthHeader,
-  accessToken: mockAccessToken,
 }))
 
 // Mock useOfflineSync
@@ -454,8 +452,6 @@ describe('useWorkouts', () => {
       expect(totalWorkouts.value).toBe(1)
       expect(mockQueueCreateWorkout).toHaveBeenCalledWith(
         { duration: 60, calories: 300 },
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test-token' }
       )
       expect(mockFetch).not.toHaveBeenCalled()
     })
@@ -532,8 +528,6 @@ describe('useWorkouts', () => {
       expect(mockQueueUpdateWorkout).toHaveBeenCalledWith(
         'workout-1',
         { duration: 90 },
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test-token' }
       )
       expect(mockFetch).not.toHaveBeenCalled()
     })
@@ -616,8 +610,6 @@ describe('useWorkouts', () => {
       expect(totalWorkouts.value).toBe(1)
       expect(mockQueueDeleteWorkout).toHaveBeenCalledWith(
         'workout-1',
-        'http://localhost:8056',
-        { 'X-Member-Token': 'test-token' }
       )
       expect(mockFetch).not.toHaveBeenCalled()
     })

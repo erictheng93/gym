@@ -2,6 +2,7 @@
 import type { ClassSession } from '~/composables/useClasses'
 import type { Booking } from '~/composables/useBookings'
 import type { ReviewEligibility } from '~/composables/useReviews'
+import { formatDateWithDay } from '@gym-nexus/shared'
 
 definePageMeta({
   middleware: 'auth'
@@ -153,12 +154,8 @@ const getSessionTime = (session: ClassSession | null): string => {
   return `${start} - ${end}`
 }
 
-const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
-  return `${month}/${day} (${days[date.getDay()]})`
+const formatDateLocal = (dateStr: string): string => {
+  return formatDateWithDay(dateStr)
 }
 
 const isLoading = computed(() => classesLoading.value || bookingsLoading.value)
@@ -187,7 +184,7 @@ const getReviewClassName = (booking: Booking | null): string => {
 const getReviewSessionDate = (booking: Booking | null): string => {
   if (!booking) return ''
   const dateStr = booking.session_date || booking.session?.session_date || ''
-  return formatDate(dateStr)
+  return formatDateLocal(dateStr)
 }
 </script>
 
@@ -301,7 +298,7 @@ const getReviewSessionDate = (booking: Booking | null): string => {
             <div class="modal-header">
               <h2>{{ getClassName(selectedSession) }}</h2>
               <p class="session-datetime">
-                {{ formatDate(selectedSession?.session_date || '') }} · {{ getSessionTime(selectedSession) }}
+                {{ formatDateLocal(selectedSession?.session_date || '') }} · {{ getSessionTime(selectedSession) }}
               </p>
             </div>
 
@@ -373,7 +370,7 @@ const getReviewSessionDate = (booking: Booking | null): string => {
 
             <div v-if="bookingToCancel" class="cancel-details">
               <strong>{{ bookingToCancel.class_name || bookingToCancel.session?.schedule?.class?.name }}</strong>
-              <span>{{ formatDate(bookingToCancel.session_date || bookingToCancel.session?.session_date || '') }}</span>
+              <span>{{ formatDateLocal(bookingToCancel.session_date || bookingToCancel.session?.session_date || '') }}</span>
             </div>
 
             <div v-if="error" class="error-message">

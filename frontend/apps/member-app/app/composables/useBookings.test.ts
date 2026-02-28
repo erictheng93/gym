@@ -278,6 +278,7 @@ describe('useBookings', () => {
       mockFetch.mockRejectedValue({
         data: { message: '已超過取消時限' },
       })
+      mockOfflineSync.queueCancelBooking.mockRejectedValueOnce(new Error('Queue failed'))
 
       const { cancelBooking } = useBookings()
       const result = await cancelBooking('booking-1')

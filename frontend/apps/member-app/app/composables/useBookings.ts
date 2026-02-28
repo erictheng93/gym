@@ -6,6 +6,7 @@
 
 import type { ClassSession } from './useClasses'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { formatDateWithDay } from '@gym-nexus/shared'
 
 // Cache keys
 const CACHE_KEY_MY_BOOKINGS = 'member:bookings'
@@ -54,7 +55,7 @@ interface BookingsResponse {
 export const useBookings = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
-  const { getAuthHeader, member, accessToken } = useMemberAuth()
+  const { getAuthHeader, member } = useMemberAuth()
   const { isOnline, getCache, setCache, queueCancelBooking } = useOfflineSync()
 
   const myBookings = useState<Booking[]>('my_bookings', () => [])
@@ -192,11 +193,7 @@ export const useBookings = () => {
     // If offline, queue the cancellation
     if (!isOnline.value) {
       try {
-        await queueCancelBooking(
-          bookingId,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        await queueCancelBooking(bookingId)
         // Optimistically update local state
         updateLocalState()
         return {
@@ -225,11 +222,7 @@ export const useBookings = () => {
     } catch (error: unknown) {
       // On network error, queue the cancellation
       try {
-        await queueCancelBooking(
-          bookingId,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        await queueCancelBooking(bookingId)
         // Optimistically update local state
         updateLocalState()
         return {
@@ -314,12 +307,7 @@ export const useBookings = () => {
    * Format booking date for display
    */
   const formatBookingDate = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-    const dayName = days[date.getDay()]
-    return `${month}/${day} (${dayName})`
+    return formatDateWithDay(dateStr)
   }
 
   /**

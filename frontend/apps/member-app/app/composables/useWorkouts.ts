@@ -5,6 +5,7 @@
 
 import type { Exercise, WorkoutStatsPeriod } from '../schemas/workout.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { formatDateWithDay } from '@gym-nexus/shared'
 
 // Cache settings
 const CACHE_KEY_WORKOUTS = 'member:workouts'
@@ -61,7 +62,7 @@ interface StatsResponse {
 export const useWorkouts = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
-  const { getAuthHeader, member, accessToken } = useMemberAuth()
+  const { getAuthHeader, member } = useMemberAuth()
   const { isOnline, getCache, setCache, queueCreateWorkout: queueCreate, queueUpdateWorkout: queueUpdate, queueDeleteWorkout: queueDelete } = useOfflineSync()
 
   const workouts = useState<Workout[]>('member_workouts', () => [])
@@ -206,11 +207,7 @@ export const useWorkouts = () => {
     // If offline, queue the request
     if (!isOnline.value) {
       try {
-        const queueId = await queueCreate(
-          data as Record<string, unknown>,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        const queueId = await queueCreate(data as Record<string, unknown>)
         const optimistic = createOptimisticWorkout(queueId, data)
         workouts.value.unshift(optimistic)
         totalWorkouts.value++
@@ -236,11 +233,7 @@ export const useWorkouts = () => {
     } catch (error: unknown) {
       // Network error fallback: queue the request
       try {
-        const queueId = await queueCreate(
-          data as Record<string, unknown>,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        const queueId = await queueCreate(data as Record<string, unknown>)
         const optimistic = createOptimisticWorkout(queueId, data)
         workouts.value.unshift(optimistic)
         totalWorkouts.value++
@@ -281,12 +274,7 @@ export const useWorkouts = () => {
     // If offline, queue the request
     if (!isOnline.value) {
       try {
-        await queueUpdate(
-          id,
-          data as Record<string, unknown>,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        await queueUpdate(id, data as Record<string, unknown>)
         optimisticMergeWorkout(id, data as Record<string, unknown>)
         return { success: true, message: '已排入待同步' }
       } catch (error: unknown) {
@@ -312,12 +300,7 @@ export const useWorkouts = () => {
     } catch (error: unknown) {
       // Network error fallback: queue the request
       try {
-        await queueUpdate(
-          id,
-          data as Record<string, unknown>,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        await queueUpdate(id, data as Record<string, unknown>)
         optimisticMergeWorkout(id, data as Record<string, unknown>)
         return { success: true, message: '網路異常，已排入待同步' }
       } catch {
@@ -345,11 +328,7 @@ export const useWorkouts = () => {
     // If offline, queue the request
     if (!isOnline.value) {
       try {
-        await queueDelete(
-          id,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        await queueDelete(id)
         optimisticRemoveWorkout(id)
         return { success: true, message: '已排入待同步' }
       } catch (error: unknown) {
@@ -371,11 +350,7 @@ export const useWorkouts = () => {
     } catch (error: unknown) {
       // Network error fallback: queue the request
       try {
-        await queueDelete(
-          id,
-          apiUrl,
-          { 'X-Member-Token': accessToken.value || '' }
-        )
+        await queueDelete(id)
         optimisticRemoveWorkout(id)
         return { success: true, message: '網路異常，已排入待同步' }
       } catch {
@@ -384,17 +359,7 @@ export const useWorkouts = () => {
     }
   }
 
-  /**
-   * Format workout date for display
-   */
-  const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六']
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-    const dayName = days[date.getDay()]
-    return `${month}/${day} (${dayName})`
-  }
+  const formatWorkoutDate = formatDateWithDay
 
   /**
    * Format duration for display
@@ -448,7 +413,7 @@ export const useWorkouts = () => {
     createWorkout,
     updateWorkout,
     deleteWorkout,
-    formatDate,
+    formatDate: formatWorkoutDate,
     formatDuration,
     formatCalories,
   }

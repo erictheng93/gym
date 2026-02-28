@@ -134,3 +134,38 @@ export function formatPhone(phone: string | null | undefined): string {
 
   return phone
 }
+
+/**
+ * 星期名稱（週日起始，對應 Date.getDay()）
+ */
+export const DAY_OF_WEEK_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'] as const
+
+/**
+ * 星期名稱（週一起始，用於週曆視圖）
+ */
+export const DAY_OF_WEEK_NAMES_MONDAY_FIRST = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'] as const
+
+/**
+ * 取得中文星期名稱
+ *
+ * @example
+ * getDayName(0) // '週日'
+ * getDayName(1) // '週一'
+ */
+export function getDayName(dayIndex: number): string {
+  return DAY_OF_WEEK_NAMES[dayIndex] || ''
+}
+
+/**
+ * 格式化日期為 M/D (週X) 格式
+ *
+ * @example
+ * formatDateWithDay('2024-01-15') // '1/15 (週一)'
+ */
+export function formatDateWithDay(dateStr: string): string {
+  const date = new Date(dateStr)
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const dayName = DAY_OF_WEEK_NAMES[date.getDay()]
+  return `${month}/${day} (${dayName})`
+}
