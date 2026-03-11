@@ -154,9 +154,7 @@ const getSessionTime = (session: ClassSession | null): string => {
   return `${start} - ${end}`
 }
 
-const formatDateLocal = (dateStr: string): string => {
-  return formatDateWithDay(dateStr)
-}
+const formatDateLocal = formatDateWithDay
 
 const isLoading = computed(() => classesLoading.value || bookingsLoading.value)
 

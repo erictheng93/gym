@@ -303,12 +303,7 @@ export const useBookings = () => {
     return new Date() < cutoffTime
   }
 
-  /**
-   * Format booking date for display
-   */
-  const formatBookingDate = (dateStr: string): string => {
-    return formatDateWithDay(dateStr)
-  }
+  const formatBookingDate = formatDateWithDay
 
   /**
    * Get upcoming bookings count

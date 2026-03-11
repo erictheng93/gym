@@ -143,7 +143,7 @@ export const DAY_OF_WEEK_NAMES = ['週日', '週一', '週二', '週三', '週�
 /**
  * 星期名稱（週一起始，用於週曆視圖）
  */
-export const DAY_OF_WEEK_NAMES_MONDAY_FIRST = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'] as const
+export const DAY_OF_WEEK_NAMES_MONDAY_FIRST = [...DAY_OF_WEEK_NAMES.slice(1), DAY_OF_WEEK_NAMES[0]] as const
 
 /**
  * 取得中文星期名稱

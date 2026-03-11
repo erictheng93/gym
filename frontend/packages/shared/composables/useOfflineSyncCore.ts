@@ -13,6 +13,7 @@ const STORES = {
 // Per-dbName scoping for module-level state
 const dbInstances = new Map<string, IDBDatabase>()
 const listenersInitializedSet = new Set<string>()
+const activeSyncPromises = new Map<string, Promise<SyncResult>>()
 
 const initDB = (dbName: string): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -188,7 +189,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
         const freshHeaders = getAuthHeaders()
         await $fetch(request.url, {
           method: request.method,
-          headers: { ...request.headers, ...freshHeaders },
+          headers: freshHeaders,
           body: request.body as Record<string, unknown> | undefined,
         })
         return true
@@ -211,78 +212,89 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
     }
 
     const syncPendingRequests = async (): Promise<SyncResult> => {
-      if (!isOnline.value || isSyncing.value) {
+      if (!isOnline.value) {
         return { success: false, synced: 0, failed: 0, errors: [] }
       }
 
-      isSyncing.value = true
-      const result: SyncResult = { success: true, synced: 0, failed: 0, errors: [] }
+      // Deduplicate concurrent sync calls via a Promise-based lock
+      const existing = activeSyncPromises.get(dbName)
+      if (existing) return existing
 
-      try {
-        const pending = await getPendingRequests()
+      const doSync = async (): Promise<SyncResult> => {
+        isSyncing.value = true
+        const result: SyncResult = { success: true, synced: 0, failed: 0, errors: [] }
 
-        // Separate expired requests from actionable ones
-        const actionable: QueuedRequest[] = []
-        for (const request of pending) {
-          if (request.retryCount >= request.maxRetries) {
-            await removeFromQueue(request.id)
-            result.failed++
-            result.errors.push({ id: request.id, error: '已達最大重試次數' })
-          } else {
-            actionable.push(request)
+        try {
+          const pending = await getPendingRequests()
+
+          // Separate expired requests from actionable ones
+          const actionable: QueuedRequest[] = []
+          for (const request of pending) {
+            if (request.retryCount >= request.maxRetries) {
+              await removeFromQueue(request.id)
+              result.failed++
+              result.errors.push({ id: request.id, error: '已達最大重試次數' })
+            } else {
+              actionable.push(request)
+            }
           }
-        }
 
-        // Process in parallel chunks (Phase 4)
-        const processRequest = async (request: QueuedRequest) => {
-          const success = await executeRequest(request)
-          if (success) {
-            await removeFromQueue(request.id)
-            return { success: true, id: request.id }
-          } else {
-            await updateRetryCount(request)
-            return { success: false, id: request.id }
+          // Process in parallel chunks
+          const processRequest = async (request: QueuedRequest) => {
+            const success = await executeRequest(request)
+            if (success) {
+              await removeFromQueue(request.id)
+              return { success: true, id: request.id }
+            } else {
+              await updateRetryCount(request)
+              return { success: false, id: request.id }
+            }
           }
-        }
 
-        for (let i = 0; i < actionable.length; i += concurrency) {
-          const chunk = actionable.slice(i, i + concurrency)
-          const results = await Promise.allSettled(chunk.map(processRequest))
+          for (let i = 0; i < actionable.length; i += concurrency) {
+            const chunk = actionable.slice(i, i + concurrency)
+            const results = await Promise.allSettled(chunk.map(processRequest))
 
-          for (const settledResult of results) {
-            if (settledResult.status === 'fulfilled') {
-              if (settledResult.value.success) {
-                result.synced++
+            for (const settledResult of results) {
+              if (settledResult.status === 'fulfilled') {
+                if (settledResult.value.success) {
+                  result.synced++
+                } else {
+                  result.failed++
+                  result.errors.push({
+                    id: settledResult.value.id,
+                    error: '同步失敗，將稍後重試',
+                  })
+                }
               } else {
                 result.failed++
                 result.errors.push({
-                  id: settledResult.value.id,
-                  error: '同步失敗，將稍後重試',
+                  id: 'unknown',
+                  error: '同步過程發生錯誤',
                 })
               }
-            } else {
-              result.failed++
-              result.errors.push({
-                id: 'unknown',
-                error: '同步過程發生錯誤',
-              })
             }
           }
+
+          lastSyncAt.value = Date.now()
+          result.success = result.failed === 0
+        } catch (error) {
+          result.success = false
+          result.errors.push({
+            id: 'sync',
+            error: error instanceof Error ? error.message : '同步過程發生錯誤',
+          })
+        } finally {
+          isSyncing.value = false
+          activeSyncPromises.delete(dbName)
         }
 
-        lastSyncAt.value = Date.now()
-        result.success = result.failed === 0
-      } catch (error) {
-        result.success = false
-        result.errors.push({
-          id: 'sync',
-          error: error instanceof Error ? error.message : '同步過程發生錯誤',
-        })
-      } finally {
-        isSyncing.value = false
+        return result
       }
 
-      return result
+      const promise = doSync()
+      activeSyncPromises.set(dbName, promise)
+      return promise
     }
 
     // ---- Cache Operations ----
