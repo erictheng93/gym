@@ -249,3 +249,69 @@ create table if not exists classes (
 
 create index if not exists classes_branch_id_idx on classes(branch_id);
 create index if not exists classes_instructor_id_idx on classes(instructor_id);
+
+create table if not exists class_schedules (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    class_id uuid not null references classes(id),
+    branch_id uuid not null references branches(id),
+    instructor_id uuid references employees(id),
+    day_of_week integer not null,
+    start_time time not null,
+    end_time time not null,
+    room varchar,
+    max_capacity integer default 20,
+    is_recurring boolean default true,
+    valid_from date,
+    valid_until date
+);
+
+create table if not exists class_sessions (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    schedule_id uuid references class_schedules(id),
+    class_id uuid not null references classes(id),
+    branch_id uuid not null references branches(id),
+    instructor_id uuid references employees(id),
+    session_date date not null,
+    start_time time not null,
+    end_time time not null,
+    room varchar,
+    max_capacity integer not null,
+    current_count integer default 0,
+    waitlist_count integer default 0,
+    session_status varchar default 'SCHEDULED',
+    cancelled_reason text,
+    cancelled_at timestamptz,
+    cancelled_by uuid references employees(id)
+);
+
+create table if not exists bookings (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    session_id uuid not null references class_sessions(id),
+    member_id uuid not null references members(id),
+    contract_id uuid references contracts(id),
+    booking_status varchar default 'CONFIRMED',
+    waitlist_position integer,
+    booked_at timestamptz default now(),
+    cancelled_at timestamptz,
+    cancel_reason text,
+    attended_at timestamptz,
+    count_deducted boolean default false
+);
+
+create index if not exists class_schedules_class_id_idx on class_schedules(class_id);
+create index if not exists class_schedules_branch_id_idx on class_schedules(branch_id);
+create index if not exists class_sessions_class_id_idx on class_sessions(class_id);
+create index if not exists class_sessions_branch_id_idx on class_sessions(branch_id);
+create index if not exists class_sessions_session_date_idx on class_sessions(session_date);
+create index if not exists bookings_session_id_idx on bookings(session_id);
+create index if not exists bookings_member_id_idx on bookings(member_id);
+create index if not exists bookings_contract_id_idx on bookings(contract_id);

@@ -1685,4 +1685,190 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn class_booking_round_trip_updates_session_count() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let member_id = Uuid::new_v4();
+        let plan_id = Uuid::new_v4();
+        let contract_id = Uuid::new_v4();
+        let class_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-booking-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id)
+            .bind(format!("Rust Booking Tenant {suffix}"))
+            .bind(format!("rust-booking-tenant-{suffix}"))
+            .bind(format!("booking-tenant-{suffix}@example.com"))
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id)
+            .bind(format!("Rust Booking Branch {suffix}"))
+            .bind(format!("BKB{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"bookings\":[\"read\",\"write\"]}'::jsonb, $4)")
+            .bind(job_title_id)
+            .bind(format!("Rust Booking Coach {suffix}"))
+            .bind(format!("BKA{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id)
+            .bind(&email)
+            .bind(password_hash)
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $8)")
+            .bind(employee_id)
+            .bind(user_id)
+            .bind(branch_id)
+            .bind(job_title_id)
+            .bind(format!("BKE{}", &suffix[..8]))
+            .bind("Rust Booking Coach")
+            .bind(&email)
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into members (id, member_code, full_name, phone, branch_id, sales_person_id, status, join_date, tenant_id) values ($1, $2, 'Rust Booking Member', '0912345678', $3, $4, 'ACTIVE', '2026-01-01'::date, $5)")
+            .bind(member_id)
+            .bind(format!("BKM{}", &suffix[..8]))
+            .bind(branch_id)
+            .bind(employee_id)
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into membership_plans (id, name, code, type, class_counts, price, allow_pause, allow_transfer, is_active, tenant_id, branch_id) values ($1, 'Rust Booking Plan', $2, 'COUNT_BASED', 5, 3000, false, false, true, $3, $4)")
+            .bind(plan_id)
+            .bind(format!("BKP{}", &suffix[..8]))
+            .bind(tenant_id)
+            .bind(branch_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into contracts (id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, start_date, original_end_date, end_date, remaining_counts, total_amount, paid_amount, payment_status, terms_accepted, created_by, tenant_id) values ($1, $2, $3, $4, $5, $6, 'ACTIVE', '2026-01-01'::date, '2026-12-31'::date, '2026-12-31'::date, 5, 3000, 3000, 'PAID', true, $6, $7)")
+            .bind(contract_id)
+            .bind(format!("BKC{}", &suffix[..8]))
+            .bind(member_id)
+            .bind(plan_id)
+            .bind(branch_id)
+            .bind(employee_id)
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        sqlx::query("insert into classes (id, name, duration_minutes, max_capacity, instructor_id, branch_id, category, is_active, requires_count, count_deduction) values ($1, 'Rust Booking Class', 60, 5, $2, $3, 'YOGA', true, true, 1)")
+            .bind(class_id)
+            .bind(employee_id)
+            .bind(branch_id)
+            .execute(&pool).await.unwrap();
+
+        let app = build_app(AppState {
+            db: pool.clone(),
+            jwt_secret: "test-secret".into(),
+            jwt_ttl_seconds: 3600,
+        });
+
+        let login_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"email": email, "password": password}).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let session_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/class-sessions")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "classId": class_id,
+                    "branchId": branch_id,
+                    "instructorId": employee_id,
+                    "sessionDate": "2026-02-01",
+                    "startTime": "10:00:00",
+                    "endTime": "11:00:00",
+                    "maxCapacity": 2
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(session_response.status(), StatusCode::CREATED);
+        let session_body = to_bytes(session_response.into_body(), usize::MAX).await.unwrap();
+        let session_json: Value = serde_json::from_slice(&session_body).unwrap();
+        let session_id = session_json["data"]["id"].as_str().unwrap().to_string();
+
+        let booking_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/bookings")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "sessionId": session_id,
+                    "memberId": member_id,
+                    "contractId": contract_id
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(booking_response.status(), StatusCode::CREATED);
+        let booking_body = to_bytes(booking_response.into_body(), usize::MAX).await.unwrap();
+        let booking_json: Value = serde_json::from_slice(&booking_body).unwrap();
+        let booking_id = booking_json["data"]["id"].as_str().unwrap().to_string();
+
+        let session_uuid = Uuid::parse_str(&session_id).unwrap();
+        let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
+            .bind(session_uuid).fetch_one(&pool).await.unwrap();
+        assert_eq!(current_count, 1);
+
+        let cancel_response = app.clone().oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/bookings/{booking_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(cancel_response.status(), StatusCode::OK);
+
+        let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
+            .bind(session_uuid).fetch_one(&pool).await.unwrap();
+        assert_eq!(current_count, 0);
+
+        let booking_uuid = Uuid::parse_str(&booking_id).unwrap();
+        sqlx::query("delete from bookings where id = $1").bind(booking_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_sessions where id = $1").bind(session_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from classes where id = $1").bind(class_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
 }

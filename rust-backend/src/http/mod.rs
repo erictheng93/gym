@@ -12,6 +12,7 @@ use crate::{error, error::AppError, state::AppState};
 mod auth;
 mod check_ins;
 mod classes;
+mod class_scheduling;
 mod contracts;
 mod members;
 mod membership_plans;
@@ -98,6 +99,22 @@ pub fn router(state: AppState) -> Router {
             get(classes::get)
                 .patch(classes::update)
                 .delete(classes::delete),
+        )
+        .route(
+            "/api/class-schedules",
+            get(class_scheduling::list_schedules).post(class_scheduling::create_schedule),
+        )
+        .route(
+            "/api/class-sessions",
+            get(class_scheduling::list_sessions).post(class_scheduling::create_session),
+        )
+        .route(
+            "/api/bookings",
+            get(class_scheduling::list_bookings).post(class_scheduling::create_booking),
+        )
+        .route(
+            "/api/bookings/{id}",
+            get(class_scheduling::get_booking).delete(class_scheduling::cancel_booking),
         )
         .fallback(error::not_found)
         .with_state(state)
