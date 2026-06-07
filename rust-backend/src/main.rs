@@ -3038,6 +3038,9 @@ mod tests {
             "/api/member/contracts",
             "/api/member/payments",
             "/api/member_checkins",
+            &format!("/api/member_checkins/{check_in_id}"),
+            "/api/member/checkins",
+            &format!("/api/member/checkins/{check_in_id}"),
             "/api/member/goals?status=ACHIEVED",
             &format!("/api/member/goals/{goal_id}"),
             "/api/member/workouts",
@@ -3063,6 +3066,15 @@ mod tests {
             let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
             assert_eq!(status, StatusCode::OK, "{uri}: {}", String::from_utf8_lossy(&body));
         }
+
+        let cookie_alias_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/member_checkins/{check_in_id}"))
+                .header("cookie", format!("member_access_token={token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        let cookie_alias_status = cookie_alias_response.status();
+        let cookie_alias_body = to_bytes(cookie_alias_response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(cookie_alias_status, StatusCode::OK, "member_access_token cookie auth: {}", String::from_utf8_lossy(&cookie_alias_body));
 
         for (uri, id) in [
             ("/api/member/goals", goal_id),
@@ -4450,6 +4462,253 @@ mod tests {
             .unwrap();
         sqlx::query("delete from tenants where id = $1")
             .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn admin_tenants_management_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let admin_tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let admin_user_id = Uuid::new_v4();
+        let admin_employee_id = Uuid::new_v4();
+        let suffix = admin_user_id.simple().to_string();
+        let admin_email = format!("rust-admin-tenants-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query(
+            "insert into tenants (id, name, slug, email, status, tenant_status) values ($1, $2, $3, $4, 'ACTIVE', 'active')",
+        )
+        .bind(admin_tenant_id)
+        .bind(format!("Rust Admin Tenants Host {suffix}"))
+        .bind(format!("rust-admin-tenants-host-{suffix}"))
+        .bind(format!("admin-tenants-host-{suffix}@example.com"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')",
+        )
+        .bind(branch_id)
+        .bind(format!("Rust Admin Tenants Branch {suffix}"))
+        .bind(format!("AT{}", &suffix[..8]))
+        .bind(admin_tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"adminTenants\":[\"read\",\"write\"]}'::jsonb, $4)",
+        )
+        .bind(job_title_id)
+        .bind(format!("Rust Admin Tenants Role {suffix}"))
+        .bind(format!("ATR{}", &suffix[..8]))
+        .bind(admin_tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)",
+        )
+        .bind(admin_user_id)
+        .bind(&admin_email)
+        .bind(password_hash)
+        .bind(admin_tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $8)",
+        )
+        .bind(admin_employee_id)
+        .bind(admin_user_id)
+        .bind(branch_id)
+        .bind(job_title_id)
+        .bind(format!("ATE{}", &suffix[..8]))
+        .bind("Rust Admin Tenants User")
+        .bind(&admin_email)
+        .bind(admin_tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let app = build_app(AppState {
+            db: pool.clone(),
+            jwt_secret: "test-secret".into(),
+            jwt_ttl_seconds: 3600,
+        });
+
+        let login_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "email": admin_email, "password": password }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/tenants")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "name": format!("Rust Managed Tenant {suffix}"),
+                        "slug": format!("rust-managed-tenant-{suffix}"),
+                        "email": format!("managed-{suffix}@example.com"),
+                        "phone": "02-1234-5678",
+                        "plan_type": "professional",
+                        "billing_cycle": "monthly",
+                        "max_members": 500,
+                        "max_employees": 30,
+                        "max_branches": 3,
+                        "trial_days": 14
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+        let create_json: Value = serde_json::from_slice(&create_body).unwrap();
+        assert_eq!(create_json["success"], true);
+        assert_eq!(create_json["tenant"]["tenant_status"], "trial");
+        let managed_tenant_id = Uuid::parse_str(create_json["tenant"]["id"].as_str().unwrap()).unwrap();
+
+        let list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/tenants")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+        let list_json: Value = serde_json::from_slice(&list_body).unwrap();
+        assert_eq!(list_json["success"], true);
+        assert!(list_json["stats"]["totalTenants"].as_i64().unwrap() >= 2);
+        assert!(list_json["tenants"].as_array().unwrap().iter().any(|tenant| {
+            tenant["id"] == managed_tenant_id.to_string()
+        }));
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/tenants/{managed_tenant_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get_response.status(), StatusCode::OK);
+        let get_body = to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
+        let get_json: Value = serde_json::from_slice(&get_body).unwrap();
+        assert_eq!(get_json["tenant"]["usage"]["members"]["current"], 0);
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/admin/tenants/{managed_tenant_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "name": format!("Rust Managed Tenant Updated {suffix}"),
+                        "email": format!("managed-updated-{suffix}@example.com"),
+                        "phone": "02-8765-4321",
+                        "billing_cycle": "yearly",
+                        "max_members": 600,
+                        "max_employees": 40,
+                        "max_branches": 4
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let update_body = to_bytes(update_response.into_body(), usize::MAX).await.unwrap();
+        let update_json: Value = serde_json::from_slice(&update_body).unwrap();
+        assert_eq!(update_json["tenant"]["billing_cycle"], "yearly");
+        assert_eq!(update_json["tenant"]["max_members"], 600);
+
+        let status_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/admin/tenants/{managed_tenant_id}/status"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "status": "suspended" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(status_response.status(), StatusCode::OK);
+        let status_body = to_bytes(status_response.into_body(), usize::MAX).await.unwrap();
+        let status_json: Value = serde_json::from_slice(&status_body).unwrap();
+        assert_eq!(status_json["tenant"]["tenant_status"], "suspended");
+
+        sqlx::query("update employees set user_id = null where id = $1")
+            .bind(admin_employee_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from users where id = $1")
+            .bind(admin_user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from employees where id = $1")
+            .bind(admin_employee_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from job_titles where id = $1")
+            .bind(job_title_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from branches where id = $1")
+            .bind(branch_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from tenants where id in ($1, $2)")
+            .bind(admin_tenant_id)
+            .bind(managed_tenant_id)
             .execute(&pool)
             .await
             .unwrap();

@@ -24,6 +24,7 @@ use crate::{
 };
 
 const MEMBER_COOKIE_NAME: &str = "gym-nexus-member-token";
+const MEMBER_ACCESS_COOKIE_NAME: &str = "member_access_token";
 const MEMBER_TOKEN_HEADER: &str = "x-member-token";
 
 #[derive(Debug, Deserialize)]
@@ -763,7 +764,7 @@ fn auth_token(headers: &HeaderMap) -> Option<&str> {
         cookies.split(';').find_map(|cookie| {
             let mut parts = cookie.trim().splitn(2, '=');
             match (parts.next(), parts.next()) {
-                (Some(name), Some(value)) if name == MEMBER_COOKIE_NAME => Some(value),
+                (Some(name), Some(value)) if name == MEMBER_COOKIE_NAME || name == MEMBER_ACCESS_COOKIE_NAME => Some(value),
                 _ => None,
             }
         })
@@ -797,5 +798,28 @@ impl FromRequestParts<AppState> for MemberAuthContext {
             return Err(AppError::Unauthorized);
         }
         Ok(Self { member_id: claims.sub, tenant_id, branch_id: claims.branch_id })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::auth_token;
+    use axum::http::{header::{AUTHORIZATION, COOKIE}, HeaderMap};
+
+    #[test]
+    fn auth_token_accepts_member_app_cookie_alias() {
+        let mut headers = HeaderMap::new();
+        headers.insert(COOKIE, "member_access_token=member-token; theme=light".parse().unwrap());
+
+        assert_eq!(auth_token(&headers), Some("member-token"));
+    }
+
+    #[test]
+    fn auth_token_prefers_header_over_cookie() {
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, "Bearer bearer-token".parse().unwrap());
+        headers.insert(COOKIE, "member_access_token=cookie-token".parse().unwrap());
+
+        assert_eq!(auth_token(&headers), Some("bearer-token"));
     }
 }

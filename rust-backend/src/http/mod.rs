@@ -11,11 +11,14 @@ use crate::{error, error::AppError, state::AppState};
 
 mod auth;
 mod attendances;
+mod admin_tenants;
 mod branches;
 mod check_ins;
 mod classes;
+mod class_categories;
 mod class_scheduling;
 mod contracts;
+mod contract_logs;
 mod dashboard_reports;
 mod hr;
 mod leaves;
@@ -85,6 +88,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/public/branding", get(tenant::public_branding))
         .route("/tenant/settings/branding", get(tenant::get_branding))
         .route("/tenant/settings", patch(tenant::update_settings))
+        .route("/api/admin/tenants", get(admin_tenants::list).post(admin_tenants::create))
+        .route(
+            "/api/admin/tenants/{tenantId}",
+            get(admin_tenants::get).patch(admin_tenants::update),
+        )
+        .route("/api/admin/tenants/{tenantId}/status", patch(admin_tenants::update_status))
         .route("/api/branches", get(branches::list).post(branches::create))
         .route(
             "/api/branches/{id}",
@@ -138,6 +147,14 @@ pub fn router(state: AppState) -> Router {
                 .patch(classes::update)
                 .delete(classes::delete),
         )
+        .route("/api/class_categories", get(class_categories::list).post(class_categories::create))
+        .route(
+            "/api/class_categories/{id}",
+            get(class_categories::get)
+                .patch(class_categories::update)
+                .delete(class_categories::delete),
+        )
+        .route("/api/contract_logs", post(contract_logs::create))
         .route(
             "/api/class-schedules",
             get(class_scheduling::list_schedules).post(class_scheduling::create_schedule),
@@ -319,6 +336,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/payments", get(member_app::list_payments))
         .route("/api/member_checkins", get(member_app::list_checkins))
         .route("/api/member_checkins/{id}", get(member_app::get_checkin))
+        .route("/api/member/checkins", get(member_app::list_checkins))
+        .route("/api/member/checkins/{id}", get(member_app::get_checkin))
         .route("/api/member/goals", get(member_fitness::list_goals).post(member_fitness::create_goal))
         .route(
             "/api/member/goals/{id}",
