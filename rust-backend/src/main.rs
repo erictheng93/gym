@@ -2029,6 +2029,10 @@ mod tests {
         let contract_id = Uuid::new_v4();
         let payment_id = Uuid::new_v4();
         let check_in_id = Uuid::new_v4();
+        let class_id = Uuid::new_v4();
+        let session_id = Uuid::new_v4();
+        let booking_id = Uuid::new_v4();
+        let review_id = Uuid::new_v4();
         let suffix = user_id.simple().to_string();
         let email = format!("rust-report-{suffix}@example.com");
         let password = "Passw0rd!";
@@ -2069,6 +2073,18 @@ mod tests {
         sqlx::query("insert into check_ins (id, member_id, branch_id, contract_id, check_in_time, check_in_type, check_in_method, processed_by_id) values ($1, $2, $3, $4, now(), 'ENTRY', 'MANUAL', $5)")
             .bind(check_in_id).bind(member_id).bind(branch_id).bind(contract_id).bind(employee_id)
             .execute(&pool).await.unwrap();
+        sqlx::query("insert into classes (id, name, duration_minutes, max_capacity, instructor_id, branch_id, category, is_active) values ($1, 'Rust Report Class', 60, 20, $2, $3, 'YOGA', true)")
+            .bind(class_id).bind(employee_id).bind(branch_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into class_sessions (id, class_id, branch_id, instructor_id, session_date, start_time, end_time, room, max_capacity, current_count, session_status) values ($1, $2, $3, $4, current_date, '09:00'::time, '10:00'::time, 'A', 20, 1, 'COMPLETED')")
+            .bind(session_id).bind(class_id).bind(branch_id).bind(employee_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into bookings (id, session_id, member_id, contract_id, booking_status, attended_at) values ($1, $2, $3, $4, 'ATTENDED', now())")
+            .bind(booking_id).bind(session_id).bind(member_id).bind(contract_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into class_reviews (id, member_id, class_id, session_id, booking_id, coach_id, rating, comment, tenant_id) values ($1, $2, $3, $4, $5, $6, 5, 'Great', $7)")
+            .bind(review_id).bind(member_id).bind(class_id).bind(session_id).bind(booking_id).bind(employee_id).bind(tenant_id)
+            .execute(&pool).await.unwrap();
 
         let app = build_app(AppState { db: pool.clone(), jwt_secret: "test-secret".into(), jwt_ttl_seconds: 3600 });
         let login_response = app.clone().oneshot(
@@ -2090,6 +2106,10 @@ mod tests {
             "/api/reports/member-growth?days=30",
             "/api/reports/contract-expiry?days=45",
             "/api/reports/member-activity?days=30",
+            "/api/reports/branch-performance?period=month",
+            "/api/reports/coach-performance?period=month",
+            "/api/reports/branch-performance/export?period=month&format=csv",
+            "/api/reports/coach-performance/export?period=month&format=csv",
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -2103,6 +2123,20 @@ mod tests {
                 assert_eq!(json["success"], true);
                 assert!(json["revenue"]["period"].as_f64().unwrap() >= 3000.0);
                 assert!(json["operations"]["today_checkins"].as_i64().unwrap() >= 1);
+            }
+            else if uri.starts_with("/api/reports/branch-performance?") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["summary"]["total_revenue"].as_f64().unwrap() >= 3000.0);
+                assert!(json["data"].as_array().unwrap().iter().any(|row| row["branch_id"] == branch_id.to_string()));
+            }
+            else if uri.starts_with("/api/reports/coach-performance?") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["summary"]["total_classes_taught"].as_i64().unwrap() >= 1);
+                assert!(json["data"].as_array().unwrap().iter().any(|row| row["coach_id"] == employee_id.to_string()));
             }
         }
 
@@ -2126,6 +2160,10 @@ mod tests {
         ).await.unwrap();
         assert_eq!(refresh_response.status(), StatusCode::OK);
 
+        sqlx::query("delete from class_reviews where id = $1").bind(review_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from bookings where id = $1").bind(booking_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_sessions where id = $1").bind(session_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from classes where id = $1").bind(class_id).execute(&pool).await.unwrap();
         sqlx::query("delete from check_ins where id = $1").bind(check_in_id).execute(&pool).await.unwrap();
         sqlx::query("delete from payments where id = $1").bind(payment_id).execute(&pool).await.unwrap();
         sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();

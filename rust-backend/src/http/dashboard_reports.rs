@@ -129,6 +129,41 @@ struct BranchLiteRow {
     name: String,
 }
 
+#[derive(Debug, FromRow)]
+struct BranchPerformanceRow {
+    branch_id: Uuid,
+    branch_name: String,
+    current_revenue: f64,
+    previous_revenue: f64,
+    current_new_members: i64,
+    previous_new_members: i64,
+    current_check_ins: i64,
+    previous_check_ins: i64,
+    active_contracts: i64,
+}
+
+#[derive(Debug, FromRow)]
+struct CoachPerformanceRow {
+    coach_id: Uuid,
+    coach_name: String,
+    coach_code: Option<String>,
+    branch_id: Option<Uuid>,
+    branch_name: Option<String>,
+    job_title: Option<String>,
+    classes_taught: i64,
+    total_students: i64,
+    satisfaction_rating: Option<f64>,
+    review_count: i64,
+    attendance_rate: f64,
+}
+
+#[derive(Debug, FromRow)]
+struct CoachCategoryRow {
+    coach_id: Uuid,
+    category: Option<String>,
+    count: i64,
+}
+
 pub async fn dashboard_kpis(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -402,6 +437,232 @@ pub async fn dashboard_export(auth: AuthContext, Query(query): Query<DateRangeQu
     Ok((StatusCode::OK, body))
 }
 
+pub async fn branch_performance_report(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = period_range(query.period.as_deref());
+    let days = (end - start).num_days() + 1;
+    let previous_end = start - Duration::days(1);
+    let previous_start = previous_end - Duration::days(days - 1);
+    let rows = sqlx::query_as::<_, BranchPerformanceRow>(
+        r#"
+        select
+            branches.id as branch_id,
+            branches.name as branch_name,
+            coalesce((select sum(amount) from payments where tenant_id = $1 and branch_id = branches.id and payment_date::date between $2 and $3), 0)::float8 as current_revenue,
+            coalesce((select sum(amount) from payments where tenant_id = $1 and branch_id = branches.id and payment_date::date between $4 and $5), 0)::float8 as previous_revenue,
+            (select count(*) from members where tenant_id = $1 and branch_id = branches.id and join_date between $2 and $3)::bigint as current_new_members,
+            (select count(*) from members where tenant_id = $1 and branch_id = branches.id and join_date between $4 and $5)::bigint as previous_new_members,
+            (select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and check_ins.branch_id = branches.id and check_ins.check_in_time::date between $2 and $3)::bigint as current_check_ins,
+            (select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and check_ins.branch_id = branches.id and check_ins.check_in_time::date between $4 and $5)::bigint as previous_check_ins,
+            (select count(*) from contracts where tenant_id = $1 and branch_id = branches.id and status = 'ACTIVE')::bigint as active_contracts
+        from branches
+        where branches.tenant_id = $1
+          and ($6::uuid is null or branches.id = $6)
+          and upper(coalesce(branches.status, 'ACTIVE')) = 'ACTIVE'
+        order by current_revenue desc, branches.name asc
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(previous_start)
+    .bind(previous_end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut data = rows
+        .into_iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let revenue_change = percent_change(row.current_revenue, row.previous_revenue);
+            let members_change = percent_change(row.current_new_members as f64, row.previous_new_members as f64);
+            let check_ins_change = percent_change(row.current_check_ins as f64, row.previous_check_ins as f64);
+            json!({
+                "branch_id": row.branch_id,
+                "branch_name": row.branch_name,
+                "current_period": {
+                    "revenue": row.current_revenue,
+                    "new_members": row.current_new_members,
+                    "check_ins": row.current_check_ins,
+                    "active_contracts": row.active_contracts
+                },
+                "previous_period": {
+                    "revenue": row.previous_revenue,
+                    "new_members": row.previous_new_members,
+                    "check_ins": row.previous_check_ins
+                },
+                "growth": {
+                    "revenue_change": revenue_change,
+                    "members_change": members_change,
+                    "check_ins_change": check_ins_change
+                },
+                "rank": index + 1
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let total_revenue = data.iter().map(|row| row["current_period"]["revenue"].as_f64().unwrap_or(0.0)).sum::<f64>();
+    let previous_revenue = data.iter().map(|row| row["previous_period"]["revenue"].as_f64().unwrap_or(0.0)).sum::<f64>();
+    let total_new_members = data.iter().map(|row| row["current_period"]["new_members"].as_i64().unwrap_or(0)).sum::<i64>();
+    let total_check_ins = data.iter().map(|row| row["current_period"]["check_ins"].as_i64().unwrap_or(0)).sum::<i64>();
+    let total_active_contracts = data.iter().map(|row| row["current_period"]["active_contracts"].as_i64().unwrap_or(0)).sum::<i64>();
+
+    let ranking_revenue = ranking(&data, "current_period", "revenue", false);
+    let ranking_growth = ranking(&data, "growth", "revenue_change", true);
+    let ranking_check_ins = ranking(&data, "current_period", "check_ins", false);
+    data.sort_by_key(|row| row["rank"].as_u64().unwrap_or(0));
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "period": {
+            "current": { "start": start, "end": end },
+            "previous": { "start": previous_start, "end": previous_end }
+        },
+        "summary": {
+            "total_revenue": total_revenue,
+            "total_revenue_growth": percent_change(total_revenue, previous_revenue),
+            "total_new_members": total_new_members,
+            "total_check_ins": total_check_ins,
+            "total_active_contracts": total_active_contracts
+        },
+        "data": data,
+        "ranking": {
+            "by_revenue": ranking_revenue,
+            "by_growth": ranking_growth,
+            "by_check_ins": ranking_check_ins
+        }
+    }))))
+}
+
+pub async fn coach_performance_report(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = period_range(query.period.as_deref());
+    let rows = sqlx::query_as::<_, CoachPerformanceRow>(
+        r#"
+        select
+            employees.id as coach_id,
+            employees.full_name as coach_name,
+            employees.employee_code as coach_code,
+            employees.branch_id,
+            branches.name as branch_name,
+            job_titles.name as job_title,
+            (select count(*) from class_sessions where instructor_id = employees.id and session_date between $2 and $3)::bigint as classes_taught,
+            (select count(distinct bookings.member_id) from bookings join class_sessions on class_sessions.id = bookings.session_id where class_sessions.instructor_id = employees.id and class_sessions.session_date between $2 and $3)::bigint as total_students,
+            (select avg(rating)::float8 from class_reviews where coach_id = employees.id and created_at::date between $2 and $3) as satisfaction_rating,
+            (select count(*) from class_reviews where coach_id = employees.id and created_at::date between $2 and $3)::bigint as review_count,
+            coalesce((
+                select (count(*) filter (where bookings.attended_at is not null))::float8 * 100.0 / nullif(count(*), 0)::float8
+                from bookings
+                join class_sessions on class_sessions.id = bookings.session_id
+                where class_sessions.instructor_id = employees.id and class_sessions.session_date between $2 and $3
+            ), 0)::float8 as attendance_rate
+        from employees
+        left join branches on branches.id = employees.branch_id
+        left join job_titles on job_titles.id = employees.job_title_id
+        where employees.tenant_id = $1
+          and employees.status = 'ACTIVE'
+          and ($4::uuid is null or employees.branch_id = $4)
+        order by classes_taught desc, employees.full_name asc
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let categories = sqlx::query_as::<_, CoachCategoryRow>(
+        r#"
+        select
+            class_sessions.instructor_id as coach_id,
+            classes.category,
+            count(*)::bigint as count
+        from class_sessions
+        join classes on classes.id = class_sessions.class_id
+        join employees on employees.id = class_sessions.instructor_id
+        where employees.tenant_id = $1
+          and class_sessions.session_date between $2 and $3
+          and ($4::uuid is null or employees.branch_id = $4)
+        group by class_sessions.instructor_id, classes.category
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let data = rows
+        .into_iter()
+        .map(|row| {
+            let coach_categories = categories
+                .iter()
+                .filter(|category| category.coach_id == row.coach_id)
+                .map(|category| json!({ "category": category.category, "count": category.count }))
+                .collect::<Vec<_>>();
+            json!({
+                "coach_id": row.coach_id,
+                "coach_name": row.coach_name,
+                "coach_code": row.coach_code.unwrap_or_default(),
+                "branch_id": row.branch_id,
+                "branch_name": row.branch_name.unwrap_or_default(),
+                "job_title": row.job_title.unwrap_or_default(),
+                "metrics": {
+                    "classes_taught": row.classes_taught,
+                    "total_students": row.total_students,
+                    "satisfaction_rating": row.satisfaction_rating,
+                    "review_count": row.review_count,
+                    "renewal_rate": null,
+                    "attendance_rate": row.attendance_rate,
+                    "notes_created": 0,
+                    "lesson_plans_created": 0
+                },
+                "details": {
+                    "classes_by_category": coach_categories
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let total_classes_taught = data.iter().map(|row| row["metrics"]["classes_taught"].as_i64().unwrap_or(0)).sum::<i64>();
+    let total_students = data.iter().map(|row| row["metrics"]["total_students"].as_i64().unwrap_or(0)).sum::<i64>();
+    let ratings = data.iter().filter_map(|row| row["metrics"]["satisfaction_rating"].as_f64()).collect::<Vec<_>>();
+    let average_satisfaction = if ratings.is_empty() {
+        0.0
+    } else {
+        ratings.iter().sum::<f64>() / ratings.len() as f64
+    };
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "period": { "start_date": start, "end_date": end },
+        "summary": {
+            "total_coaches": data.len(),
+            "total_classes_taught": total_classes_taught,
+            "total_students": total_students,
+            "average_satisfaction": average_satisfaction
+        },
+        "data": data
+    }))))
+}
+
+pub async fn performance_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
+    require_tenant(&auth)?;
+    let report_type = query.period.unwrap_or_else(|| "performance".into());
+    Ok((StatusCode::OK, format!("type,date,value\n{report_type},{},0\n", Utc::now().date_naive())))
+}
+
 fn range(query: &DateRangeQuery) -> (NaiveDate, NaiveDate) {
     let end = query.end_date.or(query.end_date_snake).unwrap_or_else(|| Utc::now().date_naive());
     let default_days = match query.period.as_deref() {
@@ -413,6 +674,47 @@ fn range(query: &DateRangeQuery) -> (NaiveDate, NaiveDate) {
     };
     let start = query.start_date.or(query.start_date_snake).unwrap_or(end - Duration::days(default_days));
     (start, end)
+}
+
+fn period_range(period: Option<&str>) -> (NaiveDate, NaiveDate) {
+    let end = Utc::now().date_naive();
+    let days = match period {
+        Some("week") => 6,
+        Some("quarter") => 89,
+        Some("year") => 364,
+        _ => 29,
+    };
+    (end - Duration::days(days), end)
+}
+
+fn percent_change(current: f64, previous: f64) -> f64 {
+    if previous.abs() < f64::EPSILON {
+        if current.abs() < f64::EPSILON { 0.0 } else { 100.0 }
+    } else {
+        ((current - previous) / previous) * 100.0
+    }
+}
+
+fn ranking(data: &[serde_json::Value], section: &str, field: &str, descending_absent_ok: bool) -> Vec<serde_json::Value> {
+    let mut rows = data
+        .iter()
+        .map(|row| {
+            let value = row[section][field].as_f64().unwrap_or_else(|| row[section][field].as_i64().unwrap_or(0) as f64);
+            (row["branch_id"].clone(), row["branch_name"].clone(), value)
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| right.2.partial_cmp(&left.2).unwrap_or(std::cmp::Ordering::Equal));
+    rows.into_iter()
+        .enumerate()
+        .map(|(index, (branch_id, branch_name, value))| {
+            json!({
+                "branch_id": branch_id,
+                "branch_name": branch_name,
+                "value": if descending_absent_ok { value } else { value },
+                "rank": index + 1
+            })
+        })
+        .collect()
 }
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {

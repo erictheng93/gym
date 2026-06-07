@@ -149,6 +149,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports/contract-expiry", get(dashboard_reports::contract_expiry_report))
         .route("/api/reports/member-activity", get(dashboard_reports::member_activity_report))
         .route("/api/reports/refresh", post(dashboard_reports::refresh_reports))
+        .route("/api/reports/branch-performance", get(dashboard_reports::branch_performance_report))
+        .route("/api/reports/branch-performance/export", get(dashboard_reports::performance_export))
+        .route("/api/reports/coach-performance", get(dashboard_reports::coach_performance_report))
+        .route("/api/reports/coach-performance/export", get(dashboard_reports::performance_export))
         .route("/api/employees", get(hr::list_employees).post(hr::create_employee))
         .route(
             "/api/employees/{id}",
