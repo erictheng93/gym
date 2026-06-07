@@ -4714,4 +4714,226 @@ mod tests {
             .unwrap();
     }
 
+    #[tokio::test]
+    async fn admin_notification_config_and_usage_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let member_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-notification-admin-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id)
+            .bind(format!("Rust Notification Tenant {suffix}"))
+            .bind(format!("rust-notification-{suffix}"))
+            .bind(format!("notification-{suffix}@example.com"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id)
+            .bind(format!("Rust Notification Branch {suffix}"))
+            .bind(format!("NB{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{}'::jsonb, $4)")
+            .bind(job_title_id)
+            .bind(format!("Rust Notification Admin {suffix}"))
+            .bind(format!("NA{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id)
+            .bind(&email)
+            .bind(password_hash)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, 'Rust Notification Admin', $6, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $7)")
+            .bind(employee_id)
+            .bind(user_id)
+            .bind(branch_id)
+            .bind(job_title_id)
+            .bind(format!("NAA{}", &suffix[..8]))
+            .bind(&email)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into members (id, member_code, full_name, phone, email, branch_id, status, join_date, tenant_id) values ($1, $2, 'Rust Notification Member', '0912345678', $3, $4, 'ACTIVE', current_date, $5)")
+            .bind(member_id)
+            .bind(format!("NM{}", &suffix[..8]))
+            .bind(format!("member-notification-{suffix}@example.com"))
+            .bind(branch_id)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into member_notification_history (id, member_id, notification_type, title, body, successful_channel, overall_status, sent_at, tenant_id) values (gen_random_uuid(), $1, 'booking_reminder', 'Reminder', 'Class starts soon', 'sms', 'sent', '2026-06-01T10:00:00Z'::timestamptz, $2), (gen_random_uuid(), $1, 'system', 'System', 'Welcome', 'line', 'failed', '2026-06-01T11:00:00Z'::timestamptz, $2)")
+            .bind(member_id)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let app = build_app(AppState {
+            db: pool.clone(),
+            jwt_secret: "test-secret".into(),
+            jwt_ttl_seconds: 3600,
+        });
+        let login_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "email": email, "password": password }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let branches_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/notification-config")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branches_response.status(), StatusCode::OK);
+        let branches_body = to_bytes(branches_response.into_body(), usize::MAX).await.unwrap();
+        let branches_json: Value = serde_json::from_slice(&branches_body).unwrap();
+        assert_eq!(branches_json["config"]["branch_id"], branch_id.to_string());
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/admin/notification-config")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "branch_id": branch_id,
+                        "line_channel_access_token": "line-token-1234567890",
+                        "line_channel_secret": "line-secret",
+                        "mitake_username": "mitake-user",
+                        "mitake_password": "mitake-pass",
+                        "sms_sender_name": "GymNexus",
+                        "is_active": true
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let update_body = to_bytes(update_response.into_body(), usize::MAX).await.unwrap();
+        let update_json: Value = serde_json::from_slice(&update_body).unwrap();
+        assert_eq!(update_json["config"]["has_line_config"], true);
+        assert_eq!(update_json["config"]["has_sms_config"], true);
+        assert_eq!(update_json["config"]["mitake_username"], "mitake-user");
+        assert_eq!(update_json["config"]["sms_sender_name"], "GymNexus");
+
+        let get_config_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/notification-config?branch_id={branch_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get_config_response.status(), StatusCode::OK);
+
+        let test_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/notification-config/test")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "branch_id": branch_id, "channel": "sms" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(test_response.status(), StatusCode::OK);
+        let test_body = to_bytes(test_response.into_body(), usize::MAX).await.unwrap();
+        let test_json: Value = serde_json::from_slice(&test_body).unwrap();
+        assert_eq!(test_json["success"], true);
+
+        let usage_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/notification-usage?start_date=2026-06-01&end_date=2026-06-30&group_by=day&branch_id={branch_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(usage_response.status(), StatusCode::OK);
+        let usage_body = to_bytes(usage_response.into_body(), usize::MAX).await.unwrap();
+        let usage_json: Value = serde_json::from_slice(&usage_body).unwrap();
+        assert_eq!(usage_json["summary"]["sms"]["total_sent"], 1);
+        assert_eq!(usage_json["summary"]["line"]["total_sent"], 1);
+        assert_eq!(usage_json["details"]["notifications"].as_array().unwrap().len(), 2);
+
+        let export_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/notification-usage/export?start_date=2026-06-01&end_date=2026-06-30&branch_id={branch_id}&format=csv"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(export_response.status(), StatusCode::OK);
+        assert_eq!(
+            export_response.headers().get("content-type").unwrap(),
+            "text/csv; charset=utf-8"
+        );
+
+        sqlx::query("delete from member_notification_history where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
+
 }

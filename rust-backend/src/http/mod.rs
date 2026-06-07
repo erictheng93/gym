@@ -11,6 +11,7 @@ use crate::{error, error::AppError, state::AppState};
 
 mod auth;
 mod attendances;
+mod admin_notifications;
 mod admin_tenants;
 mod branches;
 mod check_ins;
@@ -88,6 +89,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/public/branding", get(tenant::public_branding))
         .route("/tenant/settings/branding", get(tenant::get_branding))
         .route("/tenant/settings", patch(tenant::update_settings))
+        .route(
+            "/api/admin/notification-config",
+            get(admin_notifications::get_config).patch(admin_notifications::update_config),
+        )
+        .route("/api/admin/notification-config/test", post(admin_notifications::test_config))
+        .route("/api/admin/notification-usage", get(admin_notifications::usage))
+        .route("/api/admin/notification-usage/export", get(admin_notifications::export_usage))
         .route("/api/admin/tenants", get(admin_tenants::list).post(admin_tenants::create))
         .route(
             "/api/admin/tenants/{tenantId}",
