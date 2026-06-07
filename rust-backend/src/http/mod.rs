@@ -138,10 +138,17 @@ pub fn router(state: AppState) -> Router {
             get(class_scheduling::get_booking).delete(class_scheduling::cancel_booking),
         )
         .route("/api/admin/dashboard/kpis", get(dashboard_reports::dashboard_kpis))
+        .route("/api/admin/dashboard/contract-alerts", get(dashboard_reports::contract_alerts))
+        .route(
+            "/api/admin/dashboard/revenue-targets",
+            get(dashboard_reports::revenue_targets).post(dashboard_reports::set_revenue_target),
+        )
+        .route("/api/admin/dashboard/export", get(dashboard_reports::dashboard_export))
         .route("/api/reports/revenue", get(dashboard_reports::revenue_report))
         .route("/api/reports/member-growth", get(dashboard_reports::member_growth_report))
         .route("/api/reports/contract-expiry", get(dashboard_reports::contract_expiry_report))
         .route("/api/reports/member-activity", get(dashboard_reports::member_activity_report))
+        .route("/api/reports/refresh", post(dashboard_reports::refresh_reports))
         .route("/api/employees", get(hr::list_employees).post(hr::create_employee))
         .route(
             "/api/employees/{id}",

@@ -2083,6 +2083,9 @@ mod tests {
 
         for uri in [
             "/api/admin/dashboard/kpis?days=30",
+            "/api/admin/dashboard/contract-alerts?days_ahead=45&limit=10",
+            "/api/admin/dashboard/revenue-targets",
+            "/api/admin/dashboard/export?type=kpis&format=csv&days=30",
             "/api/reports/revenue?days=30",
             "/api/reports/member-growth?days=30",
             "/api/reports/contract-expiry?days=45",
@@ -2094,7 +2097,34 @@ mod tests {
                     .body(Body::empty()).unwrap()
             ).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            if uri.starts_with("/api/admin/dashboard/kpis") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["revenue"]["period"].as_f64().unwrap() >= 3000.0);
+                assert!(json["operations"]["today_checkins"].as_i64().unwrap() >= 1);
+            }
         }
+
+        let set_target_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/admin/dashboard/revenue-targets")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "branch_id": branch_id,
+                    "year": 2026,
+                    "month": 6,
+                    "target_amount": 100000.0
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(set_target_response.status(), StatusCode::OK);
+
+        let refresh_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/reports/refresh")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(refresh_response.status(), StatusCode::OK);
 
         sqlx::query("delete from check_ins where id = $1").bind(check_in_id).execute(&pool).await.unwrap();
         sqlx::query("delete from payments where id = $1").bind(payment_id).execute(&pool).await.unwrap();
