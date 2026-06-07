@@ -153,3 +153,34 @@ create index if not exists membership_plans_tenant_id_idx on membership_plans(te
 create index if not exists membership_plans_branch_id_idx on membership_plans(branch_id);
 create index if not exists members_tenant_id_idx on members(tenant_id);
 create index if not exists members_branch_id_idx on members(branch_id);
+
+create table if not exists contracts (
+    id uuid primary key default gen_random_uuid(),
+    contract_no varchar not null unique,
+    member_id uuid not null references members(id),
+    plan_id uuid not null references membership_plans(id),
+    branch_id uuid not null references branches(id),
+    sales_person_id uuid references employees(id),
+    status varchar not null,
+    sign_date date,
+    start_date date not null,
+    original_end_date date not null,
+    end_date date not null,
+    remaining_counts integer,
+    total_amount numeric not null,
+    paid_amount numeric not null,
+    payment_status varchar not null,
+    digital_signature uuid,
+    contract_pdf uuid,
+    terms_accepted boolean not null default false,
+    notes text,
+    created_by uuid references employees(id),
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create index if not exists contracts_tenant_id_idx on contracts(tenant_id);
+create index if not exists contracts_member_id_idx on contracts(member_id);
+create index if not exists contracts_plan_id_idx on contracts(plan_id);
+create index if not exists contracts_branch_id_idx on contracts(branch_id);

@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::{error, error::AppError, state::AppState};
 
 mod auth;
+mod contracts;
 mod members;
 mod membership_plans;
 
@@ -71,6 +72,13 @@ pub fn router(state: AppState) -> Router {
             get(members::get)
                 .patch(members::update)
                 .delete(members::delete),
+        )
+        .route("/api/contracts", get(contracts::list).post(contracts::create))
+        .route(
+            "/api/contracts/{id}",
+            get(contracts::get)
+                .patch(contracts::update)
+                .delete(contracts::delete),
         )
         .fallback(error::not_found)
         .with_state(state)
