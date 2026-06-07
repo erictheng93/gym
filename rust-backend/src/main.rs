@@ -2050,8 +2050,29 @@ mod tests {
         let login_json: Value = serde_json::from_slice(&login_body).unwrap();
         let token = login_json["data"]["accessToken"].as_str().unwrap();
 
+        let profile_update_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri("/api/member/profile")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "full_name": "Rust Member Updated",
+                    "phone": "0999888777",
+                    "email": format!("updated-{suffix}@example.com"),
+                    "emergency_contact": "Emergency Contact",
+                    "emergency_phone": "0911222333"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(profile_update_response.status(), StatusCode::OK);
+        let profile_update_body = to_bytes(profile_update_response.into_body(), usize::MAX).await.unwrap();
+        let profile_update_json: Value = serde_json::from_slice(&profile_update_body).unwrap();
+        assert_eq!(profile_update_json["data"]["full_name"], "Rust Member Updated");
+        assert_eq!(profile_update_json["data"]["phone"], "0999888777");
+        assert_eq!(profile_update_json["data"]["emergency_contact"], "Emergency Contact");
+        assert_eq!(profile_update_json["data"]["branch"]["name"], format!("Rust Member Branch {suffix}"));
+
         for uri in [
             "/api/member/me",
+            "/api/member/profile",
             "/api/member/classes",
             "/api/member/classes/schedule",
             "/api/member/classes/sessions",

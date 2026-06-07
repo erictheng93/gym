@@ -194,7 +194,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/performance/team-dashboard", get(performance::team_dashboard))
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
-        .route("/api/member/profile", get(member_app::profile))
+        .route("/api/member/profile", get(member_app::profile).patch(member_app::update_profile))
         .route("/api/member/classes", get(member_app::list_classes))
         .route("/api/member/classes/schedule", get(member_app::list_schedules))
         .route("/api/member/classes/sessions", get(member_app::list_sessions))

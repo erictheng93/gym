@@ -12,7 +12,7 @@ use bcrypt::verify;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use jsonwebtoken::{decode, encode, get_current_timestamp, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -87,8 +87,15 @@ struct MemberProfile {
     full_name: String,
     phone: Option<String>,
     email: Option<String>,
+    gender: Option<String>,
+    birthday: Option<NaiveDate>,
+    emergency_contact: Option<String>,
+    emergency_phone: Option<String>,
     branch_id: Uuid,
+    branch: Value,
     member_status: String,
+    date_created: Option<DateTime<Utc>>,
+    avatar: Option<Uuid>,
     contracts: Vec<MemberContract>,
 }
 
@@ -99,8 +106,15 @@ struct MemberProfileRow {
     full_name: String,
     phone: Option<String>,
     email: Option<String>,
+    gender: Option<String>,
+    birthday: Option<NaiveDate>,
+    emergency_contact: Option<String>,
+    emergency_phone: Option<String>,
     branch_id: Uuid,
+    branch: Value,
     member_status: String,
+    date_created: Option<DateTime<Utc>>,
+    avatar: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -231,6 +245,20 @@ pub struct PaginationFilter {
     limit: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateProfileRequest {
+    #[serde(default)]
+    full_name: Option<Option<String>>,
+    #[serde(default)]
+    phone: Option<Option<String>>,
+    #[serde(default)]
+    email: Option<Option<String>>,
+    #[serde(default)]
+    emergency_contact: Option<Option<String>>,
+    #[serde(default)]
+    emergency_phone: Option<Option<String>>,
+}
+
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<MemberLoginRequest>,
@@ -282,11 +310,67 @@ pub async fn login(
 }
 
 pub async fn me(auth: MemberAuthContext, State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
+    let profile = fetch_profile(&state, &auth).await?;
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: profile })))
+}
+
+pub async fn profile(auth: MemberAuthContext, State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
+    me(auth, State(state)).await
+}
+
+pub async fn update_profile(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    if let Some(Some(name)) = &payload.full_name {
+        validation::required_text("full_name", name)?;
+    }
+
+    sqlx::query(
+        r#"
+        update members set
+            full_name = case when $3::bool then $4::varchar else full_name end,
+            phone = case when $5::bool then $6::varchar else phone end,
+            email = case when $7::bool then $8::varchar else email end,
+            emergency_contact = case when $9::bool then $10::varchar else emergency_contact end,
+            emergency_phone = case when $11::bool then $12::varchar else emergency_phone end,
+            updated_at = now()
+        where members.id = $1 and members.tenant_id = $2
+        "#,
+    )
+    .bind(auth.member_id)
+    .bind(auth.tenant_id)
+    .bind(payload.full_name.is_some())
+    .bind(payload.full_name.flatten())
+    .bind(payload.phone.is_some())
+    .bind(payload.phone.flatten())
+    .bind(payload.email.is_some())
+    .bind(payload.email.flatten())
+    .bind(payload.emergency_contact.is_some())
+    .bind(payload.emergency_contact.flatten())
+    .bind(payload.emergency_phone.is_some())
+    .bind(payload.emergency_phone.flatten())
+    .execute(&state.db)
+    .await?;
+
+    let profile = fetch_profile(&state, &auth).await?;
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: profile })))
+}
+
+async fn fetch_profile(state: &AppState, auth: &MemberAuthContext) -> Result<MemberProfile, AppError> {
     let row = sqlx::query_as::<_, MemberProfileRow>(
         r#"
-        select id, member_code, full_name, phone, email, branch_id, status as member_status
+        select members.id, members.member_code, members.full_name, members.phone, members.email,
+            members.gender, members.birthday, members.emergency_contact, members.emergency_phone,
+            members.branch_id,
+            json_build_object('id', branches.id, 'name', branches.name) as branch,
+            members.status as member_status,
+            members.created_at as date_created,
+            members.avatar
         from members
-        where id = $1 and tenant_id = $2
+        join branches on branches.id = members.branch_id
+        where members.id = $1 and members.tenant_id = $2
         "#,
     )
     .bind(auth.member_id)
@@ -294,21 +378,23 @@ pub async fn me(auth: MemberAuthContext, State(state): State<AppState>) -> Resul
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::Unauthorized)?;
-    let profile = MemberProfile {
+    Ok(MemberProfile {
         id: row.id,
         member_code: row.member_code,
         full_name: row.full_name,
         phone: row.phone,
         email: row.email,
+        gender: row.gender,
+        birthday: row.birthday,
+        emergency_contact: row.emergency_contact,
+        emergency_phone: row.emergency_phone,
         branch_id: row.branch_id,
+        branch: row.branch,
         member_status: row.member_status,
-        contracts: fetch_contracts(&state, &auth).await?,
-    };
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: profile })))
-}
-
-pub async fn profile(auth: MemberAuthContext, State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
-    me(auth, State(state)).await
+        date_created: row.date_created,
+        avatar: row.avatar,
+        contracts: fetch_contracts(state, auth).await?,
+    })
 }
 
 pub async fn list_classes(
@@ -457,7 +543,7 @@ pub async fn create_booking(
         .await?;
     tx.commit().await?;
 
-    Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true, "message": "預約成功", "booking": booking}))))
+    Ok((StatusCode::CREATED, Json(json!({"success": true, "message": "預約成功", "booking": booking}))))
 }
 
 pub async fn cancel_booking(
@@ -481,7 +567,7 @@ pub async fn cancel_booking(
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
-    Ok((StatusCode::OK, Json(serde_json::json!({"success": true, "message": "取消成功", "booking": booking}))))
+    Ok((StatusCode::OK, Json(json!({"success": true, "message": "取消成功", "booking": booking}))))
 }
 
 pub async fn list_contracts(auth: MemberAuthContext, State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
@@ -490,11 +576,11 @@ pub async fn list_contracts(auth: MemberAuthContext, State(state): State<AppStat
 }
 
 pub async fn pause_contract() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "message": "暫停申請已送出"})))
+    (StatusCode::OK, Json(json!({"success": true, "message": "暫停申請已送出"})))
 }
 
 pub async fn resume_contract() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({"success": true, "message": "合約已恢復"})))
+    (StatusCode::OK, Json(json!({"success": true, "message": "合約已恢復"})))
 }
 
 pub async fn list_payments(
