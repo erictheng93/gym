@@ -1045,4 +1045,276 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn payments_round_trip_updates_contract_payment_status() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let member_id = Uuid::new_v4();
+        let plan_id = Uuid::new_v4();
+        let contract_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-payment-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query(
+            "insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')",
+        )
+        .bind(tenant_id)
+        .bind(format!("Rust Payment Tenant {suffix}"))
+        .bind(format!("rust-payment-tenant-{suffix}"))
+        .bind(format!("payment-tenant-{suffix}@example.com"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')",
+        )
+        .bind(branch_id)
+        .bind(format!("Rust Payment Branch {suffix}"))
+        .bind(format!("PYB{}", &suffix[..8]))
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"payments\":[\"read\",\"write\"]}'::jsonb, $4)",
+        )
+        .bind(job_title_id)
+        .bind(format!("Rust Payment Admin {suffix}"))
+        .bind(format!("PYA{}", &suffix[..8]))
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)",
+        )
+        .bind(user_id)
+        .bind(&email)
+        .bind(password_hash)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $8)",
+        )
+        .bind(employee_id)
+        .bind(user_id)
+        .bind(branch_id)
+        .bind(job_title_id)
+        .bind(format!("PYE{}", &suffix[..8]))
+        .bind("Rust Payment User")
+        .bind(&email)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into members (id, member_code, full_name, phone, branch_id, sales_person_id, status, join_date, tenant_id) values ($1, $2, 'Rust Payment Member', '0912345678', $3, $4, 'ACTIVE', '2026-01-01'::date, $5)",
+        )
+        .bind(member_id)
+        .bind(format!("PYM{}", &suffix[..8]))
+        .bind(branch_id)
+        .bind(employee_id)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into membership_plans (id, name, code, type, duration_months, price, allow_pause, allow_transfer, is_active, tenant_id, branch_id) values ($1, 'Rust Month Plan', $2, 'TIME_BASED', 12, 3000, false, false, true, $3, $4)",
+        )
+        .bind(plan_id)
+        .bind(format!("PYP{}", &suffix[..8]))
+        .bind(tenant_id)
+        .bind(branch_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into contracts (id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, start_date, original_end_date, end_date, total_amount, paid_amount, payment_status, terms_accepted, created_by, tenant_id) values ($1, $2, $3, $4, $5, $6, 'ACTIVE', '2026-01-01'::date, '2026-12-31'::date, '2026-12-31'::date, 3000, 0, 'UNPAID', true, $6, $7)",
+        )
+        .bind(contract_id)
+        .bind(format!("PYC{}", &suffix[..8]))
+        .bind(member_id)
+        .bind(plan_id)
+        .bind(branch_id)
+        .bind(employee_id)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let app = build_app(AppState {
+            db: pool.clone(),
+            jwt_secret: "test-secret".into(),
+            jwt_ttl_seconds: 3600,
+        });
+
+        let login_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"email": email, "password": password}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/payments")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "contractId": contract_id,
+                            "amount": 1000.0,
+                            "paymentMethod": "CASH",
+                            "type": "INCOME",
+                            "receiptNo": format!("R{}", &suffix[..8])
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+        let create_json: Value = serde_json::from_slice(&create_body).unwrap();
+        let payment_id = create_json["data"]["id"].as_str().unwrap().to_string();
+
+        let contract_status: (f64, String) = sqlx::query_as(
+            "select paid_amount::float8, payment_status from contracts where id = $1",
+        )
+        .bind(contract_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(contract_status.0, 1000.0);
+        assert_eq!(contract_status.1, "PARTIAL");
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/payments/{payment_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"amount": 3000.0}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(update_response.status(), StatusCode::OK);
+
+        let contract_status: (f64, String) = sqlx::query_as(
+            "select paid_amount::float8, payment_status from contracts where id = $1",
+        )
+        .bind(contract_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(contract_status.0, 3000.0);
+        assert_eq!(contract_status.1, "PAID");
+
+        let delete_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/payments/{payment_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete_response.status(), StatusCode::OK);
+
+        let contract_status: (f64, String) = sqlx::query_as(
+            "select paid_amount::float8, payment_status from contracts where id = $1",
+        )
+        .bind(contract_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(contract_status.0, 0.0);
+        assert_eq!(contract_status.1, "UNPAID");
+
+        sqlx::query("delete from contracts where id = $1")
+            .bind(contract_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from membership_plans where id = $1")
+            .bind(plan_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from members where id = $1")
+            .bind(member_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from employees where id = $1")
+            .bind(employee_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from users where id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from job_titles where id = $1")
+            .bind(job_title_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from branches where id = $1")
+            .bind(branch_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from tenants where id = $1")
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
 }

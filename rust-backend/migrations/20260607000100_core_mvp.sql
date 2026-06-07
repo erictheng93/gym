@@ -184,3 +184,24 @@ create index if not exists contracts_tenant_id_idx on contracts(tenant_id);
 create index if not exists contracts_member_id_idx on contracts(member_id);
 create index if not exists contracts_plan_id_idx on contracts(plan_id);
 create index if not exists contracts_branch_id_idx on contracts(branch_id);
+
+create table if not exists payments (
+    id uuid primary key default gen_random_uuid(),
+    contract_id uuid not null references contracts(id),
+    member_id uuid not null references members(id),
+    branch_id uuid not null references branches(id),
+    amount numeric not null,
+    payment_method varchar not null,
+    payment_date timestamptz not null,
+    type varchar not null,
+    receipt_no varchar,
+    notes varchar,
+    created_by uuid references employees(id),
+    created_at timestamptz not null default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create index if not exists payments_tenant_id_idx on payments(tenant_id);
+create index if not exists payments_contract_id_idx on payments(contract_id);
+create index if not exists payments_member_id_idx on payments(member_id);
+create index if not exists payments_branch_id_idx on payments(branch_id);

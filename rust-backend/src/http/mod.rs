@@ -13,6 +13,7 @@ mod auth;
 mod contracts;
 mod members;
 mod membership_plans;
+mod payments;
 
 #[derive(Debug, Serialize)]
 struct ApiResponse<T> {
@@ -79,6 +80,13 @@ pub fn router(state: AppState) -> Router {
             get(contracts::get)
                 .patch(contracts::update)
                 .delete(contracts::delete),
+        )
+        .route("/api/payments", get(payments::list).post(payments::create))
+        .route(
+            "/api/payments/{id}",
+            get(payments::get)
+                .patch(payments::update)
+                .delete(payments::delete),
         )
         .fallback(error::not_found)
         .with_state(state)
