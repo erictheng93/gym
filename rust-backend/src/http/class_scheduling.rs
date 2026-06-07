@@ -30,6 +30,10 @@ pub struct ScheduleFilters {
     active_only: Option<bool>,
     day_of_week: Option<i32>,
     is_recurring: Option<bool>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -142,6 +146,10 @@ pub struct SessionFilters {
     end_date: Option<NaiveDate>,
     session_status: Option<String>,
     instructor_id: Option<Uuid>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -247,6 +255,10 @@ pub struct BookingFilters {
     end_date: Option<NaiveDate>,
     upcoming: Option<bool>,
     exclude_cancelled: Option<bool>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -369,7 +381,7 @@ pub async fn list_schedules(
     Query(filters): Query<ScheduleFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let schedules = sqlx::query_as::<_, ClassSchedule>(
+    let mut schedules = sqlx::query_as::<_, ClassSchedule>(
         r#"
         select class_schedules.*,
             json_build_object(
@@ -409,6 +421,7 @@ pub async fn list_schedules(
     .bind(filters.is_recurring)
     .fetch_all(&state.db)
     .await?;
+    sort_schedules(&mut schedules, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     Ok((StatusCode::OK, Json(paginated(schedules, filters.page, filters.limit))))
 }
@@ -557,7 +570,7 @@ pub async fn list_sessions(
     Query(filters): Query<SessionFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let sessions = sqlx::query_as::<_, ClassSession>(
+    let mut sessions = sqlx::query_as::<_, ClassSession>(
         r#"
         select class_sessions.*,
             json_build_object(
@@ -601,6 +614,7 @@ pub async fn list_sessions(
     .bind(filters.instructor_id)
     .fetch_all(&state.db)
     .await?;
+    sort_sessions(&mut sessions, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     Ok((StatusCode::OK, Json(paginated(sessions, filters.page, filters.limit))))
 }
@@ -748,7 +762,7 @@ pub async fn list_bookings(
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
     let statuses = filters.status.as_deref().map(parse_status_filter);
-    let bookings = sqlx::query_as::<_, Booking>(
+    let mut bookings = sqlx::query_as::<_, Booking>(
         r#"
         select bookings.id, bookings.status, bookings.session_id, bookings.member_id,
             bookings.contract_id, bookings.booking_status, bookings.waitlist_position,
@@ -811,6 +825,7 @@ pub async fn list_bookings(
     .bind(filters.exclude_cancelled.unwrap_or(false))
     .fetch_all(&state.db)
     .await?;
+    sort_bookings(&mut bookings, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     Ok((StatusCode::OK, Json(paginated(bookings, filters.page, filters.limit))))
 }
@@ -1553,6 +1568,51 @@ async fn fetch_session(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Class
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
     auth.user.tenant_id.ok_or(AppError::Unauthorized)
+}
+
+fn sort_schedules(schedules: &mut [ClassSchedule], sort_by: Option<&str>, sort_order: Option<&str>) {
+    match sort_by.unwrap_or("day_of_week") {
+        "day_of_week" | "dayOfWeek" => schedules.sort_by(|a, b| {
+            a.day_of_week.cmp(&b.day_of_week).then(a.start_time.cmp(&b.start_time))
+        }),
+        "start_time" | "startTime" => schedules.sort_by(|a, b| a.start_time.cmp(&b.start_time)),
+        "end_time" | "endTime" => schedules.sort_by(|a, b| a.end_time.cmp(&b.end_time)),
+        "max_capacity" | "maxCapacity" => schedules.sort_by(|a, b| a.max_capacity.cmp(&b.max_capacity)),
+        "is_recurring" | "isRecurring" => schedules.sort_by(|a, b| a.is_recurring.cmp(&b.is_recurring)),
+        _ => {}
+    }
+    if sort_order.map(|value| value.eq_ignore_ascii_case("desc")).unwrap_or(false) {
+        schedules.reverse();
+    }
+}
+
+fn sort_sessions(sessions: &mut [ClassSession], sort_by: Option<&str>, sort_order: Option<&str>) {
+    match sort_by.unwrap_or("session_date") {
+        "session_date" | "sessionDate" => sessions.sort_by(|a, b| {
+            a.session_date.cmp(&b.session_date).then(a.start_time.cmp(&b.start_time))
+        }),
+        "start_time" | "startTime" => sessions.sort_by(|a, b| a.start_time.cmp(&b.start_time)),
+        "end_time" | "endTime" => sessions.sort_by(|a, b| a.end_time.cmp(&b.end_time)),
+        "session_status" | "sessionStatus" => sessions.sort_by(|a, b| a.session_status.cmp(&b.session_status)),
+        "current_count" | "currentCount" => sessions.sort_by(|a, b| a.current_count.cmp(&b.current_count)),
+        "max_capacity" | "maxCapacity" => sessions.sort_by(|a, b| a.max_capacity.cmp(&b.max_capacity)),
+        _ => {}
+    }
+    if sort_order.map(|value| value.eq_ignore_ascii_case("desc")).unwrap_or(false) {
+        sessions.reverse();
+    }
+}
+
+fn sort_bookings(bookings: &mut [Booking], sort_by: Option<&str>, sort_order: Option<&str>) {
+    match sort_by.unwrap_or("booked_at") {
+        "booked_at" | "bookedAt" => bookings.sort_by(|a, b| a.booked_at.cmp(&b.booked_at)),
+        "booking_status" | "bookingStatus" => bookings.sort_by(|a, b| a.booking_status.cmp(&b.booking_status)),
+        "waitlist_position" | "waitlistPosition" => bookings.sort_by(|a, b| a.waitlist_position.cmp(&b.waitlist_position)),
+        _ => {}
+    }
+    if !sort_order.map(|value| value.eq_ignore_ascii_case("asc")).unwrap_or(false) {
+        bookings.reverse();
+    }
 }
 
 fn paginated<T: Serialize + Clone>(data: Vec<T>, page: Option<i64>, limit: Option<i64>) -> PaginatedResponse<Vec<T>> {

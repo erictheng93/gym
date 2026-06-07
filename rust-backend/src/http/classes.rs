@@ -34,6 +34,10 @@ pub struct ClassFilters {
     #[serde(rename = "is_active")]
     is_active: Option<bool>,
     search: Option<String>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -137,7 +141,7 @@ pub async fn list(
     let difficulty_level = filters.difficulty_level.or(filters.difficulty_level_snake);
     let is_active = filters.is_active.or(filters.active_only);
     let search = filters.search.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let classes = sqlx::query_as::<_, GymClass>(
+    let mut classes = sqlx::query_as::<_, GymClass>(
         r#"
         select
             classes.id, classes.status, classes.name, classes.description,
@@ -189,6 +193,7 @@ pub async fn list(
     .bind(search)
     .fetch_all(&state.db)
     .await?;
+    sort_classes(&mut classes, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     let total = classes.len() as i64;
     let page = filters.page.unwrap_or(1).max(1);
@@ -488,6 +493,24 @@ async fn resolve_category_code(
     .ok_or_else(|| AppError::Validation("category_id is invalid for this tenant".into()))?;
 
     Ok(Some(code))
+}
+
+fn sort_classes(classes: &mut [GymClass], sort_by: Option<&str>, sort_order: Option<&str>) {
+    let mut sorted = true;
+    match sort_by.unwrap_or("date_created") {
+        "name" => classes.sort_by(|a, b| a.name.cmp(&b.name)),
+        "duration_minutes" | "durationMinutes" => classes.sort_by(|a, b| a.duration_minutes.cmp(&b.duration_minutes)),
+        "max_capacity" | "maxCapacity" => classes.sort_by(|a, b| a.max_capacity.cmp(&b.max_capacity)),
+        "difficulty_level" | "difficultyLevel" => classes.sort_by(|a, b| a.difficulty_level.cmp(&b.difficulty_level)),
+        "category" | "category_id" | "categoryId" => classes.sort_by(|a, b| a.category.cmp(&b.category)),
+        "is_active" | "isActive" => classes.sort_by(|a, b| a.is_active.cmp(&b.is_active)),
+        _ => sorted = false,
+    }
+
+    let ascending = sort_order.map(|value| value.eq_ignore_ascii_case("asc")).unwrap_or(false);
+    if (sorted && !ascending) || (!sorted && ascending) {
+        classes.reverse();
+    }
 }
 
 #[cfg(test)]

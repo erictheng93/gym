@@ -2308,7 +2308,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/classes?is_active=true&category_id={category_id}&branch_id={branch_id}&search=Rust&page=1&limit=1"))
+                    .uri(format!("/api/classes?is_active=true&category_id={category_id}&branch_id={branch_id}&search=Rust&sortBy=name&sortOrder=asc&page=1&limit=1"))
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2592,7 +2592,7 @@ mod tests {
         let session_list_response = app.clone().oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/class_sessions?branch_id={branch_id}&instructor_id={employee_id}&session_status=SCHEDULED&start_date=2026-02-01&end_date=2026-02-01"
+                    "/api/class_sessions?branch_id={branch_id}&instructor_id={employee_id}&session_status=SCHEDULED&start_date=2026-02-01&end_date=2026-02-01&sortBy=session_date&sortOrder=asc&page=1&limit=1"
                 ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
@@ -2676,7 +2676,7 @@ mod tests {
         let booking_list_response = app.clone().oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/bookings?booking_status=CONFIRMED,WAITLIST&branch_id={branch_id}&start_date=2026-02-01&end_date=2026-02-01&page=1&limit=1"
+                    "/api/bookings?booking_status=CONFIRMED,WAITLIST&branch_id={branch_id}&start_date=2026-02-01&end_date=2026-02-01&sortBy=booked_at&sortOrder=desc&page=1&limit=1"
                 ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
