@@ -17,6 +17,13 @@ cargo test
 cargo run
 ```
 
+Run migrations:
+
+```bash
+cargo binstall sqlx-cli --no-default-features --features postgres
+DATABASE_URL=postgresql://gym_nexus:gym_nexus_dev@localhost:15432/gym_nexus sqlx migrate run
+```
+
 For local DB-backed health checks, start the existing database from `backend/` first and use:
 
 ```bash
