@@ -18,6 +18,7 @@ mod contracts;
 mod dashboard_reports;
 mod hr;
 mod leaves;
+mod makeup;
 mod members;
 mod membership_plans;
 mod member_app;
@@ -164,6 +165,12 @@ pub fn router(state: AppState) -> Router {
             "/api/employee_shifts/{id}",
             get(shifts::get_employee_shift).patch(shifts::update_employee_shift),
         )
+        .route("/api/makeup_requests", get(makeup::list_requests).post(makeup::create_request))
+        .route(
+            "/api/makeup_requests/{id}",
+            get(makeup::get_request).patch(makeup::update_request),
+        )
+        .route("/api/makeup_approval_logs", get(makeup::list_logs).post(makeup::create_log))
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
         .route("/api/member/profile", get(member_app::profile))

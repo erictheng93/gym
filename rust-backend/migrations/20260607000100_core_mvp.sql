@@ -463,3 +463,38 @@ create index if not exists shift_schedules_branch_id_idx on shift_schedules(bran
 create index if not exists employee_shifts_tenant_id_idx on employee_shifts(tenant_id);
 create index if not exists employee_shifts_employee_id_idx on employee_shifts(employee_id);
 create index if not exists employee_shifts_shift_schedule_id_idx on employee_shifts(shift_schedule_id);
+
+create table if not exists makeup_requests (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    branch_id uuid not null references branches(id),
+    target_date date not null,
+    makeup_type varchar not null,
+    requested_check_in time,
+    requested_check_out time,
+    reason text not null,
+    document_url varchar,
+    request_status varchar not null default 'PENDING',
+    approver_id uuid references employees(id),
+    approved_at timestamptz,
+    approval_notes text,
+    submitted_at timestamptz
+);
+
+create table if not exists makeup_approval_logs (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    makeup_request_id uuid not null references makeup_requests(id),
+    action_by uuid not null references employees(id),
+    action varchar not null,
+    previous_status varchar,
+    new_status varchar,
+    notes text
+);
+
+create index if not exists makeup_requests_employee_id_idx on makeup_requests(employee_id);
+create index if not exists makeup_requests_request_status_idx on makeup_requests(request_status);
+create index if not exists makeup_approval_logs_makeup_request_id_idx on makeup_approval_logs(makeup_request_id);
