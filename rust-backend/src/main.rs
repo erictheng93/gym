@@ -2325,4 +2325,159 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn hr_leaves_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let approver_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-leave-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id).bind(format!("Rust Leave Tenant {suffix}"))
+            .bind(format!("rust-leave-tenant-{suffix}"))
+            .bind(format!("leave-tenant-{suffix}@example.com"))
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id).bind(format!("Rust Leave Branch {suffix}"))
+            .bind(format!("RLB{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"leaves\":[\"read\",\"write\"]}'::jsonb, $4)")
+            .bind(job_title_id).bind(format!("Rust Leave Role {suffix}"))
+            .bind(format!("RLJ{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id).bind(&email).bind(password_hash).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, 'Rust Leave Approver', $6, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $7)")
+            .bind(approver_id).bind(user_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RLA{}", &suffix[..8])).bind(&email).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, branch_id, job_title_id, employee_code, full_name, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, 'Rust Leave Employee', 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $5)")
+            .bind(employee_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RLE{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        let app = build_app(AppState { db: pool.clone(), jwt_secret: "test-secret".into(), jwt_ttl_seconds: 3600 });
+        let login_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"email": email, "password": password}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let balance_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/leave_balances")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "employee_id": employee_id,
+                    "leave_type": "ANNUAL",
+                    "year": 2026,
+                    "total_days": 14
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(balance_response.status(), StatusCode::CREATED);
+        let balance_body = to_bytes(balance_response.into_body(), usize::MAX).await.unwrap();
+        let balance_json: Value = serde_json::from_slice(&balance_body).unwrap();
+        let balance_id = Uuid::parse_str(balance_json["data"]["id"].as_str().unwrap()).unwrap();
+
+        let leave_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/leave_requests")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "employee_id": employee_id,
+                    "leave_type": "ANNUAL",
+                    "start_date": "2026-04-01",
+                    "end_date": "2026-04-02",
+                    "days_requested": 2,
+                    "reason": "Rust leave smoke"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(leave_response.status(), StatusCode::CREATED);
+        let leave_body = to_bytes(leave_response.into_body(), usize::MAX).await.unwrap();
+        let leave_json: Value = serde_json::from_slice(&leave_body).unwrap();
+        let leave_id = Uuid::parse_str(leave_json["data"]["id"].as_str().unwrap()).unwrap();
+
+        let log_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/leave_approval_logs")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "leave_request_id": leave_id,
+                    "action_by": employee_id,
+                    "action": "SUBMIT",
+                    "previous_status": null,
+                    "new_status": "PENDING",
+                    "notes": "提交休假申請"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(log_response.status(), StatusCode::CREATED);
+        let log_body = to_bytes(log_response.into_body(), usize::MAX).await.unwrap();
+        let log_json: Value = serde_json::from_slice(&log_body).unwrap();
+        let log_id = Uuid::parse_str(log_json["data"]["id"].as_str().unwrap()).unwrap();
+
+        for uri in [
+            format!("/api/leave_requests/{leave_id}"),
+            format!("/api/leave_requests?employee_id={employee_id}&leave_status=PENDING"),
+            format!("/api/leave_balances?employee_id={employee_id}&year=2026"),
+            format!("/api/leave_approval_logs?leave_request_id={leave_id}"),
+        ] {
+            let response = app.clone().oneshot(
+                Request::builder().uri(uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty()).unwrap()
+            ).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let approve_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri(format!("/api/leave_requests/{leave_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "leave_status": "APPROVED",
+                    "approver_id": approver_id,
+                    "approved_at": "2026-03-01T00:00:00Z",
+                    "approval_notes": "ok"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(approve_response.status(), StatusCode::OK);
+
+        let balance_update_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri(format!("/api/leave_balances/{balance_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"used_days": 2, "pending_days": 0}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(balance_update_response.status(), StatusCode::OK);
+
+        sqlx::query("delete from leave_approval_logs where id = $1").bind(log_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from leave_requests where id = $1").bind(leave_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from leave_balances where id = $1").bind(balance_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(approver_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
 }

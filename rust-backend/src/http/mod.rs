@@ -2,7 +2,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::Serialize;
@@ -17,6 +17,7 @@ mod class_scheduling;
 mod contracts;
 mod dashboard_reports;
 mod hr;
+mod leaves;
 mod members;
 mod membership_plans;
 mod member_app;
@@ -144,6 +145,14 @@ pub fn router(state: AppState) -> Router {
             "/api/attendances/{id}",
             get(attendances::get).patch(attendances::update),
         )
+        .route("/api/leave_requests", get(leaves::list_requests).post(leaves::create_request))
+        .route(
+            "/api/leave_requests/{id}",
+            get(leaves::get_request).patch(leaves::update_request),
+        )
+        .route("/api/leave_balances", get(leaves::list_balances).post(leaves::create_balance))
+        .route("/api/leave_balances/{id}", patch(leaves::update_balance))
+        .route("/api/leave_approval_logs", get(leaves::list_logs).post(leaves::create_log))
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
         .route("/api/member/profile", get(member_app::profile))

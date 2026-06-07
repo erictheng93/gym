@@ -363,3 +363,67 @@ update attendances set attendance_date = coalesce(attendance_date, check_in::dat
 create index if not exists attendances_employee_id_idx on attendances(employee_id);
 create index if not exists attendances_branch_id_idx on attendances(branch_id);
 create index if not exists attendances_attendance_date_idx on attendances(attendance_date);
+
+create table if not exists leave_requests (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    leave_type varchar not null,
+    start_date timestamptz not null,
+    end_date timestamptz not null,
+    leave_status varchar not null default 'PENDING',
+    approver_id uuid references employees(id),
+    reason text,
+    hours_requested numeric,
+    days_requested numeric,
+    submitted_at timestamptz,
+    approved_at timestamptz,
+    approval_notes text,
+    document_url varchar,
+    is_half_day boolean default false,
+    half_day_type varchar
+);
+
+alter table leave_requests add column if not exists status varchar default 'ACTIVE';
+alter table leave_requests add column if not exists updated_at timestamptz default now();
+alter table leave_requests add column if not exists hours_requested numeric;
+alter table leave_requests add column if not exists days_requested numeric;
+alter table leave_requests add column if not exists submitted_at timestamptz;
+alter table leave_requests add column if not exists approved_at timestamptz;
+alter table leave_requests add column if not exists approval_notes text;
+alter table leave_requests add column if not exists document_url varchar;
+alter table leave_requests add column if not exists is_half_day boolean default false;
+alter table leave_requests add column if not exists half_day_type varchar;
+
+create table if not exists leave_balances (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    leave_type varchar not null,
+    year integer not null,
+    total_days numeric not null default 0,
+    used_days numeric not null default 0,
+    pending_days numeric not null default 0,
+    carried_over_days numeric not null default 0,
+    expires_at timestamptz
+);
+
+create table if not exists leave_approval_logs (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    leave_request_id uuid not null references leave_requests(id),
+    action_by uuid not null references employees(id),
+    action varchar not null,
+    previous_status varchar,
+    new_status varchar,
+    notes text
+);
+
+create index if not exists leave_requests_employee_id_idx on leave_requests(employee_id);
+create index if not exists leave_requests_leave_status_idx on leave_requests(leave_status);
+create index if not exists leave_balances_employee_id_idx on leave_balances(employee_id);
+create index if not exists leave_approval_logs_leave_request_id_idx on leave_approval_logs(leave_request_id);
