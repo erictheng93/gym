@@ -365,6 +365,99 @@ mod tests {
             .unwrap();
         assert_eq!(new_password_response.status(), StatusCode::OK);
 
+        let tenant_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/tenant")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(tenant_response.status(), StatusCode::OK);
+        let tenant_body = to_bytes(tenant_response.into_body(), usize::MAX).await.unwrap();
+        let tenant_json: Value = serde_json::from_slice(&tenant_body).unwrap();
+        assert_eq!(tenant_json["data"]["id"], tenant_id.to_string());
+        assert_eq!(tenant_json["data"]["slug"], format!("rust-tenant-{suffix}"));
+        assert_eq!(tenant_json["data"]["status"], "active");
+        assert_eq!(tenant_json["data"]["planType"], "starter");
+
+        let quota_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/tenant/quota")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(quota_response.status(), StatusCode::OK);
+        let quota_body = to_bytes(quota_response.into_body(), usize::MAX).await.unwrap();
+        let quota_json: Value = serde_json::from_slice(&quota_body).unwrap();
+        assert_eq!(quota_json["data"]["branches"]["current"], 1);
+        assert_eq!(quota_json["data"]["employees"]["current"], 1);
+        assert_eq!(quota_json["data"]["members"]["current"], 0);
+
+        let update_settings_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/tenant/settings")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "branding": {
+                            "brandName": "Rust Gym",
+                            "appSuffix": { "admin": "Admin" },
+                            "colors": { "admin": { "start": "#111111", "end": "#222222" } }
+                        }
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(update_settings_response.status(), StatusCode::OK);
+
+        let branding_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/tenant/settings/branding")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branding_response.status(), StatusCode::OK);
+        let branding_body = to_bytes(branding_response.into_body(), usize::MAX).await.unwrap();
+        let branding_json: Value = serde_json::from_slice(&branding_body).unwrap();
+        assert_eq!(branding_json["data"]["brandName"], "Rust Gym");
+        assert_eq!(branding_json["data"]["appSuffix"]["admin"], "Admin");
+        assert_eq!(branding_json["data"]["appSuffix"]["coach"], "Coach");
+        assert_eq!(branding_json["data"]["colors"]["admin"]["start"], "#111111");
+        assert_eq!(branding_json["data"]["colors"]["member"]["start"], "#30d158");
+
+        let public_branding_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/public/branding?slug=rust-tenant-{suffix}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(public_branding_response.status(), StatusCode::OK);
+        let public_branding_body = to_bytes(public_branding_response.into_body(), usize::MAX).await.unwrap();
+        let public_branding_json: Value = serde_json::from_slice(&public_branding_body).unwrap();
+        assert_eq!(public_branding_json["data"]["brandName"], "Rust Gym");
+
         sqlx::query("delete from employees where id = $1")
             .bind(employee_id)
             .execute(&pool)

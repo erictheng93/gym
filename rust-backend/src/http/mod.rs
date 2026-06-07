@@ -33,6 +33,7 @@ mod payments;
 mod payroll;
 mod performance;
 mod shifts;
+mod tenant;
 mod users;
 
 #[derive(Debug, Serialize)]
@@ -79,6 +80,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/me", get(auth::me).post(error::method_not_allowed))
         .route("/api/auth/me/permissions", get(auth::permissions))
         .route("/api/auth/change-password", post(auth::change_password))
+        .route("/api/tenant", get(tenant::get_tenant))
+        .route("/api/tenant/quota", get(tenant::get_quota))
+        .route("/api/public/branding", get(tenant::public_branding))
+        .route("/tenant/settings/branding", get(tenant::get_branding))
+        .route("/tenant/settings", patch(tenant::update_settings))
         .route("/api/branches", get(branches::list).post(branches::create))
         .route(
             "/api/branches/{id}",
