@@ -1610,6 +1610,44 @@ mod tests {
         let list_json: Value = serde_json::from_slice(&list_body).unwrap();
         assert_eq!(list_json["pagination"]["total"], 1);
 
+        let summary_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/payments/summary?branchId={branch_id}&startDate=2026-01-01&endDate=2026-01-31"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(summary_response.status(), StatusCode::OK);
+        let summary_body = to_bytes(summary_response.into_body(), usize::MAX).await.unwrap();
+        let summary_json: Value = serde_json::from_slice(&summary_body).unwrap();
+        assert_eq!(summary_json["data"]["totalIncome"], 1000.0);
+        assert_eq!(summary_json["data"]["totalRefund"], 0.0);
+        assert_eq!(summary_json["data"]["netIncome"], 1000.0);
+        assert_eq!(summary_json["data"]["paymentCount"], 1);
+
+        let export_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/payments/export?branchId={branch_id}&startDate=2026-01-01&endDate=2026-01-31&format=csv"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(export_response.status(), StatusCode::OK);
+        let export_body = to_bytes(export_response.into_body(), usize::MAX).await.unwrap();
+        let export_csv = String::from_utf8_lossy(&export_body);
+        assert!(export_csv.contains("receiptNo,memberName,memberCode,amount,paymentMethod,paymentDate,type"));
+        assert!(export_csv.contains(&format!("R{}", &suffix[..8])));
+        assert!(export_csv.contains("Rust Payment Member"));
+        assert!(export_csv.contains(",1000,CASH,2026-01-01,INCOME"));
+
         let contract_status: (f64, String) = sqlx::query_as(
             "select paid_amount::float8, payment_status from contracts where id = $1",
         )

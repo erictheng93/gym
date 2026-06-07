@@ -1,11 +1,12 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header::{CONTENT_DISPOSITION, CONTENT_TYPE}, StatusCode},
     response::IntoResponse,
     Json,
 };
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -105,6 +106,17 @@ struct ContractPaymentContext {
     total_amount: f64,
 }
 
+#[derive(Debug, FromRow)]
+struct PaymentExportRow {
+    receipt_no: Option<String>,
+    member_name: Option<String>,
+    member_code: Option<String>,
+    amount: f64,
+    payment_method: String,
+    payment_date: DateTime<Utc>,
+    payment_type: String,
+}
+
 fn default_income() -> String {
     "INCOME".into()
 }
@@ -189,6 +201,100 @@ pub async fn get(
     let payment = fetch_payment(&state.db, tenant_id, id).await?;
 
     Ok((StatusCode::OK, Json(ApiResponse { success: true, data: payment })))
+}
+
+pub async fn summary(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(filters): Query<PaymentFilters>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let branch_id = filters.branch_id.or(filters.branch_id_snake);
+    let start_date = filters.start_date.or(filters.start_date_camel)
+        .map(|value| parse_datetime_filter(&value, false))
+        .transpose()?;
+    let end_date = filters.end_date.or(filters.end_date_camel)
+        .map(|value| parse_datetime_filter(&value, true))
+        .transpose()?;
+
+    let (total_income, total_refund, payment_count) = sqlx::query_as::<_, (f64, f64, i64)>(
+        r#"
+        select
+            coalesce(sum(case when type = 'INCOME' then amount else 0 end), 0)::float8,
+            coalesce(sum(case when type = 'REFUND' then amount else 0 end), 0)::float8,
+            count(*)::bigint
+        from payments
+        where tenant_id = $1
+          and ($2::uuid is null or branch_id = $2)
+          and ($3::timestamptz is null or payment_date >= $3)
+          and ($4::timestamptz is null or payment_date < $4)
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(start_date)
+    .bind(end_date)
+    .fetch_one(&state.db)
+    .await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "totalIncome": total_income,
+            "totalRefund": total_refund,
+            "netIncome": total_income - total_refund,
+            "paymentCount": payment_count,
+            "total_income": total_income,
+            "total_refund": total_refund,
+            "net_income": total_income - total_refund,
+            "payment_count": payment_count
+        }
+    }))))
+}
+
+pub async fn export(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(filters): Query<PaymentFilters>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let branch_id = filters.branch_id.or(filters.branch_id_snake);
+    let start_date = filters.start_date.or(filters.start_date_camel)
+        .map(|value| parse_datetime_filter(&value, false))
+        .transpose()?;
+    let end_date = filters.end_date.or(filters.end_date_camel)
+        .map(|value| parse_datetime_filter(&value, true))
+        .transpose()?;
+
+    let rows = sqlx::query_as::<_, PaymentExportRow>(
+        r#"
+        select payments.receipt_no, members.full_name as member_name, members.member_code,
+            payments.amount::float8 as amount, payments.payment_method, payments.payment_date,
+            payments.type as payment_type
+        from payments
+        left join members on members.id = payments.member_id
+        where payments.tenant_id = $1
+          and ($2::uuid is null or payments.branch_id = $2)
+          and ($3::timestamptz is null or payments.payment_date >= $3)
+          and ($4::timestamptz is null or payments.payment_date < $4)
+        order by payments.payment_date desc, payments.created_at desc
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(start_date)
+    .bind(end_date)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok((
+        StatusCode::OK,
+        [
+            (CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (CONTENT_DISPOSITION, "attachment; filename=\"payments.csv\""),
+        ],
+        payments_csv(&rows),
+    ))
 }
 
 pub async fn create(
@@ -432,6 +538,31 @@ fn parse_datetime_filter(value: &str, exclusive_end: bool) -> Result<DateTime<Ut
         .map_err(|_| AppError::Validation("paymentDate must be YYYY-MM-DD or RFC3339".into()))?;
     let datetime = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
     Ok(if exclusive_end { datetime + Duration::days(1) } else { datetime })
+}
+
+fn payments_csv(rows: &[PaymentExportRow]) -> String {
+    let mut csv = String::from("receiptNo,memberName,memberCode,amount,paymentMethod,paymentDate,type\n");
+    for row in rows {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            csv_cell(row.receipt_no.as_deref().unwrap_or("")),
+            csv_cell(row.member_name.as_deref().unwrap_or("")),
+            csv_cell(row.member_code.as_deref().unwrap_or("")),
+            row.amount,
+            csv_cell(&row.payment_method),
+            row.payment_date.date_naive(),
+            csv_cell(&row.payment_type),
+        ));
+    }
+    csv
+}
+
+fn csv_cell(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
 }
 
 #[cfg(test)]

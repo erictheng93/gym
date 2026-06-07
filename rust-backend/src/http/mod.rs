@@ -143,6 +143,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/contracts/{id}/pause", post(contracts::pause))
         .route("/api/contracts/{id}/resume", post(contracts::resume))
         .route("/api/payments", get(payments::list).post(payments::create))
+        .route("/api/payments/summary", get(payments::summary))
+        .route("/api/payments/export", get(payments::export))
         .route(
             "/api/payments/{id}",
             get(payments::get)
