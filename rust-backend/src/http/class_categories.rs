@@ -6,6 +6,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde::de::{self, Deserializer};
 use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -44,6 +45,7 @@ pub struct CreateCategoryRequest {
     code: String,
     name: String,
     name_en: Option<String>,
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     parent_id: Option<Uuid>,
     icon: Option<String>,
     color: Option<String>,
@@ -53,6 +55,7 @@ pub struct CreateCategoryRequest {
     requires_equipment: Option<bool>,
     equipment_list: Option<Value>,
     metadata: Option<Value>,
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     owner_branch_id: Option<Uuid>,
     visibility: Option<String>,
     status: Option<String>,
@@ -64,6 +67,7 @@ pub struct UpdateCategoryRequest {
     code: Option<String>,
     name: Option<String>,
     name_en: Option<String>,
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     parent_id: Option<Uuid>,
     icon: Option<String>,
     color: Option<String>,
@@ -73,6 +77,7 @@ pub struct UpdateCategoryRequest {
     requires_equipment: Option<bool>,
     equipment_list: Option<Value>,
     metadata: Option<Value>,
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     owner_branch_id: Option<Uuid>,
     visibility: Option<String>,
     status: Option<String>,
@@ -425,6 +430,17 @@ async fn sync_class_category_code(
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
     auth.user.tenant_id.ok_or(AppError::Unauthorized)
+}
+
+fn empty_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    match value.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(value) => Uuid::parse_str(value).map(Some).map_err(de::Error::custom),
+    }
 }
 
 fn validate_create(payload: &CreateCategoryRequest) -> Result<(), AppError> {

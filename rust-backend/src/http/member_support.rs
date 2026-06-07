@@ -39,10 +39,14 @@ pub struct IssueFilter {
     issue_type: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
+    page: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateIssueRequest {
+    branch_id: Option<Uuid>,
+    #[serde(rename = "branchId")]
+    branch_id_camel: Option<Uuid>,
     #[serde(rename = "type")]
     issue_type: String,
     title: String,
@@ -105,12 +109,14 @@ pub async fn list_issues(
     State(state): State<AppState>,
     Query(filter): Query<IssueFilter>,
 ) -> Result<impl IntoResponse, AppError> {
+    let limit = filter.limit.unwrap_or(50).clamp(1, 100);
+    let offset = filter.offset.unwrap_or_else(|| filter.page.map(|page| (page.max(1) - 1) * limit).unwrap_or(0)).max(0);
     let rows = sqlx::query_as::<_, IssueRow>(ISSUE_SELECT)
         .bind(auth.member_id)
         .bind(filter.status)
         .bind(filter.issue_type)
-        .bind(filter.limit.unwrap_or(50).clamp(1, 100))
-        .bind(filter.offset.unwrap_or(0).max(0))
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(ListResponse { success: true, data: rows })))
@@ -132,6 +138,7 @@ pub async fn create_issue(
 ) -> Result<impl IntoResponse, AppError> {
     validation::required_text("title", &payload.title)?;
     validation::required_text("content", &payload.content)?;
+    let branch_id = payload.branch_id.or(payload.branch_id_camel).unwrap_or(auth.branch_id);
 
     let id = sqlx::query_scalar::<_, Uuid>(
         r#"
@@ -143,7 +150,7 @@ pub async fn create_issue(
         "#,
     )
     .bind(auth.member_id)
-    .bind(auth.branch_id)
+    .bind(branch_id)
     .bind(payload.issue_type)
     .bind(payload.title)
     .bind(payload.content)
@@ -152,6 +159,23 @@ pub async fn create_issue(
     .await?;
     let row = fetch_issue(&state, auth.member_id, id).await?;
     Ok((StatusCode::CREATED, Json(MutationResponse { success: true, message: "問題已提交", data: Some(row) })))
+}
+
+pub async fn issue_types() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "issueTypes": [
+                    { "value": "EQUIPMENT", "label": "設備問題" },
+                    { "value": "SERVICE", "label": "服務問題" },
+                    { "value": "SUGGESTION", "label": "意見建議" },
+                    { "value": "COMPLAINT", "label": "客訴反映" }
+                ]
+            }
+        })),
+    )
 }
 
 pub async fn update_issue(

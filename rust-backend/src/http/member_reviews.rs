@@ -30,10 +30,12 @@ struct MutationResponse {
 pub struct ReviewPage {
     limit: Option<i64>,
     offset: Option<i64>,
+    page: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SubmitReviewRequest {
+    #[serde(alias = "bookingId")]
     booking_id: Uuid,
     rating: i32,
     comment: Option<String>,
@@ -101,6 +103,7 @@ pub async fn eligibility(
         success: true,
         data: json!({
             "can_review": can_review,
+            "eligible": can_review,
             "reason": reason,
             "days_since_session": days_since_session,
             "existing_review": existing_review
@@ -203,10 +206,12 @@ pub async fn class_reviews(
     Path(class_id): Path<Uuid>,
     Query(page): Query<ReviewPage>,
 ) -> Result<impl IntoResponse, AppError> {
+    let limit = page.limit.unwrap_or(10).clamp(1, 100);
+    let offset = page.offset.unwrap_or_else(|| page.page.map(|value| (value.max(1) - 1) * limit).unwrap_or(0)).max(0);
     let reviews = sqlx::query_as::<_, ReviewRow>(REVIEW_SELECT_BY_CLASS)
         .bind(class_id)
-        .bind(page.limit.unwrap_or(10).clamp(1, 100))
-        .bind(page.offset.unwrap_or(0).max(0))
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&state.db)
         .await?;
     let counts = rating_counts(&state, class_id).await?;
@@ -224,10 +229,12 @@ pub async fn my_reviews(
     State(state): State<AppState>,
     Query(page): Query<ReviewPage>,
 ) -> Result<impl IntoResponse, AppError> {
+    let limit = page.limit.unwrap_or(20).clamp(1, 100);
+    let offset = page.offset.unwrap_or_else(|| page.page.map(|value| (value.max(1) - 1) * limit).unwrap_or(0)).max(0);
     let reviews = sqlx::query_as::<_, ReviewRow>(REVIEW_SELECT_BY_MEMBER)
         .bind(auth.member_id)
-        .bind(page.limit.unwrap_or(20).clamp(1, 100))
-        .bind(page.offset.unwrap_or(0).max(0))
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(DataResponse { success: true, data: reviews })))

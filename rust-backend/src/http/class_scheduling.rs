@@ -6,6 +6,7 @@ use axum::{
 };
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde::de::{self, Deserializer};
 use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -28,7 +29,11 @@ pub struct ScheduleFilters {
     #[serde(alias = "active_only")]
     #[serde(alias = "is_active")]
     active_only: Option<bool>,
+    #[serde(rename = "dayOfWeek")]
+    #[serde(alias = "day_of_week")]
     day_of_week: Option<i32>,
+    #[serde(rename = "isRecurring")]
+    #[serde(alias = "is_recurring")]
     is_recurring: Option<bool>,
     #[serde(rename = "sortBy", alias = "sort")]
     sort_by: Option<String>,
@@ -48,6 +53,7 @@ pub struct CreateScheduleRequest {
     branch_id: Uuid,
     #[serde(rename = "instructorId")]
     #[serde(alias = "instructor_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "dayOfWeek")]
     #[serde(alias = "day_of_week")]
@@ -83,6 +89,7 @@ pub struct UpdateScheduleRequest {
     branch_id: Option<Uuid>,
     #[serde(rename = "instructorId")]
     #[serde(alias = "instructor_id")]
+    #[serde(default, deserialize_with = "empty_nested_uuid_as_none")]
     instructor_id: Option<Option<Uuid>>,
     #[serde(rename = "dayOfWeek")]
     #[serde(alias = "day_of_week")]
@@ -142,9 +149,17 @@ pub struct SessionFilters {
     branch_id: Option<Uuid>,
     #[serde(alias = "session_date")]
     date: Option<NaiveDate>,
+    #[serde(rename = "startDate")]
+    #[serde(alias = "start_date")]
     start_date: Option<NaiveDate>,
+    #[serde(rename = "endDate")]
+    #[serde(alias = "end_date")]
     end_date: Option<NaiveDate>,
+    #[serde(rename = "sessionStatus")]
+    #[serde(alias = "session_status")]
     session_status: Option<String>,
+    #[serde(rename = "instructorId")]
+    #[serde(alias = "instructor_id")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "sortBy", alias = "sort")]
     sort_by: Option<String>,
@@ -158,6 +173,7 @@ pub struct SessionFilters {
 pub struct CreateSessionRequest {
     #[serde(rename = "scheduleId")]
     #[serde(alias = "schedule_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     schedule_id: Option<Uuid>,
     #[serde(rename = "classId")]
     #[serde(alias = "class_id")]
@@ -167,6 +183,7 @@ pub struct CreateSessionRequest {
     branch_id: Uuid,
     #[serde(rename = "instructorId")]
     #[serde(alias = "instructor_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "sessionDate")]
     #[serde(alias = "session_date")]
@@ -187,6 +204,7 @@ pub struct CreateSessionRequest {
 pub struct UpdateSessionRequest {
     #[serde(rename = "scheduleId")]
     #[serde(alias = "schedule_id")]
+    #[serde(default, deserialize_with = "empty_nested_uuid_as_none")]
     schedule_id: Option<Option<Uuid>>,
     #[serde(rename = "classId")]
     #[serde(alias = "class_id")]
@@ -196,6 +214,7 @@ pub struct UpdateSessionRequest {
     branch_id: Option<Uuid>,
     #[serde(rename = "instructorId")]
     #[serde(alias = "instructor_id")]
+    #[serde(default, deserialize_with = "empty_nested_uuid_as_none")]
     instructor_id: Option<Option<Uuid>>,
     #[serde(rename = "sessionDate")]
     #[serde(alias = "session_date")]
@@ -248,10 +267,17 @@ pub struct BookingFilters {
     #[serde(rename = "memberId")]
     #[serde(alias = "member_id")]
     member_id: Option<Uuid>,
+    #[serde(rename = "bookingStatus")]
     #[serde(alias = "booking_status")]
     status: Option<String>,
+    #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
     branch_id: Option<Uuid>,
+    #[serde(rename = "startDate")]
+    #[serde(alias = "start_date")]
     start_date: Option<NaiveDate>,
+    #[serde(rename = "endDate")]
+    #[serde(alias = "end_date")]
     end_date: Option<NaiveDate>,
     upcoming: Option<bool>,
     exclude_cancelled: Option<bool>,
@@ -273,6 +299,7 @@ pub struct CreateBookingRequest {
     member_id: Uuid,
     #[serde(rename = "contractId")]
     #[serde(alias = "contract_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     contract_id: Option<Uuid>,
 }
 
@@ -286,6 +313,7 @@ pub struct UpdateBookingRequest {
     member_id: Option<Uuid>,
     #[serde(rename = "contractId")]
     #[serde(alias = "contract_id")]
+    #[serde(default, deserialize_with = "empty_nested_uuid_as_none")]
     contract_id: Option<Option<Uuid>>,
     #[serde(rename = "bookingStatus")]
     #[serde(alias = "booking_status")]
@@ -303,6 +331,7 @@ pub struct GenerateSessionsRequest {
 pub struct AdminBookRequest {
     session_id: Uuid,
     member_id: Uuid,
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     contract_id: Option<Uuid>,
 }
 
@@ -373,6 +402,24 @@ fn default_capacity() -> i32 {
 
 fn default_true() -> bool {
     true
+}
+
+fn empty_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    match value.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(value) => Uuid::parse_str(value).map(Some).map_err(de::Error::custom),
+    }
+}
+
+fn empty_nested_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    empty_uuid_as_none(deserializer).map(Some)
 }
 
 pub async fn list_schedules(

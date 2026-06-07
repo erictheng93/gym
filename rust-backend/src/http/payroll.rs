@@ -70,6 +70,7 @@ pub struct UpdateSalaryRequest {
 #[derive(Debug, Deserialize)]
 pub struct BatchApproveRequest {
     ids: Option<Vec<Uuid>>,
+    #[serde(alias = "recordIds")]
     record_ids: Option<Vec<Uuid>>,
 }
 

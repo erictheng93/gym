@@ -31,6 +31,9 @@ pub struct DateRangeQuery {
     limit: Option<i64>,
     year: Option<i32>,
     format: Option<String>,
+    #[serde(rename = "type")]
+    export_type: Option<String>,
+    coach_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -308,6 +311,50 @@ pub async fn dashboard_kpis(
             "class_attendance_rate": 0,
             "by_branch": [],
             "bookings": bookings
+        },
+        "generated_at": Utc::now()
+    }))))
+}
+
+pub async fn dashboard_summary(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = range(&query);
+    let branch_id = query.branch_id;
+    let today = Utc::now().date_naive();
+
+    let total_members = scalar_i64_branch(&state, "select count(*) from members where tenant_id = $1 and ($2::uuid is null or branch_id = $2)", tenant_id, branch_id).await?;
+    let active_members = scalar_i64_branch(&state, "select count(*) from members where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and status = 'ACTIVE'", tenant_id, branch_id).await?;
+    let new_members = scalar_i64_range_branch(&state, "select count(*) from members where tenant_id = $1 and ($4::uuid is null or branch_id = $4) and join_date between $2 and $3", tenant_id, start, end, branch_id).await?;
+    let net_revenue = scalar_f64_range_branch(&state, "select coalesce(sum(case when type = 'REFUND' then -amount else amount end), 0)::float8 from payments where tenant_id = $1 and payment_date::date between $2 and $3 and ($4::uuid is null or branch_id = $4)", tenant_id, start, end, branch_id).await?;
+    let today_revenue = scalar_f64_range_branch(&state, "select coalesce(sum(case when type = 'REFUND' then -amount else amount end), 0)::float8 from payments where tenant_id = $1 and payment_date::date between $2 and $3 and ($4::uuid is null or branch_id = $4)", tenant_id, today, today, branch_id).await?;
+    let active_contracts = scalar_i64_branch(&state, "select count(*) from contracts where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and status = 'ACTIVE'", tenant_id, branch_id).await?;
+    let expiring_contracts = scalar_i64_range_branch(&state, "select count(*) from contracts where tenant_id = $1 and ($4::uuid is null or branch_id = $4) and status = 'ACTIVE' and end_date between $2 and $3", tenant_id, today, today + Duration::days(30), branch_id).await?;
+    let today_checkins = scalar_i64_range_branch(&state, "select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and ($4::uuid is null or check_ins.branch_id = $4) and check_ins.check_in_time::date between $2 and $3", tenant_id, today, today, branch_id).await?;
+    let period_checkins = scalar_i64_range_branch(&state, "select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and ($4::uuid is null or check_ins.branch_id = $4) and check_ins.check_in_time::date between $2 and $3", tenant_id, start, end, branch_id).await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "period": { "start_date": start, "end_date": end },
+        "summary": {
+            "total_members": total_members,
+            "active_members": active_members,
+            "new_members": new_members,
+            "net_revenue": net_revenue,
+            "today_revenue": today_revenue,
+            "active_contracts": active_contracts,
+            "expiring_contracts": expiring_contracts,
+            "today_checkins": today_checkins,
+            "period_checkins": period_checkins
+        },
+        "data": {
+            "members": { "total": total_members, "active": active_members, "new": new_members },
+            "revenue": { "today": today_revenue, "period": net_revenue },
+            "contracts": { "active": active_contracts, "expiring_30": expiring_contracts },
+            "operations": { "today_checkins": today_checkins, "period_checkins": period_checkins }
         },
         "generated_at": Utc::now()
     }))))
@@ -1093,7 +1140,7 @@ pub async fn refresh_reports(auth: AuthContext) -> Result<impl IntoResponse, App
 pub async fn dashboard_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
     require_tenant(&auth)?;
     let format = query.format.unwrap_or_else(|| "csv".into());
-    let export_type = query.period.unwrap_or_else(|| "dashboard".into());
+    let export_type = query.export_type.or(query.period).unwrap_or_else(|| "dashboard".into());
     let today = Utc::now().date_naive();
     let response = if format == "json" {
         (
@@ -1102,7 +1149,7 @@ pub async fn dashboard_export(auth: AuthContext, Query(query): Query<DateRangeQu
                 (header::CONTENT_TYPE, "application/json"),
                 (header::CONTENT_DISPOSITION, "attachment; filename=\"dashboard-export.json\""),
             ],
-            json!({ "success": true, "generated_at": today, "data": [] }).to_string(),
+            json!({ "success": true, "generated_at": today, "type": export_type, "data": [] }).to_string(),
         )
             .into_response()
     } else {
@@ -1253,6 +1300,7 @@ pub async fn coach_performance_report(
         where employees.tenant_id = $1
           and employees.status = 'ACTIVE'
           and ($4::uuid is null or employees.branch_id = $4)
+          and ($5::uuid is null or employees.id = $5)
         order by classes_taught desc, employees.full_name asc
         "#,
     )
@@ -1260,6 +1308,7 @@ pub async fn coach_performance_report(
     .bind(start)
     .bind(end)
     .bind(query.branch_id)
+    .bind(query.coach_id)
     .fetch_all(&state.db)
     .await?;
 
@@ -1275,6 +1324,7 @@ pub async fn coach_performance_report(
         where employees.tenant_id = $1
           and class_sessions.session_date between $2 and $3
           and ($4::uuid is null or employees.branch_id = $4)
+          and ($5::uuid is null or employees.id = $5)
         group by class_sessions.instructor_id, classes.category
         "#,
     )
@@ -1282,6 +1332,7 @@ pub async fn coach_performance_report(
     .bind(start)
     .bind(end)
     .bind(query.branch_id)
+    .bind(query.coach_id)
     .fetch_all(&state.db)
     .await?;
 
@@ -1339,18 +1390,100 @@ pub async fn coach_performance_report(
     }))))
 }
 
-pub async fn performance_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
-    require_tenant(&auth)?;
-    let report_type = query.period.unwrap_or_else(|| "performance".into());
-    Ok((
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
-            (header::CONTENT_DISPOSITION, "attachment; filename=\"performance-report.csv\""),
-        ],
-        format!("type,date,value\n{report_type},{},0\n", Utc::now().date_naive()),
+pub async fn branch_performance_export(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<Response, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = period_range(query.period.as_deref());
+    let rows = sqlx::query_as::<_, (String, f64, i64, i64, i64)>(
+        r#"
+        select branches.name,
+            coalesce((select sum(amount) from payments where tenant_id = $1 and branch_id = branches.id and payment_date::date between $2 and $3), 0)::float8,
+            (select count(*) from members where tenant_id = $1 and branch_id = branches.id and join_date between $2 and $3)::bigint,
+            (select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and check_ins.branch_id = branches.id and check_ins.check_in_time::date between $2 and $3)::bigint,
+            (select count(*) from contracts where tenant_id = $1 and branch_id = branches.id and status = 'ACTIVE')::bigint
+        from branches
+        where branches.tenant_id = $1
+          and ($4::uuid is null or branches.id = $4)
+          and upper(coalesce(branches.status, 'ACTIVE')) = 'ACTIVE'
+        order by 2 desc, branches.name
+        "#,
     )
-        .into_response())
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut csv = String::from("branchName,revenue,newMembers,checkIns,activeContracts\n");
+    for (branch_name, revenue, new_members, check_ins, active_contracts) in rows {
+        csv.push_str(&format!(
+            "{},{},{},{},{}\n",
+            csv_cell(&branch_name),
+            revenue,
+            new_members,
+            check_ins,
+            active_contracts
+        ));
+    }
+    Ok(csv_response("branch_performance_report.csv", csv))
+}
+
+pub async fn coach_performance_export(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<Response, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = period_range(query.period.as_deref());
+    let rows = sqlx::query_as::<_, (String, String, i64, i64, Option<f64>, i64, f64)>(
+        r#"
+        select employees.full_name,
+            coalesce(branches.name, ''),
+            (select count(*) from class_sessions where instructor_id = employees.id and session_date between $2 and $3)::bigint,
+            (select count(distinct bookings.member_id) from bookings join class_sessions on class_sessions.id = bookings.session_id where class_sessions.instructor_id = employees.id and class_sessions.session_date between $2 and $3)::bigint,
+            (select avg(rating)::float8 from class_reviews where coach_id = employees.id and created_at::date between $2 and $3),
+            (select count(*) from class_reviews where coach_id = employees.id and created_at::date between $2 and $3)::bigint,
+            coalesce((
+                select (count(*) filter (where bookings.attended_at is not null))::float8 * 100.0 / nullif(count(*), 0)::float8
+                from bookings
+                join class_sessions on class_sessions.id = bookings.session_id
+                where class_sessions.instructor_id = employees.id and class_sessions.session_date between $2 and $3
+            ), 0)::float8
+        from employees
+        left join branches on branches.id = employees.branch_id
+        where employees.tenant_id = $1
+          and employees.status = 'ACTIVE'
+          and ($4::uuid is null or employees.branch_id = $4)
+          and ($5::uuid is null or employees.id = $5)
+        order by 3 desc, employees.full_name
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .bind(query.coach_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut csv = String::from("coachName,branchName,classesTaught,totalStudents,satisfactionRating,reviewCount,attendanceRate\n");
+    for (coach_name, branch_name, classes_taught, total_students, satisfaction_rating, review_count, attendance_rate) in rows {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            csv_cell(&coach_name),
+            csv_cell(&branch_name),
+            classes_taught,
+            total_students,
+            satisfaction_rating.map(|rating| rating.to_string()).unwrap_or_default(),
+            review_count,
+            attendance_rate
+        ));
+    }
+    Ok(csv_response("coach_performance_report.csv", csv))
 }
 
 pub async fn revenue_export(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
@@ -1497,6 +1630,18 @@ async fn report_export(auth: AuthContext, state: AppState, query: DateRangeQuery
         ],
         csv,
     ).into_response())
+}
+
+fn csv_response(filename: &str, csv: String) -> Response {
+    let content_disposition = format!("attachment; filename=\"{filename}\"");
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (header::CONTENT_DISPOSITION, content_disposition),
+        ],
+        csv,
+    ).into_response()
 }
 
 fn csv_cell(value: &str) -> String {

@@ -104,6 +104,10 @@ pub struct EmployeeShiftFilters {
     employee_id: Option<Uuid>,
     #[serde(alias = "shiftScheduleId")]
     shift_schedule_id: Option<Uuid>,
+    #[serde(alias = "branchId")]
+    branch_id: Option<Uuid>,
+    #[serde(alias = "activeOnly")]
+    active_only: Option<bool>,
     effective_date_lte: Option<NaiveDate>,
     effective_date_gte: Option<NaiveDate>,
     #[serde(rename = "startDate")]
@@ -273,6 +277,7 @@ pub async fn list_employee_shifts(
     let tenant_id = require_tenant(&auth)?;
     let effective_date_gte = filters.effective_date_gte.or(filters.start_date);
     let effective_date_lte = filters.effective_date_lte.or(filters.end_date);
+    let today = chrono::Utc::now().date_naive();
     let rows = sqlx::query_as::<_, EmployeeShiftRow>(EMPLOYEE_SHIFT_SELECT)
         .bind(tenant_id)
         .bind(None::<Uuid>)
@@ -280,6 +285,9 @@ pub async fn list_employee_shifts(
         .bind(filters.shift_schedule_id)
         .bind(effective_date_lte)
         .bind(effective_date_gte)
+        .bind(filters.branch_id)
+        .bind(filters.active_only.unwrap_or(false))
+        .bind(today)
         .fetch_all(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(paginated(rows, filters.page, filters.limit))))
@@ -369,6 +377,9 @@ async fn fetch_employee_shift(state: &AppState, tenant_id: Uuid, id: Uuid) -> Re
         .bind(None::<Uuid>)
         .bind(None::<NaiveDate>)
         .bind(None::<NaiveDate>)
+        .bind(None::<Uuid>)
+        .bind(false)
+        .bind(chrono::Utc::now().date_naive())
         .fetch_optional(&state.db)
         .await?
         .ok_or(AppError::NotFound)
@@ -474,6 +485,8 @@ const EMPLOYEE_SHIFT_SELECT: &str = r#"
       and ($4::uuid is null or employee_shifts.shift_schedule_id = $4)
       and ($5::date is null or employee_shifts.effective_date <= $5)
       and ($6::date is null or employee_shifts.effective_date >= $6)
+      and ($7::uuid is null or employees.branch_id = $7)
+      and ($8::bool = false or (employee_shifts.effective_date <= $9 and (employee_shifts.end_date is null or employee_shifts.end_date >= $9)))
     order by employee_shifts.created_at desc
 "#;
 

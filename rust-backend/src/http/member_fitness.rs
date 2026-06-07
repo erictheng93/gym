@@ -39,14 +39,20 @@ pub struct GoalFilter {
     status: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
+    page: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DateFilter {
     start_date: Option<NaiveDate>,
+    #[serde(rename = "startDate")]
+    start_date_camel: Option<NaiveDate>,
     end_date: Option<NaiveDate>,
+    #[serde(rename = "endDate")]
+    end_date_camel: Option<NaiveDate>,
     limit: Option<i64>,
     offset: Option<i64>,
+    page: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,19 +61,33 @@ pub struct PeriodFilter {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ProgressFilter {
+    metric: String,
+    period: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateGoalRequest {
+    #[serde(alias = "goalType")]
     goal_type: String,
+    #[serde(alias = "targetValue")]
     target_value: Value,
+    #[serde(alias = "currentValue")]
     current_value: Option<Value>,
+    #[serde(alias = "startDate")]
     start_date: Option<NaiveDate>,
+    #[serde(alias = "targetDate")]
     target_date: Option<NaiveDate>,
     notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateGoalRequest {
+    #[serde(alias = "targetValue")]
     target_value: Option<Value>,
+    #[serde(alias = "currentValue")]
     current_value: Option<Value>,
+    #[serde(alias = "targetDate")]
     target_date: Option<NaiveDate>,
     status: Option<String>,
     notes: Option<String>,
@@ -86,10 +106,13 @@ pub struct WorkoutRequest {
 pub struct MeasurementRequest {
     date: Option<NaiveDate>,
     weight: Option<f32>,
+    #[serde(alias = "bodyFat")]
     body_fat: Option<f32>,
+    #[serde(alias = "muscleMass")]
     muscle_mass: Option<f32>,
     bmi: Option<f32>,
     source: Option<String>,
+    #[serde(alias = "rawData")]
     raw_data: Option<Value>,
 }
 
@@ -155,6 +178,8 @@ pub async fn list_goals(
     State(state): State<AppState>,
     Query(filter): Query<GoalFilter>,
 ) -> Result<impl IntoResponse, AppError> {
+    let limit = filter.limit.unwrap_or(50).clamp(1, 100);
+    let offset = page_offset(filter.page, filter.offset, limit);
     let rows = sqlx::query_as::<_, GoalRow>(
         r#"
         select id, member_id, goal_type, target_value, current_value, start_date, target_date,
@@ -168,8 +193,8 @@ pub async fn list_goals(
     )
     .bind(auth.member_id)
     .bind(filter.status)
-    .bind(filter.limit.unwrap_or(50).clamp(1, 100))
-    .bind(filter.offset.unwrap_or(0).max(0))
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await?;
 
@@ -261,12 +286,16 @@ pub async fn list_workouts(
     State(state): State<AppState>,
     Query(filter): Query<DateFilter>,
 ) -> Result<impl IntoResponse, AppError> {
+    let start_date = filter.start_date.or(filter.start_date_camel);
+    let end_date = filter.end_date.or(filter.end_date_camel);
+    let limit = filter.limit.unwrap_or(50).clamp(1, 100);
+    let offset = page_offset(filter.page, filter.offset, limit);
     let rows = sqlx::query_as::<_, WorkoutRow>(WORKOUT_SELECT)
         .bind(auth.member_id)
-        .bind(filter.start_date)
-        .bind(filter.end_date)
-        .bind(filter.limit.unwrap_or(50).clamp(1, 100))
-        .bind(filter.offset.unwrap_or(0).max(0))
+        .bind(start_date)
+        .bind(end_date)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&state.db)
         .await?;
     let total = rows.len() as i64;
@@ -388,12 +417,54 @@ pub async fn workout_stats(
     Ok((StatusCode::OK, Json(DataResponse { success: true, data: json!({ "stats": stats, "daily": rows }) })))
 }
 
+pub async fn workout_stats_summary(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Query(filter): Query<PeriodFilter>,
+) -> Result<impl IntoResponse, AppError> {
+    let period = filter.period.unwrap_or_else(|| "7".into());
+    let days = period.parse::<i64>().unwrap_or(match period.as_str() {
+        "year" => 365,
+        "month" => 30,
+        _ => 7,
+    }).clamp(1, 365);
+    let since = Utc::now().date_naive() - Duration::days(days - 1);
+    let summary = sqlx::query_as::<_, (i64, i64, i64)>(
+        r#"
+        select count(*)::bigint,
+            coalesce(sum(duration), 0)::bigint,
+            coalesce(sum(calories), 0)::bigint
+        from workout_logs
+        where member_id = $1 and date >= $2
+        "#,
+    )
+    .bind(auth.member_id)
+    .bind(since)
+    .fetch_one(&state.db)
+    .await?;
+    Ok((StatusCode::OK, Json(DataResponse {
+        success: true,
+        data: json!({
+            "totalWorkouts": summary.0,
+            "totalDuration": summary.1,
+            "totalCalories": summary.2,
+            "avgDuration": if summary.0 > 0 { summary.1 as f64 / summary.0 as f64 } else { 0.0 },
+            "avgCalories": if summary.0 > 0 { summary.2 as f64 / summary.0 as f64 } else { 0.0 },
+            "period": days
+        }),
+    })))
+}
+
 pub async fn list_measurements(
     auth: MemberAuthContext,
     State(state): State<AppState>,
     Query(filter): Query<DateFilter>,
 ) -> Result<impl IntoResponse, AppError> {
-    let rows = fetch_measurements(&state, auth.member_id, filter.start_date, filter.end_date, filter.limit, filter.offset).await?;
+    let start_date = filter.start_date.or(filter.start_date_camel);
+    let end_date = filter.end_date.or(filter.end_date_camel);
+    let limit = filter.limit;
+    let offset = Some(page_offset(filter.page, filter.offset, limit.unwrap_or(100).clamp(1, 500)));
+    let rows = fetch_measurements(&state, auth.member_id, start_date, end_date, limit, offset).await?;
     Ok((StatusCode::OK, Json(ListResponse { success: true, data: rows, total: None })))
 }
 
@@ -514,6 +585,40 @@ pub async fn measurement_stats(
     Ok((StatusCode::OK, Json(DataResponse { success: true, data: json!({ "stats": stats, "daily": daily }) })))
 }
 
+pub async fn measurement_progress(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Query(filter): Query<ProgressFilter>,
+) -> Result<impl IntoResponse, AppError> {
+    match filter.metric.as_str() {
+        "weight" | "bodyFat" | "body_fat" | "muscleMass" | "muscle_mass" | "bmi" => {}
+        _ => return Err(AppError::Validation("metric is invalid".into())),
+    }
+    let period = filter.period.unwrap_or(30).clamp(1, 365);
+    let since = Utc::now().date_naive() - Duration::days(period - 1);
+    let rows = fetch_measurements(&state, auth.member_id, Some(since), None, Some(500), Some(0)).await?;
+    let data_points: Vec<Value> = rows.iter().map(|row| {
+        let value = match filter.metric.as_str() {
+            "weight" => row.weight,
+            "bodyFat" | "body_fat" => row.body_fat,
+            "muscleMass" | "muscle_mass" => row.muscle_mass,
+            "bmi" => row.bmi,
+            _ => None,
+        };
+        json!({ "date": row.date, "value": value })
+    }).collect();
+    let values = data_points.iter().filter_map(|point| point.get("value").and_then(Value::as_f64).map(|value| value as f32)).collect();
+    Ok((StatusCode::OK, Json(DataResponse {
+        success: true,
+        data: json!({
+            "metric": filter.metric,
+            "period": period,
+            "dataPoints": data_points,
+            "trend": trend(values)
+        }),
+    })))
+}
+
 async fn fetch_goal(state: &AppState, member_id: Uuid, id: Uuid) -> Result<GoalRow, AppError> {
     sqlx::query_as::<_, GoalRow>(
         r#"
@@ -609,6 +714,10 @@ fn trend(values: Vec<f32>) -> TrendData {
         }
     });
     TrendData { first, last, change, trend }
+}
+
+fn page_offset(page: Option<i64>, offset: Option<i64>, limit: i64) -> i64 {
+    offset.unwrap_or_else(|| page.map(|value| (value.max(1) - 1) * limit).unwrap_or(0)).max(0)
 }
 
 const WORKOUT_SELECT: &str = r#"

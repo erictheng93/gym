@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use chrono::NaiveDate;
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeMap, Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -44,7 +44,7 @@ pub struct CreateEmployeeRequest {
     employee_code: Option<String>,
     #[serde(rename = "employeeCode")]
     employee_code_camel: Option<String>,
-    full_name: String,
+    full_name: Option<String>,
     #[serde(rename = "fullName")]
     full_name_camel: Option<String>,
     phone: Option<String>,
@@ -104,7 +104,7 @@ pub struct UpdateEmployeeRequest {
     custom_permissions_camel: Option<Value>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, FromRow)]
 pub struct Employee {
     id: Uuid,
     user_id: Option<Uuid>,
@@ -122,6 +122,47 @@ pub struct Employee {
     basic_salary: Option<f64>,
     custom_permissions: Option<Value>,
     tenant_id: Option<Uuid>,
+}
+
+impl Serialize for Employee {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(31))?;
+        map.serialize_entry("id", &self.id)?;
+        map.serialize_entry("user_id", &self.user_id)?;
+        map.serialize_entry("userId", &self.user_id)?;
+        map.serialize_entry("branch_id", &self.branch_id)?;
+        map.serialize_entry("branchId", &self.branch_id)?;
+        map.serialize_entry("job_title_id", &self.job_title_id)?;
+        map.serialize_entry("jobTitleId", &self.job_title_id)?;
+        map.serialize_entry("employee_code", &self.employee_code)?;
+        map.serialize_entry("employeeCode", &self.employee_code)?;
+        map.serialize_entry("full_name", &self.full_name)?;
+        map.serialize_entry("fullName", &self.full_name)?;
+        map.serialize_entry("phone", &self.phone)?;
+        map.serialize_entry("email", &self.email)?;
+        map.serialize_entry("employment_status", &self.employment_status)?;
+        map.serialize_entry("employmentStatus", &self.employment_status)?;
+        map.serialize_entry("status", &self.status)?;
+        map.serialize_entry("employment_type", &self.employment_type)?;
+        map.serialize_entry("employmentType", &self.employment_type)?;
+        map.serialize_entry("hire_date", &self.hire_date)?;
+        map.serialize_entry("hireDate", &self.hire_date)?;
+        map.serialize_entry("resign_date", &self.resign_date)?;
+        map.serialize_entry("resignDate", &self.resign_date)?;
+        map.serialize_entry("basic_salary", &self.basic_salary)?;
+        map.serialize_entry("basicSalary", &self.basic_salary)?;
+        map.serialize_entry("custom_permissions", &self.custom_permissions)?;
+        map.serialize_entry("customPermissions", &self.custom_permissions)?;
+        map.serialize_entry("tenant_id", &self.tenant_id)?;
+        map.serialize_entry("tenantId", &self.tenant_id)?;
+        map.serialize_entry("supervisor_id", &Option::<Uuid>::None)?;
+        map.serialize_entry("supervisorId", &Option::<Uuid>::None)?;
+        map.serialize_entry("supervisor", &Option::<Value>::None)?;
+        map.end()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,7 +268,7 @@ pub async fn create_employee(
     Json(payload): Json<CreateEmployeeRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let full_name = payload.full_name_camel.as_ref().unwrap_or(&payload.full_name).trim().to_string();
+    let full_name = payload.full_name_camel.or(payload.full_name).unwrap_or_default().trim().to_string();
     validation::required_text("full_name", &full_name)?;
     let branch_id = payload.branch_id.or(payload.branch_id_camel).ok_or_else(|| AppError::Validation("branch_id is required".into()))?;
     let job_title_id = payload.job_title_id.or(payload.job_title_id_camel).ok_or_else(|| AppError::Validation("job_title_id is required".into()))?;

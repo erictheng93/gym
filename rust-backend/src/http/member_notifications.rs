@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -18,6 +18,7 @@ const DEV_VAPID_PUBLIC_KEY: &str = "BEl62iUYgUivxIkv69yViEuiBIa40HI80VEFgrYchSow
 pub struct HistoryFilter {
     limit: Option<i64>,
     offset: Option<i64>,
+    page: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,7 +110,11 @@ pub async fn get_preferences(
     Ok((StatusCode::OK, Json(json!({
         "success": true,
         "preferences": preferences,
-        "available_channels": available_channels
+        "available_channels": available_channels,
+        "data": {
+            "preferences": preferences,
+            "available_channels": available_channels
+        }
     }))))
 }
 
@@ -168,7 +173,8 @@ pub async fn update_preferences(
     Ok((StatusCode::OK, Json(json!({
         "success": true,
         "message": "通知設定已更新",
-        "preferences": preferences
+        "preferences": preferences,
+        "data": { "preferences": preferences }
     }))))
 }
 
@@ -178,18 +184,20 @@ pub async fn channels(
 ) -> Result<impl IntoResponse, AppError> {
     let member = member_channels(&state, auth.member_id).await?;
     let push = active_push(&state, auth.member_id).await?;
+    let channels = json!({
+        "line": { "available": false },
+        "push": {
+            "available": push.is_some(),
+            "deviceName": push.as_ref().and_then(|value| value.get("deviceName")).and_then(Value::as_str),
+            "subscribedAt": push.as_ref().and_then(|value| value.get("subscribedAt")).and_then(Value::as_str)
+        },
+        "email": { "available": member.email.is_some(), "address": member.email },
+        "sms": { "available": member.phone.is_some(), "phone": member.phone }
+    });
     Ok((StatusCode::OK, Json(json!({
         "success": true,
-        "channels": {
-            "line": { "available": false },
-            "push": {
-                "available": push.is_some(),
-                "deviceName": push.as_ref().and_then(|value| value.get("deviceName")).and_then(Value::as_str),
-                "subscribedAt": push.as_ref().and_then(|value| value.get("subscribedAt")).and_then(Value::as_str)
-            },
-            "email": { "available": member.email.is_some(), "address": member.email },
-            "sms": { "available": member.phone.is_some(), "phone": member.phone }
-        }
+        "channels": channels,
+        "data": { "channels": channels }
     }))))
 }
 
@@ -199,7 +207,7 @@ pub async fn history(
     Query(filter): Query<HistoryFilter>,
 ) -> Result<impl IntoResponse, AppError> {
     let limit = filter.limit.unwrap_or(20).clamp(1, 100);
-    let offset = filter.offset.unwrap_or(0).max(0);
+    let offset = filter.offset.unwrap_or_else(|| filter.page.map(|page| (page.max(1) - 1) * limit).unwrap_or(0)).max(0);
     let rows = sqlx::query_as::<_, NotificationHistoryRow>(
         r#"
         select id, notification_type, title, body, successful_channel, overall_status,
@@ -227,6 +235,66 @@ pub async fn history(
         "data": rows,
         "pagination": { "limit": limit, "offset": offset, "total": total }
     }))))
+}
+
+pub async fn unread_count(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, AppError> {
+    let count = sqlx::query_scalar::<_, i64>(
+        r#"
+        select count(*)::bigint
+        from notifications
+        where target_member_id = $1 and coalesce(is_read, read_status, false) = false
+        "#,
+    )
+    .bind(auth.member_id)
+    .fetch_one(&state.db)
+    .await?;
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": { "unreadCount": count }
+    }))))
+}
+
+pub async fn mark_read(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let affected = sqlx::query(
+        r#"
+        update notifications
+        set is_read = true, read_status = true, read_at = now(), updated_at = now()
+        where id = $1 and target_member_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(auth.member_id)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok((StatusCode::OK, Json(json!({ "success": true }))))
+}
+
+pub async fn read_all(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, AppError> {
+    sqlx::query(
+        r#"
+        update notifications
+        set is_read = true, read_status = true, read_at = now(), updated_at = now()
+        where target_member_id = $1 and coalesce(is_read, read_status, false) = false
+        "#,
+    )
+    .bind(auth.member_id)
+    .execute(&state.db)
+    .await?;
+    Ok((StatusCode::OK, Json(json!({ "success": true }))))
 }
 
 pub async fn test_notification(

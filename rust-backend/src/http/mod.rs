@@ -272,6 +272,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/segmentation/auto-tag", post(marketing::auto_tag))
         .route("/api/segmentation/export/{segment}", get(marketing::export_segment))
         .route("/api/admin/dashboard/kpis", get(dashboard_reports::dashboard_kpis))
+        .route("/api/dashboard/summary", get(dashboard_reports::dashboard_summary))
         .route("/api/admin/dashboard/contract-alerts", get(dashboard_reports::contract_alerts))
         .route(
             "/api/admin/dashboard/revenue-targets",
@@ -294,9 +295,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports/member-activity/export", get(dashboard_reports::member_activity_export))
         .route("/api/reports/refresh", post(dashboard_reports::refresh_reports))
         .route("/api/reports/branch-performance", get(dashboard_reports::branch_performance_report))
-        .route("/api/reports/branch-performance/export", get(dashboard_reports::performance_export))
+        .route("/api/reports/branch-performance/export", get(dashboard_reports::branch_performance_export))
         .route("/api/reports/coach-performance", get(dashboard_reports::coach_performance_report))
-        .route("/api/reports/coach-performance/export", get(dashboard_reports::performance_export))
+        .route("/api/reports/coach-performance/export", get(dashboard_reports::coach_performance_export))
         .route("/api/employees", get(hr::list_employees).post(hr::create_employee))
         .route(
             "/api/employees/{id}",
@@ -411,6 +412,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/member/workouts", get(member_fitness::list_workouts).post(member_fitness::create_workout))
         .route("/api/member/workouts/stats", get(member_fitness::workout_stats))
+        .route("/api/member/workouts/stats/summary", get(member_fitness::workout_stats_summary))
         .route(
             "/api/member/workouts/{id}",
             get(member_fitness::get_workout).put(member_fitness::update_workout).delete(member_fitness::delete_workout),
@@ -418,6 +420,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/measurements", get(member_fitness::list_measurements).post(member_fitness::create_measurement))
         .route("/api/member/measurements/latest", get(member_fitness::latest_measurement))
         .route("/api/member/measurements/stats", get(member_fitness::measurement_stats))
+        .route("/api/member/measurements/progress", get(member_fitness::measurement_progress))
         .route(
             "/api/member/measurements/{id}",
             get(member_fitness::get_measurement)
@@ -440,11 +443,15 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/member/notifications/channels", get(member_notifications::channels))
         .route("/api/member/notifications/history", get(member_notifications::history))
+        .route("/api/member/notifications/unread-count", get(member_notifications::unread_count))
+        .route("/api/member/notifications/read-all", post(member_notifications::read_all))
+        .route("/api/member/notifications/{id}/read", post(member_notifications::mark_read))
         .route("/api/member/notifications/test", post(member_notifications::test_notification))
         .route("/api/member/push/vapid-public-key", get(member_notifications::vapid_public_key))
         .route("/api/member/push/subscribe", post(member_notifications::subscribe))
         .route("/api/member/push/unsubscribe", delete(member_notifications::unsubscribe))
         .route("/api/member/push/preferences", patch(member_notifications::update_push_preferences))
+        .route("/api/member/issues/types/list", get(member_support::issue_types))
         .route("/api/member/issues", get(member_support::list_issues).post(member_support::create_issue))
         .route(
             "/api/member/issues/{id}",

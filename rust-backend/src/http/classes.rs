@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use serde::de::{self, Deserializer};
 use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -51,11 +52,13 @@ pub struct CreateClassRequest {
     #[serde(rename = "maxCapacity", alias = "max_capacity")]
     max_capacity: i32,
     #[serde(rename = "instructorId", alias = "instructor_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Uuid,
     category: Option<String>,
     #[serde(rename = "categoryId", alias = "category_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     category_id: Option<Uuid>,
     #[serde(rename = "difficultyLevel", alias = "difficulty_level")]
     difficulty_level: Option<String>,
@@ -78,11 +81,13 @@ pub struct UpdateClassRequest {
     #[serde(rename = "maxCapacity", alias = "max_capacity")]
     max_capacity: Option<i32>,
     #[serde(rename = "instructorId", alias = "instructor_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Option<Uuid>,
     category: Option<String>,
     #[serde(rename = "categoryId", alias = "category_id")]
+    #[serde(default, deserialize_with = "empty_uuid_as_none")]
     category_id: Option<Uuid>,
     #[serde(rename = "difficultyLevel", alias = "difficulty_level")]
     difficulty_level: Option<String>,
@@ -128,6 +133,17 @@ fn default_true() -> bool {
 
 fn default_count_deduction() -> i32 {
     1
+}
+
+fn empty_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    match value.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(value) => Uuid::parse_str(value).map(Some).map_err(de::Error::custom),
+    }
 }
 
 pub async fn list(

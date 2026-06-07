@@ -38,6 +38,7 @@ pub struct PaymentFilters {
     payment_method_snake: Option<String>,
     #[serde(rename = "type")]
     payment_type: Option<String>,
+    #[serde(rename = "payment_type")]
     payment_type_snake: Option<String>,
     start_date: Option<String>,
     end_date: Option<String>,

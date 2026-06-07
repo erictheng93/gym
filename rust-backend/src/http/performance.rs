@@ -32,9 +32,12 @@ struct Meta {
 
 #[derive(Debug, Deserialize)]
 pub struct ReviewFilters {
+    #[serde(alias = "employeeId")]
     employee_id: Option<Uuid>,
+    #[serde(alias = "reviewerId")]
     reviewer_id: Option<Uuid>,
     status: Option<String>,
+    #[serde(alias = "reviewType")]
     review_type: Option<String>,
     period: Option<String>,
     limit: Option<i64>,
@@ -43,11 +46,17 @@ pub struct ReviewFilters {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateReviewRequest {
+    #[serde(alias = "employeeId")]
     employee_id: Uuid,
+    #[serde(alias = "reviewerId")]
     reviewer_id: Option<Uuid>,
+    #[serde(alias = "reviewPeriod")]
     review_period: String,
+    #[serde(alias = "reviewType")]
     review_type: String,
+    #[serde(alias = "templateId")]
     template_id: Option<Uuid>,
+    #[serde(alias = "kpiData")]
     kpi_data: Option<Value>,
     score: Option<f64>,
     comments: Option<String>,
@@ -56,6 +65,7 @@ pub struct CreateReviewRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateReviewRequest {
+    #[serde(alias = "kpiData")]
     kpi_data: Option<Value>,
     score: Option<f64>,
     comments: Option<String>,
@@ -71,14 +81,18 @@ pub struct RejectReviewRequest {
 pub struct CreateTemplateRequest {
     name: String,
     description: Option<String>,
+    #[serde(alias = "jobTitleId")]
     job_title_id: Option<Uuid>,
+    #[serde(alias = "reviewType")]
     review_type: Option<String>,
     kpis: Value,
+    #[serde(alias = "isDefault")]
     is_default: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DashboardFilters {
+    #[serde(alias = "branchId")]
     branch_id: Option<Uuid>,
     period: Option<String>,
 }

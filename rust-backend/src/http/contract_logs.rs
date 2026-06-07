@@ -173,6 +173,7 @@ pub async fn create(
     ensure_member_scope(&state, tenant_id, payload.original_member_id, "original_member_id").await?;
     ensure_member_scope(&state, tenant_id, payload.target_member_id, "target_member_id").await?;
 
+    let mut tx = state.db.begin().await?;
     let log = sqlx::query_as::<_, ContractLog>(
         r#"
         insert into contract_logs (
@@ -196,8 +197,38 @@ pub async fn create(
     .bind(payload.target_member_id)
     .bind(payload.branch_id)
     .bind(tenant_id)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
+
+    if payload.log_type.trim() == "TRANSFER" {
+        let Some(target_member_id) = payload.target_member_id else {
+            tx.commit().await?;
+            return Ok((StatusCode::CREATED, Json(ApiResponse { success: true, data: log })));
+        };
+        let updated = sqlx::query_scalar::<_, bool>(
+            r#"
+            update contracts
+            set member_id = $3, updated_at = now()
+            where id = $1
+              and tenant_id = $2
+              and ($4::uuid is null or member_id = $4)
+            returning true
+            "#,
+        )
+        .bind(payload.contract_id)
+        .bind(tenant_id)
+        .bind(target_member_id)
+        .bind(payload.original_member_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(false);
+
+        if !updated {
+            return Err(AppError::Validation("original_member_id does not match contract".into()));
+        }
+    }
+
+    tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(ApiResponse { success: true, data: log })))
 }
