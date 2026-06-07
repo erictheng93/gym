@@ -2050,6 +2050,81 @@ mod tests {
         let login_json: Value = serde_json::from_slice(&login_body).unwrap();
         let token = login_json["data"]["accessToken"].as_str().unwrap();
 
+        let otp_send_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/otp/send")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"identifier": "0912345678", "type": "phone"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(otp_send_response.status(), StatusCode::OK);
+        let otp_verify_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/otp/verify")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"identifier": "0912345678", "type": "phone", "code": "123456"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(otp_verify_response.status(), StatusCode::OK);
+        let otp_verify_body = to_bytes(otp_verify_response.into_body(), usize::MAX).await.unwrap();
+        let otp_verify_json: Value = serde_json::from_slice(&otp_verify_body).unwrap();
+        let otp_token = otp_verify_json["data"]["accessToken"].as_str().unwrap();
+        let refresh_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/otp/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"refreshToken": otp_token}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(refresh_response.status(), StatusCode::OK);
+
+        let otp_send_only_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/otp/send")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"identifier": "0912345678", "type": "phone"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(otp_send_only_response.status(), StatusCode::OK);
+        let otp_verify_only_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/otp/verify-only")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"identifier": "0912345678", "type": "phone", "code": "123456"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(otp_verify_only_response.status(), StatusCode::OK);
+
+        let forgot_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/auth/forgot-password")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"email": email}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(forgot_response.status(), StatusCode::OK);
+        let forgot_body = to_bytes(forgot_response.into_body(), usize::MAX).await.unwrap();
+        let forgot_json: Value = serde_json::from_slice(&forgot_body).unwrap();
+        let reset_url = forgot_json["data"]["resetUrl"].as_str().unwrap();
+        let reset_token = reset_url.split("token=").nth(1).unwrap();
+        let reset_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/auth/reset-password")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"token": reset_token, "password": "NewPassw0rd!"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(reset_response.status(), StatusCode::OK);
+        let change_password_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/auth/change-password")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"currentPassword": "NewPassw0rd!", "newPassword": password}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(change_password_response.status(), StatusCode::OK);
+
+        let complete_profile_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/me/complete-profile")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "full_name": "Rust Member Completed",
+                    "phone": "0912345678",
+                    "gender": "OTHER",
+                    "birthday": "1990-01-01",
+                    "branch_id": branch_id,
+                    "emergency_contact": "Complete Emergency",
+                    "emergency_phone": "0999000111"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(complete_profile_response.status(), StatusCode::OK);
+
         let profile_update_response = app.clone().oneshot(
             Request::builder().method("PATCH").uri("/api/member/profile")
                 .header("x-member-token", token)
@@ -2338,6 +2413,7 @@ mod tests {
         assert_eq!(push_unsubscribe_response.status(), StatusCode::OK);
 
         sqlx::query("delete from class_reviews where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from member_otps where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from member_notification_history where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from member_notification_preferences where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from push_subscriptions where member_id = $1").bind(member_id).execute(&pool).await.unwrap();

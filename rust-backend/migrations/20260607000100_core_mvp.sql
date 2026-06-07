@@ -765,3 +765,16 @@ create index if not exists member_notification_preferences_member_id_idx on memb
 create index if not exists member_notification_history_member_id_idx on member_notification_history(member_id);
 create index if not exists member_notification_history_created_at_idx on member_notification_history(created_at);
 create index if not exists push_subscriptions_member_id_idx on push_subscriptions(member_id);
+
+create table if not exists member_otps (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    identifier varchar not null,
+    code varchar not null,
+    expires_at timestamptz not null,
+    consumed_at timestamptz,
+    created_at timestamptz default now()
+);
+
+create index if not exists member_otps_member_id_idx on member_otps(member_id);
+create index if not exists member_otps_identifier_idx on member_otps(identifier);

@@ -22,6 +22,7 @@ mod makeup;
 mod members;
 mod membership_plans;
 mod member_app;
+mod member_auth_extra;
 mod member_fitness;
 mod member_notifications;
 mod member_reviews;
@@ -197,7 +198,15 @@ pub fn router(state: AppState) -> Router {
         .route("/api/performance/kpi-templates/{id}", delete(performance::delete_template))
         .route("/api/performance/team-dashboard", get(performance::team_dashboard))
         .route("/api/member/auth/login", post(member_app::login))
+        .route("/api/member/auth/forgot-password", post(member_auth_extra::forgot_password))
+        .route("/api/member/auth/reset-password", post(member_auth_extra::reset_password))
+        .route("/api/member/auth/change-password", post(member_auth_extra::change_password))
+        .route("/api/member/otp/send", post(member_auth_extra::send_otp))
+        .route("/api/member/otp/verify", post(member_auth_extra::verify_otp))
+        .route("/api/member/otp/verify-only", post(member_auth_extra::verify_otp_only))
+        .route("/api/member/otp/refresh", post(member_auth_extra::refresh))
         .route("/api/member/me", get(member_app::me))
+        .route("/api/member/me/complete-profile", post(member_auth_extra::complete_profile))
         .route("/api/member/profile", get(member_app::profile).patch(member_app::update_profile))
         .route("/api/member/classes", get(member_app::list_classes))
         .route("/api/member/classes/schedule", get(member_app::list_schedules))

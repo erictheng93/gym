@@ -285,7 +285,7 @@ pub async fn login(
         return Err(AppError::Unauthorized);
     }
     let tenant_id = member.tenant_id.ok_or(AppError::Unauthorized)?;
-    let token = member_token(&state, member.id, Some(tenant_id), member.branch_id)?;
+    let token = make_member_token(&state, member.id, Some(tenant_id), member.branch_id)?;
 
     let cookie = format!("{MEMBER_COOKIE_NAME}={}; Path=/; Max-Age={}; HttpOnly; SameSite=Lax", token, state.jwt_ttl_seconds);
 
@@ -693,11 +693,27 @@ async fn fetch_bookings(
     .map_err(AppError::from)
 }
 
-fn member_token(state: &AppState, member_id: Uuid, tenant_id: Option<Uuid>, branch_id: Uuid) -> Result<String, AppError> {
+pub(crate) fn make_member_token(state: &AppState, member_id: Uuid, tenant_id: Option<Uuid>, branch_id: Uuid) -> Result<String, AppError> {
     let iat = get_current_timestamp();
     let claims = MemberClaims { sub: member_id, tenant_id, branch_id, iat, exp: iat + state.jwt_ttl_seconds };
     encode(&Header::default(), &claims, &EncodingKey::from_secret(state.jwt_secret.as_bytes()))
         .map_err(|_| AppError::Unauthorized)
+}
+
+pub(crate) async fn refresh_member_token(state: &AppState, token: &str) -> Result<(String, String), AppError> {
+    let claims = decode_member_token(&state.jwt_secret, token)?;
+    let active = sqlx::query_scalar::<_, bool>(
+        "select exists(select 1 from members where id = $1 and tenant_id = $2 and status = 'ACTIVE')",
+    )
+    .bind(claims.sub)
+    .bind(claims.tenant_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !active {
+        return Err(AppError::Unauthorized);
+    }
+    let token = make_member_token(state, claims.sub, claims.tenant_id, claims.branch_id)?;
+    Ok((token.clone(), token))
 }
 
 fn decode_member_token(secret: &str, token: &str) -> Result<MemberClaims, AppError> {
