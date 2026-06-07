@@ -29,7 +29,7 @@ const fetchContracts = async () => {
 
   try {
     isLoading.value = true
-    const result = await readItems<Contract & { plan?: { name: string, plan_type: string } }>('contracts', {
+    const result = await readItems<Contract & { plan?: { name: string, plan_type: string } }>('member/contracts', {
       filter: {
         member_id: member.value.id
       },

@@ -41,7 +41,7 @@ const fetchPayments = async (loadMore = false) => {
       currentPage.value = 1
     }
 
-    const result = await readItems<Payment>('payments', {
+    const result = await readItems<Payment>('member/payments', {
       filter: {
         member_id: member.value.id
       },
