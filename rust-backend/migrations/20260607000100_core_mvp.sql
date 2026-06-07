@@ -330,3 +330,36 @@ create index if not exists class_sessions_session_date_idx on class_sessions(ses
 create index if not exists bookings_session_id_idx on bookings(session_id);
 create index if not exists bookings_member_id_idx on bookings(member_id);
 create index if not exists bookings_contract_id_idx on bookings(contract_id);
+
+create table if not exists attendances (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    branch_id uuid references branches(id),
+    attendance_date date,
+    check_in timestamptz,
+    check_out timestamptz,
+    check_type varchar default 'REGULAR',
+    attendance_status varchar default 'PRESENT',
+    late_minutes integer default 0,
+    early_leave_minutes integer default 0,
+    work_hours numeric,
+    overtime_hours numeric default 0,
+    location_ip varchar,
+    location_gps varchar,
+    notes text
+);
+
+alter table attendances add column if not exists branch_id uuid references branches(id);
+alter table attendances add column if not exists attendance_date date;
+alter table attendances add column if not exists check_type varchar default 'REGULAR';
+alter table attendances add column if not exists attendance_status varchar default 'PRESENT';
+alter table attendances add column if not exists late_minutes integer default 0;
+alter table attendances add column if not exists early_leave_minutes integer default 0;
+alter table attendances add column if not exists overtime_hours numeric default 0;
+alter table attendances add column if not exists notes text;
+update attendances set attendance_date = coalesce(attendance_date, check_in::date, created_at::date) where attendance_date is null;
+
+create index if not exists attendances_employee_id_idx on attendances(employee_id);
+create index if not exists attendances_branch_id_idx on attendances(branch_id);
+create index if not exists attendances_attendance_date_idx on attendances(attendance_date);

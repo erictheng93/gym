@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::{error, error::AppError, state::AppState};
 
 mod auth;
+mod attendances;
 mod check_ins;
 mod classes;
 mod class_scheduling;
@@ -137,6 +138,11 @@ pub fn router(state: AppState) -> Router {
             get(hr::get_job_title)
                 .patch(hr::update_job_title)
                 .delete(hr::delete_job_title),
+        )
+        .route("/api/attendances", get(attendances::list).post(attendances::create))
+        .route(
+            "/api/attendances/{id}",
+            get(attendances::get).patch(attendances::update),
         )
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
