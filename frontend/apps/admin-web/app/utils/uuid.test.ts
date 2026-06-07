@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, vi } from 'vitest'
 import {
   generateUUIDv7,

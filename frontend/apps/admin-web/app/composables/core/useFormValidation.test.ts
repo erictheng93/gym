@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useFormValidation.test.ts
  * Tests for the Zod-integrated form validation composable

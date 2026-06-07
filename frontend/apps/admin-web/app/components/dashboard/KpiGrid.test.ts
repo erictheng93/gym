@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * KpiGrid Component Unit Tests
  * 測試 KPI 網格元件

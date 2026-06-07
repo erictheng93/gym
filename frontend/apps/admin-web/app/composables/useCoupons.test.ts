@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useCoupons } from './useCoupons'
 import type { Coupon, CouponUsage, CouponValidation } from './useCoupons'

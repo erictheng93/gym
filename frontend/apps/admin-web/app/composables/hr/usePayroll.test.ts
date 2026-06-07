@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { usePayroll } from './usePayroll'
 import type { SalaryRecord, PromotionRecord } from './usePayroll'

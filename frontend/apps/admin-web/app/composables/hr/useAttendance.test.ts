@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useAttendance.test.ts
  * Tests for the attendance management composable

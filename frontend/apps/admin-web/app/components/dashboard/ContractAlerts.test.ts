@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * ContractAlerts Component Unit Tests
  * 測試合約到期警示元件

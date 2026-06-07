@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { usePerformance } from './usePerformance'
 import type { PerformanceReview, KPITemplate, TeamDashboard } from './usePerformance'

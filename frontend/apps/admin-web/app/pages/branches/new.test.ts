@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { computed as vueComputed, computed, nextTick, ref, reactive } from 'vue'

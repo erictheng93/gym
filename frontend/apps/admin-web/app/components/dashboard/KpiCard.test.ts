@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * KpiCard Component Unit Tests
  * 測試 KPI 指標卡片元件

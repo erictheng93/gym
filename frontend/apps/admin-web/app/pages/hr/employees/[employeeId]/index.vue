@@ -40,7 +40,7 @@ const loadEmployee = async () => {
 
 onMounted(loadEmployee)
 
-const formatDate = (dateStr: string | null) => {
+const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',
@@ -49,7 +49,7 @@ const formatDate = (dateStr: string | null) => {
   })
 }
 
-const formatCurrency = (amount: number | null) => {
+const formatCurrency = (amount?: number | null) => {
   if (amount === null || amount === undefined) return '—'
   return `NT$ ${amount.toLocaleString()}`
 }
@@ -64,13 +64,13 @@ const getStatusBadge = (status: string) => {
   return map[normalizedStatus] || { label: status, class: '' }
 }
 
-const getEmploymentTypeBadge = (type: string) => {
+const getEmploymentTypeBadge = (type?: string) => {
   const map: Record<string, { label: string; class: string }> = {
     FULL_TIME: { label: '正職', class: 'badge-info' },
     PART_TIME: { label: '兼職', class: 'badge-secondary' },
     FREELANCE: { label: '外包', class: 'badge-secondary' }
   }
-  return map[type] || { label: type, class: '' }
+  return map[type || ''] || { label: type || '—', class: '' }
 }
 
 const handleDelete = async () => {

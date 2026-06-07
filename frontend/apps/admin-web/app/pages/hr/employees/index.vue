@@ -81,11 +81,11 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
 }
 
 // Get avatar variant based on status
-const getEmployeeStatusVariant = (status: string) => {
-  const map: Record<string, string> = {
+const getEmployeeStatusVariant = (status: string): 'green' | 'gray' | 'blue' | 'red' | 'orange' | 'pink' | 'purple' => {
+  const map: Record<string, 'green' | 'gray' | 'orange'> = {
     ACTIVE: 'green',
     RESIGNED: 'gray',
-    LEAVE: 'yellow'
+    LEAVE: 'orange'
   }
   return map[status] || 'green'
 }

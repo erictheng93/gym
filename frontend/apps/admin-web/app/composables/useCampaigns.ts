@@ -101,7 +101,7 @@ export const useCampaigns = () => {
   const isLoading = useState('campaigns_loading', () => false)
   const totalCount = useState('campaigns_total', () => 0)
 
-  const apiBase = config.public.apiUrl
+  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch campaigns
@@ -128,7 +128,7 @@ export const useCampaigns = () => {
         success: boolean
         data: Campaign[]
         meta: { total: number }
-      }>(`${apiBase}/campaigns?${params}`)
+      }>(`${apiUrl}/campaigns?${params}`)
 
       if (response.success) {
         campaigns.value = response.data
@@ -152,7 +152,7 @@ export const useCampaigns = () => {
   const getCampaign = async (id: string): Promise<Campaign | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: Campaign }>(
-        `${apiBase}/campaigns/${id}`
+        `${apiUrl}/campaigns/${id}`
       )
       return response.success ? response.data : null
     } catch (error) {
@@ -182,7 +182,7 @@ export const useCampaigns = () => {
    */
   const createCampaign = async (data: Partial<Campaign>): Promise<Campaign | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Campaign }>(`${apiBase}/campaigns`, {
+      const response = await $fetch<{ success: boolean; data: Campaign }>(`${apiUrl}/campaigns`, {
         method: 'POST',
         body: data
       })
@@ -202,7 +202,7 @@ export const useCampaigns = () => {
   const updateCampaign = async (id: string, data: Partial<Campaign>): Promise<Campaign | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: Campaign }>(
-        `${apiBase}/campaigns/${id}`,
+        `${apiUrl}/campaigns/${id}`,
         {
           method: 'PATCH',
           body: data
@@ -223,7 +223,7 @@ export const useCampaigns = () => {
    */
   const cancelCampaign = async (id: string): Promise<boolean> => {
     try {
-      const response = await $fetch<{ success: boolean }>(`${apiBase}/campaigns/${id}`, {
+      const response = await $fetch<{ success: boolean }>(`${apiUrl}/campaigns/${id}`, {
         method: 'DELETE'
       })
       return response.success
@@ -256,7 +256,7 @@ export const useCampaigns = () => {
           actual_cost: number | null
           metrics: CampaignMetrics
         }
-      }>(`${apiBase}/campaigns/${id}/metrics`)
+      }>(`${apiUrl}/campaigns/${id}/metrics`)
       return response.success ? response.data.metrics : null
     } catch (error) {
       handleError(error, {
@@ -288,7 +288,7 @@ export const useCampaigns = () => {
   ): Promise<Campaign | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: Campaign }>(
-        `${apiBase}/campaigns/${id}/update-metrics`,
+        `${apiUrl}/campaigns/${id}/update-metrics`,
         {
           method: 'POST',
           body: metrics
@@ -320,7 +320,7 @@ export const useCampaigns = () => {
   ): Promise<unknown | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: unknown }>(
-        `${apiBase}/campaigns/${campaignId}/assets`,
+        `${apiUrl}/campaigns/${campaignId}/assets`,
         {
           method: 'POST',
           body: asset
@@ -355,7 +355,7 @@ export const useCampaigns = () => {
         period: { start_date: string; end_date: string }
         summary: ROISummary
         data: ROIReport[]
-      }>(`${apiBase}/campaigns/roi-report?${params}`)
+      }>(`${apiUrl}/campaigns/roi-report?${params}`)
 
       return response.success ? { summary: response.summary, data: response.data } : null
     } catch (error) {

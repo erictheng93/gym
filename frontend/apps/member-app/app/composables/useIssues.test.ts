@@ -229,7 +229,7 @@ describe('useIssues', () => {
         offset: 5,
       })
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockFetch.mock.calls[0]![0] as string
       expect(url).toContain('status=SUBMITTED')
       expect(url).toContain('type=EQUIPMENT')
       expect(url).toContain('limit=10')
@@ -438,7 +438,7 @@ describe('useIssues', () => {
       const result = await updateIssue('issue-1', { title: 'Updated title' })
 
       expect(result.success).toBe(true)
-      expect(issues.value[0].title).toBe('Updated title')
+      expect(issues.value[0]!.title).toBe('Updated title')
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8056/api/member/issues/issue-1',
         expect.objectContaining({

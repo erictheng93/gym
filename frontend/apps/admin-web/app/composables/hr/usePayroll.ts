@@ -88,7 +88,7 @@ export const usePayroll = () => {
   const isPromotionLoading = useState('promotion_loading', () => false)
   const totalCount = useState('payroll_total', () => 0)
 
-  const apiBase = config.public.apiUrl
+  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch salary records
@@ -116,7 +116,7 @@ export const usePayroll = () => {
         success: boolean
         data: SalaryRecord[]
         meta: { total: number }
-      }>(`${apiBase}/payroll/salary-records?${params}`)
+      }>(`${apiUrl}/payroll/salary-records?${params}`)
 
       if (response.success) {
         salaryRecords.value = response.data
@@ -141,7 +141,7 @@ export const usePayroll = () => {
     isLoading.value = true
     try {
       const response = await $fetch<{ success: boolean; data: SalaryRecord }>(
-        `${apiBase}/payroll/salary-records/${id}`
+        `${apiUrl}/payroll/salary-records/${id}`
       )
       if (response.success) {
         currentSalaryRecord.value = response.data
@@ -168,7 +168,7 @@ export const usePayroll = () => {
     const response = await $fetch<{
       success: boolean
       data: { generated: number; records: SalaryRecord[] }
-    }>(`${apiBase}/payroll/generate`, {
+    }>(`${apiUrl}/payroll/generate`, {
       method: 'POST',
       body: data
     })
@@ -191,7 +191,7 @@ export const usePayroll = () => {
     }
   ): Promise<SalaryRecord> => {
     const response = await $fetch<{ success: boolean; data: SalaryRecord }>(
-      `${apiBase}/payroll/salary-records/${id}`,
+      `${apiUrl}/payroll/salary-records/${id}`,
       {
         method: 'PATCH',
         body: data
@@ -208,7 +208,7 @@ export const usePayroll = () => {
    */
   const approveSalary = async (id: string): Promise<SalaryRecord> => {
     const response = await $fetch<{ success: boolean; data: SalaryRecord }>(
-      `${apiBase}/payroll/salary-records/${id}/approve`,
+      `${apiUrl}/payroll/salary-records/${id}/approve`,
       { method: 'POST' }
     )
     if (!response.success) {
@@ -222,7 +222,7 @@ export const usePayroll = () => {
    */
   const batchApproveSalary = async (ids: string[]): Promise<{ approved_count: number }> => {
     const response = await $fetch<{ success: boolean; data: { approved_count: number } }>(
-      `${apiBase}/payroll/batch-approve`,
+      `${apiUrl}/payroll/batch-approve`,
       {
         method: 'POST',
         body: { ids }
@@ -239,7 +239,7 @@ export const usePayroll = () => {
    */
   const markAsPaid = async (id: string): Promise<SalaryRecord> => {
     const response = await $fetch<{ success: boolean; data: SalaryRecord }>(
-      `${apiBase}/payroll/salary-records/${id}/pay`,
+      `${apiUrl}/payroll/salary-records/${id}/pay`,
       { method: 'POST' }
     )
     if (!response.success) {
@@ -263,7 +263,7 @@ export const usePayroll = () => {
     if (options.format) params.append('format', options.format)
     if (options.include_details !== undefined) params.append('include_details', String(options.include_details))
 
-    const response = await $fetch<Blob>(`${apiBase}/payroll/export?${params}`, {
+    const response = await $fetch<Blob>(`${apiUrl}/payroll/export?${params}`, {
       responseType: 'blob'
     })
     return response
@@ -293,7 +293,7 @@ export const usePayroll = () => {
         success: boolean
         data: PromotionRecord[]
         meta: { total: number }
-      }>(`${apiBase}/payroll/promotions?${params}`)
+      }>(`${apiUrl}/payroll/promotions?${params}`)
 
       if (response.success) {
         promotions.value = response.data
@@ -324,7 +324,7 @@ export const usePayroll = () => {
     reason?: string
   }): Promise<PromotionRecord> => {
     const response = await $fetch<{ success: boolean; data: PromotionRecord }>(
-      `${apiBase}/payroll/promotions`,
+      `${apiUrl}/payroll/promotions`,
       {
         method: 'POST',
         body: data

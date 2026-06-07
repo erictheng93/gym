@@ -214,7 +214,7 @@ const { apiCall } = useAuth()
 const config = useRuntimeConfig()
 
 const invoiceId = computed(() => route.params.invoiceId)
-const apiBaseUrl = computed(() => config.public.apiBase || '')
+const apiBaseUrl = computed(() => config.public.apiBaseUrl || '')
 
 const invoice = ref(null)
 const transactions = ref([])

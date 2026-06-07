@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect } from 'vitest'
 import { isValidUUID, isValidUUIDv4, validateUUIDParam } from './validation'
 

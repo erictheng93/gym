@@ -80,7 +80,7 @@ export const usePerformance = () => {
   const isLoading = useState('performance_loading', () => false)
   const totalCount = useState('performance_total', () => 0)
 
-  const apiBase = config.public.apiUrl
+  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch reviews list
@@ -109,7 +109,7 @@ export const usePerformance = () => {
         success: boolean
         data: PerformanceReview[]
         meta: { total: number }
-      }>(`${apiBase}/performance/reviews?${params}`)
+      }>(`${apiUrl}/performance/reviews?${params}`)
 
       if (response.success) {
         reviews.value = response.data
@@ -134,7 +134,7 @@ export const usePerformance = () => {
     isLoading.value = true
     try {
       const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-        `${apiBase}/performance/reviews/${id}`
+        `${apiUrl}/performance/reviews/${id}`
       )
       if (response.success) {
         currentReview.value = response.data
@@ -162,7 +162,7 @@ export const usePerformance = () => {
     comments?: string
   }): Promise<PerformanceReview> => {
     const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiBase}/performance/reviews`,
+      `${apiUrl}/performance/reviews`,
       {
         method: 'POST',
         body: data
@@ -182,7 +182,7 @@ export const usePerformance = () => {
     data: Partial<PerformanceReview>
   ): Promise<PerformanceReview> => {
     const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiBase}/performance/reviews/${id}`,
+      `${apiUrl}/performance/reviews/${id}`,
       {
         method: 'PATCH',
         body: data
@@ -199,7 +199,7 @@ export const usePerformance = () => {
    */
   const submitReview = async (id: string): Promise<PerformanceReview> => {
     const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiBase}/performance/reviews/${id}/submit`,
+      `${apiUrl}/performance/reviews/${id}/submit`,
       { method: 'POST' }
     )
     if (!response.success) {
@@ -213,7 +213,7 @@ export const usePerformance = () => {
    */
   const approveReview = async (id: string): Promise<PerformanceReview> => {
     const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiBase}/performance/reviews/${id}/approve`,
+      `${apiUrl}/performance/reviews/${id}/approve`,
       { method: 'POST' }
     )
     if (!response.success) {
@@ -227,7 +227,7 @@ export const usePerformance = () => {
    */
   const rejectReview = async (id: string, reason: string): Promise<PerformanceReview> => {
     const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiBase}/performance/reviews/${id}/reject`,
+      `${apiUrl}/performance/reviews/${id}/reject`,
       {
         method: 'POST',
         body: { reason }
@@ -245,7 +245,7 @@ export const usePerformance = () => {
   const fetchKPITemplates = async () => {
     try {
       const response = await $fetch<{ success: boolean; data: KPITemplate[] }>(
-        `${apiBase}/performance/kpi-templates`
+        `${apiUrl}/performance/kpi-templates`
       )
       if (response.success) {
         kpiTemplates.value = response.data
@@ -268,7 +268,7 @@ export const usePerformance = () => {
     kpis: KPIItem[]
   }): Promise<KPITemplate> => {
     const response = await $fetch<{ success: boolean; data: KPITemplate }>(
-      `${apiBase}/performance/kpi-templates`,
+      `${apiUrl}/performance/kpi-templates`,
       {
         method: 'POST',
         body: data
@@ -285,7 +285,7 @@ export const usePerformance = () => {
    */
   const deleteKPITemplate = async (id: string): Promise<void> => {
     const response = await $fetch<{ success: boolean }>(
-      `${apiBase}/performance/kpi-templates/${id}`,
+      `${apiUrl}/performance/kpi-templates/${id}`,
       { method: 'DELETE' }
     )
     if (!response.success) {
@@ -306,7 +306,7 @@ export const usePerformance = () => {
       if (options?.period) params.append('period', options.period)
 
       const response = await $fetch<{ success: boolean; data: TeamDashboard }>(
-        `${apiBase}/performance/team-dashboard?${params}`
+        `${apiUrl}/performance/team-dashboard?${params}`
       )
       return response.success ? response.data : null
     } catch (error) {

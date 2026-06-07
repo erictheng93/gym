@@ -38,7 +38,7 @@ export interface TenantQuota {
 
 export const useTenant = () => {
   const config = useRuntimeConfig()
-  const apiBase = config.public.apiBase || 'http://localhost:8056'
+  const apiBaseUrl = config.public.apiBaseUrl || 'http://localhost:8056'
 
   const tenantInfo = useState<TenantInfo | null>('tenant_info', () => null)
   const tenantQuota = useState<TenantQuota | null>('tenant_quota', () => null)
@@ -54,7 +54,7 @@ export const useTenant = () => {
 
     try {
       const response = await $fetch<{ success: boolean; data: TenantInfo; error?: string }>(
-        `${apiBase}/api/tenant`,
+        `${apiBaseUrl}/api/tenant`,
         {
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -83,7 +83,7 @@ export const useTenant = () => {
 
     try {
       const response = await $fetch<{ success: boolean; data: TenantQuota; error?: string }>(
-        `${apiBase}/api/tenant/quota`,
+        `${apiBaseUrl}/api/tenant/quota`,
         {
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

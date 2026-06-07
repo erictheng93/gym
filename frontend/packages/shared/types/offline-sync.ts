@@ -3,6 +3,7 @@ export interface QueuedRequest {
   url: string
   method: 'POST' | 'PUT' | 'DELETE'
   body?: unknown
+  headers?: Record<string, string>
   timestamp: number
   retryCount: number
   maxRetries: number

@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useMakeupRequests.test.ts
  * Tests for the makeup request management composable

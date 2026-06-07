@@ -81,7 +81,7 @@ onMounted(async () => {
 // Transform snake_case to camelCase for API
 const transformToCamelCase = (data: typeof form) => {
   // Map frontend field names (snake_case) to backend field names (camelCase)
-  const genderMap: Record<string, string> = {
+  const genderMap: Record<string, 'MALE' | 'FEMALE' | 'OTHER'> = {
     M: 'MALE',
     F: 'FEMALE',
     O: 'OTHER'

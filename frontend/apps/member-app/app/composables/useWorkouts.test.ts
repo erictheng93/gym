@@ -209,7 +209,7 @@ describe('useWorkouts', () => {
         offset: 5,
       })
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockFetch.mock.calls[0]![0] as string
       expect(url).toContain('start_date=2024-01-01')
       expect(url).toContain('end_date=2024-01-31')
       expect(url).toContain('limit=10')
@@ -567,7 +567,7 @@ describe('useWorkouts', () => {
 
       expect(result.success).toBe(true)
       expect(workouts.value).toHaveLength(1)
-      expect(workouts.value[0].id).toBe('workout-2')
+      expect(workouts.value[0]!.id).toBe('workout-2')
       expect(totalWorkouts.value).toBe(1)
     })
 

@@ -63,6 +63,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0",
     "vitest": "^3.2.4",
+    "vue-tsc": "^3.3.3",
     "vue-eslint-parser": "^10.2.0",
     "wrangler": "^4.63.0"
   },

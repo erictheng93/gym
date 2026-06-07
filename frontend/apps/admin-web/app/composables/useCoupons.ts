@@ -67,7 +67,7 @@ export const useCoupons = () => {
   const isLoading = useState('coupons_loading', () => false)
   const totalCount = useState('coupons_total', () => 0)
 
-  const apiBase = config.public.apiUrl
+  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch coupons
@@ -94,7 +94,7 @@ export const useCoupons = () => {
         success: boolean
         data: Coupon[]
         meta: { total: number }
-      }>(`${apiBase}/coupons?${params}`)
+      }>(`${apiUrl}/coupons?${params}`)
 
       if (response.success) {
         coupons.value = response.data
@@ -117,7 +117,7 @@ export const useCoupons = () => {
    */
   const getCoupon = async (id: string): Promise<Coupon | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiBase}/coupons/${id}`)
+      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons/${id}`)
       return response.success ? response.data : null
     } catch (error) {
       handleError(error, {
@@ -133,7 +133,7 @@ export const useCoupons = () => {
    */
   const createCoupon = async (data: Partial<Coupon>): Promise<Coupon | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiBase}/coupons`, {
+      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons`, {
         method: 'POST',
         body: data
       })
@@ -152,7 +152,7 @@ export const useCoupons = () => {
    */
   const updateCoupon = async (id: string, data: Partial<Coupon>): Promise<Coupon | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiBase}/coupons/${id}`, {
+      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons/${id}`, {
         method: 'PATCH',
         body: data
       })
@@ -171,7 +171,7 @@ export const useCoupons = () => {
    */
   const deactivateCoupon = async (id: string): Promise<boolean> => {
     try {
-      const response = await $fetch<{ success: boolean }>(`${apiBase}/coupons/${id}`, {
+      const response = await $fetch<{ success: boolean }>(`${apiUrl}/coupons/${id}`, {
         method: 'DELETE'
       })
       return response.success
@@ -195,7 +195,7 @@ export const useCoupons = () => {
   ): Promise<CouponValidation> => {
     try {
       const response = await $fetch<{ success: boolean; data: CouponValidation }>(
-        `${apiBase}/coupons/validate`,
+        `${apiUrl}/coupons/validate`,
         {
           method: 'POST',
           body: {
@@ -234,7 +234,7 @@ export const useCoupons = () => {
         success: boolean
         data: CouponUsage[]
         meta: { total: number }
-      }>(`${apiBase}/coupons/${couponId}/usages?${params}`)
+      }>(`${apiUrl}/coupons/${couponId}/usages?${params}`)
 
       return response.success
         ? { data: response.data, total: response.meta.total }
@@ -270,7 +270,7 @@ export const useCoupons = () => {
       const response = await $fetch<{
         success: boolean
         data: { count: number; codes: string[] }
-      }>(`${apiBase}/coupons/generate-batch`, {
+      }>(`${apiUrl}/coupons/generate-batch`, {
         method: 'POST',
         body: data
       })
@@ -296,7 +296,7 @@ export const useCoupons = () => {
   }): Promise<CouponUsage | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: CouponUsage }>(
-        `${apiBase}/coupons/apply`,
+        `${apiUrl}/coupons/apply`,
         {
           method: 'POST',
           body: data

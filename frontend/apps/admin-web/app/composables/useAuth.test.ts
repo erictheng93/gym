@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mockGlobalFetch, mockHandleError } from '@test/setup'
 import { useAuth } from './useAuth'

@@ -88,7 +88,7 @@ export const useLeads = () => {
   const isLoading = useState('leads_loading', () => false)
   const totalCount = useState('leads_total', () => 0)
 
-  const apiBase = config.public.apiUrl
+  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch leads with filters
@@ -119,7 +119,7 @@ export const useLeads = () => {
         success: boolean
         data: Lead[]
         meta: { total: number }
-      }>(`${apiBase}/leads?${params}`)
+      }>(`${apiUrl}/leads?${params}`)
 
       if (response.success) {
         leads.value = response.data
@@ -142,7 +142,7 @@ export const useLeads = () => {
    */
   const getLead = async (id: string): Promise<Lead | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiBase}/leads/${id}`)
+      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiUrl}/leads/${id}`)
       return response.success ? response.data : null
     } catch (error) {
       handleError(error, {
@@ -158,7 +158,7 @@ export const useLeads = () => {
    */
   const createLead = async (data: Partial<Lead>): Promise<Lead | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiBase}/leads`, {
+      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiUrl}/leads`, {
         method: 'POST',
         body: data
       })
@@ -181,7 +181,7 @@ export const useLeads = () => {
    */
   const updateLead = async (id: string, data: Partial<Lead>): Promise<Lead | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiBase}/leads/${id}`, {
+      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiUrl}/leads/${id}`, {
         method: 'PATCH',
         body: data
       })
@@ -200,7 +200,7 @@ export const useLeads = () => {
    */
   const deleteLead = async (id: string): Promise<boolean> => {
     try {
-      const response = await $fetch<{ success: boolean }>(`${apiBase}/leads/${id}`, {
+      const response = await $fetch<{ success: boolean }>(`${apiUrl}/leads/${id}`, {
         method: 'DELETE'
       })
       return response.success
@@ -229,7 +229,7 @@ export const useLeads = () => {
   ): Promise<LeadActivity | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: LeadActivity }>(
-        `${apiBase}/leads/${leadId}/activities`,
+        `${apiUrl}/leads/${leadId}/activities`,
         {
           method: 'POST',
           body: activity
@@ -256,7 +256,7 @@ export const useLeads = () => {
       const response = await $fetch<{
         success: boolean
         data: { lead: Lead; member: { id: string; [key: string]: unknown }; is_new_member: boolean; member_id?: string }
-      }>(`${apiBase}/leads/${leadId}/convert`, {
+      }>(`${apiUrl}/leads/${leadId}/convert`, {
         method: 'POST',
         body: { converted_by: convertedBy }
       })
@@ -284,7 +284,7 @@ export const useLeads = () => {
   ): Promise<Lead | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: Lead }>(
-        `${apiBase}/leads/${leadId}/assign`,
+        `${apiUrl}/leads/${leadId}/assign`,
         {
           method: 'POST',
           body: { assigned_to: assignedTo, assigned_by: assignedBy }
@@ -317,7 +317,7 @@ export const useLeads = () => {
       if (options?.period) params.append('period', options.period)
 
       const response = await $fetch<{ success: boolean; data: LeadAnalytics }>(
-        `${apiBase}/leads/analytics?${params}`
+        `${apiUrl}/leads/analytics?${params}`
       )
       return response.success ? response.data : null
     } catch (error) {

@@ -24,8 +24,8 @@ export type {
 } from './types'
 
 // Composables
-export { useTenant } from './composables'
-export type { TenantInfo, TenantQuota } from './composables'
+export { useApi, useFetch, useTenant } from './composables'
+export type { ApiClient, ApiResponse, FetchClient, FetchOptions, TenantInfo, TenantQuota } from './composables'
 export { createOfflineSync } from './composables'
 
 // Offline sync types

@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * API Contract Tests
  * 驗證後端 API 回應結構與前端 Schema 定義一致

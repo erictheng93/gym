@@ -13,7 +13,7 @@ interface Props {
   /** 尺寸 */
   size?: 'sm' | 'md' | 'lg' | 'xl'
   /** 顏色變體 */
-  variant?: 'blue' | 'green' | 'purple' | 'orange' | 'pink'
+  variant?: 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'red' | 'gray'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -92,6 +92,14 @@ const sizeMap = {
 
 .variant-pink {
   background: linear-gradient(135deg, #ff2d55, #ff375f);
+}
+
+.variant-red {
+  background: linear-gradient(135deg, #ff3b30, #d70015);
+}
+
+.variant-gray {
+  background: linear-gradient(135deg, #8e8e93, #636366);
 }
 
 .avatar-img {

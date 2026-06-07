@@ -11,6 +11,8 @@ interface BaseFields {
   date_updated: string | null
   user_created: string | null
   user_updated: string | null
+  createdAt?: string
+  updatedAt?: string | null
 }
 
 // 分店
@@ -48,6 +50,17 @@ export interface Employee extends BaseFields {
   branch?: Branch
   job_title?: JobTitle
   supervisor?: Employee
+  employeeCode?: string | null
+  fullName?: string
+  branchId?: string | null
+  jobTitleId?: string | null
+  supervisorId?: string | null
+  hireDate?: string | null
+  employmentStatus?: 'ACTIVE' | 'RESIGNED' | 'LEAVE'
+  employmentType?: 'FULL_TIME' | 'PART_TIME' | 'FREELANCE'
+  basicSalary?: number | null
+  customPermissions?: Record<string, boolean> | null
+  jobTitle?: JobTitle
 }
 
 // 會員
@@ -62,7 +75,7 @@ export interface Member extends BaseFields {
   join_date: string | null
   sales_person_id: string | null
   tags: string[] | null
-  gender: 'M' | 'F' | 'O' | null
+  gender: 'M' | 'F' | 'O' | 'MALE' | 'FEMALE' | 'OTHER' | null
   birthday: string | null
   height: number | null
   emergency_contact: string | null
@@ -72,6 +85,17 @@ export interface Member extends BaseFields {
   sales_person?: Employee
   contracts?: Contract[]
   social_accounts?: MemberSocialAccount[]
+  memberCode?: string
+  fullName?: string
+  branchId?: string | null
+  userId?: string | null
+  memberStatus?: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE'
+  joinDate?: string | null
+  salesPersonId?: string | null
+  emergencyContact?: string | null
+  emergencyPhone?: string | null
+  salesPerson?: Employee
+  socialAccounts?: MemberSocialAccount[]
 }
 
 // 會員社群帳號連結
@@ -130,6 +154,22 @@ export interface Contract extends BaseFields {
   sales_person?: Employee
   logs?: ContractLog[]
   payments?: Payment[]
+  contractNo?: string
+  memberId?: string
+  planId?: string
+  signDate?: string | null
+  startDate?: string
+  endDate?: string | null
+  originalEndDate?: string | null
+  contractStatus?: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'TERMINATED'
+  remainingCounts?: number | null
+  totalAmount?: number
+  paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID'
+  digitalSignature?: string | null
+  contractPdf?: string | null
+  salesPersonId?: string | null
+  branchId?: string | null
+  salesPerson?: Employee
 }
 
 // 合約異動

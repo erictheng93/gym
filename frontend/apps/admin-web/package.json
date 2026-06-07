@@ -9,7 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "generate:icons": "node scripts/generate-pwa-icons.mjs",
-    "typecheck": "nuxi typecheck"
+    "typecheck": "nuxi prepare && node scripts/prepare-typecheck.mjs && vue-tsc --noEmit -p .nuxt/tsconfig.json"
   },
   "dependencies": {
     "@gym-nexus/hr-composables": "workspace:*",

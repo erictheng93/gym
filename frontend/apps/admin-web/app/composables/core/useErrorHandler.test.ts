@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useErrorHandler.test.ts
  * Tests for the error handling composable

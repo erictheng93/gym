@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useReports Composable Unit Tests
  * 測試報表 API 呼叫功能

@@ -116,7 +116,7 @@ const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED
 
   try {
     await Promise.all(
-      selectedIds.value.map(id => updateMember(id, { status }))
+      selectedIds.value.map(id => updateMember(id, { member_status: status }))
     )
     toast.success(`成功更新 ${selectedIds.value.length} 位會員狀態`)
     selectedIds.value = []

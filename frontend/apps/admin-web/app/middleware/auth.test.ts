@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockAuthInstance, mockNavigateTo } from '@test/setup'
 

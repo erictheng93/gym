@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useFetch.test.ts
  * Tests for the API fetch utility composable

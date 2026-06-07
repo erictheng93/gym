@@ -60,7 +60,7 @@ export const useSegmentation = () => {
   const isLoading = useState('segmentation_loading', () => false)
   const totalCount = useState('segmentation_total', () => 0)
 
-  const apiBase = config.public.apiUrl
+  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch RFM scores
@@ -85,7 +85,7 @@ export const useSegmentation = () => {
         success: boolean
         data: RFMScore[]
         meta: { total: number }
-      }>(`${apiBase}/segmentation/rfm?${params}`)
+      }>(`${apiUrl}/segmentation/rfm?${params}`)
 
       if (response.success) {
         rfmScores.value = response.data
@@ -109,7 +109,7 @@ export const useSegmentation = () => {
   const getMemberRFM = async (memberId: string): Promise<RFMScore | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: RFMScore }>(
-        `${apiBase}/segmentation/rfm/${memberId}`
+        `${apiUrl}/segmentation/rfm/${memberId}`
       )
       return response.success ? response.data : null
     } catch (error) {
@@ -130,7 +130,7 @@ export const useSegmentation = () => {
       const response = await $fetch<{
         success: boolean
         data: { calculated: number; calculated_at: string }
-      }>(`${apiBase}/segmentation/calculate`, {
+      }>(`${apiUrl}/segmentation/calculate`, {
         method: 'POST',
         body: { branch_id: branchId }
       })
@@ -153,7 +153,7 @@ export const useSegmentation = () => {
       const response = await $fetch<{
         success: boolean
         data: { segments: SegmentInfo[]; total_members: number }
-      }>(`${apiBase}/segmentation/segments${params}`)
+      }>(`${apiUrl}/segmentation/segments${params}`)
 
       if (response.success) {
         segments.value = response.data.segments
@@ -196,7 +196,7 @@ export const useSegmentation = () => {
           members: RFMScore[]
         }
         meta: { total: number }
-      }>(`${apiBase}/segmentation/segments/${segment}/members?${params}`)
+      }>(`${apiUrl}/segmentation/segments/${segment}/members?${params}`)
 
       if (response.success) {
         rfmScores.value = response.data.members
@@ -226,7 +226,7 @@ export const useSegmentation = () => {
   }): Promise<{ updated: number } | null> => {
     try {
       const response = await $fetch<{ success: boolean; data: { updated: number } }>(
-        `${apiBase}/segmentation/auto-tag`,
+        `${apiUrl}/segmentation/auto-tag`,
         {
           method: 'POST',
           body: {
@@ -250,7 +250,7 @@ export const useSegmentation = () => {
    */
   const exportSegment = (segment: RFMSegment | 'ALL', branchId?: string) => {
     const params = branchId ? `?branch_id=${branchId}` : ''
-    window.open(`${apiBase}/segmentation/export/${segment}${params}`, '_blank')
+    window.open(`${apiUrl}/segmentation/export/${segment}${params}`, '_blank')
   }
 
   // Segment helpers

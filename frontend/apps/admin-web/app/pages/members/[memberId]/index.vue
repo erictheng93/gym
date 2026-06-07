@@ -42,7 +42,7 @@ const loadMember = async () => {
 
 onMounted(loadMember)
 
-const formatDate = (dateStr: string | null) => {
+const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('zh-TW', {
     year: 'numeric',
@@ -301,8 +301,8 @@ const handleDelete = async () => {
           >
             <div class="contract-header">
               <code class="contract-no">{{ contract.contractNo }}</code>
-              <span :class="['badge', getContractStatusBadge(contract.contractStatus).class]">
-                {{ getContractStatusBadge(contract.contractStatus).label }}
+              <span :class="['badge', getContractStatusBadge(contract.contractStatus || '').class]">
+                {{ getContractStatusBadge(contract.contractStatus || '').label }}
               </span>
             </div>
             <h4 class="plan-name">{{ contract.plan?.name || '—' }}</h4>

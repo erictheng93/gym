@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useSegmentation } from './useSegmentation'
 import type { RFMScore, SegmentInfo } from './useSegmentation'

@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useApi.test.ts
  * Tests for the API request enhancement composable

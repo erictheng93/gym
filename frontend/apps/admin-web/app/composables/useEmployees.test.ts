@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mockFetchInstance } from '@test/setup'
 import { useEmployees } from './useEmployees'

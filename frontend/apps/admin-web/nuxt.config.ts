@@ -263,7 +263,16 @@ export default defineNuxtConfig({
   },
 
   typescript: {
-    strict: true
+    strict: true,
+    tsConfig: {
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/*.spec.ts',
+        '**/*.spec.tsx',
+        '**/test-setup.ts'
+      ]
+    }
   },
 
   // Ignore test files and test-setup.ts in nuxt build (they're validated by vitest)

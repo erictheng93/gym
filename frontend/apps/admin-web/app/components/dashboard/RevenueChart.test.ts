@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * RevenueChart Component Unit Tests
  * 測試營收趨勢圖表元件

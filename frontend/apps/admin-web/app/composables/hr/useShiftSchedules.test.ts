@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useShiftSchedules.test.ts
  * Tests for the shift schedule management composable

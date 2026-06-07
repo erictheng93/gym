@@ -184,7 +184,7 @@ describe('useGoals', () => {
       const { fetchGoals } = useGoals()
       await fetchGoals({ status: 'IN_PROGRESS', limit: 10, offset: 5 })
 
-      const url = mockFetch.mock.calls[0][0] as string
+      const url = mockFetch.mock.calls[0]![0] as string
       expect(url).toContain('status=IN_PROGRESS')
       expect(url).toContain('limit=10')
       expect(url).toContain('offset=5')
@@ -385,7 +385,7 @@ describe('useGoals', () => {
       const result = await updateGoal('goal-1', { status: 'ACHIEVED' })
 
       expect(result.success).toBe(true)
-      expect(goals.value[0].status).toBe('ACHIEVED')
+      expect(goals.value[0]!.status).toBe('ACHIEVED')
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8056/api/member/goals/goal-1',
         expect.objectContaining({
@@ -428,7 +428,7 @@ describe('useGoals', () => {
 
       expect(result.success).toBe(true)
       expect(goals.value).toHaveLength(1)
-      expect(goals.value[0].id).toBe('goal-2')
+      expect(goals.value[0]!.id).toBe('goal-2')
     })
 
     it('should not remove from local state on failure', async () => {
@@ -543,7 +543,7 @@ describe('useGoals', () => {
       const { activeGoals } = useGoals()
 
       expect(activeGoals.value).toHaveLength(1)
-      expect(activeGoals.value[0].id).toBe('goal-1')
+      expect(activeGoals.value[0]!.id).toBe('goal-1')
     })
 
     it('achievedGoals should filter ACHIEVED goals', () => {
@@ -554,7 +554,7 @@ describe('useGoals', () => {
       const { achievedGoals } = useGoals()
 
       expect(achievedGoals.value).toHaveLength(1)
-      expect(achievedGoals.value[0].id).toBe('goal-2')
+      expect(achievedGoals.value[0]!.id).toBe('goal-2')
     })
 
     it('abandonedGoals should filter ABANDONED goals', () => {
@@ -565,7 +565,7 @@ describe('useGoals', () => {
       const { abandonedGoals } = useGoals()
 
       expect(abandonedGoals.value).toHaveLength(1)
-      expect(abandonedGoals.value[0].id).toBe('goal-3')
+      expect(abandonedGoals.value[0]!.id).toBe('goal-3')
     })
 
     it('should return empty arrays when no goals', () => {

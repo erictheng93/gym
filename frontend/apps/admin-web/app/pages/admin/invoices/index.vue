@@ -182,7 +182,7 @@ import { useRuntimeConfig } from '#app'
 const { apiCall } = useAuth()
 const config = useRuntimeConfig()
 
-const apiBaseUrl = computed(() => config.public.apiBase || '')
+const apiBaseUrl = computed(() => config.public.apiBaseUrl || '')
 
 const invoices = ref([])
 const tenants = ref([])

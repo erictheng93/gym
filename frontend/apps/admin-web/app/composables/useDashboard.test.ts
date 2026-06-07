@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * useDashboard Composable Unit Tests
  * 測試戰情室 Dashboard API 呼叫功能

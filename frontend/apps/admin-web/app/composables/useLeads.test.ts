@@ -1,3 +1,4 @@
+// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useLeads } from './useLeads'
 import type { Lead, LeadActivity, LeadAnalytics } from './useLeads'

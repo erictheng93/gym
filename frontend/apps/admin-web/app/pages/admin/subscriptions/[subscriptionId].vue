@@ -188,7 +188,7 @@ const { apiCall } = useAuth()
 const config = useRuntimeConfig()
 
 const subscriptionId = computed(() => route.params.subscriptionId)
-const apiBaseUrl = computed(() => config.public.apiBase || '')
+const apiBaseUrl = computed(() => config.public.apiBaseUrl || '')
 
 const subscription = ref(null)
 const invoices = ref([])
