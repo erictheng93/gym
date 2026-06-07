@@ -10,7 +10,7 @@ use serde_json::json;
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::{error::AppError, http::{auth::AuthContext, ApiResponse}, state::AppState};
+use crate::{error::AppError, http::auth::AuthContext, state::AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct DateRangeQuery {
@@ -41,80 +41,10 @@ pub struct SetRevenueTargetRequest {
     target_amount: f64,
 }
 
-#[derive(Debug, Serialize)]
-pub struct RevenueKpis {
-    total: f64,
-    payments_count: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RevenueReport {
-    summary: RevenueKpis,
-    data: Vec<RevenueRow>,
-}
-
-#[derive(Debug, Serialize, FromRow)]
-pub struct RevenueRow {
-    date: NaiveDate,
-    amount: f64,
-    count: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct MemberGrowthReport {
-    summary: MemberGrowthSummary,
-    data: Vec<MemberGrowthRow>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct MemberGrowthSummary {
-    total_new_members: i64,
-    total_members: i64,
-}
-
 #[derive(Debug, Serialize, FromRow)]
 pub struct MemberGrowthRow {
     date: NaiveDate,
     new_members: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ContractExpiryReport {
-    summary: ContractExpirySummary,
-    data: Vec<ContractExpiryRow>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ContractExpirySummary {
-    total_expiring: i64,
-}
-
-#[derive(Debug, Serialize, FromRow)]
-pub struct ContractExpiryRow {
-    id: Uuid,
-    contract_no: String,
-    member_id: Uuid,
-    end_date: NaiveDate,
-    status: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct MemberActivityReport {
-    summary: MemberActivitySummary,
-    data: Vec<MemberActivityRow>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct MemberActivitySummary {
-    total_checkins: i64,
-    unique_members: i64,
-}
-
-#[derive(Debug, Serialize, FromRow)]
-pub struct MemberActivityRow {
-    date: NaiveDate,
-    checkins: i64,
-    unique_members: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -205,6 +135,73 @@ struct HeatmapRow {
     count: i64,
 }
 
+#[derive(Debug, FromRow)]
+struct FrontendRevenueRow {
+    payment_day: NaiveDate,
+    branch_id: Uuid,
+    branch_name: String,
+    transaction_count: i64,
+    total_income: f64,
+    total_refund: f64,
+    net_revenue: f64,
+    unique_members: i64,
+    cash_income: f64,
+    credit_card_income: f64,
+    bank_transfer_income: f64,
+    line_pay_income: f64,
+}
+
+#[derive(Debug, FromRow)]
+struct FrontendMemberGrowthRow {
+    join_day: NaiveDate,
+    branch_id: Uuid,
+    branch_name: String,
+    new_members: i64,
+    active_members: i64,
+    male_count: i64,
+    female_count: i64,
+    sales_persons_involved: i64,
+}
+
+#[derive(Debug, FromRow)]
+struct FrontendContractExpiryRow {
+    contract_id: Uuid,
+    contract_no: String,
+    member_id: Uuid,
+    member_name: String,
+    member_code: String,
+    member_phone: String,
+    member_email: String,
+    branch_id: Uuid,
+    branch_name: String,
+    plan_name: String,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+    contract_status: String,
+    payment_status: String,
+    days_until_expiry: i32,
+    sales_person_id: Option<Uuid>,
+    sales_person_name: String,
+    total_amount: f64,
+    total_paid: f64,
+    outstanding_amount: f64,
+}
+
+#[derive(Debug, FromRow)]
+struct FrontendMemberActivityRow {
+    activity_day: NaiveDate,
+    branch_id: Uuid,
+    branch_name: String,
+    total_check_ins: i64,
+    unique_members: i64,
+    qr_code_count: i64,
+    manual_count: i64,
+    card_count: i64,
+    morning_count: i64,
+    afternoon_count: i64,
+    evening_count: i64,
+}
+
 pub async fn dashboard_kpis(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -282,23 +279,127 @@ pub async fn dashboard_kpis(
 pub async fn revenue_report(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
     let (start, end) = range(&query);
-    let data = sqlx::query_as::<_, RevenueRow>(
-        "select payment_date::date as date, coalesce(sum(amount), 0)::float8 as amount, count(*) as count from payments where tenant_id = $1 and payment_date::date between $2 and $3 group by payment_date::date order by date",
-    ).bind(tenant_id).bind(start).bind(end).fetch_all(&state.db).await?;
-    let total = data.iter().map(|r| r.amount).sum();
-    let count = data.iter().map(|r| r.count).sum();
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: RevenueReport { summary: RevenueKpis { total, payments_count: count }, data } })))
+    let rows = sqlx::query_as::<_, FrontendRevenueRow>(
+        r#"
+        select
+            payments.payment_date::date as payment_day,
+            payments.branch_id as branch_id,
+            branches.name as branch_name,
+            count(*)::bigint as transaction_count,
+            coalesce(sum(case when payments.type = 'REFUND' then 0 else payments.amount end), 0)::float8 as total_income,
+            coalesce(sum(case when payments.type = 'REFUND' then payments.amount else 0 end), 0)::float8 as total_refund,
+            coalesce(sum(case when payments.type = 'REFUND' then -payments.amount else payments.amount end), 0)::float8 as net_revenue,
+            count(distinct payments.member_id)::bigint as unique_members,
+            coalesce(sum(case when payments.type <> 'REFUND' and payments.payment_method = 'CASH' then payments.amount else 0 end), 0)::float8 as cash_income,
+            coalesce(sum(case when payments.type <> 'REFUND' and payments.payment_method = 'CREDIT_CARD' then payments.amount else 0 end), 0)::float8 as credit_card_income,
+            coalesce(sum(case when payments.type <> 'REFUND' and payments.payment_method in ('BANK_TRANSFER', 'TRANSFER') then payments.amount else 0 end), 0)::float8 as bank_transfer_income,
+            coalesce(sum(case when payments.type <> 'REFUND' and payments.payment_method = 'LINE_PAY' then payments.amount else 0 end), 0)::float8 as line_pay_income
+        from payments
+        join branches on branches.id = payments.branch_id
+        where payments.tenant_id = $1
+          and payments.payment_date::date between $2 and $3
+          and ($4::uuid is null or payments.branch_id = $4)
+        group by payments.payment_date::date, payments.branch_id, branches.name
+        order by payment_day, branch_name
+        "#
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let total_income = rows.iter().map(|row| row.total_income).sum::<f64>();
+    let total_refund = rows.iter().map(|row| row.total_refund).sum::<f64>();
+    let net_revenue = rows.iter().map(|row| row.net_revenue).sum::<f64>();
+    let total_transactions = rows.iter().map(|row| row.transaction_count).sum::<i64>();
+    let day_count = (end - start).num_days().max(0) + 1;
+    let data = rows.into_iter().map(|row| json!({
+        "payment_day": row.payment_day,
+        "branch_id": row.branch_id,
+        "branch_name": row.branch_name,
+        "transaction_count": row.transaction_count.to_string(),
+        "total_income": row.total_income.to_string(),
+        "total_refund": row.total_refund.to_string(),
+        "net_revenue": row.net_revenue.to_string(),
+        "unique_members": row.unique_members.to_string(),
+        "cash_income": row.cash_income.to_string(),
+        "credit_card_income": row.credit_card_income.to_string(),
+        "bank_transfer_income": row.bank_transfer_income.to_string(),
+        "line_pay_income": row.line_pay_income.to_string()
+    })).collect::<Vec<_>>();
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "period": { "start_date": start, "end_date": end },
+        "summary": {
+            "total_income": total_income,
+            "total_refund": total_refund,
+            "net_revenue": net_revenue,
+            "total_transactions": total_transactions,
+            "average_daily_revenue": format!("{:.2}", net_revenue / day_count as f64)
+        },
+        "data": data
+    }))))
 }
 
 pub async fn member_growth_report(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
     let (start, end) = range(&query);
-    let data = sqlx::query_as::<_, MemberGrowthRow>(
-        "select join_date as date, count(*) as new_members from members where tenant_id = $1 and ($4::uuid is null or branch_id = $4) and join_date between $2 and $3 group by join_date order by join_date",
-    ).bind(tenant_id).bind(start).bind(end).bind(query.branch_id).fetch_all(&state.db).await?;
-    let total_new_members = data.iter().map(|r| r.new_members).sum();
+    let rows = sqlx::query_as::<_, FrontendMemberGrowthRow>(
+        r#"
+        select
+            members.join_date as join_day,
+            members.branch_id as branch_id,
+            branches.name as branch_name,
+            count(*)::bigint as new_members,
+            count(*) filter (where members.status = 'ACTIVE')::bigint as active_members,
+            count(*) filter (where lower(coalesce(members.gender, '')) = 'male')::bigint as male_count,
+            count(*) filter (where lower(coalesce(members.gender, '')) = 'female')::bigint as female_count,
+            count(distinct members.sales_person_id)::bigint as sales_persons_involved
+        from members
+        join branches on branches.id = members.branch_id
+        where members.tenant_id = $1
+          and members.join_date between $2 and $3
+          and ($4::uuid is null or members.branch_id = $4)
+        group by members.join_date, members.branch_id, branches.name
+        order by join_day, branch_name
+        "#
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+    let total_new_members = rows.iter().map(|row| row.new_members).sum::<i64>();
     let total_members = scalar_i64_branch(&state, "select count(*) from members where tenant_id = $1 and ($2::uuid is null or branch_id = $2)", tenant_id, query.branch_id).await?;
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: MemberGrowthReport { summary: MemberGrowthSummary { total_new_members, total_members }, data } })))
+    let male = rows.iter().map(|row| row.male_count).sum::<i64>();
+    let female = rows.iter().map(|row| row.female_count).sum::<i64>();
+    let day_count = (end - start).num_days().max(0) + 1;
+    let data = rows.into_iter().map(|row| json!({
+        "join_day": row.join_day,
+        "branch_id": row.branch_id,
+        "branch_name": row.branch_name,
+        "new_members": row.new_members.to_string(),
+        "active_members": row.active_members.to_string(),
+        "male_count": row.male_count.to_string(),
+        "female_count": row.female_count.to_string(),
+        "sales_persons_involved": row.sales_persons_involved.to_string()
+    })).collect::<Vec<_>>();
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "period": { "start_date": start, "end_date": end },
+        "summary": {
+            "total_new_members": total_new_members,
+            "total_members": total_members,
+            "average_daily_growth": format!("{:.2}", total_new_members as f64 / day_count as f64),
+            "gender_distribution": { "male": male, "female": female }
+        },
+        "data": data
+    }))))
 }
 
 pub async fn admin_member_demographics(
@@ -653,22 +754,163 @@ pub async fn contract_expiry_report(auth: AuthContext, State(state): State<AppSt
         .end_date
         .or(query.end_date_snake)
         .unwrap_or(today + Duration::days(query.days_ahead.or(query.days).unwrap_or(30)));
-    let data = sqlx::query_as::<_, ContractExpiryRow>(
-        "select id, contract_no, member_id, end_date, status from contracts where tenant_id = $1 and end_date between $2 and $3 order by end_date",
-    ).bind(tenant_id).bind(start).bind(end).fetch_all(&state.db).await?;
+    let limit = query.limit.unwrap_or(100).max(1);
+    let rows = sqlx::query_as::<_, FrontendContractExpiryRow>(
+        r#"
+        select
+            contracts.id as contract_id,
+            contracts.contract_no as contract_no,
+            contracts.member_id as member_id,
+            members.full_name as member_name,
+            members.member_code as member_code,
+            coalesce(members.phone, '') as member_phone,
+            coalesce(members.email, '') as member_email,
+            contracts.branch_id as branch_id,
+            branches.name as branch_name,
+            membership_plans.name as plan_name,
+            contracts.start_date as start_date,
+            contracts.end_date as end_date,
+            contracts.status as contract_status,
+            contracts.payment_status as payment_status,
+            (contracts.end_date - current_date)::int as days_until_expiry,
+            contracts.sales_person_id as sales_person_id,
+            coalesce(employees.full_name, '') as sales_person_name,
+            contracts.total_amount::float8 as total_amount,
+            contracts.paid_amount::float8 as total_paid,
+            (contracts.total_amount - contracts.paid_amount)::float8 as outstanding_amount
+        from contracts
+        join members on members.id = contracts.member_id
+        join branches on branches.id = contracts.branch_id
+        join membership_plans on membership_plans.id = contracts.plan_id
+        left join employees on employees.id = contracts.sales_person_id
+        where contracts.tenant_id = $1
+          and contracts.status = 'ACTIVE'
+          and contracts.end_date between $2 and $3
+          and ($4::uuid is null or contracts.branch_id = $4)
+        order by contracts.end_date, contracts.contract_no
+        limit $5
+        "#
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await?;
+    let data = rows.into_iter().map(|row| json!({
+        "contract_id": row.contract_id,
+        "contract_no": row.contract_no,
+        "member_id": row.member_id,
+        "member_name": row.member_name,
+        "member_code": row.member_code,
+        "member_phone": row.member_phone,
+        "member_email": row.member_email,
+        "branch_id": row.branch_id,
+        "branch_name": row.branch_name,
+        "plan_name": row.plan_name,
+        "start_date": row.start_date,
+        "end_date": row.end_date,
+        "contract_status": row.contract_status,
+        "payment_status": row.payment_status,
+        "days_until_expiry": row.days_until_expiry,
+        "sales_person_id": row.sales_person_id,
+        "sales_person_name": row.sales_person_name,
+        "total_amount": row.total_amount.to_string(),
+        "total_paid": row.total_paid.to_string(),
+        "outstanding_amount": row.outstanding_amount.to_string()
+    })).collect::<Vec<_>>();
     let total_expiring = data.len() as i64;
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: ContractExpiryReport { summary: ContractExpirySummary { total_expiring }, data } })))
+    let urgent = data.iter().filter(|row| row["days_until_expiry"].as_i64().unwrap_or(0) <= 7).cloned().collect::<Vec<_>>();
+    let soon = data.iter().filter(|row| {
+        let days = row["days_until_expiry"].as_i64().unwrap_or(0);
+        days > 7 && days <= 30
+    }).cloned().collect::<Vec<_>>();
+    let upcoming = data.iter().filter(|row| row["days_until_expiry"].as_i64().unwrap_or(0) > 30).cloned().collect::<Vec<_>>();
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "summary": {
+            "total_expiring": total_expiring,
+            "urgent_count": urgent.len(),
+            "soon_count": soon.len(),
+            "upcoming_count": upcoming.len()
+        },
+        "grouped": {
+            "urgent": urgent,
+            "soon": soon,
+            "upcoming": upcoming
+        },
+        "data": data
+    }))))
 }
 
 pub async fn member_activity_report(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
     let (start, end) = range(&query);
-    let data = sqlx::query_as::<_, MemberActivityRow>(
-        "select check_ins.check_in_time::date as date, count(*) as checkins, count(distinct check_ins.member_id) as unique_members from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and check_ins.check_in_time::date between $2 and $3 group by check_ins.check_in_time::date order by date",
-    ).bind(tenant_id).bind(start).bind(end).fetch_all(&state.db).await?;
-    let total_checkins = data.iter().map(|r| r.checkins).sum();
-    let unique_members = data.iter().map(|r| r.unique_members).max().unwrap_or(0);
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: MemberActivityReport { summary: MemberActivitySummary { total_checkins, unique_members }, data } })))
+    let rows = sqlx::query_as::<_, FrontendMemberActivityRow>(
+        r#"
+        select
+            check_ins.check_in_time::date as activity_day,
+            check_ins.branch_id as branch_id,
+            branches.name as branch_name,
+            count(*)::bigint as total_check_ins,
+            count(distinct check_ins.member_id)::bigint as unique_members,
+            count(*) filter (where check_ins.check_in_method = 'QR_CODE')::bigint as qr_code_count,
+            count(*) filter (where check_ins.check_in_method = 'MANUAL')::bigint as manual_count,
+            count(*) filter (where check_ins.check_in_method = 'CARD')::bigint as card_count,
+            count(*) filter (where extract(hour from check_ins.check_in_time) between 5 and 11)::bigint as morning_count,
+            count(*) filter (where extract(hour from check_ins.check_in_time) between 12 and 17)::bigint as afternoon_count,
+            count(*) filter (where extract(hour from check_ins.check_in_time) between 18 and 23)::bigint as evening_count
+        from check_ins
+        join members on members.id = check_ins.member_id
+        join branches on branches.id = check_ins.branch_id
+        where members.tenant_id = $1
+          and check_ins.check_in_time::date between $2 and $3
+          and ($4::uuid is null or check_ins.branch_id = $4)
+        group by check_ins.check_in_time::date, check_ins.branch_id, branches.name
+        order by activity_day, branch_name
+        "#
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+    let total_check_ins = rows.iter().map(|row| row.total_check_ins).sum::<i64>();
+    let qr_code = rows.iter().map(|row| row.qr_code_count).sum::<i64>();
+    let manual = rows.iter().map(|row| row.manual_count).sum::<i64>();
+    let card = rows.iter().map(|row| row.card_count).sum::<i64>();
+    let day_count = (end - start).num_days().max(0) + 1;
+    let data = rows.into_iter().map(|row| json!({
+        "activity_day": row.activity_day,
+        "branch_id": row.branch_id,
+        "branch_name": row.branch_name,
+        "total_check_ins": row.total_check_ins.to_string(),
+        "unique_members": row.unique_members.to_string(),
+        "qr_code_count": row.qr_code_count.to_string(),
+        "manual_count": row.manual_count.to_string(),
+        "card_count": row.card_count.to_string(),
+        "morning_count": row.morning_count.to_string(),
+        "afternoon_count": row.afternoon_count.to_string(),
+        "evening_count": row.evening_count.to_string()
+    })).collect::<Vec<_>>();
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "period": { "start_date": start, "end_date": end },
+        "summary": {
+            "total_check_ins": total_check_ins,
+            "average_daily_check_ins": format!("{:.2}", total_check_ins as f64 / day_count as f64),
+            "method_distribution": {
+                "qr_code": qr_code,
+                "manual": manual,
+                "card": card
+            }
+        },
+        "data": data
+    }))))
 }
 
 pub async fn contract_alerts(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {

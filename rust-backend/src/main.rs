@@ -2582,6 +2582,54 @@ mod tests {
                 assert!(json["data"]["totalRequests"].as_i64().is_some());
                 assert!(json["data"]["topEndpoints"].as_array().is_some());
             }
+            else if uri.starts_with("/api/reports/revenue?") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["summary"]["net_revenue"].as_f64().unwrap() >= 3000.0);
+                assert!(json["summary"]["total_transactions"].as_i64().unwrap() >= 1);
+                assert!(json["data"].as_array().unwrap().iter().any(|row| {
+                    row["branch_id"] == branch_id.to_string()
+                        && row["payment_day"].as_str().is_some()
+                        && row["net_revenue"].as_str().is_some()
+                }));
+            }
+            else if uri.starts_with("/api/reports/member-growth?") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["summary"]["total_new_members"].as_i64().unwrap() >= 1);
+                assert!(json["summary"]["average_daily_growth"].as_str().is_some());
+                assert!(json["data"].as_array().unwrap().iter().any(|row| {
+                    row["branch_id"] == branch_id.to_string()
+                        && row["join_day"].as_str().is_some()
+                        && row["new_members"].as_str().is_some()
+                }));
+            }
+            else if uri.starts_with("/api/reports/contract-expiry?") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["summary"]["total_expiring"].as_i64().unwrap() >= 1);
+                assert!(json["summary"]["soon_count"].as_i64().unwrap() >= 1);
+                assert!(json["grouped"]["soon"].as_array().unwrap().iter().any(|row| {
+                    row["contract_id"] == contract_id.to_string()
+                        && row["member_name"] == "Rust Report Member"
+                        && row["branch_id"] == branch_id.to_string()
+                }));
+            }
+            else if uri.starts_with("/api/reports/member-activity?") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["summary"]["total_check_ins"].as_i64().unwrap() >= 1);
+                assert!(json["summary"]["method_distribution"]["manual"].as_i64().unwrap() >= 1);
+                assert!(json["data"].as_array().unwrap().iter().any(|row| {
+                    row["branch_id"] == branch_id.to_string()
+                        && row["activity_day"].as_str().is_some()
+                        && row["total_check_ins"].as_str().is_some()
+                }));
+            }
             else if uri.starts_with("/api/reports/branch-performance?") {
                 let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
                 let json: Value = serde_json::from_slice(&body).unwrap();
