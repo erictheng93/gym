@@ -15,6 +15,7 @@ mod classes;
 mod class_scheduling;
 mod contracts;
 mod dashboard_reports;
+mod hr;
 mod members;
 mod membership_plans;
 mod member_app;
@@ -123,6 +124,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports/member-growth", get(dashboard_reports::member_growth_report))
         .route("/api/reports/contract-expiry", get(dashboard_reports::contract_expiry_report))
         .route("/api/reports/member-activity", get(dashboard_reports::member_activity_report))
+        .route("/api/employees", get(hr::list_employees).post(hr::create_employee))
+        .route(
+            "/api/employees/{id}",
+            get(hr::get_employee)
+                .patch(hr::update_employee)
+                .delete(hr::delete_employee),
+        )
+        .route("/api/job-titles", get(hr::list_job_titles).post(hr::create_job_title))
+        .route(
+            "/api/job-titles/{id}",
+            get(hr::get_job_title)
+                .patch(hr::update_job_title)
+                .delete(hr::delete_job_title),
+        )
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
         .route("/api/member/profile", get(member_app::profile))
