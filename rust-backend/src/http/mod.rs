@@ -11,6 +11,7 @@ use crate::{error, error::AppError, state::AppState};
 
 mod auth;
 mod attendances;
+mod branches;
 mod check_ins;
 mod classes;
 mod class_scheduling;
@@ -74,6 +75,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/auth/refresh", post(auth::refresh))
         .route("/api/auth/me", get(auth::me).post(error::method_not_allowed))
+        .route("/api/branches", get(branches::list).post(branches::create))
+        .route(
+            "/api/branches/{id}",
+            get(branches::get).patch(branches::update).delete(branches::delete),
+        )
         .route(
             "/api/membership-plans",
             get(membership_plans::list).post(membership_plans::create),
@@ -107,6 +113,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/check-ins", get(check_ins::list).post(check_ins::create))
         .route("/api/check-ins/{id}", get(check_ins::get))
+        .route("/api/admin/checkin/qr-verify", post(check_ins::qr_verify))
         .route("/api/classes", get(classes::list).post(classes::create))
         .route(
             "/api/classes/{id}",

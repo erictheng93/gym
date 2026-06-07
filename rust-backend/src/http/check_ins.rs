@@ -4,8 +4,9 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -30,6 +31,10 @@ pub struct CheckInFilters {
     #[serde(rename = "contract_id")]
     contract_id_snake: Option<Uuid>,
     date: Option<NaiveDate>,
+    #[serde(rename = "startDate")]
+    start_date: Option<DateTime<Utc>>,
+    #[serde(rename = "endDate")]
+    end_date: Option<DateTime<Utc>>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -53,6 +58,13 @@ pub struct CreateCheckInRequest {
     #[serde(rename = "locationDevice")]
     location_device: Option<String>,
     notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct QrVerifyRequest {
+    payload: Value,
+    branch_id: Option<Uuid>,
+    verified_by: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -117,6 +129,52 @@ struct ContractCheckInContext {
     plan_type: String,
 }
 
+#[derive(Debug, FromRow)]
+struct QrMemberRow {
+    id: Uuid,
+    member_code: String,
+    full_name: String,
+    branch_id: Uuid,
+}
+
+#[derive(Debug, FromRow)]
+struct QrContractRow {
+    id: Uuid,
+    contract_no: String,
+    member_id: Uuid,
+    branch_id: Uuid,
+    remaining_counts: Option<i32>,
+    end_date: Option<NaiveDate>,
+    plan_name: Option<String>,
+    plan_type: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct QrVerifyResponse {
+    success: bool,
+    message: String,
+    checkin_id: Uuid,
+    member: QrMemberResponse,
+    contract: Option<QrContractResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct QrMemberResponse {
+    id: Uuid,
+    member_code: String,
+    full_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct QrContractResponse {
+    id: Uuid,
+    contract_no: String,
+    plan_name: Option<String>,
+    plan_type: Option<String>,
+    remaining_counts: Option<i32>,
+    end_date: Option<NaiveDate>,
+}
+
 fn default_entry() -> String {
     "ENTRY".into()
 }
@@ -134,6 +192,8 @@ pub async fn list(
     let member_id = filters.member_id.or(filters.member_id_snake);
     let branch_id = filters.branch_id.or(filters.branch_id_snake);
     let contract_id = filters.contract_id.or(filters.contract_id_snake);
+    let start_date = filters.start_date;
+    let end_date = filters.end_date;
     let check_ins = sqlx::query_as::<_, CheckInRow>(
         r#"
         select
@@ -149,6 +209,8 @@ pub async fn list(
           and ($3::uuid is null or check_ins.branch_id = $3)
           and ($4::uuid is null or check_ins.contract_id = $4)
           and ($5::date is null or check_ins.check_in_time::date = $5)
+          and ($6::timestamptz is null or check_ins.check_in_time >= $6)
+          and ($7::timestamptz is null or check_ins.check_in_time < $7)
         order by check_ins.check_in_time desc
         "#,
     )
@@ -157,6 +219,8 @@ pub async fn list(
     .bind(branch_id)
     .bind(contract_id)
     .bind(filters.date)
+    .bind(start_date)
+    .bind(end_date)
     .fetch_all(&state.db)
     .await?
     .into_iter()
@@ -259,6 +323,112 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(ApiResponse { success: true, data: CheckIn::from(row) })))
 }
 
+pub async fn qr_verify(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<QrVerifyRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let qr = normalize_qr_payload(payload.payload)?;
+    let member_code = qr
+        .get("m")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| AppError::Validation("QR payload missing member code".into()))?;
+    let timestamp_ms = qr
+        .get("t")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| AppError::Validation("QR payload missing timestamp".into()))?;
+    let generated_at = Utc
+        .timestamp_millis_opt(timestamp_ms)
+        .single()
+        .ok_or_else(|| AppError::Validation("QR payload timestamp is invalid".into()))?;
+
+    if (Utc::now() - generated_at).num_milliseconds().abs() > 30_000 {
+        return Err(AppError::Validation("QR Code 已過期".into()));
+    }
+
+    let member = fetch_member_by_code(&state.db, tenant_id, member_code).await?;
+    let branch_id = payload
+        .branch_id
+        .or(auth.user.branch_id)
+        .unwrap_or(member.branch_id);
+    ensure_branch_scope(&state.db, tenant_id, branch_id).await?;
+
+    let requested_contract_id = qr
+        .get("c")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(Uuid::parse_str)
+        .transpose()
+        .map_err(|_| AppError::Validation("QR payload contract id is invalid".into()))?;
+    let mut contract = match requested_contract_id {
+        Some(contract_id) => Some(fetch_qr_contract(&state.db, tenant_id, contract_id).await?),
+        None => fetch_active_qr_contract(&state.db, tenant_id, member.id).await?,
+    };
+
+    if let Some(contract) = &contract {
+        if contract.member_id != member.id {
+            return Err(AppError::Validation("contract does not match member".into()));
+        }
+        if contract.branch_id != branch_id {
+            return Err(AppError::Validation("contract does not match branch".into()));
+        }
+        if contract.plan_type.as_deref() == Some("COUNT_BASED")
+            && contract.remaining_counts.unwrap_or(0) <= 0
+        {
+            return Err(AppError::Validation("contract has no remaining counts".into()));
+        }
+    }
+
+    let mut tx = state.db.begin().await?;
+    let checkin_id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        insert into check_ins (
+            id, member_id, branch_id, contract_id, check_in_time, check_in_type,
+            check_in_method, processed_by_id
+        )
+        values (gen_random_uuid(), $1, $2, $3, now(), 'ENTRY', 'QR', $4)
+        returning id
+        "#,
+    )
+    .bind(member.id)
+    .bind(branch_id)
+    .bind(contract.as_ref().map(|contract| contract.id))
+    .bind(payload.verified_by.or(auth.user.employee_id))
+    .fetch_one(&mut *tx)
+    .await?;
+
+    if let Some(contract) = &contract {
+        if contract.plan_type.as_deref() == Some("COUNT_BASED") {
+            decrement_remaining_count(&mut tx, tenant_id, contract.id).await?;
+        }
+    }
+
+    tx.commit().await?;
+
+    if let Some(existing) = &contract {
+        contract = Some(fetch_qr_contract(&state.db, tenant_id, existing.id).await?);
+    }
+
+    Ok((
+        StatusCode::OK,
+        Json(QrVerifyResponse {
+            success: true,
+            message: "QR Code 驗證成功".into(),
+            checkin_id,
+            member: QrMemberResponse {
+                id: member.id,
+                member_code: member.member_code,
+                full_name: member.full_name,
+            },
+            contract: contract.map(QrContractResponse::from),
+        }),
+    ))
+}
+
 async fn fetch_check_in(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<CheckIn, AppError> {
     sqlx::query_as::<_, CheckInRow>(
         r#"
@@ -332,6 +502,77 @@ async fn fetch_contract_context(
     .ok_or_else(|| AppError::Validation("contractId is invalid for this tenant".into()))
 }
 
+async fn fetch_member_by_code(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    member_code: &str,
+) -> Result<QrMemberRow, AppError> {
+    sqlx::query_as::<_, QrMemberRow>(
+        r#"
+        select id, member_code, full_name, branch_id
+        from members
+        where tenant_id = $1 and member_code = $2 and status = 'ACTIVE'
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(member_code)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::Validation("QR member is invalid".into()))
+}
+
+async fn fetch_qr_contract(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    contract_id: Uuid,
+) -> Result<QrContractRow, AppError> {
+    sqlx::query_as::<_, QrContractRow>(
+        r#"
+        select
+            contracts.id, contracts.contract_no, contracts.member_id, contracts.branch_id,
+            contracts.remaining_counts, contracts.end_date, membership_plans.name as plan_name,
+            membership_plans.type as plan_type
+        from contracts
+        join membership_plans on membership_plans.id = contracts.plan_id
+        where contracts.id = $1 and contracts.tenant_id = $2 and contracts.status = 'ACTIVE'
+        "#,
+    )
+    .bind(contract_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::Validation("QR contract is invalid".into()))
+}
+
+async fn fetch_active_qr_contract(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    member_id: Uuid,
+) -> Result<Option<QrContractRow>, AppError> {
+    sqlx::query_as::<_, QrContractRow>(
+        r#"
+        select
+            contracts.id, contracts.contract_no, contracts.member_id, contracts.branch_id,
+            contracts.remaining_counts, contracts.end_date, membership_plans.name as plan_name,
+            membership_plans.type as plan_type
+        from contracts
+        join membership_plans on membership_plans.id = contracts.plan_id
+        where contracts.tenant_id = $1
+          and contracts.member_id = $2
+          and contracts.status = 'ACTIVE'
+          and contracts.start_date <= current_date
+          and contracts.end_date >= current_date
+        order by contracts.end_date desc
+        limit 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(member_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)
+}
+
 async fn decrement_remaining_count(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: Uuid,
@@ -377,5 +618,27 @@ impl From<CheckInRow> for CheckIn {
                 member_code: value.member_code,
             }),
         }
+    }
+}
+
+impl From<QrContractRow> for QrContractResponse {
+    fn from(value: QrContractRow) -> Self {
+        Self {
+            id: value.id,
+            contract_no: value.contract_no,
+            plan_name: value.plan_name,
+            plan_type: value.plan_type,
+            remaining_counts: value.remaining_counts,
+            end_date: value.end_date,
+        }
+    }
+}
+
+fn normalize_qr_payload(payload: Value) -> Result<Value, AppError> {
+    match payload {
+        Value::String(value) => serde_json::from_str(&value)
+            .map_err(|_| AppError::Validation("QR payload is invalid".into())),
+        Value::Object(_) => Ok(payload),
+        _ => Err(AppError::Validation("QR payload is invalid".into())),
     }
 }

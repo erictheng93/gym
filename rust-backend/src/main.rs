@@ -1497,7 +1497,138 @@ mod tests {
             .unwrap();
         assert_eq!(list_response.status(), StatusCode::OK);
 
+        let branch_list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/branches?status=active")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branch_list_response.status(), StatusCode::OK);
+        let branch_list_body = to_bytes(branch_list_response.into_body(), usize::MAX).await.unwrap();
+        let branch_list_json: Value = serde_json::from_slice(&branch_list_body).unwrap();
+        assert!(branch_list_json["data"].as_array().unwrap().iter().any(|branch| {
+            branch["id"] == branch_id.to_string()
+        }));
+
+        let branch_get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/branches/{branch_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branch_get_response.status(), StatusCode::OK);
+
+        let branch_create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/branches")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": format!("Rust Checkin Secondary {suffix}"),
+                            "code": format!("CIS{}", &suffix[..8]),
+                            "type": "BRANCH",
+                            "address": "Rust Street"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branch_create_response.status(), StatusCode::CREATED);
+        let branch_create_body = to_bytes(branch_create_response.into_body(), usize::MAX).await.unwrap();
+        let branch_create_json: Value = serde_json::from_slice(&branch_create_body).unwrap();
+        let created_branch_id = branch_create_json["data"]["id"].as_str().unwrap().to_string();
+
+        let branch_update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/branches/{created_branch_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"phone": "0223456789"}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branch_update_response.status(), StatusCode::OK);
+        let branch_update_body = to_bytes(branch_update_response.into_body(), usize::MAX).await.unwrap();
+        let branch_update_json: Value = serde_json::from_slice(&branch_update_body).unwrap();
+        assert_eq!(branch_update_json["data"]["phone"], "0223456789");
+
+        let branch_delete_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/branches/{created_branch_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(branch_delete_response.status(), StatusCode::OK);
+
+        let qr_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/checkin/qr-verify")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "payload": {
+                                "m": format!("CIM{}", &suffix[..8]),
+                                "t": chrono::Utc::now().timestamp_millis(),
+                                "c": contract_id.to_string()
+                            },
+                            "branch_id": branch_id,
+                            "verified_by": employee_id
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(qr_response.status(), StatusCode::OK);
+        let qr_body = to_bytes(qr_response.into_body(), usize::MAX).await.unwrap();
+        let qr_json: Value = serde_json::from_slice(&qr_body).unwrap();
+        let qr_check_in_id = qr_json["checkin_id"].as_str().unwrap().to_string();
+        assert_eq!(qr_json["success"], true);
+        assert_eq!(qr_json["member"]["id"], member_id.to_string());
+        assert_eq!(qr_json["contract"]["remaining_counts"], 3);
+
+        let remaining_after_qr: i32 = sqlx::query_scalar("select remaining_counts from contracts where id = $1")
+            .bind(contract_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining_after_qr, 3);
+
+        let created_branch_uuid = Uuid::parse_str(&created_branch_id).unwrap();
         let check_in_uuid = Uuid::parse_str(&check_in_id).unwrap();
+        let qr_check_in_uuid = Uuid::parse_str(&qr_check_in_id).unwrap();
+        sqlx::query("delete from check_ins where id = $1").bind(qr_check_in_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from check_ins where id = $1").bind(check_in_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
         sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
@@ -1505,6 +1636,7 @@ mod tests {
         sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
         sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
         sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(created_branch_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
