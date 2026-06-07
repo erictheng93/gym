@@ -20,6 +20,22 @@ struct ApiResponse<T> {
 }
 
 #[derive(Debug, Serialize)]
+struct Pagination {
+    total: i64,
+    page: i64,
+    limit: i64,
+    #[serde(rename = "totalPages")]
+    total_pages: i64,
+}
+
+#[derive(Debug, Serialize)]
+struct PaginatedResponse<T> {
+    success: bool,
+    data: T,
+    pagination: Pagination,
+}
+
+#[derive(Debug, Serialize)]
 struct HealthData {
     status: &'static str,
     service: &'static str,
@@ -36,6 +52,8 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health).post(error::method_not_allowed))
         .route("/health/db", get(health_db).post(error::method_not_allowed))
         .route("/api/auth/login", post(auth::login).get(error::method_not_allowed))
+        .route("/api/auth/logout", post(auth::logout))
+        .route("/api/auth/refresh", post(auth::refresh))
         .route("/api/auth/me", get(auth::me).post(error::method_not_allowed))
         .route(
             "/api/membership-plans",

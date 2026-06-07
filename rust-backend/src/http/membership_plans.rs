@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     error::AppError,
-    http::{auth::AuthContext, ApiResponse},
+    http::{auth::AuthContext, ApiResponse, PaginatedResponse, Pagination},
     state::AppState,
     validation,
 };
@@ -21,6 +21,9 @@ pub struct PlanFilters {
     branch_id: Option<Uuid>,
     #[serde(rename = "planType")]
     plan_type: Option<String>,
+    #[serde(rename = "plan_type")]
+    plan_type_snake: Option<String>,
+    status: Option<String>,
     #[serde(rename = "activeOnly")]
     active_only: Option<bool>,
 }
@@ -113,6 +116,8 @@ pub async fn list(
     Query(filters): Query<PlanFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
+    let plan_type = filters.plan_type.or(filters.plan_type_snake);
+    let active_only = filters.active_only.unwrap_or(false) || filters.status.as_deref() == Some("ACTIVE");
     let plans = sqlx::query_as::<_, MembershipPlan>(
         r#"
         select
@@ -129,12 +134,25 @@ pub async fn list(
     )
     .bind(tenant_id)
     .bind(filters.branch_id)
-    .bind(filters.plan_type)
-    .bind(filters.active_only.unwrap_or(false))
+    .bind(plan_type)
+    .bind(active_only)
     .fetch_all(&state.db)
     .await?;
 
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: plans })))
+    let total = plans.len() as i64;
+    Ok((
+        StatusCode::OK,
+        Json(PaginatedResponse {
+            success: true,
+            data: plans,
+            pagination: Pagination {
+                total,
+                page: 1,
+                limit: total,
+                total_pages: 1,
+            },
+        }),
+    ))
 }
 
 pub async fn get(

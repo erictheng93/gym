@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     error::AppError,
-    http::{auth::AuthContext, ApiResponse},
+    http::{auth::AuthContext, ApiResponse, PaginatedResponse, Pagination},
     state::AppState,
     validation,
 };
@@ -23,6 +23,9 @@ pub struct MemberFilters {
     branch_id: Option<Uuid>,
     status: Option<String>,
     q: Option<String>,
+    search: Option<String>,
+    page: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +129,11 @@ pub async fn list(
     Query(filters): Query<MemberFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
+    let search = filters
+        .q
+        .or(filters.search)
+        .map(|q| q.trim().to_string())
+        .filter(|q| !q.is_empty());
     let members = sqlx::query_as::<_, Member>(
         r#"
         select
@@ -149,11 +157,26 @@ pub async fn list(
     .bind(tenant_id)
     .bind(filters.branch_id)
     .bind(filters.status)
-    .bind(filters.q.map(|q| q.trim().to_string()).filter(|q| !q.is_empty()))
+    .bind(search)
     .fetch_all(&state.db)
     .await?;
 
-    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: members })))
+    let total = members.len() as i64;
+    let page = filters.page.unwrap_or(1).max(1);
+    let limit = filters.limit.unwrap_or(total.max(1)).max(1);
+    Ok((
+        StatusCode::OK,
+        Json(PaginatedResponse {
+            success: true,
+            data: members,
+            pagination: Pagination {
+                total,
+                page,
+                limit,
+                total_pages: ((total + limit - 1) / limit).max(1),
+            },
+        }),
+    ))
 }
 
 pub async fn get(

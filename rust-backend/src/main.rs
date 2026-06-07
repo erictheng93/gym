@@ -4,10 +4,16 @@ mod http;
 mod state;
 mod validation;
 
-use axum::Router;
+use axum::{
+    http::{header, Method},
+    Router,
+};
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::{AllowCredentials, AllowOrigin, CorsLayer},
+    trace::TraceLayer,
+};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{config::Settings, state::AppState};
@@ -56,7 +62,13 @@ async fn build_state(settings: &Settings) -> Result<AppState, error::AppError> {
 
 fn build_app(state: AppState) -> Router {
     http::router(state)
-        .layer(CorsLayer::permissive())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::mirror_request())
+                .allow_credentials(AllowCredentials::yes())
+                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT]),
+        )
         .layer(TraceLayer::new_for_http())
 }
 
@@ -270,12 +282,14 @@ mod tests {
         let me_body = to_bytes(me_response.into_body(), usize::MAX).await.unwrap();
         let me_json: Value = serde_json::from_slice(&me_body).unwrap();
 
-        assert_eq!(me_json["data"]["id"], user_id.to_string());
-        assert_eq!(me_json["data"]["tenant_id"], tenant_id.to_string());
-        assert_eq!(me_json["data"]["branch_id"], branch_id.to_string());
-        assert_eq!(me_json["data"]["employee_id"], employee_id.to_string());
-        assert_eq!(me_json["data"]["role"], "ADMIN");
-        assert_eq!(me_json["data"]["permissions"], permissions);
+        assert_eq!(me_json["data"]["user"]["id"], user_id.to_string());
+        assert_eq!(me_json["data"]["user"]["tenantId"], tenant_id.to_string());
+        assert_eq!(me_json["data"]["user"]["branchId"], branch_id.to_string());
+        assert_eq!(me_json["data"]["user"]["employeeId"], employee_id.to_string());
+        assert_eq!(me_json["data"]["user"]["role"], "ADMIN");
+        assert_eq!(me_json["data"]["user"]["permissions"], permissions);
+        assert_eq!(me_json["data"]["employee"]["id"], employee_id.to_string());
+        assert_eq!(me_json["data"]["employee"]["branchId"], branch_id.to_string());
 
         sqlx::query("delete from employees where id = $1")
             .bind(employee_id)
