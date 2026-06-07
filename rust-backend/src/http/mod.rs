@@ -14,6 +14,7 @@ mod check_ins;
 mod classes;
 mod class_scheduling;
 mod contracts;
+mod dashboard_reports;
 mod members;
 mod membership_plans;
 mod payments;
@@ -116,6 +117,11 @@ pub fn router(state: AppState) -> Router {
             "/api/bookings/{id}",
             get(class_scheduling::get_booking).delete(class_scheduling::cancel_booking),
         )
+        .route("/api/admin/dashboard/kpis", get(dashboard_reports::dashboard_kpis))
+        .route("/api/reports/revenue", get(dashboard_reports::revenue_report))
+        .route("/api/reports/member-growth", get(dashboard_reports::member_growth_report))
+        .route("/api/reports/contract-expiry", get(dashboard_reports::contract_expiry_report))
+        .route("/api/reports/member-activity", get(dashboard_reports::member_activity_report))
         .fallback(error::not_found)
         .with_state(state)
 }

@@ -1871,4 +1871,103 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn dashboard_reports_smoke_with_seed_data() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let member_id = Uuid::new_v4();
+        let plan_id = Uuid::new_v4();
+        let contract_id = Uuid::new_v4();
+        let payment_id = Uuid::new_v4();
+        let check_in_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-report-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id).bind(format!("Rust Report Tenant {suffix}"))
+            .bind(format!("rust-report-tenant-{suffix}"))
+            .bind(format!("report-tenant-{suffix}@example.com"))
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id).bind(format!("Rust Report Branch {suffix}"))
+            .bind(format!("RPB{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"reports\":[\"read\"]}'::jsonb, $4)")
+            .bind(job_title_id).bind(format!("Rust Report Admin {suffix}"))
+            .bind(format!("RPA{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id).bind(&email).bind(password_hash).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, 'Rust Report Admin', $6, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $7)")
+            .bind(employee_id).bind(user_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RPE{}", &suffix[..8])).bind(&email).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into members (id, member_code, full_name, phone, branch_id, sales_person_id, status, join_date, tenant_id) values ($1, $2, 'Rust Report Member', '0912345678', $3, $4, 'ACTIVE', current_date, $5)")
+            .bind(member_id).bind(format!("RPM{}", &suffix[..8])).bind(branch_id).bind(employee_id).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into membership_plans (id, name, code, type, duration_months, price, allow_pause, allow_transfer, is_active, tenant_id, branch_id) values ($1, 'Rust Report Plan', $2, 'TIME_BASED', 12, 3000, false, false, true, $3, $4)")
+            .bind(plan_id).bind(format!("RPP{}", &suffix[..8])).bind(tenant_id).bind(branch_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into contracts (id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, start_date, original_end_date, end_date, total_amount, paid_amount, payment_status, terms_accepted, created_by, tenant_id) values ($1, $2, $3, $4, $5, $6, 'ACTIVE', current_date, current_date + interval '30 days', current_date + interval '30 days', 3000, 3000, 'PAID', true, $6, $7)")
+            .bind(contract_id).bind(format!("RPC{}", &suffix[..8])).bind(member_id).bind(plan_id).bind(branch_id).bind(employee_id).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into payments (id, contract_id, member_id, branch_id, amount, payment_method, payment_date, type, created_by, tenant_id) values ($1, $2, $3, $4, 3000, 'CASH', now(), 'INCOME', $5, $6)")
+            .bind(payment_id).bind(contract_id).bind(member_id).bind(branch_id).bind(employee_id).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into check_ins (id, member_id, branch_id, contract_id, check_in_time, check_in_type, check_in_method, processed_by_id) values ($1, $2, $3, $4, now(), 'ENTRY', 'MANUAL', $5)")
+            .bind(check_in_id).bind(member_id).bind(branch_id).bind(contract_id).bind(employee_id)
+            .execute(&pool).await.unwrap();
+
+        let app = build_app(AppState { db: pool.clone(), jwt_secret: "test-secret".into(), jwt_ttl_seconds: 3600 });
+        let login_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"email": email, "password": password}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        for uri in [
+            "/api/admin/dashboard/kpis?days=30",
+            "/api/reports/revenue?days=30",
+            "/api/reports/member-growth?days=30",
+            "/api/reports/contract-expiry?days=45",
+            "/api/reports/member-activity?days=30",
+        ] {
+            let response = app.clone().oneshot(
+                Request::builder().uri(uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty()).unwrap()
+            ).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        }
+
+        sqlx::query("delete from check_ins where id = $1").bind(check_in_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from payments where id = $1").bind(payment_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
 }
