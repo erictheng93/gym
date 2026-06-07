@@ -4,8 +4,9 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{Datelike, Duration, NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -155,6 +156,31 @@ pub struct CreateBookingRequest {
     contract_id: Option<Uuid>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct GenerateSessionsRequest {
+    branch_id: Uuid,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdminBookRequest {
+    session_id: Uuid,
+    member_id: Uuid,
+    contract_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdminCancelBookingRequest {
+    booking_id: Uuid,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdminAttendRequest {
+    booking_id: Uuid,
+}
+
 #[derive(Debug, Serialize, FromRow)]
 pub struct Booking {
     id: Uuid,
@@ -180,6 +206,28 @@ struct SessionContext {
     current_count: Option<i32>,
 }
 
+#[derive(Debug, FromRow)]
+struct ScheduleGenerateRow {
+    id: Uuid,
+    class_id: Uuid,
+    branch_id: Uuid,
+    instructor_id: Option<Uuid>,
+    day_of_week: i32,
+    start_time: NaiveTime,
+    end_time: NaiveTime,
+    room: Option<String>,
+    max_capacity: Option<i32>,
+}
+
+#[derive(Debug, FromRow)]
+struct AttendContext {
+    contract_id: Option<Uuid>,
+    count_deducted: Option<bool>,
+    contract_tenant_id: Option<Uuid>,
+    plan_type: Option<String>,
+    remaining_counts: Option<i32>,
+}
+
 fn default_capacity() -> i32 {
     20
 }
@@ -202,7 +250,7 @@ pub async fn list_schedules(
         where branches.tenant_id = $1
           and ($2::uuid is null or class_schedules.class_id = $2)
           and ($3::uuid is null or class_schedules.branch_id = $3)
-          and ($4::bool is not true or class_schedules.status = 'ACTIVE')
+          and ($4::bool is not true or upper(coalesce(class_schedules.status, 'ACTIVE')) = 'ACTIVE')
         order by day_of_week, start_time
         "#,
     )
@@ -424,6 +472,199 @@ pub async fn cancel_booking(
     Ok((StatusCode::OK, Json(ApiResponse { success: true, data: booking })))
 }
 
+pub async fn generate_sessions(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<GenerateSessionsRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    if payload.end_date < payload.start_date {
+        return Err(AppError::Validation("end_date must be on or after start_date".into()));
+    }
+    ensure_branch_scope(&state.db, tenant_id, payload.branch_id).await?;
+    let schedules = sqlx::query_as::<_, ScheduleGenerateRow>(
+        r#"
+        select id, class_id, branch_id, instructor_id, day_of_week, start_time, end_time, room, max_capacity
+        from class_schedules
+        where branch_id = $1
+          and upper(coalesce(status, 'ACTIVE')) = 'ACTIVE'
+          and coalesce(is_recurring, true) = true
+          and (valid_from is null or valid_from <= $3)
+          and (valid_until is null or valid_until >= $2)
+        "#,
+    )
+    .bind(payload.branch_id)
+    .bind(payload.start_date)
+    .bind(payload.end_date)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut created = 0;
+    let mut date = payload.start_date;
+    let mut tx = state.db.begin().await?;
+    while date <= payload.end_date {
+        let day_of_week = date.weekday().num_days_from_sunday() as i32;
+        for schedule in schedules.iter().filter(|schedule| schedule.day_of_week == day_of_week) {
+            let inserted = sqlx::query_scalar::<_, Option<Uuid>>(
+                r#"
+                insert into class_sessions (
+                    id, schedule_id, class_id, branch_id, instructor_id, session_date,
+                    start_time, end_time, room, max_capacity
+                )
+                select gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, 20)
+                where not exists (
+                    select 1 from class_sessions
+                    where schedule_id = $1 and session_date = $5 and start_time = $6
+                )
+                returning id
+                "#,
+            )
+            .bind(schedule.id)
+            .bind(schedule.class_id)
+            .bind(schedule.branch_id)
+            .bind(schedule.instructor_id)
+            .bind(date)
+            .bind(schedule.start_time)
+            .bind(schedule.end_time)
+            .bind(&schedule.room)
+            .bind(schedule.max_capacity)
+            .fetch_optional(&mut *tx)
+            .await?;
+            if inserted.flatten().is_some() {
+                created += 1;
+            }
+        }
+        date += Duration::days(1);
+    }
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(json!({ "created": created }))))
+}
+
+pub async fn admin_book(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<AdminBookRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    ensure_member_scope(&state.db, tenant_id, payload.member_id).await?;
+    let session = fetch_session_context(&state.db, tenant_id, payload.session_id).await?;
+    if let Some(contract_id) = payload.contract_id {
+        ensure_contract_matches(&state.db, tenant_id, contract_id, payload.member_id, session.branch_id).await?;
+    }
+    let booking_status = if session.current_count.unwrap_or(0) >= session.max_capacity {
+        "WAITLIST"
+    } else {
+        "CONFIRMED"
+    };
+    let waitlist_position = if booking_status == "WAITLIST" {
+        Some(next_waitlist_position(&state.db, payload.session_id).await?)
+    } else {
+        None
+    };
+
+    let mut tx = state.db.begin().await?;
+    let booking = sqlx::query_as::<_, Booking>(
+        r#"
+        insert into bookings (id, session_id, member_id, contract_id, booking_status, waitlist_position)
+        values (gen_random_uuid(), $1, $2, $3, $4, $5)
+        returning id, status, session_id, member_id, contract_id, booking_status,
+            waitlist_position, count_deducted
+        "#,
+    )
+    .bind(payload.session_id)
+    .bind(payload.member_id)
+    .bind(payload.contract_id)
+    .bind(booking_status)
+    .bind(waitlist_position)
+    .fetch_one(&mut *tx)
+    .await?;
+    if booking_status == "CONFIRMED" {
+        increment_session_count(&mut tx, payload.session_id, 1).await?;
+    }
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "booking_id": booking.id,
+        "booking_status": booking.booking_status,
+        "waitlist_position": booking.waitlist_position,
+        "message": if booking_status == "CONFIRMED" { "預約成功" } else { "已加入候補" }
+    }))))
+}
+
+pub async fn admin_cancel_booking(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<AdminCancelBookingRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let existing = fetch_booking(&state.db, tenant_id, payload.booking_id).await?;
+    let mut tx = state.db.begin().await?;
+    sqlx::query(
+        "update bookings set booking_status = 'CANCELLED', cancel_reason = $2, cancelled_at = now(), updated_at = now() where id = $1",
+    )
+    .bind(payload.booking_id)
+    .bind(payload.reason)
+    .execute(&mut *tx)
+    .await?;
+    if existing.booking_status.as_deref() == Some("CONFIRMED") {
+        increment_session_count(&mut tx, existing.session_id, -1).await?;
+    }
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "promoted_booking_id": null,
+        "promoted_member_id": null,
+        "message": "取消預約成功"
+    }))))
+}
+
+pub async fn admin_attend(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<AdminAttendRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let context = fetch_attend_context(&state.db, tenant_id, payload.booking_id).await?;
+    let mut remaining_counts = context.remaining_counts;
+    let mut tx = state.db.begin().await?;
+    sqlx::query(
+        "update bookings set booking_status = 'ATTENDED', attended_at = coalesce(attended_at, now()), updated_at = now() where id = $1",
+    )
+    .bind(payload.booking_id)
+    .execute(&mut *tx)
+    .await?;
+    if context.plan_type.as_deref() == Some("COUNT_BASED") && context.count_deducted != Some(true) {
+        let contract_id = context.contract_id.ok_or_else(|| AppError::Validation("booking has no contract".into()))?;
+        let updated = sqlx::query_scalar::<_, Option<i32>>(
+            r#"
+            update contracts
+            set remaining_counts = remaining_counts - 1, updated_at = now()
+            where id = $1 and tenant_id = $2 and remaining_counts > 0
+            returning remaining_counts
+            "#,
+        )
+        .bind(contract_id)
+        .bind(context.contract_tenant_id.unwrap_or(tenant_id))
+        .fetch_optional(&mut *tx)
+        .await?;
+        remaining_counts = updated.flatten();
+        sqlx::query("update bookings set count_deducted = true where id = $1")
+            .bind(payload.booking_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "remaining_counts": remaining_counts,
+        "message": "簽到成功"
+    }))))
+}
+
 async fn fetch_booking(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Booking, AppError> {
     sqlx::query_as::<_, Booking>(
         r#"
@@ -457,6 +698,38 @@ async fn fetch_session_context(pool: &PgPool, tenant_id: Uuid, session_id: Uuid)
     .fetch_optional(pool)
     .await?
     .ok_or_else(|| AppError::Validation("sessionId is invalid for this tenant".into()))
+}
+
+async fn next_waitlist_position(pool: &PgPool, session_id: Uuid) -> Result<i32, AppError> {
+    Ok(sqlx::query_scalar::<_, i32>(
+        "select coalesce(max(waitlist_position), 0) + 1 from bookings where session_id = $1 and booking_status = 'WAITLIST'",
+    )
+    .bind(session_id)
+    .fetch_one(pool)
+    .await?)
+}
+
+async fn fetch_attend_context(pool: &PgPool, tenant_id: Uuid, booking_id: Uuid) -> Result<AttendContext, AppError> {
+    sqlx::query_as::<_, AttendContext>(
+        r#"
+        select
+            bookings.contract_id,
+            bookings.count_deducted,
+            contracts.tenant_id as contract_tenant_id,
+            membership_plans.type as plan_type,
+            contracts.remaining_counts
+        from bookings
+        join members on members.id = bookings.member_id
+        left join contracts on contracts.id = bookings.contract_id
+        left join membership_plans on membership_plans.id = contracts.plan_id
+        where bookings.id = $1 and members.tenant_id = $2
+        "#,
+    )
+    .bind(booking_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(AppError::NotFound)
 }
 
 async fn ensure_contract_matches(

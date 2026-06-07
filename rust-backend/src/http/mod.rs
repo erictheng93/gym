@@ -137,6 +137,10 @@ pub fn router(state: AppState) -> Router {
             "/api/bookings/{id}",
             get(class_scheduling::get_booking).delete(class_scheduling::cancel_booking),
         )
+        .route("/api/admin/classes/generate-sessions", post(class_scheduling::generate_sessions))
+        .route("/api/admin/classes/book", post(class_scheduling::admin_book))
+        .route("/api/admin/classes/cancel-booking", post(class_scheduling::admin_cancel_booking))
+        .route("/api/admin/classes/attend", post(class_scheduling::admin_attend))
         .route("/api/admin/dashboard/kpis", get(dashboard_reports::dashboard_kpis))
         .route("/api/admin/dashboard/contract-alerts", get(dashboard_reports::contract_alerts))
         .route(

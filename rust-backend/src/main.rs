@@ -1916,6 +1916,13 @@ mod tests {
             .bind(employee_id)
             .bind(branch_id)
             .execute(&pool).await.unwrap();
+        let schedule_id = Uuid::new_v4();
+        sqlx::query("insert into class_schedules (id, class_id, branch_id, instructor_id, day_of_week, start_time, end_time, room, max_capacity, is_recurring, valid_from, valid_until) values ($1, $2, $3, $4, 1, '08:00'::time, '09:00'::time, 'B', 2, true, '2026-02-01'::date, '2026-02-28'::date)")
+            .bind(schedule_id)
+            .bind(class_id)
+            .bind(branch_id)
+            .bind(employee_id)
+            .execute(&pool).await.unwrap();
 
         let app = build_app(AppState {
             db: pool.clone(),
@@ -1995,9 +2002,77 @@ mod tests {
             .bind(session_uuid).fetch_one(&pool).await.unwrap();
         assert_eq!(current_count, 0);
 
+        let generate_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/classes/generate-sessions")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "branch_id": branch_id,
+                    "start_date": "2026-02-02",
+                    "end_date": "2026-02-02"
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(generate_response.status(), StatusCode::OK);
+        let generate_body = to_bytes(generate_response.into_body(), usize::MAX).await.unwrap();
+        let generate_json: Value = serde_json::from_slice(&generate_body).unwrap();
+        assert_eq!(generate_json["created"], 1);
+
+        let generated_session_id: Uuid = sqlx::query_scalar("select id from class_sessions where schedule_id = $1 and session_date = '2026-02-02'::date")
+            .bind(schedule_id).fetch_one(&pool).await.unwrap();
+        let admin_book_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/classes/book")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "session_id": generated_session_id,
+                    "member_id": member_id,
+                    "contract_id": contract_id
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(admin_book_response.status(), StatusCode::OK);
+        let admin_book_body = to_bytes(admin_book_response.into_body(), usize::MAX).await.unwrap();
+        let admin_book_json: Value = serde_json::from_slice(&admin_book_body).unwrap();
+        let admin_booking_id = admin_book_json["booking_id"].as_str().unwrap().to_string();
+        assert_eq!(admin_book_json["booking_status"], "CONFIRMED");
+
+        let attend_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/classes/attend")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "booking_id": admin_booking_id }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(attend_response.status(), StatusCode::OK);
+        let attend_body = to_bytes(attend_response.into_body(), usize::MAX).await.unwrap();
+        let attend_json: Value = serde_json::from_slice(&attend_body).unwrap();
+        assert_eq!(attend_json["remaining_counts"], 4);
+
+        let admin_cancel_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/classes/cancel-booking")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "booking_id": admin_booking_id, "reason": "test" }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(admin_cancel_response.status(), StatusCode::OK);
+
         let booking_uuid = Uuid::parse_str(&booking_id).unwrap();
+        let admin_booking_uuid = Uuid::parse_str(&admin_booking_id).unwrap();
+        sqlx::query("delete from bookings where id = $1").bind(admin_booking_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from bookings where id = $1").bind(booking_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_sessions where id = $1").bind(generated_session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_sessions where id = $1").bind(session_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();
         sqlx::query("delete from classes where id = $1").bind(class_id).execute(&pool).await.unwrap();
         sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
         sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
