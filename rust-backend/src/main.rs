@@ -4936,4 +4936,126 @@ mod tests {
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
 
+    #[tokio::test]
+    async fn marketing_crm_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let member_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-marketing-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id)
+            .bind(format!("Rust Marketing Tenant {suffix}"))
+            .bind(format!("rust-marketing-tenant-{suffix}"))
+            .bind(format!("marketing-tenant-{suffix}@example.com"))
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id)
+            .bind(format!("Rust Marketing Branch {suffix}"))
+            .bind(format!("MB{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"crm\":[\"read\",\"write\"]}'::jsonb, $4)")
+            .bind(job_title_id)
+            .bind(format!("Rust Marketing Admin {suffix}"))
+            .bind(format!("MA{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id).bind(&email).bind(password_hash).bind(tenant_id).execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $8)")
+            .bind(employee_id).bind(user_id).bind(branch_id).bind(job_title_id).bind(format!("ME{}", &suffix[..8])).bind("Rust Marketing User").bind(&email).bind(tenant_id).execute(&pool).await.unwrap();
+        sqlx::query("insert into members (id, member_code, full_name, phone, email, branch_id, sales_person_id, status, join_date, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', '2026-01-15'::date, $8)")
+            .bind(member_id).bind(format!("MM{}", &suffix[..8])).bind("Rust Coupon Member").bind("0911000000").bind(format!("member-{suffix}@example.com")).bind(branch_id).bind(employee_id).bind(tenant_id).execute(&pool).await.unwrap();
+
+        let app = build_app(AppState { db: pool.clone(), jwt_secret: "test-secret".into(), jwt_ttl_seconds: 3600 });
+        let login_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/auth/login").header("content-type", "application/json").body(Body::from(json!({"email": email, "password": password}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let lead_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/leads").header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"name":"Rust Lead","phone":"0922000000","email":"lead@example.com","source":"WEBSITE","branch_id":branch_id,"assigned_to":employee_id}).to_string())).unwrap()).await.unwrap();
+        let lead_status = lead_response.status();
+        let lead_body = to_bytes(lead_response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(lead_status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&lead_body));
+        let lead_json: Value = serde_json::from_slice(&lead_body).unwrap();
+        let lead_id = lead_json["data"]["id"].as_str().unwrap().to_string();
+        assert_eq!(lead_json["data"]["branch_id"], branch_id.to_string());
+
+        let list_leads = app.clone().oneshot(Request::builder().uri("/api/leads?limit=20&offset=0").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(list_leads.status(), StatusCode::OK);
+        let list_json: Value = serde_json::from_slice(&to_bytes(list_leads.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(list_json["meta"]["total"].as_i64().unwrap() >= 1);
+
+        let activity_response = app.clone().oneshot(Request::builder().method("POST").uri(format!("/api/leads/{lead_id}/activities")).header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"activity_type":"CALL","content":"Called lead"}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(activity_response.status(), StatusCode::CREATED);
+
+        let convert_response = app.clone().oneshot(Request::builder().method("POST").uri(format!("/api/leads/{lead_id}/convert")).header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from("{}" )).unwrap()).await.unwrap();
+        assert_eq!(convert_response.status(), StatusCode::OK);
+        let convert_json: Value = serde_json::from_slice(&to_bytes(convert_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let converted_member_id = convert_json["data"]["member_id"].as_str().unwrap().to_string();
+
+        let campaign_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/campaigns").header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"name":"Rust Campaign","type":"PROMOTION","start_date":"2026-06-01","end_date":"2026-06-30","budget":1000,"status":"ACTIVE"}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(campaign_response.status(), StatusCode::CREATED);
+        let campaign_json: Value = serde_json::from_slice(&to_bytes(campaign_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let campaign_id = campaign_json["data"]["id"].as_str().unwrap().to_string();
+        let metrics_response = app.clone().oneshot(Request::builder().method("POST").uri(format!("/api/campaigns/{campaign_id}/update-metrics")).header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"impressions":100,"clicks":10,"conversions":2,"revenue":2500,"actual_cost":900}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(metrics_response.status(), StatusCode::OK);
+        let roi_response = app.clone().oneshot(Request::builder().uri("/api/campaigns/roi-report").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(roi_response.status(), StatusCode::OK);
+
+        let coupon_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/coupons").header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"code":format!("CP{}", &suffix[..8]),"name":"Rust Coupon","discount_type":"FIXED_AMOUNT","discount_value":100,"min_purchase":500,"usage_limit":10,"usage_per_member":1,"start_date":"2026-06-01","end_date":"2026-12-31"}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(coupon_response.status(), StatusCode::CREATED);
+        let coupon_json: Value = serde_json::from_slice(&to_bytes(coupon_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        let coupon_id = coupon_json["data"]["id"].as_str().unwrap().to_string();
+        let coupon_code = coupon_json["data"]["code"].as_str().unwrap().to_string();
+        let validate_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/coupons/validate").header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"code":coupon_code,"member_id":member_id,"amount":1000}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(validate_response.status(), StatusCode::OK);
+        let validate_json: Value = serde_json::from_slice(&to_bytes(validate_response.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(validate_json["data"]["valid"], true);
+        let apply_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/coupons/apply").header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"coupon_id":coupon_id,"member_id":member_id,"discount_amount":100}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(apply_response.status(), StatusCode::CREATED);
+
+        let calculate_response = app.clone().oneshot(Request::builder().method("POST").uri("/api/segmentation/calculate").header("authorization", format!("Bearer {token}")).header("content-type", "application/json").body(Body::from(json!({"branch_id":branch_id}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(calculate_response.status(), StatusCode::OK);
+        let segments_response = app.clone().oneshot(Request::builder().uri(format!("/api/segmentation/segments?branch_id={branch_id}")).header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(segments_response.status(), StatusCode::OK);
+        let export_response = app.clone().oneshot(Request::builder().uri("/api/segmentation/export/ALL").header("authorization", format!("Bearer {token}")).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(export_response.status(), StatusCode::OK);
+
+        let lead_uuid = Uuid::parse_str(&lead_id).unwrap();
+        let campaign_uuid = Uuid::parse_str(&campaign_id).unwrap();
+        let coupon_uuid = Uuid::parse_str(&coupon_id).unwrap();
+        let converted_member_uuid = Uuid::parse_str(&converted_member_id).unwrap();
+        sqlx::query("delete from coupon_usages where coupon_id = $1").bind(coupon_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from rfm_scores where tenant_id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from lead_activities where lead_id = $1").bind(lead_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from leads where id = $1").bind(lead_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from coupons where id = $1").bind(coupon_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from campaign_assets where campaign_id = $1").bind(campaign_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from campaigns where id = $1").bind(campaign_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from members where id = $1").bind(converted_member_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
+
 }

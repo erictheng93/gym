@@ -24,6 +24,7 @@ mod dashboard_reports;
 mod hr;
 mod leaves;
 mod makeup;
+mod marketing;
 mod members;
 mod membership_plans;
 mod member_app;
@@ -217,6 +218,46 @@ pub fn router(state: AppState) -> Router {
         .route("/api/admin/classes/book", post(class_scheduling::admin_book))
         .route("/api/admin/classes/cancel-booking", post(class_scheduling::admin_cancel_booking))
         .route("/api/admin/classes/attend", post(class_scheduling::admin_attend))
+        .route("/api/leads/analytics", get(marketing::lead_analytics))
+        .route("/api/leads", get(marketing::list_leads).post(marketing::create_lead))
+        .route(
+            "/api/leads/{id}",
+            get(marketing::get_lead)
+                .patch(marketing::update_lead)
+                .delete(marketing::delete_lead),
+        )
+        .route("/api/leads/{id}/activities", post(marketing::add_lead_activity))
+        .route("/api/leads/{id}/assign", post(marketing::assign_lead))
+        .route("/api/leads/{id}/convert", post(marketing::convert_lead))
+        .route("/api/campaigns/roi-report", get(marketing::campaign_roi_report))
+        .route("/api/campaigns", get(marketing::list_campaigns).post(marketing::create_campaign))
+        .route(
+            "/api/campaigns/{id}",
+            get(marketing::get_campaign)
+                .patch(marketing::update_campaign)
+                .delete(marketing::delete_campaign),
+        )
+        .route("/api/campaigns/{id}/metrics", get(marketing::campaign_metrics))
+        .route("/api/campaigns/{id}/update-metrics", post(marketing::update_campaign_metrics))
+        .route("/api/campaigns/{id}/assets", post(marketing::add_campaign_asset))
+        .route("/api/coupons/validate", post(marketing::validate_coupon))
+        .route("/api/coupons/generate-batch", post(marketing::generate_batch_coupons))
+        .route("/api/coupons/apply", post(marketing::apply_coupon))
+        .route("/api/coupons", get(marketing::list_coupons).post(marketing::create_coupon))
+        .route(
+            "/api/coupons/{id}",
+            get(marketing::get_coupon)
+                .patch(marketing::update_coupon)
+                .delete(marketing::delete_coupon),
+        )
+        .route("/api/coupons/{id}/usages", get(marketing::coupon_usages))
+        .route("/api/segmentation/rfm", get(marketing::list_rfm))
+        .route("/api/segmentation/rfm/{member_id}", get(marketing::get_member_rfm))
+        .route("/api/segmentation/calculate", post(marketing::calculate_rfm))
+        .route("/api/segmentation/segments", get(marketing::segments))
+        .route("/api/segmentation/segments/{segment}/members", get(marketing::segment_members))
+        .route("/api/segmentation/auto-tag", post(marketing::auto_tag))
+        .route("/api/segmentation/export/{segment}", get(marketing::export_segment))
         .route("/api/admin/dashboard/kpis", get(dashboard_reports::dashboard_kpis))
         .route("/api/admin/dashboard/contract-alerts", get(dashboard_reports::contract_alerts))
         .route(
