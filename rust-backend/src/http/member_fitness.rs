@@ -440,6 +440,51 @@ pub async fn create_measurement(
     Ok((StatusCode::CREATED, Json(MutationResponse { success: true, message: "量測紀錄已建立", data: Some(row) })))
 }
 
+pub async fn get_measurement(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let row = fetch_measurement(&state, auth.member_id, id).await?;
+    Ok((StatusCode::OK, Json(DataResponse { success: true, data: row })))
+}
+
+pub async fn update_measurement(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<MeasurementRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let updated_id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        update body_measurements set
+            date = coalesce($3, date),
+            weight = coalesce($4, weight),
+            body_fat = coalesce($5, body_fat),
+            muscle_mass = coalesce($6, muscle_mass),
+            bmi = coalesce($7, bmi),
+            source = coalesce($8, source),
+            raw_data = coalesce($9::jsonb, raw_data)
+        where id = $1 and member_id = $2
+        returning id
+        "#,
+    )
+    .bind(id)
+    .bind(auth.member_id)
+    .bind(payload.date)
+    .bind(payload.weight)
+    .bind(payload.body_fat)
+    .bind(payload.muscle_mass)
+    .bind(payload.bmi)
+    .bind(payload.source)
+    .bind(payload.raw_data.map(|value| value.to_string()))
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    let row = fetch_measurement(&state, auth.member_id, updated_id).await?;
+    Ok((StatusCode::OK, Json(MutationResponse { success: true, message: "量測紀錄已更新", data: Some(row) })))
+}
+
 pub async fn delete_measurement(
     auth: MemberAuthContext,
     State(state): State<AppState>,

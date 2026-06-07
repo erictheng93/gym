@@ -3421,6 +3421,19 @@ mod tests {
         let measurement_body = to_bytes(measurement_response.into_body(), usize::MAX).await.unwrap();
         let measurement_json: Value = serde_json::from_slice(&measurement_body).unwrap();
         let measurement_id = Uuid::parse_str(measurement_json["data"]["id"].as_str().unwrap()).unwrap();
+        let measurement_get_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/member/measurements/{measurement_id}"))
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(measurement_get_response.status(), StatusCode::OK);
+        let measurement_update_response = app.clone().oneshot(
+            Request::builder().method("PUT").uri(format!("/api/member/measurements/{measurement_id}"))
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"weight": 77.8, "body_fat": 21.5}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(measurement_update_response.status(), StatusCode::OK);
 
         let issue_response = app.clone().oneshot(
             Request::builder().method("POST").uri("/api/member/issues")
@@ -3673,6 +3686,7 @@ mod tests {
             &format!("/api/member/workouts/{workout_id}"),
             "/api/member/workouts/stats?period=month",
             "/api/member/measurements",
+            &format!("/api/member/measurements/{measurement_id}"),
             "/api/member/measurements/latest",
             "/api/member/measurements/stats?period=30",
             "/api/member/issues?status=SUBMITTED&type=EQUIPMENT",
@@ -3723,6 +3737,7 @@ mod tests {
         assert_eq!(review_delete_response.status(), StatusCode::OK);
         let push_unsubscribe_response = app.clone().oneshot(
             Request::builder().method("DELETE").uri("/api/member/push/unsubscribe")
+                .header("x-member-token", token)
                 .header("content-type", "application/json")
                 .body(Body::from(json!({ "endpoint": push_endpoint }).to_string())).unwrap()
         ).await.unwrap();

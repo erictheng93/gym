@@ -305,11 +305,13 @@ pub async fn subscribe(
 }
 
 pub async fn unsubscribe(
+    auth: MemberAuthContext,
     State(state): State<AppState>,
     Json(payload): Json<UnsubscribeRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    sqlx::query("update push_subscriptions set is_active = false, updated_at = now() where endpoint = $1")
+    sqlx::query("update push_subscriptions set is_active = false, updated_at = now() where endpoint = $1 and member_id = $2")
         .bind(payload.endpoint)
+        .bind(auth.member_id)
         .execute(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(json!({ "success": true }))))

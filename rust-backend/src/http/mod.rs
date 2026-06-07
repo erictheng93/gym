@@ -418,7 +418,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/measurements", get(member_fitness::list_measurements).post(member_fitness::create_measurement))
         .route("/api/member/measurements/latest", get(member_fitness::latest_measurement))
         .route("/api/member/measurements/stats", get(member_fitness::measurement_stats))
-        .route("/api/member/measurements/{id}", delete(member_fitness::delete_measurement))
+        .route(
+            "/api/member/measurements/{id}",
+            get(member_fitness::get_measurement)
+                .put(member_fitness::update_measurement)
+                .delete(member_fitness::delete_measurement),
+        )
         .route("/api/member/reviews/eligibility/{booking_id}", get(member_reviews::eligibility))
         .route("/api/member/reviews", post(member_reviews::submit_review))
         .route(
