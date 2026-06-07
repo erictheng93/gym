@@ -139,6 +139,9 @@ pub fn router(state: AppState) -> Router {
                 .patch(contracts::update)
                 .delete(contracts::delete),
         )
+        .route("/api/contracts/{id}/activate", post(contracts::activate))
+        .route("/api/contracts/{id}/pause", post(contracts::pause))
+        .route("/api/contracts/{id}/resume", post(contracts::resume))
         .route("/api/payments", get(payments::list).post(payments::create))
         .route(
             "/api/payments/{id}",
@@ -163,7 +166,12 @@ pub fn router(state: AppState) -> Router {
                 .patch(class_categories::update)
                 .delete(class_categories::delete),
         )
-        .route("/api/contract_logs", post(contract_logs::create))
+        .route("/api/contract_logs", get(contract_logs::list).post(contract_logs::create))
+        .route("/api/contract_logs/contract/{contract_id}", get(contract_logs::list_by_contract))
+        .route("/api/contract_logs/{id}", get(contract_logs::get))
+        .route("/api/contract-logs", get(contract_logs::list).post(contract_logs::create))
+        .route("/api/contract-logs/contract/{contract_id}", get(contract_logs::list_by_contract))
+        .route("/api/contract-logs/{id}", get(contract_logs::get))
         .route(
             "/api/class-schedules",
             get(class_scheduling::list_schedules).post(class_scheduling::create_schedule),

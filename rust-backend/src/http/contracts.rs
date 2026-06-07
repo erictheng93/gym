@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::NaiveDate;
+use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::FromRow;
@@ -94,6 +94,15 @@ pub struct UpdateContractRequest {
     notes: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ContractActionRequest {
+    #[serde(rename = "startDate", alias = "start_date")]
+    start_date: Option<NaiveDate>,
+    #[serde(rename = "endDate", alias = "end_date")]
+    end_date: Option<NaiveDate>,
+    reason: Option<String>,
+}
+
 #[derive(Debug, Serialize, FromRow)]
 pub struct Contract {
     id: Uuid,
@@ -123,6 +132,15 @@ pub struct Contract {
 struct PlanInfo {
     plan_type: String,
     class_counts: Option<i32>,
+}
+
+#[derive(Debug, FromRow)]
+struct ContractActionRow {
+    id: Uuid,
+    member_id: Uuid,
+    branch_id: Uuid,
+    status: String,
+    end_date: NaiveDate,
 }
 
 fn default_active() -> String {
@@ -354,6 +372,99 @@ pub async fn delete(
     Ok((StatusCode::OK, Json(ApiResponse { success: true, data: contract })))
 }
 
+pub async fn activate(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let current = fetch_contract_action_row(&state, tenant_id, id).await?;
+    if current.status != "DRAFT" && current.status != "PENDING" {
+        return Err(AppError::Validation("contract must be DRAFT or PENDING to activate".into()));
+    }
+
+    let mut tx = state.db.begin().await?;
+    let contract = update_contract_status_in_tx(&mut tx, tenant_id, id, "ACTIVE", None).await?;
+    insert_contract_log_in_tx(
+        &mut tx,
+        tenant_id,
+        &current,
+        "ACTIVATE",
+        None,
+        None,
+        None,
+        None,
+        auth.user.employee_id,
+    ).await?;
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: contract })))
+}
+
+pub async fn pause(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ContractActionRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let current = fetch_contract_action_row(&state, tenant_id, id).await?;
+    if current.status != "ACTIVE" {
+        return Err(AppError::Validation("contract must be ACTIVE to pause".into()));
+    }
+    let start_date = payload.start_date.ok_or_else(|| AppError::Validation("start_date is required".into()))?;
+    let end_date = payload.end_date.ok_or_else(|| AppError::Validation("end_date is required".into()))?;
+    validate_dates(start_date, end_date)?;
+    let days = end_date.signed_duration_since(start_date).num_days().max(0) as i32;
+    let extended_end_date = current.end_date + Duration::days(days as i64);
+
+    let mut tx = state.db.begin().await?;
+    let contract = update_contract_status_in_tx(&mut tx, tenant_id, id, "PAUSED", Some(extended_end_date)).await?;
+    insert_contract_log_in_tx(
+        &mut tx,
+        tenant_id,
+        &current,
+        "PAUSE",
+        Some(start_date),
+        Some(end_date),
+        Some(days),
+        trim_opt(payload.reason),
+        auth.user.employee_id,
+    ).await?;
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: contract })))
+}
+
+pub async fn resume(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let current = fetch_contract_action_row(&state, tenant_id, id).await?;
+    if current.status != "PAUSED" {
+        return Err(AppError::Validation("contract must be PAUSED to resume".into()));
+    }
+
+    let mut tx = state.db.begin().await?;
+    let contract = update_contract_status_in_tx(&mut tx, tenant_id, id, "ACTIVE", None).await?;
+    insert_contract_log_in_tx(
+        &mut tx,
+        tenant_id,
+        &current,
+        "RESUME",
+        None,
+        None,
+        None,
+        None,
+        auth.user.employee_id,
+    ).await?;
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: contract })))
+}
+
 async fn fetch_contract(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<Contract, AppError> {
     sqlx::query_as::<_, Contract>(
         r#"
@@ -380,6 +491,82 @@ async fn fetch_contract(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<C
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)
+}
+
+async fn fetch_contract_action_row(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<ContractActionRow, AppError> {
+    sqlx::query_as::<_, ContractActionRow>(
+        "select id, member_id, branch_id, status, end_date from contracts where id = $1 and tenant_id = $2",
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)
+}
+
+async fn update_contract_status_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    id: Uuid,
+    status: &str,
+    end_date: Option<NaiveDate>,
+) -> Result<Contract, AppError> {
+    sqlx::query_as::<_, Contract>(
+        r#"
+        update contracts
+        set status = $3,
+            end_date = coalesce($4, end_date),
+            updated_at = now()
+        where id = $1 and tenant_id = $2
+        returning
+            id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
+            start_date, original_end_date, end_date, remaining_counts,
+            total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
+            payment_status, terms_accepted, notes, created_by, tenant_id,
+            null::jsonb as plan
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .bind(status)
+    .bind(end_date)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or(AppError::NotFound)
+}
+
+async fn insert_contract_log_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    contract: &ContractActionRow,
+    log_type: &str,
+    start_date: Option<NaiveDate>,
+    end_date: Option<NaiveDate>,
+    days_affected: Option<i32>,
+    reason: Option<String>,
+    employee_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    sqlx::query(
+        r#"
+        insert into contract_logs (
+            contract_id, log_type, start_date, end_date, days_affected, reason,
+            created_by_employee, original_member_id, branch_id, tenant_id
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        "#,
+    )
+    .bind(contract.id)
+    .bind(log_type)
+    .bind(start_date)
+    .bind(end_date)
+    .bind(days_affected)
+    .bind(reason)
+    .bind(employee_id)
+    .bind(contract.member_id)
+    .bind(contract.branch_id)
+    .bind(tenant_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
@@ -443,6 +630,10 @@ fn validate_dates(start: NaiveDate, end: NaiveDate) -> Result<(), AppError> {
         return Err(AppError::Validation("endDate must be on or after startDate".into()));
     }
     Ok(())
+}
+
+fn trim_opt(value: Option<String>) -> Option<String> {
+    value.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 async fn ensure_member_scope(state: &AppState, tenant_id: Uuid, member_id: Uuid) -> Result<(), AppError> {

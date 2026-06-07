@@ -1176,15 +1176,68 @@ mod tests {
         assert_eq!(update_json["data"]["paid_amount"], 1500.0);
         assert_eq!(update_json["data"]["payment_status"], "PARTIAL");
 
+        let draft_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/contracts")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "member_id": member_id,
+                            "plan_id": plan_id,
+                            "branch_id": branch_id,
+                            "sales_person_id": employee_id,
+                            "contract_status": "DRAFT",
+                            "start_date": "2026-02-01",
+                            "original_end_date": "2026-08-31",
+                            "end_date": "2026-08-31",
+                            "total_amount": 1200.0
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(draft_response.status(), StatusCode::CREATED);
+        let draft_body = to_bytes(draft_response.into_body(), usize::MAX).await.unwrap();
+        let draft_json: Value = serde_json::from_slice(&draft_body).unwrap();
+        let draft_contract_id = draft_json["data"]["id"].as_str().unwrap().to_string();
+
+        let activate_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/contracts/{draft_contract_id}/activate"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let activate_status = activate_response.status();
+        let activate_body = to_bytes(activate_response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(activate_status, StatusCode::OK, "activate contract: {}", String::from_utf8_lossy(&activate_body));
+        let activate_json: Value = serde_json::from_slice(&activate_body).unwrap();
+        assert_eq!(activate_json["data"]["contract_status"], "ACTIVE");
+
         let pause_response = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .method("PATCH")
-                    .uri(format!("/api/contracts/{contract_id}"))
+                    .method("POST")
+                    .uri(format!("/api/contracts/{contract_id}/pause"))
                     .header("authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(json!({"contract_status": "PAUSED"}).to_string()))
+                    .body(Body::from(json!({
+                        "startDate": "2026-03-01",
+                        "endDate": "2026-03-08",
+                        "reason": "Vacation"
+                    }).to_string()))
                     .unwrap(),
             )
             .await
@@ -1193,6 +1246,105 @@ mod tests {
         let pause_body = to_bytes(pause_response.into_body(), usize::MAX).await.unwrap();
         let pause_json: Value = serde_json::from_slice(&pause_body).unwrap();
         assert_eq!(pause_json["data"]["contract_status"], "PAUSED");
+        assert_eq!(pause_json["data"]["end_date"], "2027-01-07");
+
+        let resume_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/contracts/{contract_id}/resume"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resume_response.status(), StatusCode::OK);
+        let resume_body = to_bytes(resume_response.into_body(), usize::MAX).await.unwrap();
+        let resume_json: Value = serde_json::from_slice(&resume_body).unwrap();
+        assert_eq!(resume_json["data"]["contract_status"], "ACTIVE");
+
+        let log_create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/contract-logs")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "contractId": contract_id,
+                        "logType": "TRANSFER",
+                        "startDate": "2026-04-01",
+                        "endDate": "2026-04-01",
+                        "days": 0,
+                        "reason": "Smoke transfer",
+                        "originalMemberId": member_id
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(log_create_response.status(), StatusCode::CREATED);
+        let log_create_body = to_bytes(log_create_response.into_body(), usize::MAX).await.unwrap();
+        let log_create_json: Value = serde_json::from_slice(&log_create_body).unwrap();
+        let explicit_log_id = log_create_json["data"]["id"].as_str().unwrap().to_string();
+        assert_eq!(log_create_json["data"]["log_type"], "TRANSFER");
+        assert_eq!(log_create_json["data"]["days_affected"], 0);
+
+        let log_list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/contract-logs?contractId={contract_id}&logType=PAUSE"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(log_list_response.status(), StatusCode::OK);
+        let log_list_body = to_bytes(log_list_response.into_body(), usize::MAX).await.unwrap();
+        let log_list_json: Value = serde_json::from_slice(&log_list_body).unwrap();
+        assert_eq!(log_list_json["pagination"]["total"], 1);
+        assert_eq!(log_list_json["data"][0]["log_type"], "PAUSE");
+        assert_eq!(log_list_json["data"][0]["days_affected"], 7);
+        assert_eq!(log_list_json["data"][0]["reason"], "Vacation");
+
+        let contract_logs_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/contract_logs/contract/{contract_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(contract_logs_response.status(), StatusCode::OK);
+        let contract_logs_body = to_bytes(contract_logs_response.into_body(), usize::MAX).await.unwrap();
+        let contract_logs_json: Value = serde_json::from_slice(&contract_logs_body).unwrap();
+        assert!(contract_logs_json["data"].as_array().unwrap().iter().any(|log| log["log_type"] == "RESUME"));
+
+        let log_get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/contract-logs/{explicit_log_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(log_get_response.status(), StatusCode::OK);
+        let log_get_body = to_bytes(log_get_response.into_body(), usize::MAX).await.unwrap();
+        let log_get_json: Value = serde_json::from_slice(&log_get_body).unwrap();
+        assert_eq!(log_get_json["data"]["id"], explicit_log_id);
+        assert_eq!(log_get_json["data"]["contract"]["id"], contract_id);
+        assert_eq!(log_get_json["data"]["member"]["id"], member_id.to_string());
 
         let delete_response = app
             .clone()
@@ -1212,8 +1364,20 @@ mod tests {
         assert_eq!(delete_json["data"]["contract_status"], "TERMINATED");
 
         let contract_uuid = Uuid::parse_str(&contract_id).unwrap();
+        let draft_contract_uuid = Uuid::parse_str(&draft_contract_id).unwrap();
+        sqlx::query("delete from contract_logs where contract_id in ($1, $2)")
+            .bind(contract_uuid)
+            .bind(draft_contract_uuid)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("delete from contracts where id = $1")
             .bind(contract_uuid)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("delete from contracts where id = $1")
+            .bind(draft_contract_uuid)
             .execute(&pool)
             .await
             .unwrap();
