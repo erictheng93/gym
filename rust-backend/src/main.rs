@@ -2571,6 +2571,16 @@ mod tests {
                 assert!(json["summary"]["total_classes_taught"].as_i64().unwrap() >= 1);
                 assert!(json["data"].as_array().unwrap().iter().any(|row| row["coach_id"] == employee_id.to_string()));
             }
+            else if uri.starts_with("/api/admin/dashboard/export")
+                || uri.starts_with("/api/reports/branch-performance/export")
+                || uri.starts_with("/api/reports/coach-performance/export")
+            {
+                assert_eq!(
+                    response.headers().get("content-type").unwrap(),
+                    "text/csv; charset=utf-8"
+                );
+                assert!(response.headers().get("content-disposition").is_some());
+            }
         }
 
         let set_target_response = app.clone().oneshot(

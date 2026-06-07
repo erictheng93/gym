@@ -1,4 +1,9 @@
-use axum::{extract::{Query, State}, http::StatusCode, Json, response::IntoResponse};
+use axum::{
+    extract::{Query, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -806,15 +811,33 @@ pub async fn refresh_reports(auth: AuthContext) -> Result<impl IntoResponse, App
     Ok((StatusCode::OK, Json(json!({ "success": true, "message": "報表已刷新" }))))
 }
 
-pub async fn dashboard_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
+pub async fn dashboard_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
     require_tenant(&auth)?;
     let format = query.format.unwrap_or_else(|| "csv".into());
-    let body = if format == "json" {
-        json!({ "success": true, "data": [] }).to_string()
+    let export_type = query.period.unwrap_or_else(|| "dashboard".into());
+    let today = Utc::now().date_naive();
+    let response = if format == "json" {
+        (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "application/json"),
+                (header::CONTENT_DISPOSITION, "attachment; filename=\"dashboard-export.json\""),
+            ],
+            json!({ "success": true, "generated_at": today, "data": [] }).to_string(),
+        )
+            .into_response()
     } else {
-        "type,date,value\nexport,generated,0\n".into()
+        (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+                (header::CONTENT_DISPOSITION, "attachment; filename=\"dashboard-export.csv\""),
+            ],
+            format!("type,date,value\n{export_type},{today},0\n"),
+        )
+            .into_response()
     };
-    Ok((StatusCode::OK, body))
+    Ok(response)
 }
 
 pub async fn branch_performance_report(
@@ -1037,10 +1060,18 @@ pub async fn coach_performance_report(
     }))))
 }
 
-pub async fn performance_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
+pub async fn performance_export(auth: AuthContext, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
     require_tenant(&auth)?;
     let report_type = query.period.unwrap_or_else(|| "performance".into());
-    Ok((StatusCode::OK, format!("type,date,value\n{report_type},{},0\n", Utc::now().date_naive())))
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (header::CONTENT_DISPOSITION, "attachment; filename=\"performance-report.csv\""),
+        ],
+        format!("type,date,value\n{report_type},{},0\n", Utc::now().date_naive()),
+    )
+        .into_response())
 }
 
 fn range(query: &DateRangeQuery) -> (NaiveDate, NaiveDate) {
