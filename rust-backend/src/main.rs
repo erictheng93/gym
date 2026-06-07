@@ -2802,9 +2802,13 @@ mod tests {
             "/api/admin/reports/member-growth?days=30",
             "/api/gym/analytics/api-stats?timeRange=24h",
             "/api/reports/revenue?days=30",
+            "/api/reports/revenue/export?days=30&format=csv",
             "/api/reports/member-growth?days=30",
+            "/api/reports/member-growth/export?days=30&format=csv",
             "/api/reports/contract-expiry?days=45",
+            "/api/reports/contract-expiry/export?days=45&format=csv",
             "/api/reports/member-activity?days=30",
+            "/api/reports/member-activity/export?days=30&format=csv",
             "/api/reports/branch-performance?period=month",
             "/api/reports/coach-performance?period=month",
             "/api/reports/branch-performance/export?period=month&format=csv",
@@ -2942,12 +2946,19 @@ mod tests {
             else if uri.starts_with("/api/admin/dashboard/export")
                 || uri.starts_with("/api/reports/branch-performance/export")
                 || uri.starts_with("/api/reports/coach-performance/export")
+                || uri.starts_with("/api/reports/revenue/export")
+                || uri.starts_with("/api/reports/member-growth/export")
+                || uri.starts_with("/api/reports/contract-expiry/export")
+                || uri.starts_with("/api/reports/member-activity/export")
             {
                 assert_eq!(
                     response.headers().get("content-type").unwrap(),
                     "text/csv; charset=utf-8"
                 );
                 assert!(response.headers().get("content-disposition").is_some());
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let csv = String::from_utf8_lossy(&body);
+                assert!(csv.contains(','));
             }
         }
 

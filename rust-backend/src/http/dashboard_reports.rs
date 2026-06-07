@@ -1316,6 +1316,160 @@ pub async fn performance_export(auth: AuthContext, Query(query): Query<DateRange
         .into_response())
 }
 
+pub async fn revenue_export(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
+    report_export(auth, state, query, "revenue").await
+}
+
+pub async fn member_growth_export(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
+    report_export(auth, state, query, "member-growth").await
+}
+
+pub async fn contract_expiry_export(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
+    report_export(auth, state, query, "contract-expiry").await
+}
+
+pub async fn member_activity_export(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<Response, AppError> {
+    report_export(auth, state, query, "member-activity").await
+}
+
+async fn report_export(auth: AuthContext, state: AppState, query: DateRangeQuery, kind: &str) -> Result<Response, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = range(&query);
+    let branch_id = query.branch_id;
+    let (filename, csv) = match kind {
+        "revenue" => {
+            let rows = sqlx::query_as::<_, (NaiveDate, String, f64)>(
+                r#"
+                select payments.payment_date::date, branches.name,
+                    coalesce(sum(case when payments.type = 'REFUND' then -payments.amount else payments.amount end), 0)::float8
+                from payments
+                join branches on branches.id = payments.branch_id
+                where payments.tenant_id = $1
+                  and payments.payment_date::date between $2 and $3
+                  and ($4::uuid is null or payments.branch_id = $4)
+                group by payments.payment_date::date, branches.name
+                order by payments.payment_date::date, branches.name
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(start)
+            .bind(end)
+            .bind(branch_id)
+            .fetch_all(&state.db)
+            .await?;
+            let mut csv = String::from("date,branchName,total\n");
+            for (date, branch_name, total) in rows {
+                csv.push_str(&format!("{},{},{}\n", date, csv_cell(&branch_name), total));
+            }
+            ("revenue_report.csv", csv)
+        }
+        "member-growth" => {
+            let rows = sqlx::query_as::<_, (String, i64)>(
+                r#"
+                select to_char(members.join_date, 'YYYY-MM'), count(*)::bigint
+                from members
+                where members.tenant_id = $1
+                  and members.join_date between $2 and $3
+                  and ($4::uuid is null or members.branch_id = $4)
+                group by to_char(members.join_date, 'YYYY-MM')
+                order by to_char(members.join_date, 'YYYY-MM')
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(start)
+            .bind(end)
+            .bind(branch_id)
+            .fetch_all(&state.db)
+            .await?;
+            let mut csv = String::from("month,count\n");
+            for (month, count) in rows {
+                csv.push_str(&format!("{},{}\n", csv_cell(&month), count));
+            }
+            ("member_growth_report.csv", csv)
+        }
+        "contract-expiry" => {
+            let today = Utc::now().date_naive();
+            let days = query.days.or(query.days_ahead).unwrap_or(30);
+            let expiry_end = query.end_date.or(query.end_date_snake).unwrap_or(today + Duration::days(days));
+            let rows = sqlx::query_as::<_, (String, String, String, String, NaiveDate, i32, String)>(
+                r#"
+                select contracts.contract_no, members.full_name, members.member_code,
+                    branches.name, contracts.end_date, (contracts.end_date - current_date)::int,
+                    contracts.status
+                from contracts
+                join members on members.id = contracts.member_id
+                join branches on branches.id = contracts.branch_id
+                where contracts.tenant_id = $1
+                  and contracts.status = 'ACTIVE'
+                  and contracts.end_date between $2 and $3
+                  and ($4::uuid is null or contracts.branch_id = $4)
+                order by contracts.end_date, contracts.contract_no
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(today)
+            .bind(expiry_end)
+            .bind(branch_id)
+            .fetch_all(&state.db)
+            .await?;
+            let mut csv = String::from("contractNo,memberName,memberCode,branchName,endDate,daysUntilExpiry,status\n");
+            for (contract_no, member_name, member_code, branch_name, end_date, days_until_expiry, status) in rows {
+                csv.push_str(&format!("{},{},{},{},{},{},{}\n",
+                    csv_cell(&contract_no), csv_cell(&member_name), csv_cell(&member_code),
+                    csv_cell(&branch_name), end_date, days_until_expiry, csv_cell(&status)
+                ));
+            }
+            ("contract_expiry_report.csv", csv)
+        }
+        "member-activity" => {
+            let rows = sqlx::query_as::<_, (NaiveDate, String, i64, i64)>(
+                r#"
+                select check_ins.check_in_time::date, branches.name,
+                    count(*)::bigint, count(distinct check_ins.member_id)::bigint
+                from check_ins
+                join members on members.id = check_ins.member_id
+                join branches on branches.id = check_ins.branch_id
+                where members.tenant_id = $1
+                  and check_ins.check_in_time::date between $2 and $3
+                  and ($4::uuid is null or check_ins.branch_id = $4)
+                group by check_ins.check_in_time::date, branches.name
+                order by check_ins.check_in_time::date, branches.name
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(start)
+            .bind(end)
+            .bind(branch_id)
+            .fetch_all(&state.db)
+            .await?;
+            let mut csv = String::from("date,branchName,totalCheckIns,uniqueMembers\n");
+            for (date, branch_name, total_checkins, unique_members) in rows {
+                csv.push_str(&format!("{},{},{},{}\n", date, csv_cell(&branch_name), total_checkins, unique_members));
+            }
+            ("member_activity_report.csv", csv)
+        }
+        _ => ("report.csv", "type,date,value\nunknown,,0\n".to_string()),
+    };
+
+    let content_disposition = format!("attachment; filename=\"{filename}\"");
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (header::CONTENT_DISPOSITION, content_disposition),
+        ],
+        csv,
+    ).into_response())
+}
+
+fn csv_cell(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
 fn range(query: &DateRangeQuery) -> (NaiveDate, NaiveDate) {
     let end = query.end_date.or(query.end_date_snake).unwrap_or_else(|| Utc::now().date_naive());
     let default_days = match query.period.as_deref() {
