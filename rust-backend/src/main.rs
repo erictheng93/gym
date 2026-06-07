@@ -2052,17 +2052,17 @@ mod tests {
         let session_response = app.clone().oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/class-sessions")
+                .uri("/api/class_sessions")
                 .header("authorization", format!("Bearer {token}"))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
-                    "classId": class_id,
-                    "branchId": branch_id,
-                    "instructorId": employee_id,
-                    "sessionDate": "2026-02-01",
-                    "startTime": "10:00:00",
-                    "endTime": "11:00:00",
-                    "maxCapacity": 2
+                    "class_id": class_id,
+                    "branch_id": branch_id,
+                    "instructor_id": employee_id,
+                    "session_date": "2026-02-01",
+                    "start_time": "10:00:00",
+                    "end_time": "11:00:00",
+                    "max_capacity": 2
                 }).to_string()))
                 .unwrap(),
         ).await.unwrap();
@@ -2070,6 +2070,61 @@ mod tests {
         let session_body = to_bytes(session_response.into_body(), usize::MAX).await.unwrap();
         let session_json: Value = serde_json::from_slice(&session_body).unwrap();
         let session_id = session_json["data"]["id"].as_str().unwrap().to_string();
+
+        let get_schedule_response = app.clone().oneshot(
+            Request::builder()
+                .uri(format!("/api/class_schedules/{schedule_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(get_schedule_response.status(), StatusCode::OK);
+
+        let update_schedule_response = app.clone().oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/class_schedules/{schedule_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "room": "Legacy Room",
+                    "max_capacity": 3
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(update_schedule_response.status(), StatusCode::OK);
+        let update_schedule_body = to_bytes(update_schedule_response.into_body(), usize::MAX).await.unwrap();
+        let update_schedule_json: Value = serde_json::from_slice(&update_schedule_body).unwrap();
+        assert_eq!(update_schedule_json["data"]["room"], "Legacy Room");
+        assert_eq!(update_schedule_json["data"]["maxCapacity"], 3);
+
+        let get_session_response = app.clone().oneshot(
+            Request::builder()
+                .uri(format!("/api/class-sessions/{session_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(get_session_response.status(), StatusCode::OK);
+
+        let update_session_response = app.clone().oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/class_sessions/{session_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "room": "Updated Session Room",
+                    "session_status": "SCHEDULED",
+                    "max_capacity": 4
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(update_session_response.status(), StatusCode::OK);
+        let update_session_body = to_bytes(update_session_response.into_body(), usize::MAX).await.unwrap();
+        let update_session_json: Value = serde_json::from_slice(&update_session_body).unwrap();
+        assert_eq!(update_session_json["data"]["room"], "Updated Session Room");
+        assert_eq!(update_session_json["data"]["maxCapacity"], 4);
 
         let booking_response = app.clone().oneshot(
             Request::builder()

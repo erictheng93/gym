@@ -19,36 +19,85 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct ScheduleFilters {
     #[serde(rename = "classId")]
+    #[serde(alias = "class_id")]
     class_id: Option<Uuid>,
     #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
     branch_id: Option<Uuid>,
     #[serde(rename = "activeOnly")]
+    #[serde(alias = "active_only")]
     active_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateScheduleRequest {
     #[serde(rename = "classId")]
+    #[serde(alias = "class_id")]
     class_id: Uuid,
     #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
     branch_id: Uuid,
     #[serde(rename = "instructorId")]
+    #[serde(alias = "instructor_id")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "dayOfWeek")]
+    #[serde(alias = "day_of_week")]
     day_of_week: i32,
     #[serde(rename = "startTime")]
+    #[serde(alias = "start_time")]
     start_time: NaiveTime,
     #[serde(rename = "endTime")]
+    #[serde(alias = "end_time")]
     end_time: NaiveTime,
     room: Option<String>,
     #[serde(rename = "maxCapacity", default = "default_capacity")]
+    #[serde(alias = "max_capacity")]
     max_capacity: i32,
     #[serde(rename = "isRecurring", default = "default_true")]
+    #[serde(alias = "is_recurring")]
     is_recurring: bool,
     #[serde(rename = "validFrom")]
+    #[serde(alias = "valid_from")]
     valid_from: Option<NaiveDate>,
     #[serde(rename = "validUntil")]
+    #[serde(alias = "valid_until")]
     valid_until: Option<NaiveDate>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateScheduleRequest {
+    #[serde(rename = "classId")]
+    #[serde(alias = "class_id")]
+    class_id: Option<Uuid>,
+    #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
+    branch_id: Option<Uuid>,
+    #[serde(rename = "instructorId")]
+    #[serde(alias = "instructor_id")]
+    instructor_id: Option<Option<Uuid>>,
+    #[serde(rename = "dayOfWeek")]
+    #[serde(alias = "day_of_week")]
+    day_of_week: Option<i32>,
+    #[serde(rename = "startTime")]
+    #[serde(alias = "start_time")]
+    start_time: Option<NaiveTime>,
+    #[serde(rename = "endTime")]
+    #[serde(alias = "end_time")]
+    end_time: Option<NaiveTime>,
+    room: Option<Option<String>>,
+    #[serde(rename = "maxCapacity")]
+    #[serde(alias = "max_capacity")]
+    max_capacity: Option<i32>,
+    #[serde(rename = "isRecurring")]
+    #[serde(alias = "is_recurring")]
+    is_recurring: Option<bool>,
+    #[serde(rename = "validFrom")]
+    #[serde(alias = "valid_from")]
+    valid_from: Option<Option<NaiveDate>>,
+    #[serde(rename = "validUntil")]
+    #[serde(alias = "valid_until")]
+    valid_until: Option<Option<NaiveDate>>,
+    status: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -81,8 +130,10 @@ pub struct ClassSchedule {
 #[derive(Debug, Deserialize)]
 pub struct SessionFilters {
     #[serde(rename = "classId")]
+    #[serde(alias = "class_id")]
     class_id: Option<Uuid>,
     #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
     branch_id: Option<Uuid>,
     date: Option<NaiveDate>,
 }
@@ -90,22 +141,63 @@ pub struct SessionFilters {
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionRequest {
     #[serde(rename = "scheduleId")]
+    #[serde(alias = "schedule_id")]
     schedule_id: Option<Uuid>,
     #[serde(rename = "classId")]
+    #[serde(alias = "class_id")]
     class_id: Uuid,
     #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
     branch_id: Uuid,
     #[serde(rename = "instructorId")]
+    #[serde(alias = "instructor_id")]
     instructor_id: Option<Uuid>,
     #[serde(rename = "sessionDate")]
+    #[serde(alias = "session_date")]
     session_date: NaiveDate,
     #[serde(rename = "startTime")]
+    #[serde(alias = "start_time")]
     start_time: NaiveTime,
     #[serde(rename = "endTime")]
+    #[serde(alias = "end_time")]
     end_time: NaiveTime,
     room: Option<String>,
     #[serde(rename = "maxCapacity")]
+    #[serde(alias = "max_capacity")]
     max_capacity: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateSessionRequest {
+    #[serde(rename = "scheduleId")]
+    #[serde(alias = "schedule_id")]
+    schedule_id: Option<Option<Uuid>>,
+    #[serde(rename = "classId")]
+    #[serde(alias = "class_id")]
+    class_id: Option<Uuid>,
+    #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
+    branch_id: Option<Uuid>,
+    #[serde(rename = "instructorId")]
+    #[serde(alias = "instructor_id")]
+    instructor_id: Option<Option<Uuid>>,
+    #[serde(rename = "sessionDate")]
+    #[serde(alias = "session_date")]
+    session_date: Option<NaiveDate>,
+    #[serde(rename = "startTime")]
+    #[serde(alias = "start_time")]
+    start_time: Option<NaiveTime>,
+    #[serde(rename = "endTime")]
+    #[serde(alias = "end_time")]
+    end_time: Option<NaiveTime>,
+    room: Option<Option<String>>,
+    #[serde(rename = "maxCapacity")]
+    #[serde(alias = "max_capacity")]
+    max_capacity: Option<i32>,
+    #[serde(rename = "sessionStatus")]
+    #[serde(alias = "session_status")]
+    session_status: Option<String>,
+    status: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -303,6 +395,105 @@ pub async fn create_schedule(
     Ok((StatusCode::CREATED, Json(ApiResponse { success: true, data: schedule })))
 }
 
+pub async fn get_schedule(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let schedule = fetch_schedule(&state.db, tenant_id, id).await?;
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: schedule })))
+}
+
+pub async fn update_schedule(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateScheduleRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let current = fetch_schedule(&state.db, tenant_id, id).await?;
+    let class_id = payload.class_id.unwrap_or(current.class_id);
+    let branch_id = payload.branch_id.unwrap_or(current.branch_id);
+    let start_time = payload.start_time.unwrap_or(current.start_time);
+    let end_time = payload.end_time.unwrap_or(current.end_time);
+    validate_times(start_time, end_time)?;
+    if let Some(max_capacity) = payload.max_capacity {
+        validate_positive("maxCapacity", max_capacity)?;
+    }
+    ensure_class_scope(&state.db, tenant_id, class_id).await?;
+    ensure_branch_scope(&state.db, tenant_id, branch_id).await?;
+    let instructor_id = payload.instructor_id.unwrap_or(current.instructor_id);
+    ensure_employee_scope(&state.db, tenant_id, instructor_id).await?;
+    let room = payload.room.unwrap_or(current.room);
+    let valid_from = payload.valid_from.unwrap_or(current.valid_from);
+    let valid_until = payload.valid_until.unwrap_or(current.valid_until);
+
+    let schedule = sqlx::query_as::<_, ClassSchedule>(
+        r#"
+        update class_schedules set
+            class_id = $3,
+            branch_id = $4,
+            instructor_id = $5,
+            day_of_week = coalesce($6, day_of_week),
+            start_time = $7,
+            end_time = $8,
+            room = $9,
+            max_capacity = coalesce($10, max_capacity),
+            is_recurring = coalesce($11, is_recurring),
+            valid_from = $12,
+            valid_until = $13,
+            status = coalesce($14, status),
+            updated_at = now()
+        where id = $1
+          and branch_id in (select id from branches where tenant_id = $2)
+        returning *
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .bind(class_id)
+    .bind(branch_id)
+    .bind(instructor_id)
+    .bind(payload.day_of_week)
+    .bind(start_time)
+    .bind(end_time)
+    .bind(room)
+    .bind(payload.max_capacity)
+    .bind(payload.is_recurring)
+    .bind(valid_from)
+    .bind(valid_until)
+    .bind(payload.status)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: schedule })))
+}
+
+pub async fn delete_schedule(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let schedule = sqlx::query_as::<_, ClassSchedule>(
+        r#"
+        update class_schedules set status = 'INACTIVE', updated_at = now()
+        where id = $1
+          and branch_id in (select id from branches where tenant_id = $2)
+        returning *
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: schedule })))
+}
+
 pub async fn list_sessions(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -366,6 +557,105 @@ pub async fn create_session(
     .await?;
 
     Ok((StatusCode::CREATED, Json(ApiResponse { success: true, data: session })))
+}
+
+pub async fn get_session(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let session = fetch_session(&state.db, tenant_id, id).await?;
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: session })))
+}
+
+pub async fn update_session(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSessionRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let current = fetch_session(&state.db, tenant_id, id).await?;
+    let class_id = payload.class_id.unwrap_or(current.class_id);
+    let branch_id = payload.branch_id.unwrap_or(current.branch_id);
+    let start_time = payload.start_time.unwrap_or(current.start_time);
+    let end_time = payload.end_time.unwrap_or(current.end_time);
+    validate_times(start_time, end_time)?;
+    if let Some(max_capacity) = payload.max_capacity {
+        validate_positive("maxCapacity", max_capacity)?;
+    }
+    ensure_class_scope(&state.db, tenant_id, class_id).await?;
+    ensure_branch_scope(&state.db, tenant_id, branch_id).await?;
+    let instructor_id = payload.instructor_id.unwrap_or(current.instructor_id);
+    ensure_employee_scope(&state.db, tenant_id, instructor_id).await?;
+    let schedule_id = payload.schedule_id.unwrap_or(current.schedule_id);
+    if let Some(schedule_id) = schedule_id {
+        ensure_schedule_scope(&state.db, tenant_id, schedule_id).await?;
+    }
+    let room = payload.room.unwrap_or(current.room);
+
+    let session = sqlx::query_as::<_, ClassSession>(
+        r#"
+        update class_sessions set
+            schedule_id = $3,
+            class_id = $4,
+            branch_id = $5,
+            instructor_id = $6,
+            session_date = coalesce($7, session_date),
+            start_time = $8,
+            end_time = $9,
+            room = $10,
+            max_capacity = coalesce($11, max_capacity),
+            session_status = coalesce($12, session_status),
+            status = coalesce($13, status),
+            updated_at = now()
+        where id = $1
+          and branch_id in (select id from branches where tenant_id = $2)
+        returning *
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .bind(schedule_id)
+    .bind(class_id)
+    .bind(branch_id)
+    .bind(instructor_id)
+    .bind(payload.session_date)
+    .bind(start_time)
+    .bind(end_time)
+    .bind(room)
+    .bind(payload.max_capacity)
+    .bind(payload.session_status)
+    .bind(payload.status)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: session })))
+}
+
+pub async fn delete_session(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let session = sqlx::query_as::<_, ClassSession>(
+        r#"
+        update class_sessions set session_status = 'CANCELLED', status = 'INACTIVE', updated_at = now()
+        where id = $1
+          and branch_id in (select id from branches where tenant_id = $2)
+        returning *
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: session })))
 }
 
 pub async fn list_bookings(
@@ -816,6 +1106,59 @@ fn validate_positive(field: &str, value: i32) -> Result<(), AppError> {
         return Err(AppError::Validation(format!("{field} must be greater than zero")));
     }
     Ok(())
+}
+
+async fn ensure_schedule_scope(pool: &PgPool, tenant_id: Uuid, schedule_id: Uuid) -> Result<(), AppError> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        r#"
+        select exists(
+            select 1
+            from class_schedules
+            join branches on branches.id = class_schedules.branch_id
+            where class_schedules.id = $1 and branches.tenant_id = $2
+        )
+        "#,
+    )
+    .bind(schedule_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+    if !exists {
+        return Err(AppError::Validation("scheduleId is invalid for this tenant".into()));
+    }
+    Ok(())
+}
+
+async fn fetch_schedule(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<ClassSchedule, AppError> {
+    sqlx::query_as::<_, ClassSchedule>(
+        r#"
+        select class_schedules.*
+        from class_schedules
+        join branches on branches.id = class_schedules.branch_id
+        where class_schedules.id = $1 and branches.tenant_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(AppError::NotFound)
+}
+
+async fn fetch_session(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<ClassSession, AppError> {
+    sqlx::query_as::<_, ClassSession>(
+        r#"
+        select class_sessions.*
+        from class_sessions
+        join branches on branches.id = class_sessions.branch_id
+        where class_sessions.id = $1 and branches.tenant_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(AppError::NotFound)
 }
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {

@@ -137,8 +137,40 @@ pub fn router(state: AppState) -> Router {
             get(class_scheduling::list_schedules).post(class_scheduling::create_schedule),
         )
         .route(
+            "/api/class-schedules/{id}",
+            get(class_scheduling::get_schedule)
+                .patch(class_scheduling::update_schedule)
+                .delete(class_scheduling::delete_schedule),
+        )
+        .route(
+            "/api/class_schedules",
+            get(class_scheduling::list_schedules).post(class_scheduling::create_schedule),
+        )
+        .route(
+            "/api/class_schedules/{id}",
+            get(class_scheduling::get_schedule)
+                .patch(class_scheduling::update_schedule)
+                .delete(class_scheduling::delete_schedule),
+        )
+        .route(
             "/api/class-sessions",
             get(class_scheduling::list_sessions).post(class_scheduling::create_session),
+        )
+        .route(
+            "/api/class-sessions/{id}",
+            get(class_scheduling::get_session)
+                .patch(class_scheduling::update_session)
+                .delete(class_scheduling::delete_session),
+        )
+        .route(
+            "/api/class_sessions",
+            get(class_scheduling::list_sessions).post(class_scheduling::create_session),
+        )
+        .route(
+            "/api/class_sessions/{id}",
+            get(class_scheduling::get_session)
+                .patch(class_scheduling::update_session)
+                .delete(class_scheduling::delete_session),
         )
         .route(
             "/api/bookings",
