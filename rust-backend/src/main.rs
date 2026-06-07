@@ -2895,4 +2895,256 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn hr_performance_round_trip() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-performance-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query(
+            "insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')",
+        )
+        .bind(tenant_id)
+        .bind(format!("Rust Performance Tenant {suffix}"))
+        .bind(format!("rust-performance-tenant-{suffix}"))
+        .bind(format!("performance-tenant-{suffix}@example.com"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')",
+        )
+        .bind(branch_id)
+        .bind(format!("Rust Performance Branch {suffix}"))
+        .bind(format!("RP{}", &suffix[..8]))
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{}'::jsonb, $4)",
+        )
+        .bind(job_title_id)
+        .bind(format!("Rust Performance Reviewer {suffix}"))
+        .bind(format!("RPR{}", &suffix[..8]))
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)",
+        )
+        .bind(user_id)
+        .bind(&email)
+        .bind(password_hash)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, basic_salary, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, 60000, $8)",
+        )
+        .bind(employee_id)
+        .bind(user_id)
+        .bind(branch_id)
+        .bind(job_title_id)
+        .bind(format!("RPE{}", &suffix[..8]))
+        .bind("Rust Performance User")
+        .bind(&email)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let app = build_app(AppState {
+            db: pool.clone(),
+            jwt_secret: "test-secret".into(),
+            jwt_ttl_seconds: 3600,
+        });
+
+        let login_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "email": email, "password": password }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let template_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/performance/kpi-templates")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "name": "Monthly Coaching KPI",
+                        "description": "Rust performance smoke template",
+                        "review_type": "MONTHLY",
+                        "kpis": [{ "id": "kpi_1", "name": "Retention", "weight": 100, "target": 90 }]
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(template_response.status(), StatusCode::CREATED);
+        let template_body = to_bytes(template_response.into_body(), usize::MAX).await.unwrap();
+        let template_json: Value = serde_json::from_slice(&template_body).unwrap();
+        let template_id = template_json["data"]["id"].as_str().unwrap();
+
+        let review_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/performance/reviews")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "employee_id": employee_id,
+                        "review_period": "2026-06",
+                        "review_type": "MONTHLY",
+                        "template_id": template_id,
+                        "score": 88,
+                        "comments": "On track"
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(review_response.status(), StatusCode::CREATED);
+        let review_body = to_bytes(review_response.into_body(), usize::MAX).await.unwrap();
+        let review_json: Value = serde_json::from_slice(&review_body).unwrap();
+        let review_id = review_json["data"]["id"].as_str().unwrap();
+        assert_eq!(review_json["data"]["status"], "DRAFT");
+        assert_eq!(review_json["data"]["score"], 88.0);
+        assert_eq!(review_json["data"]["kpi_data"].as_array().unwrap().len(), 1);
+
+        let list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/performance/reviews?status=DRAFT&period=2026-06")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_response.status(), StatusCode::OK);
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/performance/reviews/{review_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "score": 91,
+                        "comments": "Exceeded target",
+                        "improvement_plan": "Keep mentoring new members"
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(update_response.status(), StatusCode::OK);
+
+        let submit_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/performance/reviews/{review_id}/submit"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(submit_response.status(), StatusCode::OK);
+        let submit_body = to_bytes(submit_response.into_body(), usize::MAX).await.unwrap();
+        let submit_json: Value = serde_json::from_slice(&submit_body).unwrap();
+        assert_eq!(submit_json["data"]["status"], "SUBMITTED");
+
+        let approve_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/performance/reviews/{review_id}/approve"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(approve_response.status(), StatusCode::OK);
+        let approve_body = to_bytes(approve_response.into_body(), usize::MAX).await.unwrap();
+        let approve_json: Value = serde_json::from_slice(&approve_body).unwrap();
+        assert_eq!(approve_json["data"]["status"], "APPROVED");
+
+        let dashboard_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/performance/team-dashboard?period=2026-06")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(dashboard_response.status(), StatusCode::OK);
+        let dashboard_body = to_bytes(dashboard_response.into_body(), usize::MAX).await.unwrap();
+        let dashboard_json: Value = serde_json::from_slice(&dashboard_body).unwrap();
+        assert!(dashboard_json["data"]["total_reviews"].as_i64().unwrap() >= 1);
+        assert!(dashboard_json["data"]["completed_reviews"].as_i64().unwrap() >= 1);
+
+        let delete_template_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/performance/kpi-templates/{template_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete_template_response.status(), StatusCode::OK);
+    }
+
 }

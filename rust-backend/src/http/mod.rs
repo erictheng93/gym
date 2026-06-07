@@ -24,6 +24,7 @@ mod membership_plans;
 mod member_app;
 mod payments;
 mod payroll;
+mod performance;
 mod shifts;
 
 #[derive(Debug, Serialize)]
@@ -180,6 +181,17 @@ pub fn router(state: AppState) -> Router {
         .route("/api/payroll/batch-approve", post(payroll::batch_approve_salary))
         .route("/api/payroll/export", get(payroll::export_payroll))
         .route("/api/payroll/promotions", get(payroll::list_promotions).post(payroll::create_promotion))
+        .route("/api/performance/reviews", get(performance::list_reviews).post(performance::create_review))
+        .route(
+            "/api/performance/reviews/{id}",
+            get(performance::get_review).patch(performance::update_review),
+        )
+        .route("/api/performance/reviews/{id}/submit", post(performance::submit_review))
+        .route("/api/performance/reviews/{id}/approve", post(performance::approve_review))
+        .route("/api/performance/reviews/{id}/reject", post(performance::reject_review))
+        .route("/api/performance/kpi-templates", get(performance::list_templates).post(performance::create_template))
+        .route("/api/performance/kpi-templates/{id}", delete(performance::delete_template))
+        .route("/api/performance/team-dashboard", get(performance::team_dashboard))
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
         .route("/api/member/profile", get(member_app::profile))

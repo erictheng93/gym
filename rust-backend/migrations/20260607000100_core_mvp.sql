@@ -542,3 +542,51 @@ create index if not exists payroll_salary_records_employee_id_idx on payroll_sal
 create index if not exists payroll_salary_records_period_idx on payroll_salary_records(period);
 create index if not exists payroll_promotions_tenant_id_idx on payroll_promotions(tenant_id);
 create index if not exists payroll_promotions_employee_id_idx on payroll_promotions(employee_id);
+
+create table if not exists kpi_templates (
+    id uuid primary key default gen_random_uuid(),
+    name varchar not null,
+    description text,
+    job_title_id uuid references job_titles(id),
+    review_type varchar not null default 'MONTHLY',
+    kpis jsonb not null default '[]'::jsonb,
+    is_default boolean not null default false,
+    is_active boolean not null default true,
+    created_by uuid references employees(id),
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create table if not exists performance_reviews (
+    id uuid primary key default gen_random_uuid(),
+    employee_id uuid not null references employees(id),
+    reviewer_id uuid references employees(id),
+    review_period varchar not null,
+    review_type varchar not null,
+    kpi_data jsonb not null default '[]'::jsonb,
+    scores jsonb,
+    overall_score numeric,
+    strengths text,
+    improvements text,
+    improvement_plan text,
+    goals jsonb,
+    self_assessment text,
+    reviewer_comments text,
+    status varchar not null default 'DRAFT',
+    submitted_at timestamptz,
+    reviewed_at timestamptz,
+    approved_by uuid references employees(id),
+    approved_at timestamptz,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create index if not exists kpi_templates_tenant_id_idx on kpi_templates(tenant_id);
+create index if not exists kpi_templates_job_title_id_idx on kpi_templates(job_title_id);
+create index if not exists performance_reviews_tenant_id_idx on performance_reviews(tenant_id);
+create index if not exists performance_reviews_employee_id_idx on performance_reviews(employee_id);
+create index if not exists performance_reviews_reviewer_id_idx on performance_reviews(reviewer_id);
+create index if not exists performance_reviews_status_idx on performance_reviews(status);
+create index if not exists performance_reviews_review_period_idx on performance_reviews(review_period);
