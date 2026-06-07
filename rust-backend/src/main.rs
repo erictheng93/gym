@@ -3365,7 +3365,7 @@ mod tests {
         let employee_id = Uuid::parse_str(employee_json["data"]["id"].as_str().unwrap()).unwrap();
 
         for uri in [
-            "/api/job-titles?limit=1000",
+            "/api/job-titles?status=active&limit=1000",
             "/api/employees?limit=20&employment_status=ACTIVE",
         ] {
             let response = app.clone().oneshot(
@@ -3374,6 +3374,13 @@ mod tests {
                     .body(Body::empty()).unwrap()
             ).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            if uri.starts_with("/api/job-titles") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert!(json["data"].as_array().unwrap().iter().any(|row| {
+                    row["id"] == job_title_id.to_string() && row["status"] == "active"
+                }));
+            }
         }
 
         let employee_update_response = app.clone().oneshot(
@@ -3805,6 +3812,30 @@ mod tests {
         ).await.unwrap();
         assert_eq!(schedule_update_response.status(), StatusCode::OK);
 
+        let archived_default_list_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/shift_schedules?branch_id={branch_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(archived_default_list_response.status(), StatusCode::OK);
+        let archived_default_list_body = to_bytes(archived_default_list_response.into_body(), usize::MAX).await.unwrap();
+        let archived_default_list_json: Value = serde_json::from_slice(&archived_default_list_body).unwrap();
+        assert!(!archived_default_list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == schedule_id.to_string()
+        }));
+
+        let archived_explicit_list_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/shift_schedules?branch_id={branch_id}&status=archived"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(archived_explicit_list_response.status(), StatusCode::OK);
+        let archived_explicit_list_body = to_bytes(archived_explicit_list_response.into_body(), usize::MAX).await.unwrap();
+        let archived_explicit_list_json: Value = serde_json::from_slice(&archived_explicit_list_body).unwrap();
+        assert!(archived_explicit_list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == schedule_id.to_string() && row["status"] == "archived"
+        }));
+
         sqlx::query("delete from employee_shifts where id = $1").bind(employee_shift_id).execute(&pool).await.unwrap();
         sqlx::query("delete from shift_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();
         sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
@@ -4079,12 +4110,18 @@ mod tests {
         let promotion_body = to_bytes(promotion_response.into_body(), usize::MAX).await.unwrap();
         let promotion_json: Value = serde_json::from_slice(&promotion_body).unwrap();
         let promotion_id = Uuid::parse_str(promotion_json["data"]["id"].as_str().unwrap()).unwrap();
+        assert_eq!(promotion_json["data"]["type"], "PROMOTION");
         let promotions_list_response = app.clone().oneshot(
             Request::builder().uri(format!("/api/payroll/promotions?employee_id={employee_id}"))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty()).unwrap()
         ).await.unwrap();
         assert_eq!(promotions_list_response.status(), StatusCode::OK);
+        let promotions_list_body = to_bytes(promotions_list_response.into_body(), usize::MAX).await.unwrap();
+        let promotions_list_json: Value = serde_json::from_slice(&promotions_list_body).unwrap();
+        assert!(promotions_list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == promotion_id.to_string() && row["type"] == "PROMOTION"
+        }));
 
         sqlx::query("delete from payroll_promotions where id = $1").bind(promotion_id).execute(&pool).await.unwrap();
         sqlx::query("delete from payroll_salary_records where id = $1").bind(salary_id).execute(&pool).await.unwrap();

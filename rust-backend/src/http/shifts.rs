@@ -411,7 +411,7 @@ const SHIFT_SCHEDULE_SELECT: &str = r#"
       and ($2::uuid is null or shift_schedules.id = $2)
       and ($3::uuid is null or shift_schedules.branch_id = $3)
       and (
-        $4::text is null
+        ($4::text is null and ($2::uuid is not null or lower(coalesce(shift_schedules.status, 'active')) <> 'archived'))
         or lower(coalesce(shift_schedules.status, 'active')) = lower($4)
         or (lower($4) = 'active' and lower(coalesce(shift_schedules.status, 'active')) = 'published')
       )

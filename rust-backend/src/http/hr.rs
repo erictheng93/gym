@@ -127,7 +127,7 @@ pub struct Employee {
 #[derive(Debug, Deserialize)]
 pub struct JobTitleFilters {
     #[serde(rename = "status")]
-    _status: Option<String>,
+    status: Option<String>,
     search: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
@@ -160,6 +160,7 @@ pub struct UpdateJobTitleRequest {
 #[derive(Debug, Serialize, FromRow)]
 pub struct JobTitle {
     id: Uuid,
+    status: String,
     name: String,
     code: String,
     description: Option<String>,
@@ -361,17 +362,20 @@ pub async fn list_job_titles(
     Query(filters): Query<JobTitleFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
+    let status = filters.status.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
     let search = filters.search.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let job_titles = sqlx::query_as::<_, JobTitle>(
         r#"
-        select id, name, code, description, level, sort, permissions_config, tenant_id
+        select id, 'active'::text as status, name, code, description, level, sort, permissions_config, tenant_id
         from job_titles
         where tenant_id = $1
-          and ($2::text is null or name ilike '%' || $2 || '%' or code ilike '%' || $2 || '%')
+          and ($2::text is null or $2 in ('active', 'published'))
+          and ($3::text is null or name ilike '%' || $3 || '%' or code ilike '%' || $3 || '%')
         order by sort nulls last, name
         "#,
     )
     .bind(tenant_id)
+    .bind(status)
     .bind(search)
     .fetch_all(&state.db)
     .await?;
@@ -404,7 +408,7 @@ pub async fn create_job_title(
         r#"
         insert into job_titles (id, name, code, description, level, sort, permissions_config, tenant_id)
         values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
-        returning id, name, code, description, level, sort, permissions_config, tenant_id
+        returning id, 'active'::text as status, name, code, description, level, sort, permissions_config, tenant_id
         "#,
     )
     .bind(payload.name.trim())
@@ -439,7 +443,7 @@ pub async fn update_job_title(
             sort = coalesce($7, sort),
             permissions_config = coalesce($8, permissions_config)
         where id = $1 and tenant_id = $2
-        returning id, name, code, description, level, sort, permissions_config, tenant_id
+        returning id, 'active'::text as status, name, code, description, level, sort, permissions_config, tenant_id
         "#,
     )
     .bind(id)
@@ -484,7 +488,7 @@ async fn fetch_employee(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<E
 
 async fn fetch_job_title(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<JobTitle, AppError> {
     sqlx::query_as::<_, JobTitle>(
-        "select id, name, code, description, level, sort, permissions_config, tenant_id from job_titles where id = $1 and tenant_id = $2",
+        "select id, 'active'::text as status, name, code, description, level, sort, permissions_config, tenant_id from job_titles where id = $1 and tenant_id = $2",
     )
     .bind(id)
     .bind(tenant_id)
