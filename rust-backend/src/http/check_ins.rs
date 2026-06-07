@@ -37,6 +37,11 @@ pub struct CheckInFilters {
     #[serde(rename = "endDate")]
     #[serde(alias = "end_date")]
     end_date: Option<DateTime<Utc>>,
+    search: Option<String>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -222,7 +227,7 @@ pub async fn list(
     let contract_id = filters.contract_id.or(filters.contract_id_snake);
     let start_date = filters.start_date;
     let end_date = filters.end_date;
-    let check_ins = sqlx::query_as::<_, CheckInRow>(
+    let mut check_ins = sqlx::query_as::<_, CheckInRow>(
         r#"
         select
             check_ins.id, check_ins.status, check_ins.member_id, check_ins.branch_id,
@@ -257,16 +262,28 @@ pub async fn list(
     .into_iter()
     .map(CheckIn::from)
     .collect::<Vec<_>>();
+    if let Some(search) = trim_opt(filters.search) {
+        let search = search.to_lowercase();
+        check_ins.retain(|check_in| check_in_matches_search(check_in, &search));
+    }
+    sort_check_ins(&mut check_ins, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     let total = check_ins.len() as i64;
     let page = filters.page.unwrap_or(1).max(1);
     let limit = filters.limit.unwrap_or(total.max(1)).max(1);
+    let start = ((page - 1) * limit) as usize;
+    let end = (start + limit as usize).min(check_ins.len());
+    let data = if start >= check_ins.len() {
+        Vec::new()
+    } else {
+        check_ins.into_iter().skip(start).take(end - start).collect()
+    };
 
     Ok((
         StatusCode::OK,
         Json(PaginatedResponse {
             success: true,
-            data: check_ins,
+            data,
             pagination: Pagination {
                 total,
                 page,
@@ -686,6 +703,48 @@ async fn decrement_remaining_count(
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
     auth.user.tenant_id.ok_or(AppError::Unauthorized)
+}
+
+fn trim_opt(value: Option<String>) -> Option<String> {
+    value.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+fn check_in_matches_search(check_in: &CheckIn, search: &str) -> bool {
+    check_in.member.as_ref().map(|member| {
+        member.full_name.to_lowercase().contains(search)
+            || member.member_code.to_lowercase().contains(search)
+    }).unwrap_or(false)
+        || check_in.branch.as_ref().map(|branch| branch.name.to_lowercase().contains(search)).unwrap_or(false)
+        || check_in.check_in_type.as_ref().map(|value| value.to_lowercase().contains(search)).unwrap_or(false)
+        || check_in.check_in_method.as_ref().map(|value| value.to_lowercase().contains(search)).unwrap_or(false)
+}
+
+fn sort_check_ins(check_ins: &mut [CheckIn], sort_by: Option<&str>, sort_order: Option<&str>) {
+    match sort_by.unwrap_or("check_in_time") {
+        "check_in_time" | "checkInTime" | "check_time" | "checkTime" => {
+            check_ins.sort_by(|a, b| a.check_in_time.cmp(&b.check_in_time))
+        }
+        "member_code" | "memberCode" => check_ins.sort_by(|a, b| {
+            let left = a.member.as_ref().map(|member| member.member_code.as_str()).unwrap_or("");
+            let right = b.member.as_ref().map(|member| member.member_code.as_str()).unwrap_or("");
+            left.cmp(right)
+        }),
+        "member_name" | "memberName" | "fullName" => check_ins.sort_by(|a, b| {
+            let left = a.member.as_ref().map(|member| member.full_name.as_str()).unwrap_or("");
+            let right = b.member.as_ref().map(|member| member.full_name.as_str()).unwrap_or("");
+            left.cmp(right)
+        }),
+        "branch_name" | "branchName" => check_ins.sort_by(|a, b| {
+            let left = a.branch.as_ref().map(|branch| branch.name.as_str()).unwrap_or("");
+            let right = b.branch.as_ref().map(|branch| branch.name.as_str()).unwrap_or("");
+            left.cmp(right)
+        }),
+        _ => {}
+    }
+
+    if !sort_order.map(|value| value.eq_ignore_ascii_case("asc")).unwrap_or(false) {
+        check_ins.reverse();
+    }
 }
 
 impl From<CheckInRow> for CheckIn {

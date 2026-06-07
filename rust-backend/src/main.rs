@@ -1954,11 +1954,22 @@ mod tests {
             .unwrap();
         assert_eq!(remaining, 4);
 
+        let older_check_in_id = Uuid::new_v4();
+        sqlx::query("insert into check_ins (id, member_id, branch_id, contract_id, check_in_time, check_in_type, check_in_method, processed_by_id) values ($1, $2, $3, $4, '2026-01-01T09:00:00Z'::timestamptz, 'ENTRY', 'MANUAL', $5)")
+            .bind(older_check_in_id)
+            .bind(member_id)
+            .bind(branch_id)
+            .bind(contract_id)
+            .bind(employee_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
         let list_response = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/check-ins?member_id={member_id}&limit=1"))
+                    .uri(format!("/api/check-ins?member_id={member_id}&search=CIM{}&sortBy=checkInTime&sortOrder=desc&page=1&limit=1", &suffix[..8]))
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -1968,6 +1979,9 @@ mod tests {
         assert_eq!(list_response.status(), StatusCode::OK);
         let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
         let list_json: Value = serde_json::from_slice(&list_body).unwrap();
+        assert_eq!(list_json["pagination"]["total"], 2);
+        assert_eq!(list_json["pagination"]["limit"], 1);
+        assert_eq!(list_json["data"].as_array().unwrap().len(), 1);
         assert!(list_json["data"].as_array().unwrap().iter().any(|row| {
             row["id"] == check_in_id
                 && row["branch"]["id"] == branch_id.to_string()
@@ -2144,6 +2158,7 @@ mod tests {
         let qr_check_in_uuid = Uuid::parse_str(&qr_check_in_id).unwrap();
         sqlx::query("delete from check_ins where id = $1").bind(qr_check_in_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from check_ins where id = $1").bind(check_in_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from check_ins where id = $1").bind(older_check_in_id).execute(&pool).await.unwrap();
         sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
         sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
         sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
