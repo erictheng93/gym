@@ -11,6 +11,8 @@ import type { CurrentMember } from '../types/auth'
 interface MemberProfileResponse {
   success: boolean
   data: CurrentMember & {
+    branch?: { id?: string; name?: string } | null
+    branch_name?: string | null
     contracts: (Contract & { plan_id?: { name: string; plan_type: string } })[]
   }
 }
@@ -75,7 +77,7 @@ export const useAuthSession = () => {
           phone: data.phone,
           email: data.email,
           branch_id: data.branch_id,
-          branch_name: (data as { branch_id?: { name?: string } }).branch_id?.name || null,
+          branch_name: data.branch_name || data.branch?.name || null,
           member_status: data.member_status,
           activeContract: contract,
         }

@@ -93,6 +93,7 @@ struct MemberProfile {
     emergency_contact: Option<String>,
     emergency_phone: Option<String>,
     branch_id: Uuid,
+    branch_name: Option<String>,
     branch: Value,
     member_status: String,
     date_created: Option<DateTime<Utc>>,
@@ -112,6 +113,7 @@ struct MemberProfileRow {
     emergency_contact: Option<String>,
     emergency_phone: Option<String>,
     branch_id: Uuid,
+    branch_name: Option<String>,
     branch: Value,
     member_status: String,
     date_created: Option<DateTime<Utc>>,
@@ -213,11 +215,16 @@ struct MemberPayment {
 #[derive(Debug, Serialize, FromRow)]
 struct MemberCheckIn {
     id: Uuid,
+    member_id: Uuid,
     check_time: DateTime<Utc>,
     check_type: String,
     verification_method: Option<String>,
     is_cross_branch: bool,
+    notes: Option<String>,
+    date_created: DateTime<Utc>,
     branch_id: Value,
+    contract_id: Option<Value>,
+    verified_by: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -365,6 +372,7 @@ async fn fetch_profile(state: &AppState, auth: &MemberAuthContext) -> Result<Mem
         select members.id, members.member_code, members.full_name, members.phone, members.email,
             members.gender, members.birthday, members.emergency_contact, members.emergency_phone,
             members.branch_id,
+            branches.name as branch_name,
             json_build_object('id', branches.id, 'name', branches.name) as branch,
             members.status as member_status,
             members.created_at as date_created,
@@ -390,6 +398,7 @@ async fn fetch_profile(state: &AppState, auth: &MemberAuthContext) -> Result<Mem
         emergency_contact: row.emergency_contact,
         emergency_phone: row.emergency_phone,
         branch_id: row.branch_id,
+        branch_name: row.branch_name,
         branch: row.branch,
         member_status: row.member_status,
         date_created: row.date_created,
@@ -523,11 +532,34 @@ pub async fn create_booking(
         .and_then(|v| v.as_str()).and_then(|s| Uuid::parse_str(s).ok());
 
     let mut tx = state.db.begin().await?;
+    let session = sqlx::query_as::<_, (i32, i32)>(
+        r#"
+        select max_capacity, coalesce(current_count, 0) as current_count
+        from class_sessions
+        where id = $1
+          and branch_id in (select id from branches where tenant_id = $2)
+        for update
+        "#,
+    )
+    .bind(session_id)
+    .bind(auth.tenant_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let booking_status = if session.1 >= session.0 { "WAITLIST" } else { "CONFIRMED" };
+    let waitlist_position = if booking_status == "WAITLIST" {
+        Some(next_waitlist_position_in_tx(&mut tx, session_id).await?)
+    } else {
+        None
+    };
+
     let booking = sqlx::query_as::<_, MemberBooking>(
         r#"
-        insert into bookings (id, session_id, member_id, contract_id, booking_status)
-        values (gen_random_uuid(), $1, $2, $3, 'CONFIRMED')
-        returning id, session_id, member_id, contract_id, coalesce(booking_status, 'CONFIRMED') as booking_status,
+        insert into bookings (id, session_id, member_id, contract_id, booking_status, waitlist_position)
+        values (gen_random_uuid(), $1, $2, $3, $4, $5)
+        returning id, session_id, member_id, contract_id,
+            case when coalesce(booking_status, 'CONFIRMED') = 'WAITLIST' then 'WAITLISTED' else coalesce(booking_status, 'CONFIRMED') end as booking_status,
             waitlist_position, coalesce(booked_at, created_at) as booked_at, cancelled_at, attended_at,
             null::text as class_name, null::date as session_date, null::time as start_time,
             null::time as end_time, null::varchar as room, false as has_review
@@ -536,15 +568,25 @@ pub async fn create_booking(
     .bind(session_id)
     .bind(auth.member_id)
     .bind(contract_id)
+    .bind(booking_status)
+    .bind(waitlist_position)
     .fetch_one(&mut *tx)
     .await?;
-    sqlx::query("update class_sessions set current_count = greatest(coalesce(current_count, 0) + 1, 0), updated_at = now() where id = $1")
-        .bind(session_id)
-        .execute(&mut *tx)
-        .await?;
+    if booking_status == "CONFIRMED" {
+        sqlx::query("update class_sessions set current_count = greatest(coalesce(current_count, 0) + 1, 0), updated_at = now() where id = $1")
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query("update class_sessions set waitlist_count = greatest(coalesce(waitlist_count, 0) + 1, 0), updated_at = now() where id = $1")
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
 
-    Ok((StatusCode::CREATED, Json(json!({"success": true, "message": "預約成功", "booking": booking}))))
+    let message = if booking_status == "CONFIRMED" { "預約成功" } else { "已加入候補" };
+    Ok((StatusCode::CREATED, Json(json!({"success": true, "message": message, "booking": booking}))))
 }
 
 pub async fn cancel_booking(
@@ -609,7 +651,7 @@ pub async fn list_payments(
     .bind(auth.tenant_id)
     .fetch_all(&state.db)
     .await?;
-    Ok((StatusCode::OK, Json(paginated(payments, filter.page.unwrap_or(1), filter.limit.unwrap_or(20)))))
+    Ok((StatusCode::OK, Json(paginated_page(payments, filter.page.unwrap_or(1), filter.limit.unwrap_or(20)))))
 }
 
 pub async fn list_checkins(
@@ -619,12 +661,24 @@ pub async fn list_checkins(
 ) -> Result<impl IntoResponse, AppError> {
     let checkins = sqlx::query_as::<_, MemberCheckIn>(
         r#"
-        select check_ins.id, coalesce(check_in_time, now()) as check_time,
+        select check_ins.id, check_ins.member_id, coalesce(check_in_time, now()) as check_time,
             coalesce(check_in_type, 'ENTRY') as check_type, check_in_method as verification_method,
             check_ins.branch_id <> $3 as is_cross_branch,
-            json_build_object('id', branches.id, 'name', branches.name) as branch_id
+            check_ins.notes, coalesce(check_ins.date_created, check_ins.check_in_time, now()) as date_created,
+            json_build_object('id', branches.id, 'name', branches.name, 'address', branches.address, 'phone', branches.phone) as branch_id,
+            case when contracts.id is null then null else json_build_object(
+                'id', contracts.id,
+                'contract_no', contracts.contract_no,
+                'contract_type', membership_plans.type,
+                'remaining_counts', contracts.remaining_counts,
+                'plan_id', json_build_object('id', membership_plans.id, 'name', membership_plans.name)
+            ) end as contract_id,
+            case when employees.id is null then null else json_build_object('id', employees.id, 'full_name', employees.full_name) end as verified_by
         from check_ins
         join branches on branches.id = check_ins.branch_id
+        left join contracts on contracts.id = check_ins.contract_id
+        left join membership_plans on membership_plans.id = contracts.plan_id
+        left join employees on employees.id = check_ins.processed_by_id
         where check_ins.member_id = $1 and branches.tenant_id = $2
         order by check_in_time desc
         "#,
@@ -634,7 +688,7 @@ pub async fn list_checkins(
     .bind(auth.branch_id)
     .fetch_all(&state.db)
     .await?;
-    Ok((StatusCode::OK, Json(paginated(checkins, filter.page.unwrap_or(1), filter.limit.unwrap_or(20)))))
+    Ok((StatusCode::OK, Json(paginated_page(checkins, filter.page.unwrap_or(1), filter.limit.unwrap_or(20)))))
 }
 
 pub async fn get_checkin(
@@ -644,12 +698,24 @@ pub async fn get_checkin(
 ) -> Result<impl IntoResponse, AppError> {
     let checkin = sqlx::query_as::<_, MemberCheckIn>(
         r#"
-        select check_ins.id, coalesce(check_in_time, now()) as check_time,
+        select check_ins.id, check_ins.member_id, coalesce(check_in_time, now()) as check_time,
             coalesce(check_in_type, 'ENTRY') as check_type, check_in_method as verification_method,
             check_ins.branch_id <> $4 as is_cross_branch,
-            json_build_object('id', branches.id, 'name', branches.name) as branch_id
+            check_ins.notes, coalesce(check_ins.date_created, check_ins.check_in_time, now()) as date_created,
+            json_build_object('id', branches.id, 'name', branches.name, 'address', branches.address, 'phone', branches.phone) as branch_id,
+            case when contracts.id is null then null else json_build_object(
+                'id', contracts.id,
+                'contract_no', contracts.contract_no,
+                'contract_type', membership_plans.type,
+                'remaining_counts', contracts.remaining_counts,
+                'plan_id', json_build_object('id', membership_plans.id, 'name', membership_plans.name)
+            ) end as contract_id,
+            case when employees.id is null then null else json_build_object('id', employees.id, 'full_name', employees.full_name) end as verified_by
         from check_ins
         join branches on branches.id = check_ins.branch_id
+        left join contracts on contracts.id = check_ins.contract_id
+        left join membership_plans on membership_plans.id = contracts.plan_id
+        left join employees on employees.id = check_ins.processed_by_id
         where check_ins.id = $1 and check_ins.member_id = $2 and branches.tenant_id = $3
         "#,
     )
@@ -691,10 +757,11 @@ async fn fetch_bookings(
     upcoming: Option<bool>,
     limit: Option<i64>,
 ) -> Result<Vec<MemberBooking>, AppError> {
+    let status = status.map(normalize_member_booking_status_filter);
     sqlx::query_as::<_, MemberBooking>(
         r#"
         select bookings.id, bookings.session_id, bookings.member_id, bookings.contract_id,
-            coalesce(bookings.booking_status, 'CONFIRMED') as booking_status,
+            case when coalesce(bookings.booking_status, 'CONFIRMED') = 'WAITLIST' then 'WAITLISTED' else coalesce(bookings.booking_status, 'CONFIRMED') end as booking_status,
             bookings.waitlist_position, coalesce(bookings.booked_at, bookings.created_at) as booked_at,
             bookings.cancelled_at, bookings.attended_at, classes.name as class_name,
             class_sessions.session_date, class_sessions.start_time, class_sessions.end_time,
@@ -718,6 +785,23 @@ async fn fetch_bookings(
     .fetch_all(&state.db)
     .await
     .map_err(AppError::from)
+}
+
+async fn next_waitlist_position_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    session_id: Uuid,
+) -> Result<i32, AppError> {
+    Ok(sqlx::query_scalar::<_, i32>(
+        "select coalesce(max(waitlist_position), 0) + 1 from bookings where session_id = $1 and booking_status in ('WAITLIST', 'WAITLISTED')",
+    )
+    .bind(session_id)
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+fn normalize_member_booking_status_filter(status: String) -> String {
+    let status = status.trim().to_uppercase();
+    if status == "WAITLISTED" { "WAITLIST".into() } else { status }
 }
 
 pub(crate) fn make_member_token(state: &AppState, member_id: Uuid, tenant_id: Option<Uuid>, branch_id: Uuid) -> Result<String, AppError> {
@@ -773,6 +857,19 @@ fn auth_token(headers: &HeaderMap) -> Option<&str> {
 
 fn paginated<T: Serialize>(data: Vec<T>, page: i64, limit: i64) -> PaginatedResponse<Vec<T>> {
     let total = data.len() as i64;
+    PaginatedResponse {
+        success: true,
+        data,
+        pagination: Pagination { total, page, limit, total_pages: ((total + limit - 1) / limit).max(1) },
+    }
+}
+
+fn paginated_page<T: Serialize>(data: Vec<T>, page: i64, limit: i64) -> PaginatedResponse<Vec<T>> {
+    let total = data.len() as i64;
+    let page = page.max(1);
+    let limit = limit.clamp(1, 100);
+    let offset = ((page - 1) * limit) as usize;
+    let data = data.into_iter().skip(offset).take(limit as usize).collect();
     PaginatedResponse {
         success: true,
         data,

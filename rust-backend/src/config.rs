@@ -14,7 +14,7 @@ pub struct Settings {
 impl Settings {
     pub fn from_env() -> Result<Self, AppError> {
         let bind_address = env::var("BIND_ADDRESS")
-            .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
+            .unwrap_or_else(|_| "127.0.0.1:8056".to_string())
             .parse()
             .map_err(|_| AppError::Config("BIND_ADDRESS must be a host:port socket address".into()))?;
 
@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn rejects_zero_db_connections() {
         env::set_var("DB_MAX_CONNECTIONS", "0");
-        env::set_var("BIND_ADDRESS", "127.0.0.1:8080");
+        env::set_var("BIND_ADDRESS", "127.0.0.1:8056");
         env::set_var("DATABASE_URL", "postgresql://user:pass@localhost/db");
 
         let result = Settings::from_env();

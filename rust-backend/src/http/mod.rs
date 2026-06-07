@@ -410,7 +410,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/member/reviews/class/{class_id}", get(member_reviews::class_reviews))
         .route("/api/member/reviews/my", get(member_reviews::my_reviews))
-        .route("/api/member/notifications/preferences", get(member_notifications::get_preferences).patch(member_notifications::update_preferences))
+        .route(
+            "/api/member/notifications/preferences",
+            get(member_notifications::get_preferences)
+                .patch(member_notifications::update_preferences)
+                .put(member_notifications::update_preferences),
+        )
         .route("/api/member/notifications/channels", get(member_notifications::channels))
         .route("/api/member/notifications/history", get(member_notifications::history))
         .route("/api/member/notifications/test", post(member_notifications::test_notification))

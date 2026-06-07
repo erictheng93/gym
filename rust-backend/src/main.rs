@@ -2786,6 +2786,7 @@ mod tests {
         let class_id = Uuid::new_v4();
         let schedule_id = Uuid::new_v4();
         let session_id = Uuid::new_v4();
+        let full_session_id = Uuid::new_v4();
         let booking_id = Uuid::new_v4();
         let suffix = member_id.simple().to_string();
         let email = format!("rust-member-{suffix}@example.com");
@@ -2825,6 +2826,8 @@ mod tests {
             .bind(schedule_id).bind(class_id).bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("insert into class_sessions (id, schedule_id, class_id, branch_id, session_date, start_time, end_time, room, max_capacity, current_count) values ($1, $2, $3, $4, current_date + interval '1 day', '09:00'::time, '10:00'::time, 'A', 20, 1)")
             .bind(session_id).bind(schedule_id).bind(class_id).bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("insert into class_sessions (id, schedule_id, class_id, branch_id, session_date, start_time, end_time, room, max_capacity, current_count, waitlist_count) values ($1, $2, $3, $4, current_date + interval '2 days', '09:00'::time, '10:00'::time, 'A', 1, 1, 0)")
+            .bind(full_session_id).bind(schedule_id).bind(class_id).bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("insert into bookings (id, session_id, member_id, contract_id, booking_status) values ($1, $2, $3, $4, 'CONFIRMED')")
             .bind(booking_id).bind(session_id).bind(member_id).bind(contract_id).execute(&pool).await.unwrap();
 
@@ -2838,6 +2841,19 @@ mod tests {
         let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
         let login_json: Value = serde_json::from_slice(&login_body).unwrap();
         let token = login_json["data"]["accessToken"].as_str().unwrap();
+
+        let me_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/me")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(me_response.status(), StatusCode::OK);
+        let me_body = to_bytes(me_response.into_body(), usize::MAX).await.unwrap();
+        let me_json: Value = serde_json::from_slice(&me_body).unwrap();
+        assert_eq!(me_json["data"]["branch_id"], branch_id.to_string());
+        assert_eq!(me_json["data"]["branch_name"], format!("Rust Member Branch {suffix}"));
+        assert_eq!(me_json["data"]["branch"]["id"], branch_id.to_string());
+        assert_eq!(me_json["data"]["branch"]["name"], format!("Rust Member Branch {suffix}"));
 
         let providers_response = app.clone().oneshot(
             Request::builder().uri("/api/member/oauth/providers")
@@ -3142,6 +3158,15 @@ mod tests {
                 }).to_string())).unwrap()
         ).await.unwrap();
         assert_eq!(notification_update_response.status(), StatusCode::OK);
+        let notification_put_response = app.clone().oneshot(
+            Request::builder().method("PUT").uri("/api/member/notifications/preferences")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "notify_promotions": true
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(notification_put_response.status(), StatusCode::OK);
 
         let push_endpoint = format!("https://push.example.test/{suffix}");
         let vapid_response = app.clone().oneshot(
@@ -3183,6 +3208,91 @@ mod tests {
                 .body(Body::from(json!({ "channel": "push", "type": "test" }).to_string())).unwrap()
         ).await.unwrap();
         assert_eq!(notification_test_response.status(), StatusCode::OK);
+
+        let waitlisted_booking_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/bookings")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "session_id": full_session_id,
+                    "contract_id": contract_id
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        let waitlisted_booking_status = waitlisted_booking_response.status();
+        let waitlisted_booking_body = to_bytes(waitlisted_booking_response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(waitlisted_booking_status, StatusCode::CREATED, "member waitlisted booking: {}", String::from_utf8_lossy(&waitlisted_booking_body));
+        let waitlisted_booking_json: Value = serde_json::from_slice(&waitlisted_booking_body).unwrap();
+        let waitlisted_booking_id = Uuid::parse_str(waitlisted_booking_json["booking"]["id"].as_str().unwrap()).unwrap();
+        assert_eq!(waitlisted_booking_json["booking"]["booking_status"], "WAITLISTED");
+        assert_eq!(waitlisted_booking_json["booking"]["waitlist_position"], 1);
+
+        let waitlisted_list_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/bookings?status=WAITLISTED")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        let waitlisted_list_status = waitlisted_list_response.status();
+        let waitlisted_list_body = to_bytes(waitlisted_list_response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(waitlisted_list_status, StatusCode::OK, "member waitlisted list: {}", String::from_utf8_lossy(&waitlisted_list_body));
+        let waitlisted_list_json: Value = serde_json::from_slice(&waitlisted_list_body).unwrap();
+        assert!(waitlisted_list_json["data"].as_array().unwrap().iter().any(|booking| {
+            booking["id"] == waitlisted_booking_id.to_string() && booking["booking_status"] == "WAITLISTED"
+        }));
+
+        let member_contracts_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/contracts")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(member_contracts_response.status(), StatusCode::OK);
+        let member_contracts_body = to_bytes(member_contracts_response.into_body(), usize::MAX).await.unwrap();
+        let member_contracts_json: Value = serde_json::from_slice(&member_contracts_body).unwrap();
+        assert_eq!(member_contracts_json["data"][0]["id"], contract_id.to_string());
+        assert_eq!(member_contracts_json["data"][0]["contract_no"], format!("RMC{}", &suffix[..8]));
+        assert_eq!(member_contracts_json["data"][0]["plan"]["name"], "Rust Member Plan");
+        assert_eq!(member_contracts_json["pagination"]["total"], 1);
+
+        let member_payments_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/payments?page=1&limit=1&sortBy=payment_date&sortOrder=desc")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(member_payments_response.status(), StatusCode::OK);
+        let member_payments_body = to_bytes(member_payments_response.into_body(), usize::MAX).await.unwrap();
+        let member_payments_json: Value = serde_json::from_slice(&member_payments_body).unwrap();
+        assert_eq!(member_payments_json["data"].as_array().unwrap().len(), 1);
+        assert_eq!(member_payments_json["data"][0]["id"], payment_id.to_string());
+        assert_eq!(member_payments_json["data"][0]["contract_id"]["contract_no"], format!("RMC{}", &suffix[..8]));
+        assert_eq!(member_payments_json["data"][0]["contract_id"]["plan_id"]["name"], "Rust Member Plan");
+        assert!(member_payments_json["data"][0]["payment_date"].as_str().is_some());
+
+        let member_checkins_response = app.clone().oneshot(
+            Request::builder().uri("/api/member_checkins?page=1&limit=1&sortBy=check_time&sortOrder=desc")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(member_checkins_response.status(), StatusCode::OK);
+        let member_checkins_body = to_bytes(member_checkins_response.into_body(), usize::MAX).await.unwrap();
+        let member_checkins_json: Value = serde_json::from_slice(&member_checkins_body).unwrap();
+        assert_eq!(member_checkins_json["data"].as_array().unwrap().len(), 1);
+        assert_eq!(member_checkins_json["data"][0]["id"], check_in_id.to_string());
+        assert_eq!(member_checkins_json["data"][0]["member_id"], member_id.to_string());
+        assert_eq!(member_checkins_json["data"][0]["branch_id"]["name"], format!("Rust Member Branch {suffix}"));
+        assert_eq!(member_checkins_json["data"][0]["contract_id"]["contract_no"], format!("RMC{}", &suffix[..8]));
+        assert_eq!(member_checkins_json["pagination"]["total"], 1);
+
+        let member_checkin_detail_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/member_checkins/{check_in_id}"))
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(member_checkin_detail_response.status(), StatusCode::OK);
+        let member_checkin_detail_body = to_bytes(member_checkin_detail_response.into_body(), usize::MAX).await.unwrap();
+        let member_checkin_detail_json: Value = serde_json::from_slice(&member_checkin_detail_body).unwrap();
+        assert_eq!(member_checkin_detail_json["data"]["member_id"], member_id.to_string());
+        assert_eq!(member_checkin_detail_json["data"]["contract_id"]["id"], contract_id.to_string());
+        assert_eq!(member_checkin_detail_json["data"]["contract_id"]["plan_id"]["name"], "Rust Member Plan");
+        assert!(member_checkin_detail_json["data"]["date_created"].as_str().is_some());
 
         for uri in [
             "/api/member/me",
@@ -3263,7 +3373,9 @@ mod tests {
         sqlx::query("delete from member_notification_history where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from member_notification_preferences where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from push_subscriptions where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from bookings where id = $1").bind(waitlisted_booking_id).execute(&pool).await.unwrap();
         sqlx::query("delete from bookings where id = $1").bind(booking_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_sessions where id = $1").bind(full_session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_sessions where id = $1").bind(session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();
         sqlx::query("delete from classes where id = $1").bind(class_id).execute(&pool).await.unwrap();
