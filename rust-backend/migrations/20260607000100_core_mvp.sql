@@ -205,3 +205,25 @@ create index if not exists payments_tenant_id_idx on payments(tenant_id);
 create index if not exists payments_contract_id_idx on payments(contract_id);
 create index if not exists payments_member_id_idx on payments(member_id);
 create index if not exists payments_branch_id_idx on payments(branch_id);
+
+create table if not exists check_ins (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    date_created timestamptz default now(),
+    date_updated timestamptz default now(),
+    member_id uuid not null references members(id),
+    branch_id uuid not null references branches(id),
+    contract_id uuid references contracts(id),
+    check_in_time timestamptz default now(),
+    check_in_type varchar,
+    check_in_method varchar,
+    processed_by_id uuid references employees(id),
+    location_ip varchar,
+    location_device varchar,
+    notes text
+);
+
+create index if not exists check_ins_member_id_idx on check_ins(member_id);
+create index if not exists check_ins_branch_id_idx on check_ins(branch_id);
+create index if not exists check_ins_contract_id_idx on check_ins(contract_id);
+create index if not exists check_ins_check_in_time_idx on check_ins(check_in_time);

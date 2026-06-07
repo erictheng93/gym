@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::{error, error::AppError, state::AppState};
 
 mod auth;
+mod check_ins;
 mod contracts;
 mod members;
 mod membership_plans;
@@ -88,6 +89,8 @@ pub fn router(state: AppState) -> Router {
                 .patch(payments::update)
                 .delete(payments::delete),
         )
+        .route("/api/check-ins", get(check_ins::list).post(check_ins::create))
+        .route("/api/check-ins/{id}", get(check_ins::get))
         .fallback(error::not_found)
         .with_state(state)
 }
