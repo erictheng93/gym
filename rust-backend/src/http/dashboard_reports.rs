@@ -136,6 +136,12 @@ struct HeatmapRow {
 }
 
 #[derive(Debug, FromRow)]
+struct HourlyDistributionRow {
+    hour: i32,
+    count: i64,
+}
+
+#[derive(Debug, FromRow)]
 struct FrontendRevenueRow {
     payment_day: NaiveDate,
     branch_id: Uuid,
@@ -225,6 +231,37 @@ pub async fn dashboard_kpis(
     let today = Utc::now().date_naive();
     let today_checkins = scalar_i64_range_branch(&state, "select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and ($4::uuid is null or check_ins.branch_id = $4) and check_ins.check_in_time::date between $2 and $3", tenant_id, today, today, branch_id).await?;
     let period_checkins = scalar_i64_range_branch(&state, "select count(*) from check_ins join members on members.id = check_ins.member_id where members.tenant_id = $1 and ($4::uuid is null or check_ins.branch_id = $4) and check_ins.check_in_time::date between $2 and $3", tenant_id, start, end, branch_id).await?;
+    let hourly_rows = sqlx::query_as::<_, HourlyDistributionRow>(
+        r#"
+        select extract(hour from check_ins.check_in_time)::int as hour,
+               count(*)::bigint as count
+        from check_ins
+        join members on members.id = check_ins.member_id
+        where members.tenant_id = $1
+          and ($4::uuid is null or check_ins.branch_id = $4)
+          and check_ins.check_in_time::date between $2 and $3
+        group by hour
+        order by hour
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?;
+    let mut hourly_distribution = vec![0_i64; 24];
+    for row in hourly_rows {
+        if (0..=23).contains(&row.hour) {
+            hourly_distribution[row.hour as usize] = row.count;
+        }
+    }
+    let peak_hour = hourly_distribution
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, count)| *count)
+        .map(|(hour, _)| hour as i32)
+        .unwrap_or(0);
     let bookings = scalar_i64_range_branch(&state, "select count(*) from bookings join members on members.id = bookings.member_id where members.tenant_id = $1 and ($4::uuid is null or members.branch_id = $4) and bookings.booked_at::date between $2 and $3", tenant_id, start, end, branch_id).await?;
 
     Ok((StatusCode::OK, Json(json!({
@@ -266,8 +303,8 @@ pub async fn dashboard_kpis(
         "operations": {
             "today_checkins": today_checkins,
             "period_checkins": period_checkins,
-            "peak_hour": 0,
-            "hourly_distribution": [],
+            "peak_hour": peak_hour,
+            "hourly_distribution": hourly_distribution,
             "class_attendance_rate": 0,
             "by_branch": [],
             "bookings": bookings

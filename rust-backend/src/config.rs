@@ -66,15 +66,11 @@ mod tests {
     #[test]
     fn rejects_zero_db_connections() {
         env::set_var("DB_MAX_CONNECTIONS", "0");
-        env::set_var("BIND_ADDRESS", "127.0.0.1:8056");
-        env::set_var("DATABASE_URL", "postgresql://user:pass@localhost/db");
 
         let result = Settings::from_env();
 
         assert!(result.is_err());
 
         env::remove_var("DB_MAX_CONNECTIONS");
-        env::remove_var("BIND_ADDRESS");
-        env::remove_var("DATABASE_URL");
     }
 }

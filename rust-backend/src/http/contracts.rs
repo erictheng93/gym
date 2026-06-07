@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use chrono::{Duration, NaiveDate};
-use serde::{Deserialize, Serialize};
+use serde::{ser::{SerializeMap, Serializer}, Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -103,7 +103,7 @@ pub struct ContractActionRequest {
     reason: Option<String>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, FromRow)]
 pub struct Contract {
     id: Uuid,
     contract_no: String,
@@ -126,6 +126,9 @@ pub struct Contract {
     created_by: Option<Uuid>,
     tenant_id: Option<Uuid>,
     plan: Option<Value>,
+    member: Option<Value>,
+    branch: Option<Value>,
+    sales_person: Option<Value>,
 }
 
 #[derive(Debug, FromRow)]
@@ -173,10 +176,21 @@ pub async fn list(
                 'id', membership_plans.id,
                 'name', membership_plans.name,
                 'planType', membership_plans.type,
-                'plan_type', membership_plans.type
-            ) as plan
+                'plan_type', membership_plans.type,
+                'duration_months', membership_plans.duration_months,
+                'class_counts', membership_plans.class_counts,
+                'price', membership_plans.price::float8,
+                'allow_pause', membership_plans.allow_pause,
+                'allow_transfer', membership_plans.allow_transfer
+            ) as plan,
+            json_build_object('id', members.id, 'full_name', members.full_name, 'member_code', members.member_code) as member,
+            json_build_object('id', branches.id, 'name', branches.name) as branch,
+            case when employees.id is null then null else json_build_object('id', employees.id, 'full_name', employees.full_name) end as sales_person
         from contracts
         join membership_plans on membership_plans.id = contracts.plan_id
+        join members on members.id = contracts.member_id
+        join branches on branches.id = contracts.branch_id
+        left join employees on employees.id = contracts.sales_person_id
         where contracts.tenant_id = $1
           and ($2::uuid is null or contracts.id = $2)
           and ($3::uuid is null or contracts.member_id = $3)
@@ -264,7 +278,7 @@ pub async fn create(
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
             payment_status, terms_accepted, notes, created_by, tenant_id,
-            null::jsonb as plan
+            null::jsonb as plan, null::jsonb as member, null::jsonb as branch, null::jsonb as sales_person
         "#,
     )
     .bind(contract_no)
@@ -321,7 +335,7 @@ pub async fn update(
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
             payment_status, terms_accepted, notes, created_by, tenant_id,
-            null::jsonb as plan
+            null::jsonb as plan, null::jsonb as member, null::jsonb as branch, null::jsonb as sales_person
         "#,
     )
     .bind(id)
@@ -360,7 +374,7 @@ pub async fn delete(
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
             payment_status, terms_accepted, notes, created_by, tenant_id,
-            null::jsonb as plan
+            null::jsonb as plan, null::jsonb as member, null::jsonb as branch, null::jsonb as sales_person
         "#,
     )
     .bind(id)
@@ -479,10 +493,21 @@ async fn fetch_contract(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<C
                 'id', membership_plans.id,
                 'name', membership_plans.name,
                 'planType', membership_plans.type,
-                'plan_type', membership_plans.type
-            ) as plan
+                'plan_type', membership_plans.type,
+                'duration_months', membership_plans.duration_months,
+                'class_counts', membership_plans.class_counts,
+                'price', membership_plans.price::float8,
+                'allow_pause', membership_plans.allow_pause,
+                'allow_transfer', membership_plans.allow_transfer
+            ) as plan,
+            json_build_object('id', members.id, 'full_name', members.full_name, 'member_code', members.member_code) as member,
+            json_build_object('id', branches.id, 'name', branches.name) as branch,
+            case when employees.id is null then null else json_build_object('id', employees.id, 'full_name', employees.full_name) end as sales_person
         from contracts
         join membership_plans on membership_plans.id = contracts.plan_id
+        join members on members.id = contracts.member_id
+        join branches on branches.id = contracts.branch_id
+        left join employees on employees.id = contracts.sales_person_id
         where contracts.id = $1 and contracts.tenant_id = $2
         "#,
     )
@@ -523,7 +548,7 @@ async fn update_contract_status_in_tx(
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
             payment_status, terms_accepted, notes, created_by, tenant_id,
-            null::jsonb as plan
+            null::jsonb as plan, null::jsonb as member, null::jsonb as branch, null::jsonb as sales_person
         "#,
     )
     .bind(id)
@@ -634,6 +659,58 @@ fn validate_dates(start: NaiveDate, end: NaiveDate) -> Result<(), AppError> {
 
 fn trim_opt(value: Option<String>) -> Option<String> {
     value.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+impl Serialize for Contract {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("id", &self.id)?;
+        map.serialize_entry("contract_no", &self.contract_no)?;
+        map.serialize_entry("member_id", &self.member_id)?;
+        map.serialize_entry("plan_id", &self.plan_id)?;
+        map.serialize_entry("branch_id", &self.branch_id)?;
+        map.serialize_entry("sales_person_id", &self.sales_person_id)?;
+        map.serialize_entry("contract_status", &self.contract_status)?;
+        map.serialize_entry("sign_date", &self.sign_date)?;
+        map.serialize_entry("start_date", &self.start_date)?;
+        map.serialize_entry("original_end_date", &self.original_end_date)?;
+        map.serialize_entry("end_date", &self.end_date)?;
+        map.serialize_entry("remaining_counts", &self.remaining_counts)?;
+        map.serialize_entry("total_amount", &self.total_amount)?;
+        map.serialize_entry("paid_amount", &self.paid_amount)?;
+        map.serialize_entry("payment_status", &self.payment_status)?;
+        map.serialize_entry("terms_accepted", &self.terms_accepted)?;
+        map.serialize_entry("notes", &self.notes)?;
+        map.serialize_entry("created_by", &self.created_by)?;
+        map.serialize_entry("tenant_id", &self.tenant_id)?;
+        map.serialize_entry("plan", &self.plan)?;
+        map.serialize_entry("member", &self.member)?;
+        map.serialize_entry("branch", &self.branch)?;
+        map.serialize_entry("sales_person", &self.sales_person)?;
+        map.serialize_entry("contractNo", &self.contract_no)?;
+        map.serialize_entry("memberId", &self.member_id)?;
+        map.serialize_entry("planId", &self.plan_id)?;
+        map.serialize_entry("branchId", &self.branch_id)?;
+        map.serialize_entry("salesPersonId", &self.sales_person_id)?;
+        map.serialize_entry("status", &self.contract_status)?;
+        map.serialize_entry("contractStatus", &self.contract_status)?;
+        map.serialize_entry("signDate", &self.sign_date)?;
+        map.serialize_entry("startDate", &self.start_date)?;
+        map.serialize_entry("originalEndDate", &self.original_end_date)?;
+        map.serialize_entry("endDate", &self.end_date)?;
+        map.serialize_entry("remainingCounts", &self.remaining_counts)?;
+        map.serialize_entry("totalAmount", &self.total_amount)?;
+        map.serialize_entry("paidAmount", &self.paid_amount)?;
+        map.serialize_entry("paymentStatus", &self.payment_status)?;
+        map.serialize_entry("termsAccepted", &self.terms_accepted)?;
+        map.serialize_entry("createdBy", &self.created_by)?;
+        map.serialize_entry("tenantId", &self.tenant_id)?;
+        map.serialize_entry("salesPerson", &self.sales_person)?;
+        map.end()
+    }
 }
 
 async fn ensure_member_scope(state: &AppState, tenant_id: Uuid, member_id: Uuid) -> Result<(), AppError> {

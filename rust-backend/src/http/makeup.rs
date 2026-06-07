@@ -19,40 +19,67 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct MakeupRequestFilters {
     id: Option<Uuid>,
+    #[serde(alias = "employeeId")]
     employee_id: Option<Uuid>,
+    #[serde(alias = "branchId")]
     branch_id: Option<Uuid>,
+    #[serde(alias = "requestStatus", alias = "status")]
     request_status: Option<String>,
+    #[serde(alias = "targetDate")]
     target_date: Option<NaiveDate>,
+    #[serde(alias = "targetDateFrom")]
+    target_date_gte: Option<NaiveDate>,
+    #[serde(alias = "targetDateTo")]
+    target_date_lte: Option<NaiveDate>,
     page: Option<i64>,
     limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateMakeupRequest {
+    #[serde(alias = "employeeId")]
     employee_id: Uuid,
+    #[serde(alias = "branchId")]
     branch_id: Uuid,
+    #[serde(alias = "targetDate")]
     target_date: NaiveDate,
+    #[serde(alias = "makeupType")]
     makeup_type: String,
+    #[serde(alias = "requestedCheckIn")]
     requested_check_in: Option<NaiveTime>,
+    #[serde(alias = "requestedCheckOut")]
     requested_check_out: Option<NaiveTime>,
     reason: String,
+    #[serde(alias = "documentUrl")]
     document_url: Option<String>,
+    #[serde(alias = "requestStatus")]
     request_status: Option<String>,
+    #[serde(alias = "approverId")]
     approver_id: Option<Uuid>,
+    #[serde(alias = "approvedAt")]
     approved_at: Option<DateTime<Utc>>,
+    #[serde(alias = "approvalNotes")]
     approval_notes: Option<String>,
+    #[serde(alias = "submittedAt")]
     submitted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateMakeupRequest {
+    #[serde(alias = "requestStatus")]
     request_status: Option<String>,
+    #[serde(alias = "approverId")]
     approver_id: Option<Uuid>,
+    #[serde(alias = "approvedAt")]
     approved_at: Option<DateTime<Utc>>,
+    #[serde(alias = "approvalNotes")]
     approval_notes: Option<String>,
     reason: Option<String>,
+    #[serde(alias = "requestedCheckIn")]
     requested_check_in: Option<NaiveTime>,
+    #[serde(alias = "requestedCheckOut")]
     requested_check_out: Option<NaiveTime>,
+    #[serde(alias = "documentUrl")]
     document_url: Option<String>,
 }
 
@@ -123,6 +150,8 @@ pub async fn list_requests(
         .bind(filters.branch_id)
         .bind(filters.request_status)
         .bind(filters.target_date)
+        .bind(filters.target_date_gte)
+        .bind(filters.target_date_lte)
         .fetch_all(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(paginated(rows, filters.page, filters.limit))))
@@ -270,6 +299,8 @@ async fn fetch_request(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<Ma
         .bind(None::<Uuid>)
         .bind(None::<String>)
         .bind(None::<NaiveDate>)
+        .bind(None::<NaiveDate>)
+        .bind(None::<NaiveDate>)
         .fetch_optional(&state.db)
         .await?
         .ok_or(AppError::NotFound)
@@ -356,6 +387,8 @@ const MAKEUP_REQUEST_SELECT: &str = r#"
       and ($4::uuid is null or makeup_requests.branch_id = $4)
       and ($5::text is null or makeup_requests.request_status = $5)
       and ($6::date is null or makeup_requests.target_date = $6)
+      and ($7::date is null or makeup_requests.target_date >= $7)
+      and ($8::date is null or makeup_requests.target_date <= $8)
     order by makeup_requests.created_at desc
 "#;
 

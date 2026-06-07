@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -50,6 +51,8 @@ pub struct CreateClassRequest {
     #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Uuid,
     category: Option<String>,
+    #[serde(rename = "categoryId", alias = "category_id")]
+    category_id: Option<Uuid>,
     #[serde(rename = "difficultyLevel", alias = "difficulty_level")]
     difficulty_level: Option<String>,
     #[serde(rename = "imageUrl", alias = "image_url")]
@@ -75,6 +78,8 @@ pub struct UpdateClassRequest {
     #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Option<Uuid>,
     category: Option<String>,
+    #[serde(rename = "categoryId", alias = "category_id")]
+    category_id: Option<Uuid>,
     #[serde(rename = "difficultyLevel", alias = "difficulty_level")]
     difficulty_level: Option<String>,
     #[serde(rename = "imageUrl", alias = "image_url")]
@@ -87,7 +92,7 @@ pub struct UpdateClassRequest {
     count_deduction: Option<i32>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct GymClass {
     id: Uuid,
     status: Option<String>,
@@ -98,11 +103,19 @@ pub struct GymClass {
     instructor_id: Option<Uuid>,
     branch_id: Uuid,
     category: Option<String>,
+    #[sqlx(default)]
+    category_id: Option<Uuid>,
     difficulty_level: Option<String>,
     image_url: Option<String>,
     is_active: Option<bool>,
     requires_count: Option<bool>,
     count_deduction: Option<i32>,
+    #[sqlx(default)]
+    instructor: Option<Value>,
+    #[sqlx(default)]
+    branch: Option<Value>,
+    #[sqlx(default)]
+    class_category: Option<Value>,
 }
 
 fn default_true() -> bool {
@@ -129,13 +142,39 @@ pub async fn list(
         select
             classes.id, classes.status, classes.name, classes.description,
             classes.duration_minutes, classes.max_capacity, classes.instructor_id,
-            classes.branch_id, classes.category, classes.difficulty_level, classes.image_url,
-            classes.is_active, classes.requires_count, classes.count_deduction
+            classes.branch_id, classes.category, class_categories.id as category_id,
+            classes.difficulty_level, classes.image_url,
+            classes.is_active, classes.requires_count, classes.count_deduction,
+            case when employees.id is null then null else json_build_object(
+                'id', employees.id,
+                'full_name', employees.full_name,
+                'email', employees.email
+            ) end as instructor,
+            json_build_object(
+                'id', branches.id,
+                'name', branches.name,
+                'code', branches.code
+            ) as branch,
+            case when class_categories.id is null then null else json_build_object(
+                'id', class_categories.id,
+                'code', class_categories.code,
+                'name', class_categories.name,
+                'color', class_categories.color
+            ) end as class_category
         from classes
         join branches on branches.id = classes.branch_id
+        left join employees on employees.id = classes.instructor_id
+        left join class_categories
+            on class_categories.tenant_id = branches.tenant_id
+           and lower(class_categories.code) = lower(classes.category)
         where branches.tenant_id = $1
           and ($2::uuid is null or classes.branch_id = $2)
-          and ($3::text is null or classes.category = $3)
+          and (
+              $3::text is null
+              or classes.category = $3
+              or lower(class_categories.code) = lower($3)
+              or class_categories.id::text = $3
+          )
           and ($4::text is null or classes.difficulty_level = $4)
           and ($5::bool is null or classes.is_active = $5)
           and ($6::text is null or classes.name ilike '%' || $6 || '%')
@@ -154,6 +193,9 @@ pub async fn list(
     let total = classes.len() as i64;
     let page = filters.page.unwrap_or(1).max(1);
     let limit = filters.limit.unwrap_or(total.max(1)).max(1);
+    let start = ((page - 1) * limit) as usize;
+    let end = (start + limit as usize).min(classes.len());
+    let classes = if start >= classes.len() { Vec::new() } else { classes[start..end].to_vec() };
 
     Ok((
         StatusCode::OK,
@@ -190,6 +232,7 @@ pub async fn create(
     validate_create(&payload)?;
     ensure_branch_scope(&state, tenant_id, payload.branch_id).await?;
     ensure_instructor_scope(&state, tenant_id, payload.instructor_id).await?;
+    let category = resolve_category_code(&state, tenant_id, payload.category_id, payload.category).await?;
 
     let class = sqlx::query_as::<_, GymClass>(
         r#"
@@ -212,7 +255,7 @@ pub async fn create(
     .bind(payload.max_capacity)
     .bind(payload.instructor_id)
     .bind(payload.branch_id)
-    .bind(payload.category)
+    .bind(category)
     .bind(payload.difficulty_level)
     .bind(payload.image_url)
     .bind(payload.is_active)
@@ -236,6 +279,7 @@ pub async fn update(
         ensure_branch_scope(&state, tenant_id, branch_id).await?;
     }
     ensure_instructor_scope(&state, tenant_id, payload.instructor_id).await?;
+    let category = resolve_category_code(&state, tenant_id, payload.category_id, payload.category).await?;
 
     let class = sqlx::query_as::<_, GymClass>(
         r#"
@@ -270,7 +314,7 @@ pub async fn update(
     .bind(payload.max_capacity)
     .bind(payload.instructor_id)
     .bind(payload.branch_id)
-    .bind(payload.category)
+    .bind(category)
     .bind(payload.difficulty_level)
     .bind(payload.image_url)
     .bind(payload.is_active)
@@ -316,10 +360,31 @@ async fn fetch_class(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<GymC
         select
             classes.id, classes.status, classes.name, classes.description,
             classes.duration_minutes, classes.max_capacity, classes.instructor_id,
-            classes.branch_id, classes.category, classes.difficulty_level, classes.image_url,
-            classes.is_active, classes.requires_count, classes.count_deduction
+            classes.branch_id, classes.category, class_categories.id as category_id,
+            classes.difficulty_level, classes.image_url,
+            classes.is_active, classes.requires_count, classes.count_deduction,
+            case when employees.id is null then null else json_build_object(
+                'id', employees.id,
+                'full_name', employees.full_name,
+                'email', employees.email
+            ) end as instructor,
+            json_build_object(
+                'id', branches.id,
+                'name', branches.name,
+                'code', branches.code
+            ) as branch,
+            case when class_categories.id is null then null else json_build_object(
+                'id', class_categories.id,
+                'code', class_categories.code,
+                'name', class_categories.name,
+                'color', class_categories.color
+            ) end as class_category
         from classes
         join branches on branches.id = classes.branch_id
+        left join employees on employees.id = classes.instructor_id
+        left join class_categories
+            on class_categories.tenant_id = branches.tenant_id
+           and lower(class_categories.code) = lower(classes.category)
         where classes.id = $1 and branches.tenant_id = $2
         "#,
     )
@@ -401,6 +466,28 @@ async fn ensure_instructor_scope(
     } else {
         Err(AppError::Validation("instructorId is invalid for this tenant".into()))
     }
+}
+
+async fn resolve_category_code(
+    state: &AppState,
+    tenant_id: Uuid,
+    category_id: Option<Uuid>,
+    category: Option<String>,
+) -> Result<Option<String>, AppError> {
+    let Some(category_id) = category_id else {
+        return Ok(category.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()));
+    };
+
+    let code = sqlx::query_scalar::<_, String>(
+        "select code from class_categories where id = $1 and tenant_id = $2 and is_active = true",
+    )
+    .bind(category_id)
+    .bind(tenant_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::Validation("category_id is invalid for this tenant".into()))?;
+
+    Ok(Some(code))
 }
 
 #[cfg(test)]

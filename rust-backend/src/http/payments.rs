@@ -6,7 +6,7 @@ use axum::{
 };
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -96,6 +96,12 @@ pub struct Payment {
     notes: Option<String>,
     created_by: Option<Uuid>,
     tenant_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    contract: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    member: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    branch: Option<Value>,
 }
 
 #[derive(Debug, FromRow)]
@@ -145,20 +151,26 @@ pub async fn list(
     let payments = sqlx::query_as::<_, Payment>(
         r#"
         select
-            id, contract_id, member_id, branch_id, amount::float8 as amount,
-            payment_method, payment_date, type as payment_type, receipt_no, notes,
-            created_by, tenant_id
+            payments.id, payments.contract_id, payments.member_id, payments.branch_id, payments.amount::float8 as amount,
+            payments.payment_method, payments.payment_date, payments.type as payment_type, payments.receipt_no, payments.notes,
+            payments.created_by, payments.tenant_id,
+            json_build_object('id', contracts.id, 'contract_no', contracts.contract_no, 'status', contracts.status) as contract,
+            json_build_object('id', members.id, 'full_name', members.full_name, 'member_code', members.member_code) as member,
+            json_build_object('id', branches.id, 'name', branches.name) as branch
         from payments
-        where tenant_id = $1
-          and ($2::uuid is null or id = $2)
-          and ($3::uuid is null or contract_id = $3)
-          and ($4::uuid is null or member_id = $4)
-          and ($5::uuid is null or branch_id = $5)
-          and ($6::text is null or payment_method = $6)
-          and ($7::text is null or type = $7)
-          and ($8::timestamptz is null or payment_date >= $8)
-          and ($9::timestamptz is null or payment_date < $9)
-        order by payment_date desc, created_at desc
+        join contracts on contracts.id = payments.contract_id
+        join members on members.id = payments.member_id
+        join branches on branches.id = payments.branch_id
+        where payments.tenant_id = $1
+          and ($2::uuid is null or payments.id = $2)
+          and ($3::uuid is null or payments.contract_id = $3)
+          and ($4::uuid is null or payments.member_id = $4)
+          and ($5::uuid is null or payments.branch_id = $5)
+          and ($6::text is null or payments.payment_method = $6)
+          and ($7::text is null or payments.type = $7)
+          and ($8::timestamptz is null or payments.payment_date >= $8)
+          and ($9::timestamptz is null or payments.payment_date < $9)
+        order by payments.payment_date desc, payments.created_at desc
         "#,
     )
     .bind(tenant_id)
@@ -333,7 +345,10 @@ pub async fn create(
         returning
             id, contract_id, member_id, branch_id, amount::float8 as amount,
             payment_method, payment_date, type as payment_type, receipt_no, notes,
-            created_by, tenant_id
+            created_by, tenant_id,
+            (select json_build_object('id', contracts.id, 'contract_no', contracts.contract_no, 'status', contracts.status) from contracts where contracts.id = payments.contract_id) as contract,
+            (select json_build_object('id', members.id, 'full_name', members.full_name, 'member_code', members.member_code) from members where members.id = payments.member_id) as member,
+            (select json_build_object('id', branches.id, 'name', branches.name) from branches where branches.id = payments.branch_id) as branch
         "#,
     )
     .bind(contract.id)
@@ -391,7 +406,10 @@ pub async fn update(
         returning
             id, contract_id, member_id, branch_id, amount::float8 as amount,
             payment_method, payment_date, type as payment_type, receipt_no, notes,
-            created_by, tenant_id
+            created_by, tenant_id,
+            (select json_build_object('id', contracts.id, 'contract_no', contracts.contract_no, 'status', contracts.status) from contracts where contracts.id = payments.contract_id) as contract,
+            (select json_build_object('id', members.id, 'full_name', members.full_name, 'member_code', members.member_code) from members where members.id = payments.member_id) as member,
+            (select json_build_object('id', branches.id, 'name', branches.name) from branches where branches.id = payments.branch_id) as branch
         "#,
     )
     .bind(id)
@@ -436,11 +454,17 @@ async fn fetch_payment(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Payme
     sqlx::query_as::<_, Payment>(
         r#"
         select
-            id, contract_id, member_id, branch_id, amount::float8 as amount,
-            payment_method, payment_date, type as payment_type, receipt_no, notes,
-            created_by, tenant_id
+            payments.id, payments.contract_id, payments.member_id, payments.branch_id, payments.amount::float8 as amount,
+            payments.payment_method, payments.payment_date, payments.type as payment_type, payments.receipt_no, payments.notes,
+            payments.created_by, payments.tenant_id,
+            json_build_object('id', contracts.id, 'contract_no', contracts.contract_no, 'status', contracts.status) as contract,
+            json_build_object('id', members.id, 'full_name', members.full_name, 'member_code', members.member_code) as member,
+            json_build_object('id', branches.id, 'name', branches.name) as branch
         from payments
-        where id = $1 and tenant_id = $2
+        join contracts on contracts.id = payments.contract_id
+        join members on members.id = payments.member_id
+        join branches on branches.id = payments.branch_id
+        where payments.id = $1 and payments.tenant_id = $2
         "#,
     )
     .bind(id)

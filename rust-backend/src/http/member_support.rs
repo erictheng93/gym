@@ -59,7 +59,6 @@ pub struct UpdateIssueRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSupportTicketRequest {
-    member_id: Option<Uuid>,
     category: String,
     subject: String,
     description: String,
@@ -202,7 +201,7 @@ pub async fn create_support_ticket(
         ) returning id
         "#,
     )
-    .bind(payload.member_id.unwrap_or(auth.member_id))
+    .bind(auth.member_id)
     .bind(auth.branch_id)
     .bind(payload.category)
     .bind(payload.subject)

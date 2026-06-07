@@ -2127,6 +2127,7 @@ mod tests {
 
         let tenant_id = Uuid::new_v4();
         let branch_id = Uuid::new_v4();
+        let category_id = Uuid::new_v4();
         let job_title_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
         let employee_id = Uuid::new_v4();
@@ -2148,6 +2149,13 @@ mod tests {
             .bind(branch_id)
             .bind(format!("Rust Class Branch {suffix}"))
             .bind(format!("CLB{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("insert into class_categories (id, tenant_id, code, name, color, status, is_active) values ($1, $2, 'yoga', 'Yoga', '#123456', 'published', true)")
+            .bind(category_id)
             .bind(tenant_id)
             .execute(&pool)
             .await
@@ -2223,7 +2231,7 @@ mod tests {
                             "max_capacity": 12,
                             "instructor_id": employee_id,
                             "branch_id": branch_id,
-                            "category": "YOGA",
+                            "category_id": category_id,
                             "difficulty_level": "BEGINNER",
                             "requires_count": true,
                             "count_deduction": 1
@@ -2245,7 +2253,7 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/classes?is_active=true&category_id=YOGA&branch_id={branch_id}&search=Rust"))
+                    .uri(format!("/api/classes?is_active=true&category_id={category_id}&branch_id={branch_id}&search=Rust&page=1&limit=1"))
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2256,8 +2264,15 @@ mod tests {
         let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
         let list_json: Value = serde_json::from_slice(&list_body).unwrap();
         assert!(list_json["data"].as_array().unwrap().iter().any(|row| {
-            row["id"] == class_id && row["is_active"] == true && row["category"] == "YOGA"
+            row["id"] == class_id
+                && row["is_active"] == true
+                && row["category"] == "yoga"
+                && row["category_id"] == category_id.to_string()
+                && row["class_category"]["name"] == "Yoga"
+                && row["branch"]["id"] == branch_id.to_string()
+                && row["instructor"]["id"] == employee_id.to_string()
         }));
+        assert_eq!(list_json["pagination"]["limit"], 1);
 
         let update_response = app
             .clone()
@@ -2296,6 +2311,7 @@ mod tests {
 
         let class_uuid = Uuid::parse_str(&class_id).unwrap();
         sqlx::query("delete from classes where id = $1").bind(class_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_categories where id = $1").bind(category_id).execute(&pool).await.unwrap();
         sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
         sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
         sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
@@ -2535,6 +2551,8 @@ mod tests {
                 && row["session_date"] == "2026-02-01"
                 && row["session_status"] == "SCHEDULED"
                 && row["current_count"].as_i64().is_some()
+                && row["class"]["id"] == class_id.to_string()
+                && row["instructor"]["id"] == employee_id.to_string()
         }));
 
         let booking_response = app.clone().oneshot(
@@ -2603,7 +2621,7 @@ mod tests {
         let booking_list_response = app.clone().oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/bookings?booking_status=CONFIRMED,WAITLIST&branch_id={branch_id}&start_date=2026-02-01&end_date=2026-02-01"
+                    "/api/bookings?booking_status=CONFIRMED,WAITLIST&branch_id={branch_id}&start_date=2026-02-01&end_date=2026-02-01&page=1&limit=1"
                 ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
@@ -2618,7 +2636,10 @@ mod tests {
                 && row["booked_at"].as_str().is_some()
                 && row["member"]["id"] == member_id.to_string()
                 && row["session"]["id"] == session_id
+                && row["session"]["branch"]["id"] == branch_id.to_string()
+                && row["session"]["class"]["id"] == class_id.to_string()
         }));
+        assert_eq!(booking_list_json["pagination"]["limit"], 1);
 
         let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
             .bind(session_uuid).fetch_one(&pool).await.unwrap();
@@ -2929,6 +2950,9 @@ mod tests {
                 assert_eq!(json["success"], true);
                 assert!(json["revenue"]["period"].as_f64().unwrap() >= 3000.0);
                 assert!(json["operations"]["today_checkins"].as_i64().unwrap() >= 1);
+                let hourly_distribution = json["operations"]["hourly_distribution"].as_array().unwrap();
+                assert_eq!(hourly_distribution.len(), 24);
+                assert!(hourly_distribution.iter().any(|hour| hour.as_i64().unwrap() >= 1));
             }
             else if uri.starts_with("/api/admin/analytics/member-demographics") {
                 let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();

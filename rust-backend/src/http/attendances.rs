@@ -38,7 +38,7 @@ pub struct AttendanceFilters {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateAttendanceRequest {
-    employee_id: Uuid,
+    employee_id: Option<Uuid>,
     #[serde(rename = "employeeId")]
     employee_id_camel: Option<Uuid>,
     branch_id: Option<Uuid>,
@@ -201,7 +201,7 @@ pub async fn create(
     Json(payload): Json<CreateAttendanceRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let employee_id = payload.employee_id_camel.unwrap_or(payload.employee_id);
+    let employee_id = payload.employee_id_camel.or(payload.employee_id).ok_or_else(|| AppError::Validation("employee_id is required".into()))?;
     let employee = fetch_employee_context(&state, tenant_id, employee_id).await?;
     let branch_id = payload.branch_id.or(payload.branch_id_camel).unwrap_or(employee.branch_id);
     ensure_branch_scope(&state, tenant_id, branch_id).await?;

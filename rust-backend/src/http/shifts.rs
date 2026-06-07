@@ -18,6 +18,7 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub struct ShiftScheduleFilters {
+    #[serde(alias = "branchId")]
     branch_id: Option<Uuid>,
     status: Option<String>,
     page: Option<i64>,
@@ -26,33 +27,53 @@ pub struct ShiftScheduleFilters {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateShiftSchedule {
+    #[serde(alias = "branchId")]
     branch_id: Uuid,
     name: String,
+    #[serde(alias = "startTime")]
     start_time: NaiveTime,
+    #[serde(alias = "endTime")]
     end_time: NaiveTime,
+    #[serde(alias = "breakStart")]
     break_start: Option<NaiveTime>,
+    #[serde(alias = "breakEnd")]
     break_end: Option<NaiveTime>,
+    #[serde(alias = "gracePeriodMinutes")]
     grace_period_minutes: Option<i32>,
+    #[serde(alias = "earlyLeaveMinutes")]
     early_leave_minutes: Option<i32>,
+    #[serde(alias = "overtimeStartAfter")]
     overtime_start_after: Option<NaiveTime>,
     #[serde(default)]
+    #[serde(alias = "isDefault")]
     is_default: bool,
+    #[serde(alias = "applicableDays")]
     applicable_days: Option<Value>,
     status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateShiftSchedule {
+    #[serde(alias = "branchId")]
     branch_id: Option<Uuid>,
     name: Option<String>,
+    #[serde(alias = "startTime")]
     start_time: Option<NaiveTime>,
+    #[serde(alias = "endTime")]
     end_time: Option<NaiveTime>,
+    #[serde(alias = "breakStart")]
     break_start: Option<NaiveTime>,
+    #[serde(alias = "breakEnd")]
     break_end: Option<NaiveTime>,
+    #[serde(alias = "gracePeriodMinutes")]
     grace_period_minutes: Option<i32>,
+    #[serde(alias = "earlyLeaveMinutes")]
     early_leave_minutes: Option<i32>,
+    #[serde(alias = "overtimeStartAfter")]
     overtime_start_after: Option<NaiveTime>,
+    #[serde(alias = "isDefault")]
     is_default: Option<bool>,
+    #[serde(alias = "applicableDays")]
     applicable_days: Option<Value>,
     status: Option<String>,
 }
@@ -79,7 +100,9 @@ pub struct ShiftScheduleRow {
 
 #[derive(Debug, Deserialize)]
 pub struct EmployeeShiftFilters {
+    #[serde(alias = "employeeId")]
     employee_id: Option<Uuid>,
+    #[serde(alias = "shiftScheduleId")]
     shift_schedule_id: Option<Uuid>,
     effective_date_lte: Option<NaiveDate>,
     effective_date_gte: Option<NaiveDate>,
@@ -93,15 +116,21 @@ pub struct EmployeeShiftFilters {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateEmployeeShift {
+    #[serde(alias = "employeeId")]
     employee_id: Uuid,
+    #[serde(alias = "shiftScheduleId")]
     shift_schedule_id: Uuid,
+    #[serde(alias = "effectiveDate")]
     effective_date: NaiveDate,
+    #[serde(alias = "endDate")]
     end_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateEmployeeShift {
+    #[serde(alias = "effectiveDate")]
     effective_date: Option<NaiveDate>,
+    #[serde(alias = "endDate")]
     end_date: Option<NaiveDate>,
 }
 

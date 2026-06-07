@@ -30,6 +30,8 @@ pub struct ScheduleFilters {
     active_only: Option<bool>,
     day_of_week: Option<i32>,
     is_recurring: Option<bool>,
+    page: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,7 +105,7 @@ pub struct UpdateScheduleRequest {
     status: Option<String>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ClassSchedule {
     id: Uuid,
     status: Option<String>,
@@ -118,6 +120,12 @@ pub struct ClassSchedule {
     is_recurring: Option<bool>,
     valid_from: Option<NaiveDate>,
     valid_until: Option<NaiveDate>,
+    #[sqlx(default)]
+    class: Option<Value>,
+    #[sqlx(default)]
+    branch: Option<Value>,
+    #[sqlx(default)]
+    instructor: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,6 +142,8 @@ pub struct SessionFilters {
     end_date: Option<NaiveDate>,
     session_status: Option<String>,
     instructor_id: Option<Uuid>,
+    page: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -198,7 +208,7 @@ pub struct UpdateSessionRequest {
     status: Option<String>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct ClassSession {
     id: Uuid,
     status: Option<String>,
@@ -214,6 +224,12 @@ pub struct ClassSession {
     current_count: Option<i32>,
     waitlist_count: Option<i32>,
     session_status: Option<String>,
+    #[sqlx(default)]
+    class: Option<Value>,
+    #[sqlx(default)]
+    branch: Option<Value>,
+    #[sqlx(default)]
+    instructor: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,6 +247,8 @@ pub struct BookingFilters {
     end_date: Option<NaiveDate>,
     upcoming: Option<bool>,
     exclude_cancelled: Option<bool>,
+    page: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -292,7 +310,7 @@ pub struct BookingActionRequest {
     reason: Option<String>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct Booking {
     id: Uuid,
     status: Option<String>,
@@ -353,9 +371,27 @@ pub async fn list_schedules(
     let tenant_id = require_tenant(&auth)?;
     let schedules = sqlx::query_as::<_, ClassSchedule>(
         r#"
-        select class_schedules.*
+        select class_schedules.*,
+            json_build_object(
+                'id', classes.id,
+                'name', classes.name,
+                'duration_minutes', classes.duration_minutes,
+                'max_capacity', classes.max_capacity
+            ) as class,
+            json_build_object(
+                'id', branches.id,
+                'name', branches.name,
+                'code', branches.code
+            ) as branch,
+            case when employees.id is null then null else json_build_object(
+                'id', employees.id,
+                'full_name', employees.full_name,
+                'email', employees.email
+            ) end as instructor
         from class_schedules
         join branches on branches.id = class_schedules.branch_id
+        join classes on classes.id = class_schedules.class_id
+        left join employees on employees.id = class_schedules.instructor_id
         where branches.tenant_id = $1
           and ($2::uuid is null or class_schedules.class_id = $2)
           and ($3::uuid is null or class_schedules.branch_id = $3)
@@ -374,7 +410,7 @@ pub async fn list_schedules(
     .fetch_all(&state.db)
     .await?;
 
-    Ok((StatusCode::OK, Json(paginated(schedules))))
+    Ok((StatusCode::OK, Json(paginated(schedules, filters.page, filters.limit))))
 }
 
 pub async fn create_schedule(
@@ -523,9 +559,27 @@ pub async fn list_sessions(
     let tenant_id = require_tenant(&auth)?;
     let sessions = sqlx::query_as::<_, ClassSession>(
         r#"
-        select class_sessions.*
+        select class_sessions.*,
+            json_build_object(
+                'id', classes.id,
+                'name', classes.name,
+                'duration_minutes', classes.duration_minutes,
+                'max_capacity', classes.max_capacity
+            ) as class,
+            json_build_object(
+                'id', branches.id,
+                'name', branches.name,
+                'code', branches.code
+            ) as branch,
+            case when employees.id is null then null else json_build_object(
+                'id', employees.id,
+                'full_name', employees.full_name,
+                'email', employees.email
+            ) end as instructor
         from class_sessions
         join branches on branches.id = class_sessions.branch_id
+        join classes on classes.id = class_sessions.class_id
+        left join employees on employees.id = class_sessions.instructor_id
         where branches.tenant_id = $1
           and ($2::uuid is null or class_sessions.class_id = $2)
           and ($3::uuid is null or class_sessions.branch_id = $3)
@@ -548,7 +602,7 @@ pub async fn list_sessions(
     .fetch_all(&state.db)
     .await?;
 
-    Ok((StatusCode::OK, Json(paginated(sessions))))
+    Ok((StatusCode::OK, Json(paginated(sessions, filters.page, filters.limit))))
 }
 
 pub async fn create_session(
@@ -711,6 +765,16 @@ pub async fn list_bookings(
                 'end_time', class_sessions.end_time,
                 'session_status', class_sessions.session_status,
                 'branch_id', class_sessions.branch_id,
+                'branch', json_build_object(
+                    'id', branches.id,
+                    'name', branches.name,
+                    'code', branches.code
+                ),
+                'instructor', case when employees.id is null then null else json_build_object(
+                    'id', employees.id,
+                    'full_name', employees.full_name,
+                    'email', employees.email
+                ) end,
                 'class', json_build_object(
                     'id', classes.id,
                     'name', classes.name,
@@ -722,6 +786,8 @@ pub async fn list_bookings(
         join members on members.id = bookings.member_id
         join class_sessions on class_sessions.id = bookings.session_id
         join classes on classes.id = class_sessions.class_id
+        join branches on branches.id = class_sessions.branch_id
+        left join employees on employees.id = class_sessions.instructor_id
         where members.tenant_id = $1
           and ($2::uuid is null or bookings.session_id = $2)
           and ($3::uuid is null or bookings.member_id = $3)
@@ -746,7 +812,7 @@ pub async fn list_bookings(
     .fetch_all(&state.db)
     .await?;
 
-    Ok((StatusCode::OK, Json(paginated(bookings))))
+    Ok((StatusCode::OK, Json(paginated(bookings, filters.page, filters.limit))))
 }
 
 pub async fn get_booking(
@@ -1161,6 +1227,16 @@ async fn fetch_booking(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Booki
                 'end_time', class_sessions.end_time,
                 'session_status', class_sessions.session_status,
                 'branch_id', class_sessions.branch_id,
+                'branch', json_build_object(
+                    'id', branches.id,
+                    'name', branches.name,
+                    'code', branches.code
+                ),
+                'instructor', case when employees.id is null then null else json_build_object(
+                    'id', employees.id,
+                    'full_name', employees.full_name,
+                    'email', employees.email
+                ) end,
                 'class', json_build_object(
                     'id', classes.id,
                     'name', classes.name,
@@ -1172,6 +1248,8 @@ async fn fetch_booking(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Booki
         join members on members.id = bookings.member_id
         join class_sessions on class_sessions.id = bookings.session_id
         join classes on classes.id = class_sessions.class_id
+        join branches on branches.id = class_sessions.branch_id
+        left join employees on employees.id = class_sessions.instructor_id
         where bookings.id = $1 and members.tenant_id = $2
         "#,
     )
@@ -1408,9 +1486,27 @@ async fn ensure_schedule_scope(pool: &PgPool, tenant_id: Uuid, schedule_id: Uuid
 async fn fetch_schedule(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<ClassSchedule, AppError> {
     sqlx::query_as::<_, ClassSchedule>(
         r#"
-        select class_schedules.*
+        select class_schedules.*,
+            json_build_object(
+                'id', classes.id,
+                'name', classes.name,
+                'duration_minutes', classes.duration_minutes,
+                'max_capacity', classes.max_capacity
+            ) as class,
+            json_build_object(
+                'id', branches.id,
+                'name', branches.name,
+                'code', branches.code
+            ) as branch,
+            case when employees.id is null then null else json_build_object(
+                'id', employees.id,
+                'full_name', employees.full_name,
+                'email', employees.email
+            ) end as instructor
         from class_schedules
         join branches on branches.id = class_schedules.branch_id
+        join classes on classes.id = class_schedules.class_id
+        left join employees on employees.id = class_schedules.instructor_id
         where class_schedules.id = $1 and branches.tenant_id = $2
         "#,
     )
@@ -1424,9 +1520,27 @@ async fn fetch_schedule(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Clas
 async fn fetch_session(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<ClassSession, AppError> {
     sqlx::query_as::<_, ClassSession>(
         r#"
-        select class_sessions.*
+        select class_sessions.*,
+            json_build_object(
+                'id', classes.id,
+                'name', classes.name,
+                'duration_minutes', classes.duration_minutes,
+                'max_capacity', classes.max_capacity
+            ) as class,
+            json_build_object(
+                'id', branches.id,
+                'name', branches.name,
+                'code', branches.code
+            ) as branch,
+            case when employees.id is null then null else json_build_object(
+                'id', employees.id,
+                'full_name', employees.full_name,
+                'email', employees.email
+            ) end as instructor
         from class_sessions
         join branches on branches.id = class_sessions.branch_id
+        join classes on classes.id = class_sessions.class_id
+        left join employees on employees.id = class_sessions.instructor_id
         where class_sessions.id = $1 and branches.tenant_id = $2
         "#,
     )
@@ -1441,16 +1555,22 @@ fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
     auth.user.tenant_id.ok_or(AppError::Unauthorized)
 }
 
-fn paginated<T: Serialize>(data: Vec<T>) -> PaginatedResponse<Vec<T>> {
+fn paginated<T: Serialize + Clone>(data: Vec<T>, page: Option<i64>, limit: Option<i64>) -> PaginatedResponse<Vec<T>> {
     let total = data.len() as i64;
+    let page = page.unwrap_or(1).max(1);
+    let limit = limit.unwrap_or(total.max(1)).max(1);
+    let start = ((page - 1) * limit) as usize;
+    let end = (start + limit as usize).min(data.len());
+    let data = if start >= data.len() { Vec::new() } else { data[start..end].to_vec() };
+
     PaginatedResponse {
         success: true,
         data,
         pagination: Pagination {
             total,
-            page: 1,
-            limit: total.max(1),
-            total_pages: 1,
+            page,
+            limit,
+            total_pages: ((total + limit - 1) / limit).max(1),
         },
     }
 }

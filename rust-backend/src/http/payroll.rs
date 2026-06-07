@@ -36,9 +36,11 @@ struct Meta {
 
 #[derive(Debug, Deserialize)]
 pub struct SalaryFilters {
+    #[serde(alias = "employeeId")]
     employee_id: Option<Uuid>,
     period: Option<String>,
     status: Option<String>,
+    #[serde(alias = "branchId")]
     branch_id: Option<Uuid>,
     limit: Option<i64>,
     offset: Option<i64>,
@@ -47,13 +49,17 @@ pub struct SalaryFilters {
 #[derive(Debug, Deserialize)]
 pub struct GeneratePayrollRequest {
     period: String,
+    #[serde(alias = "branchId")]
     branch_id: Option<Uuid>,
+    #[serde(alias = "employeeIds")]
     employee_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateSalaryRequest {
+    #[serde(alias = "overtimeHours")]
     overtime_hours: Option<f64>,
+    #[serde(alias = "overtimePay")]
     overtime_pay: Option<f64>,
     commission: Option<f64>,
     bonus: Option<f64>,
@@ -93,8 +99,9 @@ pub struct SalaryRecordRow {
 
 #[derive(Debug, Deserialize)]
 pub struct PromotionFilters {
+    #[serde(alias = "employeeId")]
     employee_id: Option<Uuid>,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "promotion_type", alias = "promotionType")]
     promotion_type: Option<String>,
     limit: Option<i64>,
     offset: Option<i64>,
@@ -102,12 +109,17 @@ pub struct PromotionFilters {
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePromotionRequest {
+    #[serde(alias = "employeeId")]
     employee_id: Uuid,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "promotion_type", alias = "promotionType")]
     promotion_type: String,
+    #[serde(alias = "effectiveDate")]
     effective_date: NaiveDate,
+    #[serde(alias = "toJobTitleId")]
     to_job_title_id: Option<Uuid>,
+    #[serde(alias = "toBranchId")]
     to_branch_id: Option<Uuid>,
+    #[serde(alias = "newBaseSalary")]
     new_base_salary: Option<f64>,
     reason: Option<String>,
 }

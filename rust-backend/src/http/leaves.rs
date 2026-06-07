@@ -19,48 +19,82 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct LeaveRequestFilters {
     id: Option<Uuid>,
+    #[serde(alias = "employeeId")]
     employee_id: Option<Uuid>,
+    #[serde(alias = "leaveStatus", alias = "status")]
     leave_status: Option<String>,
+    #[serde(alias = "leaveType")]
     leave_type: Option<String>,
+    #[serde(alias = "startDateFrom")]
     start_date_gte: Option<NaiveDate>,
+    #[serde(alias = "startDateTo")]
     start_date_lte: Option<NaiveDate>,
+    #[serde(alias = "endDateFrom")]
     end_date_gte: Option<NaiveDate>,
+    #[serde(alias = "endDateTo")]
     end_date_lte: Option<NaiveDate>,
+    #[serde(rename = "startDate")]
+    start_date: Option<NaiveDate>,
+    #[serde(rename = "endDate")]
+    end_date: Option<NaiveDate>,
     page: Option<i64>,
     limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateLeaveRequest {
+    #[serde(alias = "employeeId")]
     employee_id: Uuid,
+    #[serde(alias = "leaveType")]
     leave_type: String,
+    #[serde(alias = "startDate")]
     start_date: NaiveDate,
+    #[serde(alias = "endDate")]
     end_date: NaiveDate,
+    #[serde(alias = "leaveStatus")]
     leave_status: Option<String>,
+    #[serde(alias = "approverId")]
     approver_id: Option<Uuid>,
     reason: Option<String>,
+    #[serde(alias = "hoursRequested")]
     hours_requested: Option<f64>,
+    #[serde(alias = "daysRequested")]
     days_requested: Option<f64>,
+    #[serde(alias = "submittedAt")]
     submitted_at: Option<DateTime<Utc>>,
+    #[serde(alias = "approvedAt")]
     approved_at: Option<DateTime<Utc>>,
+    #[serde(alias = "approvalNotes")]
     approval_notes: Option<String>,
+    #[serde(alias = "documentUrl")]
     document_url: Option<String>,
     #[serde(default)]
+    #[serde(alias = "isHalfDay")]
     is_half_day: bool,
+    #[serde(alias = "halfDayType")]
     half_day_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateLeaveRequest {
+    #[serde(alias = "leaveStatus")]
     leave_status: Option<String>,
+    #[serde(alias = "approverId")]
     approver_id: Option<Uuid>,
+    #[serde(alias = "approvedAt")]
     approved_at: Option<DateTime<Utc>>,
+    #[serde(alias = "approvalNotes")]
     approval_notes: Option<String>,
     reason: Option<String>,
+    #[serde(alias = "hoursRequested")]
     hours_requested: Option<f64>,
+    #[serde(alias = "daysRequested")]
     days_requested: Option<f64>,
+    #[serde(alias = "documentUrl")]
     document_url: Option<String>,
+    #[serde(alias = "isHalfDay")]
     is_half_day: Option<bool>,
+    #[serde(alias = "halfDayType")]
     half_day_type: Option<String>,
 }
 
@@ -175,16 +209,18 @@ pub async fn list_requests(
     Query(filters): Query<LeaveRequestFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
+    let start_date_gte = filters.start_date_gte.or(filters.start_date);
+    let end_date_lte = filters.end_date_lte.or(filters.end_date);
     let rows = sqlx::query_as::<_, LeaveRequestRow>(LEAVE_REQUEST_SELECT)
         .bind(tenant_id)
         .bind(filters.id)
         .bind(filters.employee_id)
         .bind(filters.leave_status)
         .bind(filters.leave_type)
-        .bind(filters.start_date_gte)
+        .bind(start_date_gte)
         .bind(filters.start_date_lte)
         .bind(filters.end_date_gte)
-        .bind(filters.end_date_lte)
+        .bind(end_date_lte)
         .fetch_all(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(paginated(rows, filters.page, filters.limit))))
