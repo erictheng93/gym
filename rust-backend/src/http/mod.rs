@@ -33,6 +33,7 @@ mod payments;
 mod payroll;
 mod performance;
 mod shifts;
+mod users;
 
 #[derive(Debug, Serialize)]
 struct ApiResponse<T> {
@@ -98,6 +99,13 @@ pub fn router(state: AppState) -> Router {
                 .patch(members::update)
                 .delete(members::delete),
         )
+        .route("/api/users", get(users::list).post(users::create))
+        .route("/api/users/available-employees", get(users::available_employees))
+        .route(
+            "/api/users/{id}",
+            get(users::get).patch(users::update).delete(users::delete),
+        )
+        .route("/api/users/{id}/reset-password", post(users::reset_password))
         .route("/api/contracts", get(contracts::list).post(contracts::create))
         .route(
             "/api/contracts/{id}",
