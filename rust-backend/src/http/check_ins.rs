@@ -32,8 +32,10 @@ pub struct CheckInFilters {
     contract_id_snake: Option<Uuid>,
     date: Option<NaiveDate>,
     #[serde(rename = "startDate")]
+    #[serde(alias = "start_date")]
     start_date: Option<DateTime<Utc>>,
     #[serde(rename = "endDate")]
+    #[serde(alias = "end_date")]
     end_date: Option<DateTime<Utc>>,
     page: Option<i64>,
     limit: Option<i64>,
@@ -42,20 +44,28 @@ pub struct CheckInFilters {
 #[derive(Debug, Deserialize)]
 pub struct CreateCheckInRequest {
     #[serde(rename = "memberId")]
+    #[serde(alias = "member_id")]
     member_id: Uuid,
     #[serde(rename = "branchId")]
+    #[serde(alias = "branch_id")]
     branch_id: Uuid,
     #[serde(rename = "contractId")]
+    #[serde(alias = "contract_id")]
     contract_id: Option<Uuid>,
     #[serde(rename = "checkInTime")]
+    #[serde(alias = "check_in_time")]
     check_in_time: Option<DateTime<Utc>>,
     #[serde(rename = "checkInType", default = "default_entry")]
+    #[serde(alias = "check_in_type")]
     check_in_type: String,
     #[serde(rename = "checkInMethod", default = "default_manual")]
+    #[serde(alias = "check_in_method")]
     check_in_method: String,
     #[serde(rename = "locationIp")]
+    #[serde(alias = "location_ip")]
     location_ip: Option<String>,
     #[serde(rename = "locationDevice")]
+    #[serde(alias = "location_device")]
     location_device: Option<String>,
     notes: Option<String>,
 }
@@ -91,6 +101,9 @@ pub struct CheckIn {
     location_device: Option<String>,
     notes: Option<String>,
     member: Option<CheckInMember>,
+    branch: Option<CheckInBranch>,
+    #[serde(rename = "processedBy")]
+    processed_by: Option<CheckInProcessedBy>,
 }
 
 #[derive(Debug, Serialize, sqlx::Type)]
@@ -100,6 +113,19 @@ pub struct CheckInMember {
     full_name: String,
     #[serde(rename = "memberCode")]
     member_code: String,
+}
+
+#[derive(Debug, Serialize, sqlx::Type)]
+pub struct CheckInBranch {
+    id: Uuid,
+    name: String,
+}
+
+#[derive(Debug, Serialize, sqlx::Type)]
+pub struct CheckInProcessedBy {
+    id: Uuid,
+    #[serde(rename = "fullName")]
+    full_name: String,
 }
 
 #[derive(Debug, FromRow)]
@@ -118,6 +144,8 @@ struct CheckInRow {
     notes: Option<String>,
     member_full_name: String,
     member_code: String,
+    branch_name: String,
+    processed_by_full_name: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -201,9 +229,12 @@ pub async fn list(
             check_ins.contract_id, check_ins.check_in_time, check_ins.check_in_type,
             check_ins.check_in_method, check_ins.processed_by_id, check_ins.location_ip,
             check_ins.location_device, check_ins.notes, members.full_name as member_full_name,
-            members.member_code
+            members.member_code, branches.name as branch_name,
+            processed_by.full_name as processed_by_full_name
         from check_ins
         join members on members.id = check_ins.member_id
+        join branches on branches.id = check_ins.branch_id
+        left join employees processed_by on processed_by.id = check_ins.processed_by_id
         where members.tenant_id = $1
           and ($2::uuid is null or check_ins.member_id = $2)
           and ($3::uuid is null or check_ins.branch_id = $3)
@@ -296,7 +327,9 @@ pub async fn create(
             id, status, member_id, branch_id, contract_id, check_in_time, check_in_type,
             check_in_method, processed_by_id, location_ip, location_device, notes,
             (select full_name from members where members.id = check_ins.member_id) as member_full_name,
-            (select member_code from members where members.id = check_ins.member_id) as member_code
+            (select member_code from members where members.id = check_ins.member_id) as member_code,
+            (select name from branches where branches.id = check_ins.branch_id) as branch_name,
+            (select full_name from employees where employees.id = check_ins.processed_by_id) as processed_by_full_name
         "#,
     )
     .bind(payload.member_id)
@@ -437,9 +470,12 @@ async fn fetch_check_in(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Chec
             check_ins.contract_id, check_ins.check_in_time, check_ins.check_in_type,
             check_ins.check_in_method, check_ins.processed_by_id, check_ins.location_ip,
             check_ins.location_device, check_ins.notes, members.full_name as member_full_name,
-            members.member_code
+            members.member_code, branches.name as branch_name,
+            processed_by.full_name as processed_by_full_name
         from check_ins
         join members on members.id = check_ins.member_id
+        join branches on branches.id = check_ins.branch_id
+        left join employees processed_by on processed_by.id = check_ins.processed_by_id
         where check_ins.id = $1 and members.tenant_id = $2
         "#,
     )
@@ -617,6 +653,13 @@ impl From<CheckInRow> for CheckIn {
                 full_name: value.member_full_name,
                 member_code: value.member_code,
             }),
+            branch: Some(CheckInBranch {
+                id: value.branch_id,
+                name: value.branch_name,
+            }),
+            processed_by: value.processed_by_id
+                .zip(value.processed_by_full_name)
+                .map(|(id, full_name)| CheckInProcessedBy { id, full_name }),
         }
     }
 }

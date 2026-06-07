@@ -1683,11 +1683,11 @@ mod tests {
                     .header("content-type", "application/json")
                     .body(Body::from(
                         json!({
-                            "memberId": member_id,
-                            "branchId": branch_id,
-                            "contractId": contract_id,
-                            "checkInType": "ENTRY",
-                            "checkInMethod": "MANUAL"
+                            "member_id": member_id,
+                            "branch_id": branch_id,
+                            "contract_id": contract_id,
+                            "check_in_type": "ENTRY",
+                            "check_in_method": "MANUAL"
                         })
                         .to_string(),
                     ))
@@ -1700,6 +1700,10 @@ mod tests {
         let create_json: Value = serde_json::from_slice(&create_body).unwrap();
         let check_in_id = create_json["data"]["id"].as_str().unwrap().to_string();
         assert_eq!(create_json["data"]["member"]["id"], member_id.to_string());
+        assert_eq!(create_json["data"]["branch"]["id"], branch_id.to_string());
+        assert_eq!(create_json["data"]["branch"]["name"], format!("Rust Checkin Branch {suffix}"));
+        assert_eq!(create_json["data"]["processedBy"]["id"], employee_id.to_string());
+        assert_eq!(create_json["data"]["processedBy"]["fullName"], "Rust Checkin User");
 
         let remaining: i32 = sqlx::query_scalar("select remaining_counts from contracts where id = $1")
             .bind(contract_id)
@@ -1720,6 +1724,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+        let list_json: Value = serde_json::from_slice(&list_body).unwrap();
+        assert!(list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == check_in_id
+                && row["branch"]["id"] == branch_id.to_string()
+                && row["processedBy"]["id"] == employee_id.to_string()
+        }));
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/check-ins/{check_in_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get_response.status(), StatusCode::OK);
+        let get_body = to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
+        let get_json: Value = serde_json::from_slice(&get_body).unwrap();
+        assert_eq!(get_json["data"]["branch"]["id"], branch_id.to_string());
+        assert_eq!(get_json["data"]["processedBy"]["fullName"], "Rust Checkin User");
 
         let branch_list_response = app
             .clone()
