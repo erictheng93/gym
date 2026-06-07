@@ -2,7 +2,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::Serialize;
@@ -17,6 +17,7 @@ mod contracts;
 mod dashboard_reports;
 mod members;
 mod membership_plans;
+mod member_app;
 mod payments;
 
 #[derive(Debug, Serialize)]
@@ -122,6 +123,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/reports/member-growth", get(dashboard_reports::member_growth_report))
         .route("/api/reports/contract-expiry", get(dashboard_reports::contract_expiry_report))
         .route("/api/reports/member-activity", get(dashboard_reports::member_activity_report))
+        .route("/api/member/auth/login", post(member_app::login))
+        .route("/api/member/me", get(member_app::me))
+        .route("/api/member/profile", get(member_app::profile))
+        .route("/api/member/classes", get(member_app::list_classes))
+        .route("/api/member/classes/schedule", get(member_app::list_schedules))
+        .route("/api/member/classes/sessions", get(member_app::list_sessions))
+        .route("/api/member/classes/sessions/{id}", get(member_app::get_session))
+        .route("/api/member/bookings", get(member_app::list_bookings).post(member_app::create_booking))
+        .route("/api/member/bookings/{id}", delete(member_app::cancel_booking))
+        .route("/api/member/contracts", get(member_app::list_contracts))
+        .route("/api/member/contracts/{id}/pause", post(member_app::pause_contract))
+        .route("/api/member/contracts/{id}/resume", post(member_app::resume_contract))
+        .route("/api/member/payments", get(member_app::list_payments))
+        .route("/api/member_checkins", get(member_app::list_checkins))
         .fallback(error::not_found)
         .with_state(state)
 }

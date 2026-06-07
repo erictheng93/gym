@@ -154,6 +154,21 @@ create index if not exists membership_plans_branch_id_idx on membership_plans(br
 create index if not exists members_tenant_id_idx on members(tenant_id);
 create index if not exists members_branch_id_idx on members(branch_id);
 
+create table if not exists member_credentials (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null unique references members(id),
+    password_hash varchar not null,
+    failed_attempts integer not null default 0,
+    locked_until timestamptz,
+    password_reset_token_hash varchar,
+    password_reset_expires_at timestamptz,
+    last_password_change_at timestamptz,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create index if not exists member_credentials_member_id_idx on member_credentials(member_id);
+
 create table if not exists contracts (
     id uuid primary key default gen_random_uuid(),
     contract_no varchar not null unique,
