@@ -2920,6 +2920,8 @@ mod tests {
         for uri in [
             format!("/api/attendances/{attendance_id}"),
             format!("/api/attendances?employee_id={employee_id}&attendance_date=2026-03-01"),
+            format!("/api/hr/attendances/{attendance_id}"),
+            format!("/api/hr/attendances?startDate=2026-03-01&endDate=2026-03-01"),
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -3204,6 +3206,10 @@ mod tests {
             format!("/api/shift_schedules?branch_id={branch_id}"),
             format!("/api/employee_shifts/{employee_shift_id}"),
             format!("/api/employee_shifts?shift_schedule_id={schedule_id}&effective_date_lte=2026-05-02"),
+            format!("/api/hr/shift-schedules/{schedule_id}"),
+            format!("/api/hr/shift-schedules?status=active"),
+            format!("/api/hr/employee-shifts/{employee_shift_id}"),
+            "/api/hr/employee-shifts?startDate=2026-05-01&endDate=2026-05-02".to_string(),
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -3214,14 +3220,14 @@ mod tests {
         }
 
         let shift_update_response = app.clone().oneshot(
-            Request::builder().method("PATCH").uri(format!("/api/employee_shifts/{employee_shift_id}"))
+            Request::builder().method("PUT").uri(format!("/api/hr/employee-shifts/{employee_shift_id}"))
                 .header("authorization", format!("Bearer {token}"))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"end_date": "2026-05-31"}).to_string())).unwrap()
         ).await.unwrap();
         assert_eq!(shift_update_response.status(), StatusCode::OK);
         let schedule_update_response = app.clone().oneshot(
-            Request::builder().method("PATCH").uri(format!("/api/shift_schedules/{schedule_id}"))
+            Request::builder().method("PUT").uri(format!("/api/hr/shift-schedules/{schedule_id}"))
                 .header("authorization", format!("Bearer {token}"))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"status": "archived"}).to_string())).unwrap()

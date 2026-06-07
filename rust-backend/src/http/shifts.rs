@@ -83,6 +83,10 @@ pub struct EmployeeShiftFilters {
     shift_schedule_id: Option<Uuid>,
     effective_date_lte: Option<NaiveDate>,
     effective_date_gte: Option<NaiveDate>,
+    #[serde(rename = "startDate")]
+    start_date: Option<NaiveDate>,
+    #[serde(rename = "endDate")]
+    end_date: Option<NaiveDate>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -238,13 +242,15 @@ pub async fn list_employee_shifts(
     Query(filters): Query<EmployeeShiftFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
+    let effective_date_gte = filters.effective_date_gte.or(filters.start_date);
+    let effective_date_lte = filters.effective_date_lte.or(filters.end_date);
     let rows = sqlx::query_as::<_, EmployeeShiftRow>(EMPLOYEE_SHIFT_SELECT)
         .bind(tenant_id)
         .bind(None::<Uuid>)
         .bind(filters.employee_id)
         .bind(filters.shift_schedule_id)
-        .bind(filters.effective_date_lte)
-        .bind(filters.effective_date_gte)
+        .bind(effective_date_lte)
+        .bind(effective_date_gte)
         .fetch_all(&state.db)
         .await?;
     Ok((StatusCode::OK, Json(paginated(rows, filters.page, filters.limit))))
@@ -404,7 +410,11 @@ const SHIFT_SCHEDULE_SELECT: &str = r#"
     where branches.tenant_id = $1
       and ($2::uuid is null or shift_schedules.id = $2)
       and ($3::uuid is null or shift_schedules.branch_id = $3)
-      and ($4::text is null or shift_schedules.status = $4)
+      and (
+        $4::text is null
+        or lower(coalesce(shift_schedules.status, 'active')) = lower($4)
+        or (lower($4) = 'active' and lower(coalesce(shift_schedules.status, 'active')) = 'published')
+      )
     order by shift_schedules.start_time, shift_schedules.name
 "#;
 

@@ -176,6 +176,11 @@ pub fn router(state: AppState) -> Router {
             "/api/attendances/{id}",
             get(attendances::get).patch(attendances::update),
         )
+        .route("/api/hr/attendances", get(attendances::list).post(attendances::create))
+        .route(
+            "/api/hr/attendances/{id}",
+            get(attendances::get).patch(attendances::update),
+        )
         .route("/api/leave_requests", get(leaves::list_requests).post(leaves::create_request))
         .route(
             "/api/leave_requests/{id}",
@@ -187,12 +192,22 @@ pub fn router(state: AppState) -> Router {
         .route("/api/shift_schedules", get(shifts::list_schedules).post(shifts::create_schedule))
         .route(
             "/api/shift_schedules/{id}",
-            get(shifts::get_schedule).patch(shifts::update_schedule),
+            get(shifts::get_schedule).patch(shifts::update_schedule).put(shifts::update_schedule),
         )
         .route("/api/employee_shifts", get(shifts::list_employee_shifts).post(shifts::create_employee_shift))
         .route(
             "/api/employee_shifts/{id}",
-            get(shifts::get_employee_shift).patch(shifts::update_employee_shift),
+            get(shifts::get_employee_shift).patch(shifts::update_employee_shift).put(shifts::update_employee_shift),
+        )
+        .route("/api/hr/shift-schedules", get(shifts::list_schedules).post(shifts::create_schedule))
+        .route(
+            "/api/hr/shift-schedules/{id}",
+            get(shifts::get_schedule).patch(shifts::update_schedule).put(shifts::update_schedule),
+        )
+        .route("/api/hr/employee-shifts", get(shifts::list_employee_shifts).post(shifts::create_employee_shift))
+        .route(
+            "/api/hr/employee-shifts/{id}",
+            get(shifts::get_employee_shift).patch(shifts::update_employee_shift).put(shifts::update_employee_shift),
         )
         .route("/api/makeup_requests", get(makeup::list_requests).post(makeup::create_request))
         .route(

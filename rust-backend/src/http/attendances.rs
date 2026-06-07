@@ -28,6 +28,10 @@ pub struct AttendanceFilters {
     attendance_date: Option<NaiveDate>,
     attendance_date_gte: Option<NaiveDate>,
     attendance_date_lte: Option<NaiveDate>,
+    #[serde(rename = "startDate")]
+    start_date: Option<NaiveDate>,
+    #[serde(rename = "endDate")]
+    end_date: Option<NaiveDate>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -131,6 +135,8 @@ pub async fn list(
     let tenant_id = require_tenant(&auth)?;
     let employee_id = filters.employee_id.or(filters.employee_id_camel);
     let branch_id = filters.branch_id.or(filters.branch_id_camel);
+    let attendance_date_gte = filters.attendance_date_gte.or(filters.start_date);
+    let attendance_date_lte = filters.attendance_date_lte.or(filters.end_date);
     let attendances = sqlx::query_as::<_, Attendance>(
         r#"
         select
@@ -164,8 +170,8 @@ pub async fn list(
     .bind(employee_id)
     .bind(branch_id)
     .bind(filters.attendance_date)
-    .bind(filters.attendance_date_gte)
-    .bind(filters.attendance_date_lte)
+    .bind(attendance_date_gte)
+    .bind(attendance_date_lte)
     .fetch_all(&state.db)
     .await?;
 
