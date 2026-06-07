@@ -498,3 +498,47 @@ create table if not exists makeup_approval_logs (
 create index if not exists makeup_requests_employee_id_idx on makeup_requests(employee_id);
 create index if not exists makeup_requests_request_status_idx on makeup_requests(request_status);
 create index if not exists makeup_approval_logs_makeup_request_id_idx on makeup_approval_logs(makeup_request_id);
+
+create table if not exists payroll_salary_records (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    period varchar not null,
+    base_salary numeric not null default 0,
+    overtime_hours numeric not null default 0,
+    overtime_pay numeric not null default 0,
+    commission numeric not null default 0,
+    bonus numeric not null default 0,
+    deductions numeric not null default 0,
+    net_salary numeric not null default 0,
+    hourly_rate numeric,
+    work_days integer not null default 0,
+    leave_days jsonb,
+    notes text,
+    status varchar not null default 'PENDING',
+    approved_by uuid references employees(id),
+    approved_at timestamptz,
+    paid_at timestamptz,
+    tenant_id uuid references tenants(id)
+);
+
+create table if not exists payroll_promotions (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    type varchar not null,
+    from_job_title_id uuid references job_titles(id),
+    to_job_title_id uuid references job_titles(id),
+    from_branch_id uuid references branches(id),
+    to_branch_id uuid references branches(id),
+    effective_date date not null,
+    new_base_salary numeric,
+    reason text,
+    tenant_id uuid references tenants(id)
+);
+
+create index if not exists payroll_salary_records_tenant_id_idx on payroll_salary_records(tenant_id);
+create index if not exists payroll_salary_records_employee_id_idx on payroll_salary_records(employee_id);
+create index if not exists payroll_salary_records_period_idx on payroll_salary_records(period);
+create index if not exists payroll_promotions_tenant_id_idx on payroll_promotions(tenant_id);
+create index if not exists payroll_promotions_employee_id_idx on payroll_promotions(employee_id);

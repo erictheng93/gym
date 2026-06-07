@@ -23,6 +23,7 @@ mod members;
 mod membership_plans;
 mod member_app;
 mod payments;
+mod payroll;
 mod shifts;
 
 #[derive(Debug, Serialize)]
@@ -171,6 +172,14 @@ pub fn router(state: AppState) -> Router {
             get(makeup::get_request).patch(makeup::update_request),
         )
         .route("/api/makeup_approval_logs", get(makeup::list_logs).post(makeup::create_log))
+        .route("/api/payroll/salary-records", get(payroll::list_salary_records))
+        .route("/api/payroll/salary-records/{id}", get(payroll::get_salary_record).patch(payroll::update_salary_record))
+        .route("/api/payroll/salary-records/{id}/approve", post(payroll::approve_salary))
+        .route("/api/payroll/salary-records/{id}/pay", post(payroll::mark_salary_paid))
+        .route("/api/payroll/generate", post(payroll::generate_payroll))
+        .route("/api/payroll/batch-approve", post(payroll::batch_approve_salary))
+        .route("/api/payroll/export", get(payroll::export_payroll))
+        .route("/api/payroll/promotions", get(payroll::list_promotions).post(payroll::create_promotion))
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
         .route("/api/member/profile", get(member_app::profile))

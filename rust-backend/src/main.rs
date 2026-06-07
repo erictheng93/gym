@@ -2744,4 +2744,155 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn hr_payroll_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let to_job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let admin_employee_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-payroll-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id).bind(format!("Rust Payroll Tenant {suffix}"))
+            .bind(format!("rust-payroll-tenant-{suffix}"))
+            .bind(format!("payroll-tenant-{suffix}@example.com"))
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id).bind(format!("Rust Payroll Branch {suffix}"))
+            .bind(format!("RPB{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"payroll\":[\"read\",\"write\"]}'::jsonb, $4)")
+            .bind(job_title_id).bind(format!("Rust Payroll Role {suffix}"))
+            .bind(format!("RPJ{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"payroll\":[\"read\"]}'::jsonb, $4)")
+            .bind(to_job_title_id).bind(format!("Rust Payroll Senior Role {suffix}"))
+            .bind(format!("RPS{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id).bind(&email).bind(password_hash).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, basic_salary, tenant_id) values ($1, $2, $3, $4, $5, 'Rust Payroll Admin', $6, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, 80000, $7)")
+            .bind(admin_employee_id).bind(user_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RPA{}", &suffix[..8])).bind(&email).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, branch_id, job_title_id, employee_code, full_name, status, employment_type, hire_date, basic_salary, tenant_id) values ($1, $2, $3, $4, 'Rust Payroll Employee', 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, 50000, $5)")
+            .bind(employee_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RPE{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        let app = build_app(AppState { db: pool.clone(), jwt_secret: "test-secret".into(), jwt_ttl_seconds: 3600 });
+        let login_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"email": email, "password": password}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let generate_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/payroll/generate")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "period": "2026-07",
+                    "employee_ids": [employee_id]
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(generate_response.status(), StatusCode::OK);
+        let generate_body = to_bytes(generate_response.into_body(), usize::MAX).await.unwrap();
+        let generate_json: Value = serde_json::from_slice(&generate_body).unwrap();
+        let salary_id = Uuid::parse_str(generate_json["data"]["records"][0]["id"].as_str().unwrap()).unwrap();
+
+        for uri in [
+            format!("/api/payroll/salary-records/{salary_id}"),
+            "/api/payroll/salary-records?period=2026-07".to_string(),
+            "/api/payroll/export?period=2026-07".to_string(),
+        ] {
+            let response = app.clone().oneshot(
+                Request::builder().uri(uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty()).unwrap()
+            ).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let update_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri(format!("/api/payroll/salary-records/{salary_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"bonus": 1000, "deductions": 100, "notes": "smoke"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let approve_response = app.clone().oneshot(
+            Request::builder().method("POST").uri(format!("/api/payroll/salary-records/{salary_id}/approve"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(approve_response.status(), StatusCode::OK);
+        let paid_response = app.clone().oneshot(
+            Request::builder().method("POST").uri(format!("/api/payroll/salary-records/{salary_id}/pay"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(paid_response.status(), StatusCode::OK);
+        let batch_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/payroll/batch-approve")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"ids": [salary_id]}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(batch_response.status(), StatusCode::OK);
+
+        let promotion_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/payroll/promotions")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "employee_id": employee_id,
+                    "type": "PROMOTION",
+                    "effective_date": "2026-08-01",
+                    "to_job_title_id": to_job_title_id,
+                    "new_base_salary": 60000,
+                    "reason": "Rust payroll smoke"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(promotion_response.status(), StatusCode::CREATED);
+        let promotion_body = to_bytes(promotion_response.into_body(), usize::MAX).await.unwrap();
+        let promotion_json: Value = serde_json::from_slice(&promotion_body).unwrap();
+        let promotion_id = Uuid::parse_str(promotion_json["data"]["id"].as_str().unwrap()).unwrap();
+        let promotions_list_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/payroll/promotions?employee_id={employee_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(promotions_list_response.status(), StatusCode::OK);
+
+        sqlx::query("delete from payroll_promotions where id = $1").bind(promotion_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from payroll_salary_records where id = $1").bind(salary_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(admin_employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(to_job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
 }
