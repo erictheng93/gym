@@ -1503,4 +1503,186 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn classes_crud_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-class-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id)
+            .bind(format!("Rust Class Tenant {suffix}"))
+            .bind(format!("rust-class-tenant-{suffix}"))
+            .bind(format!("class-tenant-{suffix}@example.com"))
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id)
+            .bind(format!("Rust Class Branch {suffix}"))
+            .bind(format!("CLB{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"classes\":[\"read\",\"write\"]}'::jsonb, $4)")
+            .bind(job_title_id)
+            .bind(format!("Rust Class Coach {suffix}"))
+            .bind(format!("CLA{}", &suffix[..8]))
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id)
+            .bind(&email)
+            .bind(password_hash)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $8)")
+            .bind(employee_id)
+            .bind(user_id)
+            .bind(branch_id)
+            .bind(job_title_id)
+            .bind(format!("CLE{}", &suffix[..8]))
+            .bind("Rust Class Coach")
+            .bind(&email)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let app = build_app(AppState {
+            db: pool.clone(),
+            jwt_secret: "test-secret".into(),
+            jwt_ttl_seconds: 3600,
+        });
+
+        let login_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"email": email, "password": password}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/classes")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "Rust Yoga",
+                            "description": "Stretch and strength",
+                            "durationMinutes": 60,
+                            "maxCapacity": 12,
+                            "instructorId": employee_id,
+                            "branchId": branch_id,
+                            "category": "YOGA",
+                            "difficultyLevel": "BEGINNER",
+                            "requiresCount": true,
+                            "countDeduction": 1
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+        let create_json: Value = serde_json::from_slice(&create_body).unwrap();
+        let class_id = create_json["data"]["id"].as_str().unwrap().to_string();
+        assert_eq!(create_json["data"]["branchId"], branch_id.to_string());
+
+        let list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/classes?activeOnly=true&search=Rust")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_response.status(), StatusCode::OK);
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/classes/{class_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"maxCapacity": 20}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let update_body = to_bytes(update_response.into_body(), usize::MAX).await.unwrap();
+        let update_json: Value = serde_json::from_slice(&update_body).unwrap();
+        assert_eq!(update_json["data"]["maxCapacity"], 20);
+
+        let delete_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/classes/{class_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete_response.status(), StatusCode::OK);
+        let delete_body = to_bytes(delete_response.into_body(), usize::MAX).await.unwrap();
+        let delete_json: Value = serde_json::from_slice(&delete_body).unwrap();
+        assert_eq!(delete_json["data"]["isActive"], false);
+
+        let class_uuid = Uuid::parse_str(&class_id).unwrap();
+        sqlx::query("delete from classes where id = $1").bind(class_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
 }

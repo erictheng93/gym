@@ -227,3 +227,25 @@ create index if not exists check_ins_member_id_idx on check_ins(member_id);
 create index if not exists check_ins_branch_id_idx on check_ins(branch_id);
 create index if not exists check_ins_contract_id_idx on check_ins(contract_id);
 create index if not exists check_ins_check_in_time_idx on check_ins(check_in_time);
+
+create table if not exists classes (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'ACTIVE',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    name varchar not null,
+    description text,
+    duration_minutes integer not null,
+    max_capacity integer not null,
+    instructor_id uuid references employees(id),
+    branch_id uuid not null references branches(id),
+    category varchar,
+    difficulty_level varchar,
+    image_url varchar,
+    is_active boolean default true,
+    requires_count boolean default false,
+    count_deduction integer default 1
+);
+
+create index if not exists classes_branch_id_idx on classes(branch_id);
+create index if not exists classes_instructor_id_idx on classes(instructor_id);

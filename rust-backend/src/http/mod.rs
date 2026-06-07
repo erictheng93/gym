@@ -11,6 +11,7 @@ use crate::{error, error::AppError, state::AppState};
 
 mod auth;
 mod check_ins;
+mod classes;
 mod contracts;
 mod members;
 mod membership_plans;
@@ -91,6 +92,13 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/check-ins", get(check_ins::list).post(check_ins::create))
         .route("/api/check-ins/{id}", get(check_ins::get))
+        .route("/api/classes", get(classes::list).post(classes::create))
+        .route(
+            "/api/classes/{id}",
+            get(classes::get)
+                .patch(classes::update)
+                .delete(classes::delete),
+        )
         .fallback(error::not_found)
         .with_state(state)
 }
