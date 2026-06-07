@@ -2149,6 +2149,50 @@ mod tests {
             .bind(session_uuid).fetch_one(&pool).await.unwrap();
         assert_eq!(current_count, 1);
 
+        let update_booking_response = app.clone().oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/bookings/{booking_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "booking_status": "WAITLIST",
+                    "waitlist_position": 1
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(update_booking_response.status(), StatusCode::OK);
+        let update_booking_body = to_bytes(update_booking_response.into_body(), usize::MAX).await.unwrap();
+        let update_booking_json: Value = serde_json::from_slice(&update_booking_body).unwrap();
+        assert_eq!(update_booking_json["data"]["bookingStatus"], "WAITLIST");
+        assert_eq!(update_booking_json["data"]["waitlistPosition"], 1);
+
+        let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
+            .bind(session_uuid).fetch_one(&pool).await.unwrap();
+        assert_eq!(current_count, 0);
+
+        let confirm_booking_response = app.clone().oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(format!("/api/bookings/{booking_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "bookingStatus": "CONFIRMED",
+                    "waitlistPosition": null
+                }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(confirm_booking_response.status(), StatusCode::OK);
+        let confirm_booking_body = to_bytes(confirm_booking_response.into_body(), usize::MAX).await.unwrap();
+        let confirm_booking_json: Value = serde_json::from_slice(&confirm_booking_body).unwrap();
+        assert_eq!(confirm_booking_json["data"]["bookingStatus"], "CONFIRMED");
+        assert!(confirm_booking_json["data"]["waitlistPosition"].is_null());
+
+        let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
+            .bind(session_uuid).fetch_one(&pool).await.unwrap();
+        assert_eq!(current_count, 1);
+
         let cancel_response = app.clone().oneshot(
             Request::builder()
                 .method("DELETE")

@@ -6,7 +6,7 @@ use axum::{
 };
 use chrono::{Datelike, Duration, NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -241,11 +241,30 @@ pub struct BookingFilters {
 #[derive(Debug, Deserialize)]
 pub struct CreateBookingRequest {
     #[serde(rename = "sessionId")]
+    #[serde(alias = "session_id")]
     session_id: Uuid,
     #[serde(rename = "memberId")]
+    #[serde(alias = "member_id")]
     member_id: Uuid,
     #[serde(rename = "contractId")]
+    #[serde(alias = "contract_id")]
     contract_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateBookingRequest {
+    #[serde(rename = "sessionId")]
+    #[serde(alias = "session_id")]
+    session_id: Option<Uuid>,
+    #[serde(rename = "memberId")]
+    #[serde(alias = "member_id")]
+    member_id: Option<Uuid>,
+    #[serde(rename = "contractId")]
+    #[serde(alias = "contract_id")]
+    contract_id: Option<Option<Uuid>>,
+    #[serde(rename = "bookingStatus")]
+    #[serde(alias = "booking_status")]
+    booking_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -733,6 +752,81 @@ pub async fn create_booking(
     Ok((StatusCode::CREATED, Json(ApiResponse { success: true, data: booking })))
 }
 
+pub async fn update_booking(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(raw_payload): Json<Value>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let waitlist_position_present =
+        raw_payload.get("waitlistPosition").is_some() || raw_payload.get("waitlist_position").is_some();
+    let waitlist_position_value =
+        raw_payload.get("waitlistPosition").or_else(|| raw_payload.get("waitlist_position"));
+    let waitlist_position = parse_optional_i32("waitlistPosition", waitlist_position_value)?;
+    let payload: UpdateBookingRequest = serde_json::from_value(raw_payload)
+        .map_err(|error| AppError::Validation(error.to_string()))?;
+    let existing = fetch_booking(&state.db, tenant_id, id).await?;
+    let session_id = payload.session_id.unwrap_or(existing.session_id);
+    let member_id = payload.member_id.unwrap_or(existing.member_id);
+    let contract_id = payload.contract_id.unwrap_or(existing.contract_id);
+    let booking_status = payload.booking_status.map(normalize_booking_status).transpose()?;
+    let new_status = booking_status.as_deref().or(existing.booking_status.as_deref()).unwrap_or("CONFIRMED").to_string();
+    ensure_member_scope(&state.db, tenant_id, member_id).await?;
+    let session = fetch_session_context(&state.db, tenant_id, session_id).await?;
+    if let Some(contract_id) = contract_id {
+        ensure_contract_matches(&state.db, tenant_id, contract_id, member_id, session.branch_id).await?;
+    }
+    if existing.session_id != session_id
+        && new_status == "CONFIRMED"
+        && session.current_count.unwrap_or(0) >= session.max_capacity
+    {
+        return Err(AppError::Validation("session is full".into()));
+    }
+
+    let old_confirmed = existing.booking_status.as_deref() == Some("CONFIRMED");
+    let new_confirmed = new_status == "CONFIRMED";
+    let mut tx = state.db.begin().await?;
+    let booking = sqlx::query_as::<_, Booking>(
+        r#"
+        update bookings set
+            session_id = $2,
+            member_id = $3,
+            contract_id = $4,
+            booking_status = coalesce($5, booking_status),
+            waitlist_position = case when $6::bool then $7 else waitlist_position end,
+            cancelled_at = case when $8 = 'CANCELLED' and coalesce(booking_status, '') <> 'CANCELLED' then now() else cancelled_at end,
+            attended_at = case when $8 = 'ATTENDED' and attended_at is null then now() else attended_at end,
+            updated_at = now()
+        where id = $1
+        returning id, status, session_id, member_id, contract_id, booking_status,
+            waitlist_position, count_deducted
+        "#,
+    )
+    .bind(id)
+    .bind(session_id)
+    .bind(member_id)
+    .bind(contract_id)
+    .bind(booking_status)
+    .bind(waitlist_position_present)
+    .bind(waitlist_position)
+    .bind(&new_status)
+    .fetch_one(&mut *tx)
+    .await?;
+    match (old_confirmed, new_confirmed, existing.session_id == session_id) {
+        (true, false, _) => increment_session_count(&mut tx, existing.session_id, -1).await?,
+        (false, true, _) => increment_session_count(&mut tx, session_id, 1).await?,
+        (true, true, false) => {
+            increment_session_count(&mut tx, existing.session_id, -1).await?;
+            increment_session_count(&mut tx, session_id, 1).await?;
+        }
+        _ => {}
+    }
+    tx.commit().await?;
+
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: booking })))
+}
+
 pub async fn cancel_booking(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -1106,6 +1200,26 @@ fn validate_positive(field: &str, value: i32) -> Result<(), AppError> {
         return Err(AppError::Validation(format!("{field} must be greater than zero")));
     }
     Ok(())
+}
+
+fn normalize_booking_status(status: String) -> Result<String, AppError> {
+    let status = status.trim().to_uppercase();
+    match status.as_str() {
+        "CONFIRMED" | "WAITLIST" | "CANCELLED" | "ATTENDED" | "NO_SHOW" => Ok(status),
+        _ => Err(AppError::Validation("bookingStatus is invalid".into())),
+    }
+}
+
+fn parse_optional_i32(field: &str, value: Option<&Value>) -> Result<Option<i32>, AppError> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => number
+            .as_i64()
+            .and_then(|value| i32::try_from(value).ok())
+            .map(Some)
+            .ok_or_else(|| AppError::Validation(format!("{field} must be an integer"))),
+        _ => Err(AppError::Validation(format!("{field} must be an integer"))),
+    }
 }
 
 async fn ensure_schedule_scope(pool: &PgPool, tenant_id: Uuid, schedule_id: Uuid) -> Result<(), AppError> {
