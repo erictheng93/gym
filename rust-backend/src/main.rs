@@ -478,9 +478,9 @@ mod tests {
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
-            )
-            .await
-            .unwrap();
+        )
+        .await
+        .unwrap();
         assert_eq!(list_response.status(), StatusCode::OK);
         let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
         let list_json: Value = serde_json::from_slice(&list_body).unwrap();
@@ -971,6 +971,25 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+        let list_json: Value = serde_json::from_slice(&list_body).unwrap();
+        assert_eq!(list_json["data"][0]["plan"]["planType"], "COUNT_BASED");
+
+        let status_filter_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/contracts?id={contract_id}&contract_status=ACTIVE&limit=1"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(status_filter_response.status(), StatusCode::OK);
+        let status_filter_body = to_bytes(status_filter_response.into_body(), usize::MAX).await.unwrap();
+        let status_filter_json: Value = serde_json::from_slice(&status_filter_body).unwrap();
+        assert_eq!(status_filter_json["pagination"]["total"], 1);
 
         let update_response = app
             .clone()
@@ -1221,6 +1240,24 @@ mod tests {
         let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
         let create_json: Value = serde_json::from_slice(&create_body).unwrap();
         let payment_id = create_json["data"]["id"].as_str().unwrap().to_string();
+
+        let list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/payments?id={payment_id}&payment_type=INCOME&startDate=2026-01-01T00:00:00Z&endDate=2027-01-01T00:00:00Z"
+                    ))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+        let list_json: Value = serde_json::from_slice(&list_body).unwrap();
+        assert_eq!(list_json["pagination"]["total"], 1);
 
         let contract_status: (f64, String) = sqlx::query_as(
             "select paid_amount::float8, payment_status from contracts where id = $1",

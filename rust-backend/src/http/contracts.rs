@@ -6,6 +6,7 @@ use axum::{
 };
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -28,6 +29,7 @@ pub struct ContractFilters {
     #[serde(rename = "branch_id")]
     branch_id_snake: Option<Uuid>,
     status: Option<String>,
+    contract_status: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -128,6 +130,7 @@ pub struct Contract {
     created_by: Option<Uuid>,
     #[serde(rename = "tenantId")]
     tenant_id: Option<Uuid>,
+    plan: Option<Value>,
 }
 
 #[derive(Debug, FromRow)]
@@ -152,27 +155,37 @@ pub async fn list(
     let tenant_id = require_tenant(&auth)?;
     let member_id = filters.member_id.or(filters.member_id_snake);
     let branch_id = filters.branch_id.or(filters.branch_id_snake);
+    let status = filters.status.or(filters.contract_status);
     let contracts = sqlx::query_as::<_, Contract>(
         r#"
         select
-            id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
-            start_date, original_end_date, end_date, remaining_counts,
-            total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
-            payment_status, terms_accepted, notes, created_by, tenant_id
+            contracts.id, contracts.contract_no, contracts.member_id, contracts.plan_id,
+            contracts.branch_id, contracts.sales_person_id, contracts.status, contracts.sign_date,
+            contracts.start_date, contracts.original_end_date, contracts.end_date,
+            contracts.remaining_counts, contracts.total_amount::float8 as total_amount,
+            contracts.paid_amount::float8 as paid_amount, contracts.payment_status,
+            contracts.terms_accepted, contracts.notes, contracts.created_by, contracts.tenant_id,
+            json_build_object(
+                'id', membership_plans.id,
+                'name', membership_plans.name,
+                'planType', membership_plans.type,
+                'plan_type', membership_plans.type
+            ) as plan
         from contracts
-        where tenant_id = $1
-          and ($2::uuid is null or id = $2)
-          and ($3::uuid is null or member_id = $3)
-          and ($4::uuid is null or branch_id = $4)
-          and ($5::text is null or status = $5)
-        order by created_at desc
+        join membership_plans on membership_plans.id = contracts.plan_id
+        where contracts.tenant_id = $1
+          and ($2::uuid is null or contracts.id = $2)
+          and ($3::uuid is null or contracts.member_id = $3)
+          and ($4::uuid is null or contracts.branch_id = $4)
+          and ($5::text is null or contracts.status = $5)
+        order by contracts.created_at desc
         "#,
     )
     .bind(tenant_id)
     .bind(filters.id)
     .bind(member_id)
     .bind(branch_id)
-    .bind(filters.status)
+    .bind(status)
     .fetch_all(&state.db)
     .await?;
 
@@ -237,7 +250,8 @@ pub async fn create(
             id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
-            payment_status, terms_accepted, notes, created_by, tenant_id
+            payment_status, terms_accepted, notes, created_by, tenant_id,
+            null::jsonb as plan
         "#,
     )
     .bind(payload.contract_no.trim())
@@ -293,7 +307,8 @@ pub async fn update(
             id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
-            payment_status, terms_accepted, notes, created_by, tenant_id
+            payment_status, terms_accepted, notes, created_by, tenant_id,
+            null::jsonb as plan
         "#,
     )
     .bind(id)
@@ -331,7 +346,8 @@ pub async fn delete(
             id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
             start_date, original_end_date, end_date, remaining_counts,
             total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
-            payment_status, terms_accepted, notes, created_by, tenant_id
+            payment_status, terms_accepted, notes, created_by, tenant_id,
+            null::jsonb as plan
         "#,
     )
     .bind(id)
@@ -347,12 +363,21 @@ async fn fetch_contract(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<C
     sqlx::query_as::<_, Contract>(
         r#"
         select
-            id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
-            start_date, original_end_date, end_date, remaining_counts,
-            total_amount::float8 as total_amount, paid_amount::float8 as paid_amount,
-            payment_status, terms_accepted, notes, created_by, tenant_id
+            contracts.id, contracts.contract_no, contracts.member_id, contracts.plan_id,
+            contracts.branch_id, contracts.sales_person_id, contracts.status, contracts.sign_date,
+            contracts.start_date, contracts.original_end_date, contracts.end_date,
+            contracts.remaining_counts, contracts.total_amount::float8 as total_amount,
+            contracts.paid_amount::float8 as paid_amount, contracts.payment_status,
+            contracts.terms_accepted, contracts.notes, contracts.created_by, contracts.tenant_id,
+            json_build_object(
+                'id', membership_plans.id,
+                'name', membership_plans.name,
+                'planType', membership_plans.type,
+                'plan_type', membership_plans.type
+            ) as plan
         from contracts
-        where id = $1 and tenant_id = $2
+        join membership_plans on membership_plans.id = contracts.plan_id
+        where contracts.id = $1 and contracts.tenant_id = $2
         "#,
     )
     .bind(id)

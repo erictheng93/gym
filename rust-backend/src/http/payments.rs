@@ -17,6 +17,7 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub struct PaymentFilters {
+    id: Option<Uuid>,
     #[serde(rename = "contractId")]
     contract_id: Option<Uuid>,
     #[serde(rename = "contract_id")]
@@ -35,6 +36,13 @@ pub struct PaymentFilters {
     payment_method_snake: Option<String>,
     #[serde(rename = "type")]
     payment_type: Option<String>,
+    payment_type_snake: Option<String>,
+    start_date: Option<DateTime<Utc>>,
+    end_date: Option<DateTime<Utc>>,
+    #[serde(rename = "startDate")]
+    start_date_camel: Option<DateTime<Utc>>,
+    #[serde(rename = "endDate")]
+    end_date_camel: Option<DateTime<Utc>>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -120,6 +128,9 @@ pub async fn list(
     let member_id = filters.member_id.or(filters.member_id_snake);
     let branch_id = filters.branch_id.or(filters.branch_id_snake);
     let payment_method = filters.payment_method.or(filters.payment_method_snake);
+    let payment_type = filters.payment_type.or(filters.payment_type_snake);
+    let start_date = filters.start_date.or(filters.start_date_camel);
+    let end_date = filters.end_date.or(filters.end_date_camel);
     let payments = sqlx::query_as::<_, Payment>(
         r#"
         select
@@ -128,20 +139,26 @@ pub async fn list(
             created_by, tenant_id
         from payments
         where tenant_id = $1
-          and ($2::uuid is null or contract_id = $2)
-          and ($3::uuid is null or member_id = $3)
-          and ($4::uuid is null or branch_id = $4)
-          and ($5::text is null or payment_method = $5)
-          and ($6::text is null or type = $6)
+          and ($2::uuid is null or id = $2)
+          and ($3::uuid is null or contract_id = $3)
+          and ($4::uuid is null or member_id = $4)
+          and ($5::uuid is null or branch_id = $5)
+          and ($6::text is null or payment_method = $6)
+          and ($7::text is null or type = $7)
+          and ($8::timestamptz is null or payment_date >= $8)
+          and ($9::timestamptz is null or payment_date < $9)
         order by payment_date desc, created_at desc
         "#,
     )
     .bind(tenant_id)
+    .bind(filters.id)
     .bind(contract_id)
     .bind(member_id)
     .bind(branch_id)
     .bind(payment_method)
-    .bind(filters.payment_type)
+    .bind(payment_type)
+    .bind(start_date)
+    .bind(end_date)
     .fetch_all(&state.db)
     .await?;
 
