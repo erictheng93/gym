@@ -427,3 +427,39 @@ create index if not exists leave_requests_employee_id_idx on leave_requests(empl
 create index if not exists leave_requests_leave_status_idx on leave_requests(leave_status);
 create index if not exists leave_balances_employee_id_idx on leave_balances(employee_id);
 create index if not exists leave_approval_logs_leave_request_id_idx on leave_approval_logs(leave_request_id);
+
+create table if not exists shift_schedules (
+    id uuid primary key default gen_random_uuid(),
+    status varchar default 'published',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    branch_id uuid not null references branches(id),
+    name varchar not null,
+    start_time time not null,
+    end_time time not null,
+    break_start time,
+    break_end time,
+    grace_period_minutes integer default 15,
+    early_leave_minutes integer default 15,
+    overtime_start_after time,
+    is_default boolean default false,
+    applicable_days jsonb default '["MON","TUE","WED","THU","FRI"]'::jsonb,
+    tenant_id uuid references tenants(id)
+);
+
+create table if not exists employee_shifts (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    employee_id uuid not null references employees(id),
+    shift_schedule_id uuid not null references shift_schedules(id),
+    effective_date date not null,
+    end_date date,
+    tenant_id uuid references tenants(id)
+);
+
+create index if not exists shift_schedules_tenant_id_idx on shift_schedules(tenant_id);
+create index if not exists shift_schedules_branch_id_idx on shift_schedules(branch_id);
+create index if not exists employee_shifts_tenant_id_idx on employee_shifts(tenant_id);
+create index if not exists employee_shifts_employee_id_idx on employee_shifts(employee_id);
+create index if not exists employee_shifts_shift_schedule_id_idx on employee_shifts(shift_schedule_id);

@@ -22,6 +22,7 @@ mod members;
 mod membership_plans;
 mod member_app;
 mod payments;
+mod shifts;
 
 #[derive(Debug, Serialize)]
 struct ApiResponse<T> {
@@ -153,6 +154,16 @@ pub fn router(state: AppState) -> Router {
         .route("/api/leave_balances", get(leaves::list_balances).post(leaves::create_balance))
         .route("/api/leave_balances/{id}", patch(leaves::update_balance))
         .route("/api/leave_approval_logs", get(leaves::list_logs).post(leaves::create_log))
+        .route("/api/shift_schedules", get(shifts::list_schedules).post(shifts::create_schedule))
+        .route(
+            "/api/shift_schedules/{id}",
+            get(shifts::get_schedule).patch(shifts::update_schedule),
+        )
+        .route("/api/employee_shifts", get(shifts::list_employee_shifts).post(shifts::create_employee_shift))
+        .route(
+            "/api/employee_shifts/{id}",
+            get(shifts::get_employee_shift).patch(shifts::update_employee_shift),
+        )
         .route("/api/member/auth/login", post(member_app::login))
         .route("/api/member/me", get(member_app::me))
         .route("/api/member/profile", get(member_app::profile))

@@ -2480,4 +2480,137 @@ mod tests {
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
         sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn hr_shift_schedules_round_trip_with_seed_user() {
+        if std::env::var("RUN_DB_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required when RUN_DB_TESTS=1");
+        let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        let branch_id = Uuid::new_v4();
+        let job_title_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let admin_employee_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+        let suffix = user_id.simple().to_string();
+        let email = format!("rust-shift-{suffix}@example.com");
+        let password = "Passw0rd!";
+        let password_hash = hash(password, 4).unwrap();
+
+        sqlx::query("insert into tenants (id, name, slug, email, status) values ($1, $2, $3, $4, 'ACTIVE')")
+            .bind(tenant_id).bind(format!("Rust Shift Tenant {suffix}"))
+            .bind(format!("rust-shift-tenant-{suffix}"))
+            .bind(format!("shift-tenant-{suffix}@example.com"))
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into branches (id, name, code, type, tenant_id, status) values ($1, $2, $3, 'MAIN', $4, 'ACTIVE')")
+            .bind(branch_id).bind(format!("Rust Shift Branch {suffix}"))
+            .bind(format!("RSB{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into job_titles (id, name, code, permissions_config, tenant_id) values ($1, $2, $3, '{\"schedules\":[\"read\",\"write\"]}'::jsonb, $4)")
+            .bind(job_title_id).bind(format!("Rust Shift Role {suffix}"))
+            .bind(format!("RSJ{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into users (id, email, password_hash, role, tenant_id, is_active, email_verified) values ($1, $2, $3, 'ADMIN', $4, true, true)")
+            .bind(user_id).bind(&email).bind(password_hash).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, user_id, branch_id, job_title_id, employee_code, full_name, email, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, $5, 'Rust Shift Admin', $6, 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $7)")
+            .bind(admin_employee_id).bind(user_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RSA{}", &suffix[..8])).bind(&email).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into employees (id, branch_id, job_title_id, employee_code, full_name, status, employment_type, hire_date, tenant_id) values ($1, $2, $3, $4, 'Rust Shift Employee', 'ACTIVE', 'FULL_TIME', '2026-01-01'::date, $5)")
+            .bind(employee_id).bind(branch_id).bind(job_title_id)
+            .bind(format!("RSE{}", &suffix[..8])).bind(tenant_id)
+            .execute(&pool).await.unwrap();
+
+        let app = build_app(AppState { db: pool.clone(), jwt_secret: "test-secret".into(), jwt_ttl_seconds: 3600 });
+        let login_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"email": email, "password": password}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let login_body = to_bytes(login_response.into_body(), usize::MAX).await.unwrap();
+        let login_json: Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_json["data"]["token"].as_str().unwrap();
+
+        let schedule_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/shift_schedules")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "branch_id": branch_id,
+                    "name": "Rust Day Shift",
+                    "start_time": "09:00:00",
+                    "end_time": "18:00:00",
+                    "break_start": "12:00:00",
+                    "break_end": "13:00:00",
+                    "grace_period_minutes": 15,
+                    "early_leave_minutes": 15,
+                    "overtime_start_after": "18:30:00",
+                    "applicable_days": ["MON", "TUE", "WED", "THU", "FRI"]
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(schedule_response.status(), StatusCode::CREATED);
+        let schedule_body = to_bytes(schedule_response.into_body(), usize::MAX).await.unwrap();
+        let schedule_json: Value = serde_json::from_slice(&schedule_body).unwrap();
+        let schedule_id = Uuid::parse_str(schedule_json["data"]["id"].as_str().unwrap()).unwrap();
+
+        let employee_shift_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/employee_shifts")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "employee_id": employee_id,
+                    "shift_schedule_id": schedule_id,
+                    "effective_date": "2026-05-01"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(employee_shift_response.status(), StatusCode::CREATED);
+        let employee_shift_body = to_bytes(employee_shift_response.into_body(), usize::MAX).await.unwrap();
+        let employee_shift_json: Value = serde_json::from_slice(&employee_shift_body).unwrap();
+        let employee_shift_id = Uuid::parse_str(employee_shift_json["data"]["id"].as_str().unwrap()).unwrap();
+
+        for uri in [
+            format!("/api/shift_schedules/{schedule_id}"),
+            format!("/api/shift_schedules?branch_id={branch_id}"),
+            format!("/api/employee_shifts/{employee_shift_id}"),
+            format!("/api/employee_shifts?shift_schedule_id={schedule_id}&effective_date_lte=2026-05-02"),
+        ] {
+            let response = app.clone().oneshot(
+                Request::builder().uri(uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty()).unwrap()
+            ).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let shift_update_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri(format!("/api/employee_shifts/{employee_shift_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"end_date": "2026-05-31"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(shift_update_response.status(), StatusCode::OK);
+        let schedule_update_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri(format!("/api/shift_schedules/{schedule_id}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"status": "archived"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(schedule_update_response.status(), StatusCode::OK);
+
+        sqlx::query("delete from employee_shifts where id = $1").bind(employee_shift_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from shift_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from employees where id = $1").bind(admin_employee_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from job_titles where id = $1").bind(job_title_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from tenants where id = $1").bind(tenant_id).execute(&pool).await.unwrap();
+    }
 }
