@@ -1934,6 +1934,26 @@ mod tests {
                 && row["processedBy"]["id"] == employee_id.to_string()
         }));
 
+        let stats_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/check-ins/stats/today?branchId={branch_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stats_response.status(), StatusCode::OK);
+        let stats_body = to_bytes(stats_response.into_body(), usize::MAX).await.unwrap();
+        let stats_json: Value = serde_json::from_slice(&stats_body).unwrap();
+        assert_eq!(stats_json["data"]["total"], 1);
+        assert_eq!(stats_json["data"]["uniqueMembers"], 1);
+        assert!(stats_json["data"]["hourlyBreakdown"].as_array().unwrap().iter().any(|row| {
+            row["count"] == 1
+        }));
+
         let get_response = app
             .clone()
             .oneshot(

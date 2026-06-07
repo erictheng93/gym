@@ -152,6 +152,7 @@ pub fn router(state: AppState) -> Router {
                 .delete(payments::delete),
         )
         .route("/api/check-ins", get(check_ins::list).post(check_ins::create))
+        .route("/api/check-ins/stats/today", get(check_ins::today_stats))
         .route("/api/check-ins/{id}", get(check_ins::get))
         .route("/api/admin/checkin/qr-verify", post(check_ins::qr_verify))
         .route("/api/classes", get(classes::list).post(classes::create))

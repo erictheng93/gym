@@ -6,7 +6,7 @@ use axum::{
 };
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -286,6 +286,61 @@ pub async fn get(
     let check_in = fetch_check_in(&state.db, tenant_id, id).await?;
 
     Ok((StatusCode::OK, Json(ApiResponse { success: true, data: check_in })))
+}
+
+pub async fn today_stats(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(filters): Query<CheckInFilters>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let branch_id = filters.branch_id.or(filters.branch_id_snake);
+    let (total, unique_members) = sqlx::query_as::<_, (i64, i64)>(
+        r#"
+        select count(*)::bigint, count(distinct check_ins.member_id)::bigint
+        from check_ins
+        join branches on branches.id = check_ins.branch_id
+        where branches.tenant_id = $1
+          and check_ins.check_in_time >= current_date
+          and check_ins.check_in_time < current_date + interval '1 day'
+          and ($2::uuid is null or check_ins.branch_id = $2)
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let hourly = sqlx::query_as::<_, (f64, i64)>(
+        r#"
+        select extract(hour from check_ins.check_in_time)::float8 as hour, count(*)::bigint
+        from check_ins
+        join branches on branches.id = check_ins.branch_id
+        where branches.tenant_id = $1
+          and check_ins.check_in_time >= current_date
+          and check_ins.check_in_time < current_date + interval '1 day'
+          and ($2::uuid is null or check_ins.branch_id = $2)
+        group by extract(hour from check_ins.check_in_time)
+        order by extract(hour from check_ins.check_in_time)
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "total": total,
+            "uniqueMembers": unique_members,
+            "unique_members": unique_members,
+            "hourlyBreakdown": hourly.into_iter().map(|(hour, count)| json!({
+                "hour": hour as i64,
+                "count": count
+            })).collect::<Vec<_>>()
+        }
+    }))))
 }
 
 pub async fn create(
