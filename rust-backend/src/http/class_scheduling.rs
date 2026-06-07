@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{Datelike, Duration, NaiveDate, NaiveTime};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
@@ -26,7 +26,10 @@ pub struct ScheduleFilters {
     branch_id: Option<Uuid>,
     #[serde(rename = "activeOnly")]
     #[serde(alias = "active_only")]
+    #[serde(alias = "is_active")]
     active_only: Option<bool>,
+    day_of_week: Option<i32>,
+    is_recurring: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,26 +107,16 @@ pub struct UpdateScheduleRequest {
 pub struct ClassSchedule {
     id: Uuid,
     status: Option<String>,
-    #[serde(rename = "classId")]
     class_id: Uuid,
-    #[serde(rename = "branchId")]
     branch_id: Uuid,
-    #[serde(rename = "instructorId")]
     instructor_id: Option<Uuid>,
-    #[serde(rename = "dayOfWeek")]
     day_of_week: i32,
-    #[serde(rename = "startTime")]
     start_time: NaiveTime,
-    #[serde(rename = "endTime")]
     end_time: NaiveTime,
     room: Option<String>,
-    #[serde(rename = "maxCapacity")]
     max_capacity: Option<i32>,
-    #[serde(rename = "isRecurring")]
     is_recurring: Option<bool>,
-    #[serde(rename = "validFrom")]
     valid_from: Option<NaiveDate>,
-    #[serde(rename = "validUntil")]
     valid_until: Option<NaiveDate>,
 }
 
@@ -135,7 +128,12 @@ pub struct SessionFilters {
     #[serde(rename = "branchId")]
     #[serde(alias = "branch_id")]
     branch_id: Option<Uuid>,
+    #[serde(alias = "session_date")]
     date: Option<NaiveDate>,
+    start_date: Option<NaiveDate>,
+    end_date: Option<NaiveDate>,
+    session_status: Option<String>,
+    instructor_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -204,38 +202,35 @@ pub struct UpdateSessionRequest {
 pub struct ClassSession {
     id: Uuid,
     status: Option<String>,
-    #[serde(rename = "scheduleId")]
     schedule_id: Option<Uuid>,
-    #[serde(rename = "classId")]
     class_id: Uuid,
-    #[serde(rename = "branchId")]
     branch_id: Uuid,
-    #[serde(rename = "instructorId")]
     instructor_id: Option<Uuid>,
-    #[serde(rename = "sessionDate")]
     session_date: NaiveDate,
-    #[serde(rename = "startTime")]
     start_time: NaiveTime,
-    #[serde(rename = "endTime")]
     end_time: NaiveTime,
     room: Option<String>,
-    #[serde(rename = "maxCapacity")]
     max_capacity: i32,
-    #[serde(rename = "currentCount")]
     current_count: Option<i32>,
-    #[serde(rename = "waitlistCount")]
     waitlist_count: Option<i32>,
-    #[serde(rename = "sessionStatus")]
     session_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct BookingFilters {
     #[serde(rename = "sessionId")]
+    #[serde(alias = "session_id")]
     session_id: Option<Uuid>,
     #[serde(rename = "memberId")]
+    #[serde(alias = "member_id")]
     member_id: Option<Uuid>,
+    #[serde(alias = "booking_status")]
     status: Option<String>,
+    branch_id: Option<Uuid>,
+    start_date: Option<NaiveDate>,
+    end_date: Option<NaiveDate>,
+    upcoming: Option<bool>,
+    exclude_cancelled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -296,18 +291,15 @@ pub struct AdminAttendRequest {
 pub struct Booking {
     id: Uuid,
     status: Option<String>,
-    #[serde(rename = "sessionId")]
     session_id: Uuid,
-    #[serde(rename = "memberId")]
     member_id: Uuid,
-    #[serde(rename = "contractId")]
     contract_id: Option<Uuid>,
-    #[serde(rename = "bookingStatus")]
     booking_status: Option<String>,
-    #[serde(rename = "waitlistPosition")]
     waitlist_position: Option<i32>,
-    #[serde(rename = "countDeducted")]
     count_deducted: Option<bool>,
+    booked_at: Option<DateTime<Utc>>,
+    member: Option<Value>,
+    session: Option<Value>,
 }
 
 #[derive(Debug, FromRow)]
@@ -362,6 +354,8 @@ pub async fn list_schedules(
           and ($2::uuid is null or class_schedules.class_id = $2)
           and ($3::uuid is null or class_schedules.branch_id = $3)
           and ($4::bool is not true or upper(coalesce(class_schedules.status, 'ACTIVE')) = 'ACTIVE')
+          and ($5::int is null or class_schedules.day_of_week = $5)
+          and ($6::bool is null or coalesce(class_schedules.is_recurring, true) = $6)
         order by day_of_week, start_time
         "#,
     )
@@ -369,6 +363,8 @@ pub async fn list_schedules(
     .bind(filters.class_id)
     .bind(filters.branch_id)
     .bind(filters.active_only.unwrap_or(false))
+    .bind(filters.day_of_week)
+    .bind(filters.is_recurring)
     .fetch_all(&state.db)
     .await?;
 
@@ -528,6 +524,10 @@ pub async fn list_sessions(
           and ($2::uuid is null or class_sessions.class_id = $2)
           and ($3::uuid is null or class_sessions.branch_id = $3)
           and ($4::date is null or class_sessions.session_date = $4)
+          and ($5::date is null or class_sessions.session_date >= $5)
+          and ($6::date is null or class_sessions.session_date <= $6)
+          and ($7::text is null or class_sessions.session_status = $7)
+          and ($8::uuid is null or class_sessions.instructor_id = $8)
         order by session_date, start_time
         "#,
     )
@@ -535,6 +535,10 @@ pub async fn list_sessions(
     .bind(filters.class_id)
     .bind(filters.branch_id)
     .bind(filters.date)
+    .bind(filters.start_date)
+    .bind(filters.end_date)
+    .bind(filters.session_status)
+    .bind(filters.instructor_id)
     .fetch_all(&state.db)
     .await?;
 
@@ -683,24 +687,56 @@ pub async fn list_bookings(
     Query(filters): Query<BookingFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
+    let statuses = filters.status.as_deref().map(parse_status_filter);
     let bookings = sqlx::query_as::<_, Booking>(
         r#"
         select bookings.id, bookings.status, bookings.session_id, bookings.member_id,
             bookings.contract_id, bookings.booking_status, bookings.waitlist_position,
-            bookings.count_deducted
+            bookings.count_deducted, bookings.booked_at,
+            json_build_object(
+                'id', members.id,
+                'full_name', members.full_name,
+                'member_code', members.member_code
+            ) as member,
+            json_build_object(
+                'id', class_sessions.id,
+                'session_date', class_sessions.session_date,
+                'start_time', class_sessions.start_time,
+                'end_time', class_sessions.end_time,
+                'session_status', class_sessions.session_status,
+                'branch_id', class_sessions.branch_id,
+                'class', json_build_object(
+                    'id', classes.id,
+                    'name', classes.name,
+                    'duration_minutes', classes.duration_minutes,
+                    'max_capacity', classes.max_capacity
+                )
+            ) as session
         from bookings
         join members on members.id = bookings.member_id
+        join class_sessions on class_sessions.id = bookings.session_id
+        join classes on classes.id = class_sessions.class_id
         where members.tenant_id = $1
           and ($2::uuid is null or bookings.session_id = $2)
           and ($3::uuid is null or bookings.member_id = $3)
-          and ($4::text is null or bookings.booking_status = $4)
+          and ($4::text[] is null or bookings.booking_status = any($4))
+          and ($5::uuid is null or class_sessions.branch_id = $5)
+          and ($6::date is null or class_sessions.session_date >= $6)
+          and ($7::date is null or class_sessions.session_date <= $7)
+          and ($8::bool is not true or class_sessions.session_date >= current_date)
+          and ($9::bool is not true or bookings.booking_status <> 'CANCELLED')
         order by bookings.created_at desc
         "#,
     )
     .bind(tenant_id)
     .bind(filters.session_id)
     .bind(filters.member_id)
-    .bind(filters.status)
+    .bind(statuses)
+    .bind(filters.branch_id)
+    .bind(filters.start_date)
+    .bind(filters.end_date)
+    .bind(filters.upcoming.unwrap_or(false))
+    .bind(filters.exclude_cancelled.unwrap_or(false))
     .fetch_all(&state.db)
     .await?;
 
@@ -738,7 +774,7 @@ pub async fn create_booking(
         insert into bookings (id, session_id, member_id, contract_id, booking_status)
         values (gen_random_uuid(), $1, $2, $3, 'CONFIRMED')
         returning id, status, session_id, member_id, contract_id, booking_status,
-            waitlist_position, count_deducted
+            waitlist_position, count_deducted, booked_at, null::jsonb as member, null::jsonb as session
         "#,
     )
     .bind(payload.session_id)
@@ -800,7 +836,7 @@ pub async fn update_booking(
             updated_at = now()
         where id = $1
         returning id, status, session_id, member_id, contract_id, booking_status,
-            waitlist_position, count_deducted
+            waitlist_position, count_deducted, booked_at, null::jsonb as member, null::jsonb as session
         "#,
     )
     .bind(id)
@@ -842,7 +878,7 @@ pub async fn cancel_booking(
         set booking_status = 'CANCELLED', cancelled_at = now(), updated_at = now()
         where id = $1
         returning id, status, session_id, member_id, contract_id, booking_status,
-            waitlist_position, count_deducted
+            waitlist_position, count_deducted, booked_at, null::jsonb as member, null::jsonb as session
         "#,
     )
     .bind(id)
@@ -953,7 +989,7 @@ pub async fn admin_book(
         insert into bookings (id, session_id, member_id, contract_id, booking_status, waitlist_position)
         values (gen_random_uuid(), $1, $2, $3, $4, $5)
         returning id, status, session_id, member_id, contract_id, booking_status,
-            waitlist_position, count_deducted
+            waitlist_position, count_deducted, booked_at, null::jsonb as member, null::jsonb as session
         "#,
     )
     .bind(payload.session_id)
@@ -1054,9 +1090,30 @@ async fn fetch_booking(pool: &PgPool, tenant_id: Uuid, id: Uuid) -> Result<Booki
         r#"
         select bookings.id, bookings.status, bookings.session_id, bookings.member_id,
             bookings.contract_id, bookings.booking_status, bookings.waitlist_position,
-            bookings.count_deducted
+            bookings.count_deducted, bookings.booked_at,
+            json_build_object(
+                'id', members.id,
+                'full_name', members.full_name,
+                'member_code', members.member_code
+            ) as member,
+            json_build_object(
+                'id', class_sessions.id,
+                'session_date', class_sessions.session_date,
+                'start_time', class_sessions.start_time,
+                'end_time', class_sessions.end_time,
+                'session_status', class_sessions.session_status,
+                'branch_id', class_sessions.branch_id,
+                'class', json_build_object(
+                    'id', classes.id,
+                    'name', classes.name,
+                    'duration_minutes', classes.duration_minutes,
+                    'max_capacity', classes.max_capacity
+                )
+            ) as session
         from bookings
         join members on members.id = bookings.member_id
+        join class_sessions on class_sessions.id = bookings.session_id
+        join classes on classes.id = class_sessions.class_id
         where bookings.id = $1 and members.tenant_id = $2
         "#,
     )
@@ -1206,8 +1263,21 @@ fn normalize_booking_status(status: String) -> Result<String, AppError> {
     let status = status.trim().to_uppercase();
     match status.as_str() {
         "CONFIRMED" | "WAITLIST" | "CANCELLED" | "ATTENDED" | "NO_SHOW" => Ok(status),
+        "WAITLISTED" => Ok("WAITLIST".into()),
         _ => Err(AppError::Validation("bookingStatus is invalid".into())),
     }
+}
+
+fn parse_status_filter(status: &str) -> Vec<String> {
+    status
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            let value = value.to_uppercase();
+            if value == "WAITLISTED" { "WAITLIST".into() } else { value }
+        })
+        .collect()
 }
 
 fn parse_optional_i32(field: &str, value: Option<&Value>) -> Result<Option<i32>, AppError> {

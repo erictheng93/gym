@@ -1969,14 +1969,14 @@ mod tests {
                         json!({
                             "name": "Rust Yoga",
                             "description": "Stretch and strength",
-                            "durationMinutes": 60,
-                            "maxCapacity": 12,
-                            "instructorId": employee_id,
-                            "branchId": branch_id,
+                            "duration_minutes": 60,
+                            "max_capacity": 12,
+                            "instructor_id": employee_id,
+                            "branch_id": branch_id,
                             "category": "YOGA",
-                            "difficultyLevel": "BEGINNER",
-                            "requiresCount": true,
-                            "countDeduction": 1
+                            "difficulty_level": "BEGINNER",
+                            "requires_count": true,
+                            "count_deduction": 1
                         })
                         .to_string(),
                     ))
@@ -1988,13 +1988,14 @@ mod tests {
         let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
         let create_json: Value = serde_json::from_slice(&create_body).unwrap();
         let class_id = create_json["data"]["id"].as_str().unwrap().to_string();
-        assert_eq!(create_json["data"]["branchId"], branch_id.to_string());
+        assert_eq!(create_json["data"]["branch_id"], branch_id.to_string());
+        assert_eq!(create_json["data"]["duration_minutes"], 60);
 
         let list_response = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/api/classes?activeOnly=true&search=Rust")
+                    .uri(format!("/api/classes?is_active=true&category_id=YOGA&branch_id={branch_id}&search=Rust"))
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -2002,6 +2003,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
+        let list_json: Value = serde_json::from_slice(&list_body).unwrap();
+        assert!(list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == class_id && row["is_active"] == true && row["category"] == "YOGA"
+        }));
 
         let update_response = app
             .clone()
@@ -2011,7 +2017,7 @@ mod tests {
                     .uri(format!("/api/classes/{class_id}"))
                     .header("authorization", format!("Bearer {token}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(json!({"maxCapacity": 20}).to_string()))
+                    .body(Body::from(json!({"max_capacity": 20}).to_string()))
                     .unwrap(),
             )
             .await
@@ -2019,7 +2025,7 @@ mod tests {
         assert_eq!(update_response.status(), StatusCode::OK);
         let update_body = to_bytes(update_response.into_body(), usize::MAX).await.unwrap();
         let update_json: Value = serde_json::from_slice(&update_body).unwrap();
-        assert_eq!(update_json["data"]["maxCapacity"], 20);
+        assert_eq!(update_json["data"]["max_capacity"], 20);
 
         let delete_response = app
             .clone()
@@ -2036,7 +2042,7 @@ mod tests {
         assert_eq!(delete_response.status(), StatusCode::OK);
         let delete_body = to_bytes(delete_response.into_body(), usize::MAX).await.unwrap();
         let delete_json: Value = serde_json::from_slice(&delete_body).unwrap();
-        assert_eq!(delete_json["data"]["isActive"], false);
+        assert_eq!(delete_json["data"]["is_active"], false);
 
         let class_uuid = Uuid::parse_str(&class_id).unwrap();
         sqlx::query("delete from classes where id = $1").bind(class_uuid).execute(&pool).await.unwrap();
@@ -2214,7 +2220,7 @@ mod tests {
         let update_schedule_body = to_bytes(update_schedule_response.into_body(), usize::MAX).await.unwrap();
         let update_schedule_json: Value = serde_json::from_slice(&update_schedule_body).unwrap();
         assert_eq!(update_schedule_json["data"]["room"], "Legacy Room");
-        assert_eq!(update_schedule_json["data"]["maxCapacity"], 3);
+        assert_eq!(update_schedule_json["data"]["max_capacity"], 3);
 
         let get_session_response = app.clone().oneshot(
             Request::builder()
@@ -2242,7 +2248,26 @@ mod tests {
         let update_session_body = to_bytes(update_session_response.into_body(), usize::MAX).await.unwrap();
         let update_session_json: Value = serde_json::from_slice(&update_session_body).unwrap();
         assert_eq!(update_session_json["data"]["room"], "Updated Session Room");
-        assert_eq!(update_session_json["data"]["maxCapacity"], 4);
+        assert_eq!(update_session_json["data"]["max_capacity"], 4);
+
+        let session_list_response = app.clone().oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/class_sessions?branch_id={branch_id}&instructor_id={employee_id}&session_status=SCHEDULED&start_date=2026-02-01&end_date=2026-02-01"
+                ))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(session_list_response.status(), StatusCode::OK);
+        let session_list_body = to_bytes(session_list_response.into_body(), usize::MAX).await.unwrap();
+        let session_list_json: Value = serde_json::from_slice(&session_list_body).unwrap();
+        assert!(session_list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == session_id
+                && row["session_date"] == "2026-02-01"
+                && row["session_status"] == "SCHEDULED"
+                && row["current_count"].as_i64().is_some()
+        }));
 
         let booking_response = app.clone().oneshot(
             Request::builder()
@@ -2282,8 +2307,8 @@ mod tests {
         assert_eq!(update_booking_response.status(), StatusCode::OK);
         let update_booking_body = to_bytes(update_booking_response.into_body(), usize::MAX).await.unwrap();
         let update_booking_json: Value = serde_json::from_slice(&update_booking_body).unwrap();
-        assert_eq!(update_booking_json["data"]["bookingStatus"], "WAITLIST");
-        assert_eq!(update_booking_json["data"]["waitlistPosition"], 1);
+        assert_eq!(update_booking_json["data"]["booking_status"], "WAITLIST");
+        assert_eq!(update_booking_json["data"]["waitlist_position"], 1);
 
         let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
             .bind(session_uuid).fetch_one(&pool).await.unwrap();
@@ -2304,8 +2329,28 @@ mod tests {
         assert_eq!(confirm_booking_response.status(), StatusCode::OK);
         let confirm_booking_body = to_bytes(confirm_booking_response.into_body(), usize::MAX).await.unwrap();
         let confirm_booking_json: Value = serde_json::from_slice(&confirm_booking_body).unwrap();
-        assert_eq!(confirm_booking_json["data"]["bookingStatus"], "CONFIRMED");
-        assert!(confirm_booking_json["data"]["waitlistPosition"].is_null());
+        assert_eq!(confirm_booking_json["data"]["booking_status"], "CONFIRMED");
+        assert!(confirm_booking_json["data"]["waitlist_position"].is_null());
+
+        let booking_list_response = app.clone().oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/bookings?booking_status=CONFIRMED,WAITLIST&branch_id={branch_id}&start_date=2026-02-01&end_date=2026-02-01"
+                ))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(booking_list_response.status(), StatusCode::OK);
+        let booking_list_body = to_bytes(booking_list_response.into_body(), usize::MAX).await.unwrap();
+        let booking_list_json: Value = serde_json::from_slice(&booking_list_body).unwrap();
+        assert!(booking_list_json["data"].as_array().unwrap().iter().any(|row| {
+            row["id"] == booking_id
+                && row["booking_status"] == "CONFIRMED"
+                && row["booked_at"].as_str().is_some()
+                && row["member"]["id"] == member_id.to_string()
+                && row["session"]["id"] == session_id
+        }));
 
         let current_count: i32 = sqlx::query_scalar("select current_count from class_sessions where id = $1")
             .bind(session_uuid).fetch_one(&pool).await.unwrap();

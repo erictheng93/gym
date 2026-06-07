@@ -22,12 +22,16 @@ pub struct ClassFilters {
     #[serde(rename = "branch_id")]
     branch_id_snake: Option<Uuid>,
     category: Option<String>,
+    #[serde(rename = "category_id")]
+    category_id: Option<String>,
     #[serde(rename = "difficultyLevel")]
     difficulty_level: Option<String>,
     #[serde(rename = "difficulty_level")]
     difficulty_level_snake: Option<String>,
     #[serde(rename = "activeOnly")]
     active_only: Option<bool>,
+    #[serde(rename = "is_active")]
+    is_active: Option<bool>,
     search: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
@@ -37,24 +41,24 @@ pub struct ClassFilters {
 pub struct CreateClassRequest {
     name: String,
     description: Option<String>,
-    #[serde(rename = "durationMinutes")]
+    #[serde(rename = "durationMinutes", alias = "duration_minutes")]
     duration_minutes: i32,
-    #[serde(rename = "maxCapacity")]
+    #[serde(rename = "maxCapacity", alias = "max_capacity")]
     max_capacity: i32,
-    #[serde(rename = "instructorId")]
+    #[serde(rename = "instructorId", alias = "instructor_id")]
     instructor_id: Option<Uuid>,
-    #[serde(rename = "branchId")]
+    #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Uuid,
     category: Option<String>,
-    #[serde(rename = "difficultyLevel")]
+    #[serde(rename = "difficultyLevel", alias = "difficulty_level")]
     difficulty_level: Option<String>,
-    #[serde(rename = "imageUrl")]
+    #[serde(rename = "imageUrl", alias = "image_url")]
     image_url: Option<String>,
-    #[serde(rename = "isActive", default = "default_true")]
+    #[serde(rename = "isActive", alias = "is_active", default = "default_true")]
     is_active: bool,
-    #[serde(rename = "requiresCount", default)]
+    #[serde(rename = "requiresCount", alias = "requires_count", default)]
     requires_count: bool,
-    #[serde(rename = "countDeduction", default = "default_count_deduction")]
+    #[serde(rename = "countDeduction", alias = "count_deduction", default = "default_count_deduction")]
     count_deduction: i32,
 }
 
@@ -62,24 +66,24 @@ pub struct CreateClassRequest {
 pub struct UpdateClassRequest {
     name: Option<String>,
     description: Option<String>,
-    #[serde(rename = "durationMinutes")]
+    #[serde(rename = "durationMinutes", alias = "duration_minutes")]
     duration_minutes: Option<i32>,
-    #[serde(rename = "maxCapacity")]
+    #[serde(rename = "maxCapacity", alias = "max_capacity")]
     max_capacity: Option<i32>,
-    #[serde(rename = "instructorId")]
+    #[serde(rename = "instructorId", alias = "instructor_id")]
     instructor_id: Option<Uuid>,
-    #[serde(rename = "branchId")]
+    #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Option<Uuid>,
     category: Option<String>,
-    #[serde(rename = "difficultyLevel")]
+    #[serde(rename = "difficultyLevel", alias = "difficulty_level")]
     difficulty_level: Option<String>,
-    #[serde(rename = "imageUrl")]
+    #[serde(rename = "imageUrl", alias = "image_url")]
     image_url: Option<String>,
-    #[serde(rename = "isActive")]
+    #[serde(rename = "isActive", alias = "is_active")]
     is_active: Option<bool>,
-    #[serde(rename = "requiresCount")]
+    #[serde(rename = "requiresCount", alias = "requires_count")]
     requires_count: Option<bool>,
-    #[serde(rename = "countDeduction")]
+    #[serde(rename = "countDeduction", alias = "count_deduction")]
     count_deduction: Option<i32>,
 }
 
@@ -89,24 +93,15 @@ pub struct GymClass {
     status: Option<String>,
     name: String,
     description: Option<String>,
-    #[serde(rename = "durationMinutes")]
     duration_minutes: i32,
-    #[serde(rename = "maxCapacity")]
     max_capacity: i32,
-    #[serde(rename = "instructorId")]
     instructor_id: Option<Uuid>,
-    #[serde(rename = "branchId")]
     branch_id: Uuid,
     category: Option<String>,
-    #[serde(rename = "difficultyLevel")]
     difficulty_level: Option<String>,
-    #[serde(rename = "imageUrl")]
     image_url: Option<String>,
-    #[serde(rename = "isActive")]
     is_active: Option<bool>,
-    #[serde(rename = "requiresCount")]
     requires_count: Option<bool>,
-    #[serde(rename = "countDeduction")]
     count_deduction: Option<i32>,
 }
 
@@ -125,7 +120,9 @@ pub async fn list(
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
     let branch_id = filters.branch_id.or(filters.branch_id_snake);
+    let category = filters.category.or(filters.category_id);
     let difficulty_level = filters.difficulty_level.or(filters.difficulty_level_snake);
+    let is_active = filters.is_active.or(filters.active_only);
     let search = filters.search.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let classes = sqlx::query_as::<_, GymClass>(
         r#"
@@ -140,16 +137,16 @@ pub async fn list(
           and ($2::uuid is null or classes.branch_id = $2)
           and ($3::text is null or classes.category = $3)
           and ($4::text is null or classes.difficulty_level = $4)
-          and ($5::bool is not true or classes.is_active = true)
+          and ($5::bool is null or classes.is_active = $5)
           and ($6::text is null or classes.name ilike '%' || $6 || '%')
         order by classes.created_at desc
         "#,
     )
     .bind(tenant_id)
     .bind(branch_id)
-    .bind(filters.category)
+    .bind(category)
     .bind(difficulty_level)
-    .bind(filters.active_only.unwrap_or(false))
+    .bind(is_active)
     .bind(search)
     .fetch_all(&state.db)
     .await?;
