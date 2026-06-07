@@ -43,9 +43,9 @@ struct MemberClaims {
 
 #[derive(Debug, Clone)]
 pub struct MemberAuthContext {
-    member_id: Uuid,
-    tenant_id: Uuid,
-    branch_id: Uuid,
+    pub(crate) member_id: Uuid,
+    pub(crate) tenant_id: Uuid,
+    pub(crate) branch_id: Uuid,
 }
 
 #[derive(Debug, FromRow)]

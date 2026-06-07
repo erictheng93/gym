@@ -590,3 +590,48 @@ create index if not exists performance_reviews_employee_id_idx on performance_re
 create index if not exists performance_reviews_reviewer_id_idx on performance_reviews(reviewer_id);
 create index if not exists performance_reviews_status_idx on performance_reviews(status);
 create index if not exists performance_reviews_review_period_idx on performance_reviews(review_period);
+
+create table if not exists member_goals (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    goal_type varchar not null,
+    target_value jsonb not null,
+    current_value jsonb,
+    start_date date not null default current_date,
+    target_date date,
+    status varchar not null default 'IN_PROGRESS',
+    notes text,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create table if not exists workout_logs (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    date date not null default current_date,
+    duration integer,
+    calories integer,
+    exercises jsonb,
+    notes text,
+    created_at timestamptz default now()
+);
+
+create table if not exists body_measurements (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    date date not null default current_date,
+    weight real,
+    body_fat real,
+    muscle_mass real,
+    bmi real,
+    source varchar not null default 'MANUAL',
+    raw_data jsonb,
+    created_at timestamptz default now()
+);
+
+create index if not exists member_goals_member_id_idx on member_goals(member_id);
+create index if not exists member_goals_status_idx on member_goals(status);
+create index if not exists workout_logs_member_id_idx on workout_logs(member_id);
+create index if not exists workout_logs_date_idx on workout_logs(date);
+create index if not exists body_measurements_member_id_idx on body_measurements(member_id);
+create index if not exists body_measurements_date_idx on body_measurements(date);

@@ -2070,6 +2070,73 @@ mod tests {
         assert_eq!(profile_update_json["data"]["emergency_contact"], "Emergency Contact");
         assert_eq!(profile_update_json["data"]["branch"]["name"], format!("Rust Member Branch {suffix}"));
 
+        let goal_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/goals")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "goal_type": "WEIGHT_LOSS",
+                    "target_value": { "description": "Lose weight", "value": 70, "unit": "kg" },
+                    "current_value": { "value": 80, "unit": "kg" },
+                    "start_date": "2026-06-01",
+                    "target_date": "2026-09-01",
+                    "notes": "Rust fitness smoke"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(goal_response.status(), StatusCode::CREATED);
+        let goal_body = to_bytes(goal_response.into_body(), usize::MAX).await.unwrap();
+        let goal_json: Value = serde_json::from_slice(&goal_body).unwrap();
+        let goal_id = Uuid::parse_str(goal_json["data"]["id"].as_str().unwrap()).unwrap();
+        let goal_update_response = app.clone().oneshot(
+            Request::builder().method("PUT").uri(format!("/api/member/goals/{goal_id}"))
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"status": "ACHIEVED", "current_value": {"value": 70, "unit": "kg"}}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(goal_update_response.status(), StatusCode::OK);
+
+        let workout_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/workouts")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "date": "2026-06-02",
+                    "duration": 45,
+                    "calories": 320,
+                    "exercises": [{ "name": "跑步機", "duration": 30 }],
+                    "notes": "Rust workout smoke"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(workout_response.status(), StatusCode::CREATED);
+        let workout_body = to_bytes(workout_response.into_body(), usize::MAX).await.unwrap();
+        let workout_json: Value = serde_json::from_slice(&workout_body).unwrap();
+        let workout_id = Uuid::parse_str(workout_json["data"]["id"].as_str().unwrap()).unwrap();
+        let workout_update_response = app.clone().oneshot(
+            Request::builder().method("PUT").uri(format!("/api/member/workouts/{workout_id}"))
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"duration": 60, "calories": 400}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(workout_update_response.status(), StatusCode::OK);
+
+        let measurement_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/measurements")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "date": "2026-06-03",
+                    "weight": 78.5,
+                    "body_fat": 22.0,
+                    "muscle_mass": 35.0,
+                    "bmi": 24.0,
+                    "source": "MANUAL"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(measurement_response.status(), StatusCode::CREATED);
+        let measurement_body = to_bytes(measurement_response.into_body(), usize::MAX).await.unwrap();
+        let measurement_json: Value = serde_json::from_slice(&measurement_body).unwrap();
+        let measurement_id = Uuid::parse_str(measurement_json["data"]["id"].as_str().unwrap()).unwrap();
+
         for uri in [
             "/api/member/me",
             "/api/member/profile",
@@ -2080,6 +2147,14 @@ mod tests {
             "/api/member/contracts",
             "/api/member/payments",
             "/api/member_checkins",
+            "/api/member/goals?status=ACHIEVED",
+            &format!("/api/member/goals/{goal_id}"),
+            "/api/member/workouts",
+            &format!("/api/member/workouts/{workout_id}"),
+            "/api/member/workouts/stats?period=month",
+            "/api/member/measurements",
+            "/api/member/measurements/latest",
+            "/api/member/measurements/stats?period=30",
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -2089,6 +2164,19 @@ mod tests {
             let status = response.status();
             let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
             assert_eq!(status, StatusCode::OK, "{uri}: {}", String::from_utf8_lossy(&body));
+        }
+
+        for (uri, id) in [
+            ("/api/member/goals", goal_id),
+            ("/api/member/workouts", workout_id),
+            ("/api/member/measurements", measurement_id),
+        ] {
+            let delete_response = app.clone().oneshot(
+                Request::builder().method("DELETE").uri(format!("{uri}/{id}"))
+                    .header("x-member-token", token)
+                    .body(Body::empty()).unwrap()
+            ).await.unwrap();
+            assert_eq!(delete_response.status(), StatusCode::OK, "{uri}/{id}");
         }
 
         sqlx::query("delete from bookings where id = $1").bind(booking_id).execute(&pool).await.unwrap();

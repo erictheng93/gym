@@ -22,6 +22,7 @@ mod makeup;
 mod members;
 mod membership_plans;
 mod member_app;
+mod member_fitness;
 mod payments;
 mod payroll;
 mod performance;
@@ -206,6 +207,21 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/contracts/{id}/resume", post(member_app::resume_contract))
         .route("/api/member/payments", get(member_app::list_payments))
         .route("/api/member_checkins", get(member_app::list_checkins))
+        .route("/api/member/goals", get(member_fitness::list_goals).post(member_fitness::create_goal))
+        .route(
+            "/api/member/goals/{id}",
+            get(member_fitness::get_goal).put(member_fitness::update_goal).delete(member_fitness::delete_goal),
+        )
+        .route("/api/member/workouts", get(member_fitness::list_workouts).post(member_fitness::create_workout))
+        .route("/api/member/workouts/stats", get(member_fitness::workout_stats))
+        .route(
+            "/api/member/workouts/{id}",
+            get(member_fitness::get_workout).put(member_fitness::update_workout).delete(member_fitness::delete_workout),
+        )
+        .route("/api/member/measurements", get(member_fitness::list_measurements).post(member_fitness::create_measurement))
+        .route("/api/member/measurements/latest", get(member_fitness::latest_measurement))
+        .route("/api/member/measurements/stats", get(member_fitness::measurement_stats))
+        .route("/api/member/measurements/{id}", delete(member_fitness::delete_measurement))
         .fallback(error::not_found)
         .with_state(state)
 }
