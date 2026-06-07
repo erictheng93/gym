@@ -2,7 +2,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use serde::Serialize;
@@ -23,6 +23,7 @@ mod members;
 mod membership_plans;
 mod member_app;
 mod member_fitness;
+mod member_reviews;
 mod member_support;
 mod payments;
 mod payroll;
@@ -223,6 +224,14 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/measurements/latest", get(member_fitness::latest_measurement))
         .route("/api/member/measurements/stats", get(member_fitness::measurement_stats))
         .route("/api/member/measurements/{id}", delete(member_fitness::delete_measurement))
+        .route("/api/member/reviews/eligibility/{booking_id}", get(member_reviews::eligibility))
+        .route("/api/member/reviews", post(member_reviews::submit_review))
+        .route(
+            "/api/member/reviews/{id}",
+            put(member_reviews::update_review).delete(member_reviews::delete_review),
+        )
+        .route("/api/member/reviews/class/{class_id}", get(member_reviews::class_reviews))
+        .route("/api/member/reviews/my", get(member_reviews::my_reviews))
         .route("/api/member/issues", get(member_support::list_issues).post(member_support::create_issue))
         .route(
             "/api/member/issues/{id}",

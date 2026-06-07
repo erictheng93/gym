@@ -670,3 +670,31 @@ create index if not exists member_issues_status_idx on member_issues(status);
 create index if not exists member_issues_type_idx on member_issues(type);
 create index if not exists support_tickets_member_id_idx on support_tickets(member_id);
 create index if not exists support_tickets_status_idx on support_tickets(status);
+
+create table if not exists class_reviews (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    class_id uuid not null references classes(id),
+    session_id uuid not null references class_sessions(id),
+    booking_id uuid not null unique references bookings(id),
+    coach_id uuid references employees(id),
+    rating integer not null,
+    comment text,
+    is_anonymous boolean not null default false,
+    is_public boolean not null default true,
+    status varchar not null default 'PUBLISHED',
+    moderated_at timestamptz,
+    moderated_by uuid references employees(id),
+    staff_response text,
+    staff_response_at timestamptz,
+    staff_response_by uuid references employees(id),
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create index if not exists class_reviews_member_id_idx on class_reviews(member_id);
+create index if not exists class_reviews_class_id_idx on class_reviews(class_id);
+create index if not exists class_reviews_session_id_idx on class_reviews(session_id);
+create index if not exists class_reviews_booking_id_idx on class_reviews(booking_id);
+create index if not exists class_reviews_rating_idx on class_reviews(rating);

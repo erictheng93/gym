@@ -2181,6 +2181,39 @@ mod tests {
         let support_json: Value = serde_json::from_slice(&support_body).unwrap();
         assert_eq!(support_json["data"]["category"], "app");
 
+        let eligibility_response = app.clone().oneshot(
+            Request::builder().uri(format!("/api/member/reviews/eligibility/{booking_id}"))
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(eligibility_response.status(), StatusCode::OK);
+        let eligibility_body = to_bytes(eligibility_response.into_body(), usize::MAX).await.unwrap();
+        let eligibility_json: Value = serde_json::from_slice(&eligibility_body).unwrap();
+        assert_eq!(eligibility_json["data"]["can_review"], true);
+
+        let review_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/reviews")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "booking_id": booking_id,
+                    "rating": 5,
+                    "comment": "Excellent class from Rust smoke"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        let review_status = review_response.status();
+        let review_body = to_bytes(review_response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(review_status, StatusCode::CREATED, "{}", String::from_utf8_lossy(&review_body));
+        let review_json: Value = serde_json::from_slice(&review_body).unwrap();
+        let review_id = Uuid::parse_str(review_json["review_id"].as_str().unwrap()).unwrap();
+        let review_update_response = app.clone().oneshot(
+            Request::builder().method("PUT").uri(format!("/api/member/reviews/{review_id}"))
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"rating": 4, "comment": "Updated Rust review"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(review_update_response.status(), StatusCode::OK);
+
         for uri in [
             "/api/member/me",
             "/api/member/profile",
@@ -2201,6 +2234,8 @@ mod tests {
             "/api/member/measurements/stats?period=30",
             "/api/member/issues?status=SUBMITTED&type=EQUIPMENT",
             &format!("/api/member/issues/{issue_id}"),
+            &format!("/api/member/reviews/class/{class_id}?limit=10"),
+            "/api/member/reviews/my?limit=10",
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -2225,6 +2260,14 @@ mod tests {
             assert_eq!(delete_response.status(), StatusCode::OK, "{uri}/{id}");
         }
 
+        let review_delete_response = app.clone().oneshot(
+            Request::builder().method("DELETE").uri(format!("/api/member/reviews/{review_id}"))
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(review_delete_response.status(), StatusCode::OK);
+
+        sqlx::query("delete from class_reviews where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from bookings where id = $1").bind(booking_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_sessions where id = $1").bind(session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();
