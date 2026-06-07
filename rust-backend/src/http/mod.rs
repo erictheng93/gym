@@ -23,6 +23,7 @@ mod members;
 mod membership_plans;
 mod member_app;
 mod member_fitness;
+mod member_notifications;
 mod member_reviews;
 mod member_support;
 mod payments;
@@ -232,6 +233,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/member/reviews/class/{class_id}", get(member_reviews::class_reviews))
         .route("/api/member/reviews/my", get(member_reviews::my_reviews))
+        .route("/api/member/notifications/preferences", get(member_notifications::get_preferences).patch(member_notifications::update_preferences))
+        .route("/api/member/notifications/channels", get(member_notifications::channels))
+        .route("/api/member/notifications/history", get(member_notifications::history))
+        .route("/api/member/notifications/test", post(member_notifications::test_notification))
+        .route("/api/member/push/vapid-public-key", get(member_notifications::vapid_public_key))
+        .route("/api/member/push/subscribe", post(member_notifications::subscribe))
+        .route("/api/member/push/unsubscribe", delete(member_notifications::unsubscribe))
+        .route("/api/member/push/preferences", patch(member_notifications::update_push_preferences))
         .route("/api/member/issues", get(member_support::list_issues).post(member_support::create_issue))
         .route(
             "/api/member/issues/{id}",

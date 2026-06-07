@@ -2214,6 +2214,67 @@ mod tests {
         ).await.unwrap();
         assert_eq!(review_update_response.status(), StatusCode::OK);
 
+        let notification_prefs_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/notifications/preferences")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(notification_prefs_response.status(), StatusCode::OK);
+        let notification_update_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri("/api/member/notifications/preferences")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "enable_push": true,
+                    "notify_promotions": false,
+                    "quiet_hours_enabled": true,
+                    "quiet_hours_start": "23:00",
+                    "quiet_hours_end": "07:00"
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(notification_update_response.status(), StatusCode::OK);
+
+        let push_endpoint = format!("https://push.example.test/{suffix}");
+        let vapid_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/push/vapid-public-key")
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(vapid_response.status(), StatusCode::OK);
+        let push_subscribe_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/push/subscribe")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "endpoint": push_endpoint,
+                    "keys": { "p256dh": "p256dh-test", "auth": "auth-test" },
+                    "device_name": "Rust Test Device",
+                    "preferences": {
+                        "notify_booking_reminder": true,
+                        "notify_contract_expiry": true,
+                        "notify_class_cancelled": true,
+                        "notify_promotions": false
+                    }
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(push_subscribe_response.status(), StatusCode::OK);
+        let push_preferences_response = app.clone().oneshot(
+            Request::builder().method("PATCH").uri("/api/member/push/preferences")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "endpoint": push_endpoint,
+                    "preferences": { "notify_promotions": true }
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(push_preferences_response.status(), StatusCode::OK);
+        let notification_test_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/notifications/test")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "channel": "push", "type": "test" }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(notification_test_response.status(), StatusCode::OK);
+
         for uri in [
             "/api/member/me",
             "/api/member/profile",
@@ -2236,6 +2297,9 @@ mod tests {
             &format!("/api/member/issues/{issue_id}"),
             &format!("/api/member/reviews/class/{class_id}?limit=10"),
             "/api/member/reviews/my?limit=10",
+            "/api/member/notifications/preferences",
+            "/api/member/notifications/channels",
+            "/api/member/notifications/history?limit=20&offset=0",
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -2266,8 +2330,17 @@ mod tests {
                 .body(Body::empty()).unwrap()
         ).await.unwrap();
         assert_eq!(review_delete_response.status(), StatusCode::OK);
+        let push_unsubscribe_response = app.clone().oneshot(
+            Request::builder().method("DELETE").uri("/api/member/push/unsubscribe")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "endpoint": push_endpoint }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(push_unsubscribe_response.status(), StatusCode::OK);
 
         sqlx::query("delete from class_reviews where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from member_notification_history where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from member_notification_preferences where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from push_subscriptions where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from bookings where id = $1").bind(booking_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_sessions where id = $1").bind(session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();

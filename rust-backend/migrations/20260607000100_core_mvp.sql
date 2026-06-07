@@ -698,3 +698,70 @@ create index if not exists class_reviews_class_id_idx on class_reviews(class_id)
 create index if not exists class_reviews_session_id_idx on class_reviews(session_id);
 create index if not exists class_reviews_booking_id_idx on class_reviews(booking_id);
 create index if not exists class_reviews_rating_idx on class_reviews(rating);
+
+create table if not exists member_notification_preferences (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null unique references members(id),
+    enable_line boolean not null default false,
+    enable_push boolean not null default true,
+    enable_email boolean not null default true,
+    enable_sms boolean not null default false,
+    notify_booking_confirmation boolean not null default true,
+    notify_booking_reminder boolean not null default true,
+    notify_booking_cancelled boolean not null default true,
+    notify_contract_expiry boolean not null default true,
+    notify_payment_confirmation boolean not null default true,
+    notify_promotions boolean not null default true,
+    notify_system boolean not null default true,
+    quiet_hours_enabled boolean not null default false,
+    quiet_hours_start varchar not null default '22:00',
+    quiet_hours_end varchar not null default '08:00',
+    sms_fallback_enabled boolean not null default false,
+    sms_otp_only boolean not null default true,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create table if not exists member_notification_history (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    notification_type varchar not null,
+    title varchar,
+    body text,
+    successful_channel varchar,
+    overall_status varchar not null default 'pending',
+    sent_at timestamptz,
+    reference_type varchar,
+    reference_id uuid,
+    created_at timestamptz default now(),
+    tenant_id uuid references tenants(id)
+);
+
+create table if not exists push_subscriptions (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    user_id uuid,
+    member_id uuid references members(id),
+    endpoint text not null,
+    p256dh text not null,
+    auth text not null,
+    user_agent text,
+    is_active boolean not null default true,
+    error_count integer not null default 0,
+    notify_booking_reminder boolean not null default true,
+    notify_class_cancelled boolean not null default true,
+    notify_contract_expiry boolean not null default true,
+    notify_promotions boolean not null default true,
+    tenant_id uuid references tenants(id)
+);
+
+alter table push_subscriptions add column if not exists notify_promotions boolean not null default true;
+alter table push_subscriptions add column if not exists tenant_id uuid references tenants(id);
+
+create unique index if not exists push_subscriptions_endpoint_uidx on push_subscriptions(endpoint);
+create index if not exists member_notification_preferences_member_id_idx on member_notification_preferences(member_id);
+create index if not exists member_notification_history_member_id_idx on member_notification_history(member_id);
+create index if not exists member_notification_history_created_at_idx on member_notification_history(created_at);
+create index if not exists push_subscriptions_member_id_idx on push_subscriptions(member_id);
