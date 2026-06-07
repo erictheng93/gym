@@ -2475,6 +2475,12 @@ mod tests {
             "/api/admin/dashboard/contract-alerts?days_ahead=45&limit=10",
             "/api/admin/dashboard/revenue-targets",
             "/api/admin/dashboard/export?type=kpis&format=csv&days=30",
+            "/api/admin/analytics/member-demographics?days=30",
+            "/api/admin/analytics/contract-analytics?days=30",
+            "/api/admin/analytics/revenue-breakdown?days=30",
+            "/api/admin/analytics/checkin-heatmap?weeks=4",
+            "/api/admin/reports/member-growth?days=30",
+            "/api/gym/analytics/api-stats?timeRange=24h",
             "/api/reports/revenue?days=30",
             "/api/reports/member-growth?days=30",
             "/api/reports/contract-expiry?days=45",
@@ -2496,6 +2502,60 @@ mod tests {
                 assert_eq!(json["success"], true);
                 assert!(json["revenue"]["period"].as_f64().unwrap() >= 3000.0);
                 assert!(json["operations"]["today_checkins"].as_i64().unwrap() >= 1);
+            }
+            else if uri.starts_with("/api/admin/analytics/member-demographics") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["data"]["status_distribution"].as_array().unwrap().iter().any(|row| {
+                    row["status"] == "ACTIVE" && row["count"].as_i64().unwrap() >= 1
+                }));
+                assert!(json["data"]["gender_distribution"].as_array().is_some());
+                assert!(json["data"]["age_distribution"].as_array().is_some());
+            }
+            else if uri.starts_with("/api/admin/analytics/contract-analytics") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["data"]["type_distribution"].as_array().unwrap().iter().any(|row| {
+                    row["contract_type"] == "TIME_BASED" && row["count"].as_i64().unwrap() >= 1
+                }));
+                assert!(json["data"]["plan_stats"].as_array().unwrap().iter().any(|row| {
+                    row["plan_id"] == plan_id.to_string() && row["contract_count"].as_i64().unwrap() >= 1
+                }));
+            }
+            else if uri.starts_with("/api/admin/analytics/revenue-breakdown") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["data"]["total_revenue"].as_f64().unwrap() >= 3000.0);
+                assert!(json["data"]["by_month"].as_array().unwrap().iter().any(|row| {
+                    row["revenue"].as_f64().unwrap() >= 3000.0
+                }));
+            }
+            else if uri.starts_with("/api/admin/analytics/checkin-heatmap") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                let heatmap = json["data"]["heatmap"].as_array().unwrap();
+                assert_eq!(heatmap.len(), 7);
+                assert!(heatmap.iter().any(|day| day.as_array().unwrap().iter().any(|hour| hour.as_i64().unwrap() >= 1)));
+            }
+            else if uri.starts_with("/api/admin/reports/member-growth") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["data"]["newMembers"].as_i64().unwrap() >= 1);
+                assert!(json["data"]["growth"].as_array().unwrap().iter().any(|row| {
+                    row["total"].as_i64().unwrap() >= 1
+                }));
+            }
+            else if uri.starts_with("/api/gym/analytics/api-stats") {
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let json: Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(json["success"], true);
+                assert!(json["data"]["totalRequests"].as_i64().is_some());
+                assert!(json["data"]["topEndpoints"].as_array().is_some());
             }
             else if uri.starts_with("/api/reports/branch-performance?") {
                 let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();

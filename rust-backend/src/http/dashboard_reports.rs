@@ -164,6 +164,42 @@ struct CoachCategoryRow {
     count: i64,
 }
 
+#[derive(Debug, FromRow)]
+struct CountByStringRow {
+    key: Option<String>,
+    count: i64,
+}
+
+#[derive(Debug, FromRow)]
+struct ContractAnalyticsRow {
+    contract_type: String,
+    count: i64,
+    total_value: f64,
+}
+
+#[derive(Debug, FromRow)]
+struct PlanStatsRow {
+    plan_id: Uuid,
+    plan_name: String,
+    contract_count: i64,
+    total_value: f64,
+}
+
+#[derive(Debug, FromRow)]
+struct RevenueMonthRow {
+    year: i32,
+    month: i32,
+    revenue: f64,
+    count: i64,
+}
+
+#[derive(Debug, FromRow)]
+struct HeatmapRow {
+    day: i32,
+    hour: i32,
+    count: i64,
+}
+
 pub async fn dashboard_kpis(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -253,11 +289,355 @@ pub async fn member_growth_report(auth: AuthContext, State(state): State<AppStat
     let tenant_id = require_tenant(&auth)?;
     let (start, end) = range(&query);
     let data = sqlx::query_as::<_, MemberGrowthRow>(
-        "select join_date as date, count(*) as new_members from members where tenant_id = $1 and join_date between $2 and $3 group by join_date order by join_date",
-    ).bind(tenant_id).bind(start).bind(end).fetch_all(&state.db).await?;
+        "select join_date as date, count(*) as new_members from members where tenant_id = $1 and ($4::uuid is null or branch_id = $4) and join_date between $2 and $3 group by join_date order by join_date",
+    ).bind(tenant_id).bind(start).bind(end).bind(query.branch_id).fetch_all(&state.db).await?;
     let total_new_members = data.iter().map(|r| r.new_members).sum();
-    let total_members = scalar_i64(&state, "select count(*) from members where tenant_id = $1", tenant_id).await?;
+    let total_members = scalar_i64_branch(&state, "select count(*) from members where tenant_id = $1 and ($2::uuid is null or branch_id = $2)", tenant_id, query.branch_id).await?;
     Ok((StatusCode::OK, Json(ApiResponse { success: true, data: MemberGrowthReport { summary: MemberGrowthSummary { total_new_members, total_members }, data } })))
+}
+
+pub async fn admin_member_demographics(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (_start, end) = range(&query);
+    let branch_id = query.branch_id;
+
+    let status_distribution = sqlx::query_as::<_, CountByStringRow>(
+        "select coalesce(status, 'UNKNOWN') as key, count(*)::bigint as count from members where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and join_date <= $3 group by coalesce(status, 'UNKNOWN') order by count desc",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(end)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| json!({ "status": row.key.unwrap_or_else(|| "UNKNOWN".into()), "count": row.count }))
+    .collect::<Vec<_>>();
+
+    let gender_distribution = sqlx::query_as::<_, CountByStringRow>(
+        "select coalesce(nullif(gender, ''), 'UNKNOWN') as key, count(*)::bigint as count from members where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and join_date <= $3 group by coalesce(nullif(gender, ''), 'UNKNOWN') order by count desc",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(end)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| json!({ "gender": row.key.unwrap_or_else(|| "UNKNOWN".into()), "count": row.count }))
+    .collect::<Vec<_>>();
+
+    let age_distribution = sqlx::query_as::<_, CountByStringRow>(
+        r#"
+        select
+            case
+                when birthday is null then 'UNKNOWN'
+                when extract(year from age(current_date, birthday)) < 18 then '<18'
+                when extract(year from age(current_date, birthday)) between 18 and 24 then '18-24'
+                when extract(year from age(current_date, birthday)) between 25 and 34 then '25-34'
+                when extract(year from age(current_date, birthday)) between 35 and 44 then '35-44'
+                when extract(year from age(current_date, birthday)) between 45 and 54 then '45-54'
+                else '55+'
+            end as key,
+            count(*)::bigint as count
+        from members
+        where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and join_date <= $3
+        group by key
+        order by key
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(end)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| json!({ "age_range": row.key.unwrap_or_else(|| "UNKNOWN".into()), "count": row.count }))
+    .collect::<Vec<_>>();
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "status_distribution": status_distribution,
+            "gender_distribution": gender_distribution,
+            "age_distribution": age_distribution
+        }
+    }))))
+}
+
+pub async fn admin_contract_analytics(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = range(&query);
+    let branch_id = query.branch_id;
+
+    let type_distribution = sqlx::query_as::<_, ContractAnalyticsRow>(
+        r#"
+        select coalesce(membership_plans.type, 'UNKNOWN') as contract_type,
+               count(contracts.id)::bigint as count,
+               coalesce(sum(contracts.total_amount), 0)::float8 as total_value
+        from contracts
+        join membership_plans on membership_plans.id = contracts.plan_id
+        where contracts.tenant_id = $1
+          and ($4::uuid is null or contracts.branch_id = $4)
+          and contracts.created_at::date between $2 and $3
+        group by coalesce(membership_plans.type, 'UNKNOWN')
+        order by count desc
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let total_contracts = type_distribution.iter().map(|row| row.count).sum::<i64>();
+    let total_value = type_distribution.iter().map(|row| row.total_value).sum::<f64>();
+    let type_distribution = type_distribution
+        .into_iter()
+        .map(|row| json!({
+            "contract_type": row.contract_type,
+            "count": row.count,
+            "total_value": row.total_value,
+            "percentage": percentage(row.count as f64, total_contracts as f64)
+        }))
+        .collect::<Vec<_>>();
+
+    let plan_rows = sqlx::query_as::<_, PlanStatsRow>(
+        r#"
+        select membership_plans.id as plan_id,
+               membership_plans.name as plan_name,
+               count(contracts.id)::bigint as contract_count,
+               coalesce(sum(contracts.total_amount), 0)::float8 as total_value
+        from contracts
+        join membership_plans on membership_plans.id = contracts.plan_id
+        where contracts.tenant_id = $1
+          and ($4::uuid is null or contracts.branch_id = $4)
+          and contracts.created_at::date between $2 and $3
+        group by membership_plans.id, membership_plans.name
+        order by contract_count desc, total_value desc
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let plan_stats = plan_rows
+        .into_iter()
+        .map(|row| json!({
+            "plan_id": row.plan_id,
+            "plan_name": row.plan_name,
+            "contract_count": row.contract_count,
+            "total_value": row.total_value,
+            "percentage": percentage(row.contract_count as f64, total_contracts as f64)
+        }))
+        .collect::<Vec<_>>();
+
+    let active_contracts = scalar_i64_branch(&state, "select count(*) from contracts where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and status = 'ACTIVE'", tenant_id, branch_id).await?;
+    let ended_contracts = scalar_i64_branch(&state, "select count(*) from contracts where tenant_id = $1 and ($2::uuid is null or branch_id = $2) and status in ('EXPIRED', 'ENDED', 'CANCELLED', 'TERMINATED')", tenant_id, branch_id).await?;
+    let renewal_rate = percentage(active_contracts as f64, (active_contracts + ended_contracts) as f64);
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "type_distribution": type_distribution,
+            "plan_stats": plan_stats,
+            "renewal_rate": renewal_rate,
+            "total_contracts": total_contracts,
+            "total_value": total_value
+        }
+    }))))
+}
+
+pub async fn admin_revenue_breakdown(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = range(&query);
+    let branch_id = query.branch_id;
+
+    let by_month = sqlx::query_as::<_, RevenueMonthRow>(
+        r#"
+        select extract(year from payment_date)::int as year,
+               extract(month from payment_date)::int as month,
+               coalesce(sum(amount), 0)::float8 as revenue,
+               count(*)::bigint as count
+        from payments
+        where tenant_id = $1
+          and ($4::uuid is null or branch_id = $4)
+          and payment_date::date between $2 and $3
+        group by year, month
+        order by year, month
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| json!({ "year": row.year, "month": row.month, "revenue": row.revenue, "count": row.count }))
+    .collect::<Vec<_>>();
+
+    let by_method = sqlx::query_as::<_, CountByStringRow>(
+        "select coalesce(payment_method, 'UNKNOWN') as key, count(*)::bigint as count from payments where tenant_id = $1 and ($4::uuid is null or branch_id = $4) and payment_date::date between $2 and $3 group by coalesce(payment_method, 'UNKNOWN') order by count desc",
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|row| json!({ "payment_method": row.key.unwrap_or_else(|| "UNKNOWN".into()), "count": row.count }))
+    .collect::<Vec<_>>();
+
+    let total_revenue = scalar_f64_range_branch(
+        &state,
+        "select coalesce(sum(amount), 0)::float8 from payments where tenant_id = $1 and payment_date::date between $2 and $3 and ($4::uuid is null or branch_id = $4)",
+        tenant_id,
+        start,
+        end,
+        branch_id,
+    ).await?;
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "by_month": by_month,
+            "by_method": by_method,
+            "total_revenue": total_revenue
+        }
+    }))))
+}
+
+pub async fn admin_checkin_heatmap(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let days = query.days.unwrap_or_else(|| query.limit.unwrap_or(28)).max(1);
+    let end = Utc::now().date_naive();
+    let start = end - Duration::days(days - 1);
+
+    let rows = sqlx::query_as::<_, HeatmapRow>(
+        r#"
+        select extract(dow from check_ins.check_in_time)::int as day,
+               extract(hour from check_ins.check_in_time)::int as hour,
+               count(*)::bigint as count
+        from check_ins
+        join members on members.id = check_ins.member_id
+        where members.tenant_id = $1
+          and ($4::uuid is null or check_ins.branch_id = $4)
+          and check_ins.check_in_time::date between $2 and $3
+        group by day, hour
+        order by day, hour
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(query.branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut heatmap = vec![vec![0_i64; 24]; 7];
+    for row in rows {
+        if (0..=6).contains(&row.day) && (0..=23).contains(&row.hour) {
+            heatmap[row.day as usize][row.hour as usize] = row.count;
+        }
+    }
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "heatmap": heatmap,
+            "start_date": start,
+            "end_date": end
+        }
+    }))))
+}
+
+pub async fn admin_member_growth_report(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Query(query): Query<DateRangeQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let tenant_id = require_tenant(&auth)?;
+    let (start, end) = range(&query);
+    let branch_id = query.branch_id;
+
+    let rows = sqlx::query_as::<_, MemberGrowthRow>(
+        "select join_date as date, count(*)::bigint as new_members from members where tenant_id = $1 and ($4::uuid is null or branch_id = $4) and join_date between $2 and $3 group by join_date order by join_date",
+    )
+    .bind(tenant_id)
+    .bind(start)
+    .bind(end)
+    .bind(branch_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut total = scalar_i64_range_branch(
+        &state,
+        "select count(*) from members where tenant_id = $1 and join_date < $2 and $3::date >= $2 and ($4::uuid is null or branch_id = $4)",
+        tenant_id,
+        start,
+        end,
+        branch_id,
+    ).await?;
+    let starting_total = total;
+    let mut new_members = 0_i64;
+    let growth = rows
+        .into_iter()
+        .map(|row| {
+            total += row.new_members;
+            new_members += row.new_members;
+            json!({
+                "date": row.date,
+                "newMembers": row.new_members,
+                "new_members": row.new_members,
+                "total": total
+            })
+        })
+        .collect::<Vec<_>>();
+    let growth_rate = percent_change(total as f64, starting_total as f64);
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "growth": growth,
+            "newMembers": new_members,
+            "growthRate": growth_rate,
+            "churnedMembers": 0,
+            "totalMembers": total
+        }
+    }))))
+}
+
+pub async fn api_stats(auth: AuthContext, Query(_query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
+    require_tenant(&auth)?;
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": {
+            "totalRequests": 0,
+            "rateLimitHits": 0,
+            "avgResponseTime": 0,
+            "topEndpoints": []
+        }
+    }))))
 }
 
 pub async fn contract_expiry_report(auth: AuthContext, State(state): State<AppState>, Query(query): Query<DateRangeQuery>) -> Result<impl IntoResponse, AppError> {
@@ -695,6 +1075,14 @@ fn percent_change(current: f64, previous: f64) -> f64 {
     }
 }
 
+fn percentage(value: f64, total: f64) -> f64 {
+    if total.abs() < f64::EPSILON {
+        0.0
+    } else {
+        (value / total) * 100.0
+    }
+}
+
 fn ranking(data: &[serde_json::Value], section: &str, field: &str, descending_absent_ok: bool) -> Vec<serde_json::Value> {
     let mut rows = data
         .iter()
@@ -719,10 +1107,6 @@ fn ranking(data: &[serde_json::Value], section: &str, field: &str, descending_ab
 
 fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
     auth.user.tenant_id.ok_or(AppError::Unauthorized)
-}
-
-async fn scalar_i64(state: &AppState, sql: &str, tenant_id: Uuid) -> Result<i64, AppError> {
-    Ok(sqlx::query_scalar::<_, i64>(sql).bind(tenant_id).fetch_one(&state.db).await?)
 }
 
 async fn scalar_i64_branch(state: &AppState, sql: &str, tenant_id: Uuid, branch_id: Option<Uuid>) -> Result<i64, AppError> {

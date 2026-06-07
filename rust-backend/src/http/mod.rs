@@ -199,6 +199,12 @@ pub fn router(state: AppState) -> Router {
             get(dashboard_reports::revenue_targets).post(dashboard_reports::set_revenue_target),
         )
         .route("/api/admin/dashboard/export", get(dashboard_reports::dashboard_export))
+        .route("/api/admin/analytics/member-demographics", get(dashboard_reports::admin_member_demographics))
+        .route("/api/admin/analytics/contract-analytics", get(dashboard_reports::admin_contract_analytics))
+        .route("/api/admin/analytics/revenue-breakdown", get(dashboard_reports::admin_revenue_breakdown))
+        .route("/api/admin/analytics/checkin-heatmap", get(dashboard_reports::admin_checkin_heatmap))
+        .route("/api/admin/reports/member-growth", get(dashboard_reports::admin_member_growth_report))
+        .route("/api/gym/analytics/api-stats", get(dashboard_reports::api_stats))
         .route("/api/reports/revenue", get(dashboard_reports::revenue_report))
         .route("/api/reports/member-growth", get(dashboard_reports::member_growth_report))
         .route("/api/reports/contract-expiry", get(dashboard_reports::contract_expiry_report))
