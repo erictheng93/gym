@@ -2319,8 +2319,10 @@ mod tests {
         let user_id = Uuid::new_v4();
         let employee_id = Uuid::new_v4();
         let member_id = Uuid::new_v4();
+        let waitlist_member_id = Uuid::new_v4();
         let plan_id = Uuid::new_v4();
         let contract_id = Uuid::new_v4();
+        let waitlist_contract_id = Uuid::new_v4();
         let class_id = Uuid::new_v4();
         let suffix = user_id.simple().to_string();
         let email = format!("rust-booking-{suffix}@example.com");
@@ -2373,6 +2375,13 @@ mod tests {
             .bind(employee_id)
             .bind(tenant_id)
             .execute(&pool).await.unwrap();
+        sqlx::query("insert into members (id, member_code, full_name, phone, branch_id, sales_person_id, status, join_date, tenant_id) values ($1, $2, 'Rust Booking Waitlist Member', '0912345679', $3, $4, 'ACTIVE', '2026-01-01'::date, $5)")
+            .bind(waitlist_member_id)
+            .bind(format!("BKW{}", &suffix[..8]))
+            .bind(branch_id)
+            .bind(employee_id)
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
 
         sqlx::query("insert into membership_plans (id, name, code, type, class_counts, price, allow_pause, allow_transfer, is_active, tenant_id, branch_id) values ($1, 'Rust Booking Plan', $2, 'COUNT_BASED', 5, 3000, false, false, true, $3, $4)")
             .bind(plan_id)
@@ -2385,6 +2394,15 @@ mod tests {
             .bind(contract_id)
             .bind(format!("BKC{}", &suffix[..8]))
             .bind(member_id)
+            .bind(plan_id)
+            .bind(branch_id)
+            .bind(employee_id)
+            .bind(tenant_id)
+            .execute(&pool).await.unwrap();
+        sqlx::query("insert into contracts (id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, start_date, original_end_date, end_date, remaining_counts, total_amount, paid_amount, payment_status, terms_accepted, created_by, tenant_id) values ($1, $2, $3, $4, $5, $6, 'ACTIVE', '2026-01-01'::date, '2026-12-31'::date, '2026-12-31'::date, 5, 3000, 3000, 'PAID', true, $6, $7)")
+            .bind(waitlist_contract_id)
+            .bind(format!("BKW{}", &suffix[..8]))
+            .bind(waitlist_member_id)
             .bind(plan_id)
             .bind(branch_id)
             .bind(employee_id)
@@ -2684,16 +2702,101 @@ mod tests {
         ).await.unwrap();
         assert_eq!(admin_cancel_response.status(), StatusCode::OK);
 
+        let promotion_session_id = Uuid::new_v4();
+        let confirmed_booking_id = Uuid::new_v4();
+        let waitlist_booking_id = Uuid::new_v4();
+        sqlx::query("insert into class_sessions (id, class_id, branch_id, instructor_id, session_date, start_time, end_time, room, max_capacity, current_count, waitlist_count, session_status) values ($1, $2, $3, $4, '2026-02-03'::date, '10:00'::time, '11:00'::time, 'C', 1, 1, 1, 'SCHEDULED')")
+            .bind(promotion_session_id)
+            .bind(class_id)
+            .bind(branch_id)
+            .bind(employee_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into bookings (id, session_id, member_id, contract_id, booking_status) values ($1, $2, $3, $4, 'CONFIRMED')")
+            .bind(confirmed_booking_id)
+            .bind(promotion_session_id)
+            .bind(member_id)
+            .bind(contract_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into bookings (id, session_id, member_id, contract_id, booking_status, waitlist_position) values ($1, $2, $3, $4, 'WAITLIST', 1)")
+            .bind(waitlist_booking_id)
+            .bind(promotion_session_id)
+            .bind(waitlist_member_id)
+            .bind(waitlist_contract_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let legacy_cancel_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/bookings/{confirmed_booking_id}/cancel"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "reason": "promote waitlist" }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(legacy_cancel_response.status(), StatusCode::OK);
+        let legacy_cancel_body = to_bytes(legacy_cancel_response.into_body(), usize::MAX).await.unwrap();
+        let legacy_cancel_json: Value = serde_json::from_slice(&legacy_cancel_body).unwrap();
+        assert_eq!(legacy_cancel_json["promoted_booking_id"], waitlist_booking_id.to_string());
+        assert_eq!(legacy_cancel_json["promoted_member_id"], waitlist_member_id.to_string());
+
+        let promoted: (String, Option<i32>) = sqlx::query_as("select booking_status, waitlist_position from bookings where id = $1")
+            .bind(waitlist_booking_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(promoted.0, "CONFIRMED");
+        assert!(promoted.1.is_none());
+        let promotion_counts: (i32, i32) = sqlx::query_as("select current_count, waitlist_count from class_sessions where id = $1")
+            .bind(promotion_session_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(promotion_counts, (1, 0));
+
+        let legacy_attend_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/bookings/{waitlist_booking_id}/attend"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(legacy_attend_response.status(), StatusCode::OK);
+        let legacy_attend_body = to_bytes(legacy_attend_response.into_body(), usize::MAX).await.unwrap();
+        let legacy_attend_json: Value = serde_json::from_slice(&legacy_attend_body).unwrap();
+        assert_eq!(legacy_attend_json["remaining_counts"], 4);
+
+        let duplicate_attend_response = app.clone().oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/bookings/{waitlist_booking_id}/attend"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(duplicate_attend_response.status(), StatusCode::BAD_REQUEST);
+
         let booking_uuid = Uuid::parse_str(&booking_id).unwrap();
         let admin_booking_uuid = Uuid::parse_str(&admin_booking_id).unwrap();
+        sqlx::query("delete from bookings where id = $1").bind(waitlist_booking_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from bookings where id = $1").bind(confirmed_booking_id).execute(&pool).await.unwrap();
         sqlx::query("delete from bookings where id = $1").bind(admin_booking_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from bookings where id = $1").bind(booking_uuid).execute(&pool).await.unwrap();
+        sqlx::query("delete from class_sessions where id = $1").bind(promotion_session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_sessions where id = $1").bind(generated_session_id).execute(&pool).await.unwrap();
         sqlx::query("delete from class_sessions where id = $1").bind(session_uuid).execute(&pool).await.unwrap();
         sqlx::query("delete from class_schedules where id = $1").bind(schedule_id).execute(&pool).await.unwrap();
         sqlx::query("delete from classes where id = $1").bind(class_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from contracts where id = $1").bind(waitlist_contract_id).execute(&pool).await.unwrap();
         sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
         sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from members where id = $1").bind(waitlist_member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from employees where id = $1").bind(employee_id).execute(&pool).await.unwrap();
         sqlx::query("delete from users where id = $1").bind(user_id).execute(&pool).await.unwrap();

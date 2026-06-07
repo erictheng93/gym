@@ -287,6 +287,11 @@ pub struct AdminAttendRequest {
     booking_id: Uuid,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BookingActionRequest {
+    reason: Option<String>,
+}
+
 #[derive(Debug, Serialize, FromRow)]
 pub struct Booking {
     id: Uuid,
@@ -324,6 +329,7 @@ struct ScheduleGenerateRow {
 
 #[derive(Debug, FromRow)]
 struct AttendContext {
+    booking_status: Option<String>,
     contract_id: Option<Uuid>,
     count_deducted: Option<bool>,
     contract_tenant_id: Option<Uuid>,
@@ -892,6 +898,23 @@ pub async fn cancel_booking(
     Ok((StatusCode::OK, Json(ApiResponse { success: true, data: booking })))
 }
 
+pub async fn cancel_booking_action(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<BookingActionRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    cancel_booking_by_id(auth, state, id, payload.reason).await
+}
+
+pub async fn attend_booking_action(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    attend_booking_by_id(auth, state, id).await
+}
+
 pub async fn generate_sessions(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -1018,25 +1041,43 @@ pub async fn admin_cancel_booking(
     State(state): State<AppState>,
     Json(payload): Json<AdminCancelBookingRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    cancel_booking_by_id(auth, state, payload.booking_id, payload.reason).await
+}
+
+async fn cancel_booking_by_id(
+    auth: AuthContext,
+    state: AppState,
+    booking_id: Uuid,
+    reason: Option<String>,
+) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let existing = fetch_booking(&state.db, tenant_id, payload.booking_id).await?;
+    let existing = fetch_booking(&state.db, tenant_id, booking_id).await?;
+    if existing.booking_status.as_deref() == Some("CANCELLED") {
+        return Err(AppError::Validation("booking is already cancelled".into()));
+    }
     let mut tx = state.db.begin().await?;
     sqlx::query(
         "update bookings set booking_status = 'CANCELLED', cancel_reason = $2, cancelled_at = now(), updated_at = now() where id = $1",
     )
-    .bind(payload.booking_id)
-    .bind(payload.reason)
+    .bind(booking_id)
+    .bind(reason)
     .execute(&mut *tx)
     .await?;
+    let mut promoted_booking_id = None;
+    let mut promoted_member_id = None;
     if existing.booking_status.as_deref() == Some("CONFIRMED") {
         increment_session_count(&mut tx, existing.session_id, -1).await?;
+        if let Some((promoted_id, member_id)) = promote_waitlist_in_tx(&mut tx, existing.session_id).await? {
+            promoted_booking_id = Some(promoted_id);
+            promoted_member_id = Some(member_id);
+        }
     }
     tx.commit().await?;
 
     Ok((StatusCode::OK, Json(json!({
         "success": true,
-        "promoted_booking_id": null,
-        "promoted_member_id": null,
+        "promoted_booking_id": promoted_booking_id,
+        "promoted_member_id": promoted_member_id,
         "message": "取消預約成功"
     }))))
 }
@@ -1046,14 +1087,31 @@ pub async fn admin_attend(
     State(state): State<AppState>,
     Json(payload): Json<AdminAttendRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    attend_booking_by_id(auth, state, payload.booking_id).await
+}
+
+async fn attend_booking_by_id(
+    auth: AuthContext,
+    state: AppState,
+    booking_id: Uuid,
+) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let context = fetch_attend_context(&state.db, tenant_id, payload.booking_id).await?;
+    let context = fetch_attend_context(&state.db, tenant_id, booking_id).await?;
+    if context.booking_status.as_deref() != Some("CONFIRMED") {
+        return Err(AppError::Validation("booking must be CONFIRMED to attend".into()));
+    }
+    if context.count_deducted == Some(true) || context.booking_status.as_deref() == Some("ATTENDED") {
+        return Err(AppError::Validation("booking is already attended".into()));
+    }
+    if context.plan_type.as_deref() == Some("COUNT_BASED") && context.remaining_counts.unwrap_or(0) <= 0 {
+        return Err(AppError::Validation("contract has no remaining counts".into()));
+    }
     let mut remaining_counts = context.remaining_counts;
     let mut tx = state.db.begin().await?;
     sqlx::query(
         "update bookings set booking_status = 'ATTENDED', attended_at = coalesce(attended_at, now()), updated_at = now() where id = $1",
     )
-    .bind(payload.booking_id)
+    .bind(booking_id)
     .execute(&mut *tx)
     .await?;
     if context.plan_type.as_deref() == Some("COUNT_BASED") && context.count_deducted != Some(true) {
@@ -1072,7 +1130,7 @@ pub async fn admin_attend(
         .await?;
         remaining_counts = updated.flatten();
         sqlx::query("update bookings set count_deducted = true where id = $1")
-            .bind(payload.booking_id)
+            .bind(booking_id)
             .execute(&mut *tx)
             .await?;
     }
@@ -1154,6 +1212,7 @@ async fn fetch_attend_context(pool: &PgPool, tenant_id: Uuid, booking_id: Uuid) 
     sqlx::query_as::<_, AttendContext>(
         r#"
         select
+            bookings.booking_status,
             bookings.contract_id,
             bookings.count_deducted,
             contracts.tenant_id as contract_tenant_id,
@@ -1209,6 +1268,39 @@ async fn increment_session_count(
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+async fn promote_waitlist_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    session_id: Uuid,
+) -> Result<Option<(Uuid, Uuid)>, AppError> {
+    let promoted = sqlx::query_as::<_, (Uuid, Uuid)>(
+        r#"
+        update bookings
+        set booking_status = 'CONFIRMED',
+            waitlist_position = null,
+            updated_at = now()
+        where id = (
+            select id
+            from bookings
+            where session_id = $1 and booking_status = 'WAITLIST'
+            order by waitlist_position nulls last, booked_at, created_at
+            limit 1
+            for update skip locked
+        )
+        returning id, member_id
+        "#,
+    )
+    .bind(session_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if promoted.is_some() {
+        sqlx::query("update class_sessions set waitlist_count = greatest(coalesce(waitlist_count, 0) - 1, 0), current_count = greatest(coalesce(current_count, 0) + 1, 0), updated_at = now() where id = $1")
+            .bind(session_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(promoted)
 }
 
 async fn ensure_class_scope(pool: &PgPool, tenant_id: Uuid, class_id: Uuid) -> Result<(), AppError> {

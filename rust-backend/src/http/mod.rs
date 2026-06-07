@@ -219,6 +219,8 @@ pub fn router(state: AppState) -> Router {
             "/api/bookings",
             get(class_scheduling::list_bookings).post(class_scheduling::create_booking),
         )
+        .route("/api/bookings/{id}/cancel", post(class_scheduling::cancel_booking_action))
+        .route("/api/bookings/{id}/attend", post(class_scheduling::attend_booking_action))
         .route(
             "/api/bookings/{id}",
             get(class_scheduling::get_booking)
