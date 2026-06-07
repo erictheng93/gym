@@ -1141,6 +1141,25 @@ mod tests {
         assert_eq!(list_json["data"][0]["plan"]["planType"], "COUNT_BASED");
         assert_eq!(list_json["data"][0]["contract_status"], "ACTIVE");
 
+        let search_sort_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/contracts?search=Rust%20Contract%20Member&sortBy=contract_no&sortOrder=asc&page=1&limit=1")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(search_sort_response.status(), StatusCode::OK);
+        let search_sort_body = to_bytes(search_sort_response.into_body(), usize::MAX).await.unwrap();
+        let search_sort_json: Value = serde_json::from_slice(&search_sort_body).unwrap();
+        assert_eq!(search_sort_json["pagination"]["total"], 1);
+        assert_eq!(search_sort_json["pagination"]["limit"], 1);
+        assert_eq!(search_sort_json["data"][0]["id"], contract_id);
+        assert_eq!(search_sort_json["data"][0]["member"]["full_name"], "Rust Contract Member");
+
         let status_filter_response = app
             .clone()
             .oneshot(
@@ -1609,6 +1628,27 @@ mod tests {
         let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
         let list_json: Value = serde_json::from_slice(&list_body).unwrap();
         assert_eq!(list_json["pagination"]["total"], 1);
+
+        let receipt_no = format!("R{}", &suffix[..8]);
+        let search_sort_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/payments?search={receipt_no}&sortBy=amount&sortOrder=desc&page=1&limit=1"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(search_sort_response.status(), StatusCode::OK);
+        let search_sort_body = to_bytes(search_sort_response.into_body(), usize::MAX).await.unwrap();
+        let search_sort_json: Value = serde_json::from_slice(&search_sort_body).unwrap();
+        assert_eq!(search_sort_json["pagination"]["total"], 1);
+        assert_eq!(search_sort_json["pagination"]["limit"], 1);
+        assert_eq!(search_sort_json["data"][0]["id"], payment_id);
+        assert_eq!(search_sort_json["data"][0]["contract"]["contract_no"], format!("PYC{}", &suffix[..8]));
+        assert_eq!(search_sort_json["data"][0]["member"]["full_name"], "Rust Payment Member");
 
         let summary_response = app
             .clone()

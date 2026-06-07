@@ -7,6 +7,7 @@ use axum::{
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::cmp::Ordering;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -44,6 +45,11 @@ pub struct PaymentFilters {
     start_date_camel: Option<String>,
     #[serde(rename = "endDate")]
     end_date_camel: Option<String>,
+    search: Option<String>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -148,7 +154,7 @@ pub async fn list(
     let end_date = filters.end_date.or(filters.end_date_camel)
         .map(|value| parse_datetime_filter(&value, true))
         .transpose()?;
-    let payments = sqlx::query_as::<_, Payment>(
+    let mut payments = sqlx::query_as::<_, Payment>(
         r#"
         select
             payments.id, payments.contract_id, payments.member_id, payments.branch_id, payments.amount::float8 as amount,
@@ -184,16 +190,28 @@ pub async fn list(
     .bind(end_date)
     .fetch_all(&state.db)
     .await?;
+    if let Some(search) = trim_opt(filters.search) {
+        let search = search.to_lowercase();
+        payments.retain(|payment| payment_matches_search(payment, &search));
+    }
+    sort_payments(&mut payments, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     let total = payments.len() as i64;
     let page = filters.page.unwrap_or(1).max(1);
     let limit = filters.limit.unwrap_or(total.max(1)).max(1);
+    let start = ((page - 1) * limit) as usize;
+    let end = (start + limit as usize).min(payments.len());
+    let data = if start >= payments.len() {
+        Vec::new()
+    } else {
+        payments.into_iter().skip(start).take(end - start).collect()
+    };
 
     Ok((
         StatusCode::OK,
         Json(PaginatedResponse {
             success: true,
-            data: payments,
+            data,
             pagination: Pagination {
                 total,
                 page,
@@ -550,6 +568,43 @@ fn validate_payment_type(payment_type: &str) -> Result<(), AppError> {
     match payment_type {
         "INCOME" | "REFUND" => Ok(()),
         _ => Err(AppError::Validation("type must be INCOME or REFUND".into())),
+    }
+}
+
+fn trim_opt(value: Option<String>) -> Option<String> {
+    value.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+fn payment_matches_search(payment: &Payment, search: &str) -> bool {
+    payment.receipt_no.as_ref().map(|value| value.to_lowercase().contains(search)).unwrap_or(false)
+        || payment.payment_method.to_lowercase().contains(search)
+        || payment.payment_type.to_lowercase().contains(search)
+        || json_field_contains(payment.member.as_ref(), "full_name", search)
+        || json_field_contains(payment.member.as_ref(), "member_code", search)
+        || json_field_contains(payment.contract.as_ref(), "contract_no", search)
+        || json_field_contains(payment.branch.as_ref(), "name", search)
+}
+
+fn json_field_contains(value: Option<&Value>, field: &str, search: &str) -> bool {
+    value
+        .and_then(|value| value.get(field))
+        .and_then(Value::as_str)
+        .map(|value| value.to_lowercase().contains(search))
+        .unwrap_or(false)
+}
+
+fn sort_payments(payments: &mut [Payment], sort_by: Option<&str>, sort_order: Option<&str>) {
+    match sort_by.unwrap_or("payment_date") {
+        "payment_date" | "paymentDate" => payments.sort_by(|a, b| a.payment_date.cmp(&b.payment_date)),
+        "amount" => payments.sort_by(|a, b| a.amount.partial_cmp(&b.amount).unwrap_or(Ordering::Equal)),
+        "receipt_no" | "receiptNo" => payments.sort_by(|a, b| a.receipt_no.cmp(&b.receipt_no)),
+        "payment_method" | "paymentMethod" => payments.sort_by(|a, b| a.payment_method.cmp(&b.payment_method)),
+        "type" | "payment_type" | "paymentType" => payments.sort_by(|a, b| a.payment_type.cmp(&b.payment_type)),
+        _ => {}
+    }
+
+    if !sort_order.map(|value| value.eq_ignore_ascii_case("asc")).unwrap_or(false) {
+        payments.reverse();
     }
 }
 

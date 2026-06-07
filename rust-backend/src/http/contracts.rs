@@ -7,6 +7,7 @@ use axum::{
 use chrono::{Duration, NaiveDate};
 use serde::{ser::{SerializeMap, Serializer}, Deserialize, Serialize};
 use serde_json::Value;
+use std::cmp::Ordering;
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -30,6 +31,11 @@ pub struct ContractFilters {
     branch_id_snake: Option<Uuid>,
     status: Option<String>,
     contract_status: Option<String>,
+    search: Option<String>,
+    #[serde(rename = "sortBy", alias = "sort")]
+    sort_by: Option<String>,
+    #[serde(rename = "sortOrder")]
+    sort_order: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
@@ -163,7 +169,7 @@ pub async fn list(
     let member_id = filters.member_id.or(filters.member_id_snake);
     let branch_id = filters.branch_id.or(filters.branch_id_snake);
     let status = filters.status.or(filters.contract_status);
-    let contracts = sqlx::query_as::<_, Contract>(
+    let mut contracts = sqlx::query_as::<_, Contract>(
         r#"
         select
             contracts.id, contracts.contract_no, contracts.member_id, contracts.plan_id,
@@ -206,15 +212,27 @@ pub async fn list(
     .bind(status)
     .fetch_all(&state.db)
     .await?;
+    if let Some(search) = trim_opt(filters.search) {
+        let search = search.to_lowercase();
+        contracts.retain(|contract| contract_matches_search(contract, &search));
+    }
+    sort_contracts(&mut contracts, filters.sort_by.as_deref(), filters.sort_order.as_deref());
 
     let total = contracts.len() as i64;
     let page = filters.page.unwrap_or(1).max(1);
     let limit = filters.limit.unwrap_or(total.max(1)).max(1);
+    let start = ((page - 1) * limit) as usize;
+    let end = (start + limit as usize).min(contracts.len());
+    let data = if start >= contracts.len() {
+        Vec::new()
+    } else {
+        contracts.into_iter().skip(start).take(end - start).collect()
+    };
     Ok((
         StatusCode::OK,
         Json(PaginatedResponse {
             success: true,
-            data: contracts,
+            data,
             pagination: Pagination {
                 total,
                 page,
@@ -659,6 +677,44 @@ fn validate_dates(start: NaiveDate, end: NaiveDate) -> Result<(), AppError> {
 
 fn trim_opt(value: Option<String>) -> Option<String> {
     value.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+fn contract_matches_search(contract: &Contract, search: &str) -> bool {
+    contract.contract_no.to_lowercase().contains(search)
+        || contract.contract_status.to_lowercase().contains(search)
+        || json_field_contains(contract.member.as_ref(), "full_name", search)
+        || json_field_contains(contract.member.as_ref(), "member_code", search)
+        || json_field_contains(contract.plan.as_ref(), "name", search)
+        || json_field_contains(contract.branch.as_ref(), "name", search)
+}
+
+fn json_field_contains(value: Option<&Value>, field: &str, search: &str) -> bool {
+    value
+        .and_then(|value| value.get(field))
+        .and_then(Value::as_str)
+        .map(|value| value.to_lowercase().contains(search))
+        .unwrap_or(false)
+}
+
+fn sort_contracts(contracts: &mut [Contract], sort_by: Option<&str>, sort_order: Option<&str>) {
+    let mut sorted = true;
+    match sort_by.unwrap_or("date_created") {
+        "contract_no" | "contractNo" => contracts.sort_by(|a, b| a.contract_no.cmp(&b.contract_no)),
+        "status" | "contract_status" | "contractStatus" => {
+            contracts.sort_by(|a, b| a.contract_status.cmp(&b.contract_status))
+        }
+        "start_date" | "startDate" => contracts.sort_by(|a, b| a.start_date.cmp(&b.start_date)),
+        "end_date" | "endDate" => contracts.sort_by(|a, b| a.end_date.cmp(&b.end_date)),
+        "total_amount" | "totalAmount" => contracts.sort_by(|a, b| {
+            a.total_amount.partial_cmp(&b.total_amount).unwrap_or(Ordering::Equal)
+        }),
+        _ => sorted = false,
+    }
+
+    let ascending = sort_order.map(|value| value.eq_ignore_ascii_case("asc")).unwrap_or(false);
+    if (sorted && !ascending) || (!sorted && ascending) {
+        contracts.reverse();
+    }
 }
 
 impl Serialize for Contract {
