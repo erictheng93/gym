@@ -36,59 +36,60 @@ pub struct ContractFilters {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateContractRequest {
-    #[serde(rename = "contractNo")]
-    contract_no: String,
-    #[serde(rename = "memberId")]
+    #[serde(rename = "contractNo", alias = "contract_no")]
+    contract_no: Option<String>,
+    #[serde(rename = "memberId", alias = "member_id")]
     member_id: Uuid,
-    #[serde(rename = "planId")]
+    #[serde(rename = "planId", alias = "plan_id")]
     plan_id: Uuid,
-    #[serde(rename = "branchId")]
+    #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Uuid,
-    #[serde(rename = "salesPersonId")]
+    #[serde(rename = "salesPersonId", alias = "sales_person_id")]
     sales_person_id: Option<Uuid>,
-    #[serde(default = "default_active")]
+    #[serde(alias = "contract_status", default = "default_active")]
     status: String,
-    #[serde(rename = "signDate")]
+    #[serde(rename = "signDate", alias = "sign_date")]
     sign_date: Option<NaiveDate>,
-    #[serde(rename = "startDate")]
+    #[serde(rename = "startDate", alias = "start_date")]
     start_date: NaiveDate,
-    #[serde(rename = "originalEndDate")]
+    #[serde(rename = "originalEndDate", alias = "original_end_date")]
     original_end_date: NaiveDate,
-    #[serde(rename = "endDate")]
+    #[serde(rename = "endDate", alias = "end_date")]
     end_date: NaiveDate,
-    #[serde(rename = "remainingCounts")]
+    #[serde(rename = "remainingCounts", alias = "remaining_counts")]
     remaining_counts: Option<i32>,
-    #[serde(rename = "totalAmount")]
+    #[serde(rename = "totalAmount", alias = "total_amount")]
     total_amount: f64,
-    #[serde(rename = "paidAmount", default)]
+    #[serde(rename = "paidAmount", alias = "paid_amount", default)]
     paid_amount: f64,
-    #[serde(rename = "paymentStatus", default = "default_unpaid")]
+    #[serde(rename = "paymentStatus", alias = "payment_status", default = "default_unpaid")]
     payment_status: String,
-    #[serde(rename = "termsAccepted", default)]
+    #[serde(rename = "termsAccepted", alias = "terms_accepted", default)]
     terms_accepted: bool,
     notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateContractRequest {
+    #[serde(alias = "contract_status")]
     status: Option<String>,
-    #[serde(rename = "signDate")]
+    #[serde(rename = "signDate", alias = "sign_date")]
     sign_date: Option<NaiveDate>,
-    #[serde(rename = "startDate")]
+    #[serde(rename = "startDate", alias = "start_date")]
     start_date: Option<NaiveDate>,
-    #[serde(rename = "originalEndDate")]
+    #[serde(rename = "originalEndDate", alias = "original_end_date")]
     original_end_date: Option<NaiveDate>,
-    #[serde(rename = "endDate")]
+    #[serde(rename = "endDate", alias = "end_date")]
     end_date: Option<NaiveDate>,
-    #[serde(rename = "remainingCounts")]
+    #[serde(rename = "remainingCounts", alias = "remaining_counts")]
     remaining_counts: Option<i32>,
-    #[serde(rename = "totalAmount")]
+    #[serde(rename = "totalAmount", alias = "total_amount")]
     total_amount: Option<f64>,
-    #[serde(rename = "paidAmount")]
+    #[serde(rename = "paidAmount", alias = "paid_amount")]
     paid_amount: Option<f64>,
-    #[serde(rename = "paymentStatus")]
+    #[serde(rename = "paymentStatus", alias = "payment_status")]
     payment_status: Option<String>,
-    #[serde(rename = "termsAccepted")]
+    #[serde(rename = "termsAccepted", alias = "terms_accepted")]
     terms_accepted: Option<bool>,
     notes: Option<String>,
 }
@@ -96,39 +97,24 @@ pub struct UpdateContractRequest {
 #[derive(Debug, Serialize, FromRow)]
 pub struct Contract {
     id: Uuid,
-    #[serde(rename = "contractNo")]
     contract_no: String,
-    #[serde(rename = "memberId")]
     member_id: Uuid,
-    #[serde(rename = "planId")]
     plan_id: Uuid,
-    #[serde(rename = "branchId")]
     branch_id: Uuid,
-    #[serde(rename = "salesPersonId")]
     sales_person_id: Option<Uuid>,
-    status: String,
-    #[serde(rename = "signDate")]
+    #[sqlx(rename = "status")]
+    contract_status: String,
     sign_date: Option<NaiveDate>,
-    #[serde(rename = "startDate")]
     start_date: NaiveDate,
-    #[serde(rename = "originalEndDate")]
     original_end_date: NaiveDate,
-    #[serde(rename = "endDate")]
     end_date: NaiveDate,
-    #[serde(rename = "remainingCounts")]
     remaining_counts: Option<i32>,
-    #[serde(rename = "totalAmount")]
     total_amount: f64,
-    #[serde(rename = "paidAmount")]
     paid_amount: f64,
-    #[serde(rename = "paymentStatus")]
     payment_status: String,
-    #[serde(rename = "termsAccepted")]
     terms_accepted: bool,
     notes: Option<String>,
-    #[serde(rename = "createdBy")]
     created_by: Option<Uuid>,
-    #[serde(rename = "tenantId")]
     tenant_id: Option<Uuid>,
     plan: Option<Value>,
 }
@@ -233,6 +219,15 @@ pub async fn create(
     let remaining_counts = payload.remaining_counts.or_else(|| {
         (plan.plan_type == "COUNT_BASED").then_some(plan.class_counts.unwrap_or(0))
     });
+    let contract_no = payload.contract_no
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            let suffix = Uuid::new_v4().simple().to_string();
+            format!("C{}", &suffix[..10])
+        });
 
     let contract = sqlx::query_as::<_, Contract>(
         r#"
@@ -254,7 +249,7 @@ pub async fn create(
             null::jsonb as plan
         "#,
     )
-    .bind(payload.contract_no.trim())
+    .bind(contract_no)
     .bind(payload.member_id)
     .bind(payload.plan_id)
     .bind(payload.branch_id)
@@ -340,7 +335,7 @@ pub async fn delete(
     let contract = sqlx::query_as::<_, Contract>(
         r#"
         update contracts
-        set status = 'CANCELLED', updated_at = now()
+        set status = 'TERMINATED', updated_at = now()
         where id = $1 and tenant_id = $2
         returning
             id, contract_no, member_id, plan_id, branch_id, sales_person_id, status, sign_date,
@@ -392,7 +387,9 @@ fn require_tenant(auth: &AuthContext) -> Result<Uuid, AppError> {
 }
 
 fn validate_create(payload: &CreateContractRequest) -> Result<(), AppError> {
-    validation::required_text("contractNo", &payload.contract_no)?;
+    if let Some(contract_no) = &payload.contract_no {
+        validation::required_text("contractNo", contract_no)?;
+    }
     validate_status(&payload.status)?;
     validate_payment_status(&payload.payment_status)?;
     validate_amount("totalAmount", payload.total_amount)?;
@@ -422,7 +419,7 @@ fn validate_update(payload: &UpdateContractRequest) -> Result<(), AppError> {
 
 fn validate_status(status: &str) -> Result<(), AppError> {
     match status {
-        "ACTIVE" | "PENDING" | "EXPIRED" | "CANCELLED" | "SUSPENDED" => Ok(()),
+        "DRAFT" | "ACTIVE" | "PAUSED" | "EXPIRED" | "TERMINATED" | "PENDING" | "CANCELLED" | "SUSPENDED" => Ok(()),
         _ => Err(AppError::Validation("status is invalid".into())),
     }
 }

@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -37,32 +37,32 @@ pub struct PaymentFilters {
     #[serde(rename = "type")]
     payment_type: Option<String>,
     payment_type_snake: Option<String>,
-    start_date: Option<DateTime<Utc>>,
-    end_date: Option<DateTime<Utc>>,
+    start_date: Option<String>,
+    end_date: Option<String>,
     #[serde(rename = "startDate")]
-    start_date_camel: Option<DateTime<Utc>>,
+    start_date_camel: Option<String>,
     #[serde(rename = "endDate")]
-    end_date_camel: Option<DateTime<Utc>>,
+    end_date_camel: Option<String>,
     page: Option<i64>,
     limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePaymentRequest {
-    #[serde(rename = "contractId")]
+    #[serde(rename = "contractId", alias = "contract_id")]
     contract_id: Uuid,
-    #[serde(rename = "memberId")]
+    #[serde(rename = "memberId", alias = "member_id")]
     member_id: Option<Uuid>,
-    #[serde(rename = "branchId")]
+    #[serde(rename = "branchId", alias = "branch_id")]
     branch_id: Option<Uuid>,
     amount: f64,
-    #[serde(rename = "paymentMethod")]
+    #[serde(rename = "paymentMethod", alias = "payment_method", default = "default_cash")]
     payment_method: String,
-    #[serde(rename = "paymentDate")]
-    payment_date: Option<DateTime<Utc>>,
-    #[serde(rename = "type", default = "default_income")]
+    #[serde(rename = "paymentDate", alias = "payment_date")]
+    payment_date: Option<String>,
+    #[serde(rename = "type", alias = "payment_type", default = "default_income")]
     payment_type: String,
-    #[serde(rename = "receiptNo")]
+    #[serde(rename = "receiptNo", alias = "receipt_no")]
     receipt_no: Option<String>,
     notes: Option<String>,
 }
@@ -70,13 +70,13 @@ pub struct CreatePaymentRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdatePaymentRequest {
     amount: Option<f64>,
-    #[serde(rename = "paymentMethod")]
+    #[serde(rename = "paymentMethod", alias = "payment_method")]
     payment_method: Option<String>,
-    #[serde(rename = "paymentDate")]
-    payment_date: Option<DateTime<Utc>>,
-    #[serde(rename = "type")]
+    #[serde(rename = "paymentDate", alias = "payment_date")]
+    payment_date: Option<String>,
+    #[serde(rename = "type", alias = "payment_type")]
     payment_type: Option<String>,
-    #[serde(rename = "receiptNo")]
+    #[serde(rename = "receiptNo", alias = "receipt_no")]
     receipt_no: Option<String>,
     notes: Option<String>,
 }
@@ -84,25 +84,16 @@ pub struct UpdatePaymentRequest {
 #[derive(Debug, Serialize, FromRow)]
 pub struct Payment {
     id: Uuid,
-    #[serde(rename = "contractId")]
     contract_id: Uuid,
-    #[serde(rename = "memberId")]
     member_id: Uuid,
-    #[serde(rename = "branchId")]
     branch_id: Uuid,
     amount: f64,
-    #[serde(rename = "paymentMethod")]
     payment_method: String,
-    #[serde(rename = "paymentDate")]
     payment_date: DateTime<Utc>,
-    #[serde(rename = "type")]
     payment_type: String,
-    #[serde(rename = "receiptNo")]
     receipt_no: Option<String>,
     notes: Option<String>,
-    #[serde(rename = "createdBy")]
     created_by: Option<Uuid>,
-    #[serde(rename = "tenantId")]
     tenant_id: Option<Uuid>,
 }
 
@@ -118,6 +109,10 @@ fn default_income() -> String {
     "INCOME".into()
 }
 
+fn default_cash() -> String {
+    "CASH".into()
+}
+
 pub async fn list(
     auth: AuthContext,
     State(state): State<AppState>,
@@ -129,8 +124,12 @@ pub async fn list(
     let branch_id = filters.branch_id.or(filters.branch_id_snake);
     let payment_method = filters.payment_method.or(filters.payment_method_snake);
     let payment_type = filters.payment_type.or(filters.payment_type_snake);
-    let start_date = filters.start_date.or(filters.start_date_camel);
-    let end_date = filters.end_date.or(filters.end_date_camel);
+    let start_date = filters.start_date.or(filters.start_date_camel)
+        .map(|value| parse_datetime_filter(&value, false))
+        .transpose()?;
+    let end_date = filters.end_date.or(filters.end_date_camel)
+        .map(|value| parse_datetime_filter(&value, true))
+        .transpose()?;
     let payments = sqlx::query_as::<_, Payment>(
         r#"
         select
@@ -200,6 +199,10 @@ pub async fn create(
     let tenant_id = require_tenant(&auth)?;
     validate_amount(payload.amount)?;
     validate_payment_type(&payload.payment_type)?;
+    let payment_date = payload.payment_date
+        .as_deref()
+        .map(|value| parse_datetime_filter(value, false))
+        .transpose()?;
     let contract = fetch_contract_context(&state.db, tenant_id, payload.contract_id).await?;
     let member_id = payload.member_id.unwrap_or(contract.member_id);
     let branch_id = payload.branch_id.unwrap_or(contract.branch_id);
@@ -232,7 +235,7 @@ pub async fn create(
     .bind(branch_id)
     .bind(payload.amount)
     .bind(payload.payment_method.trim())
-    .bind(payload.payment_date)
+    .bind(payment_date)
     .bind(payload.payment_type.trim())
     .bind(payload.receipt_no)
     .bind(payload.notes)
@@ -260,6 +263,10 @@ pub async fn update(
     if let Some(payment_type) = &payload.payment_type {
         validate_payment_type(payment_type)?;
     }
+    let payment_date = payload.payment_date
+        .as_deref()
+        .map(|value| parse_datetime_filter(value, false))
+        .transpose()?;
     let existing = fetch_payment(&state.db, tenant_id, id).await?;
     let contract = fetch_contract_context(&state.db, tenant_id, existing.contract_id).await?;
 
@@ -285,7 +292,7 @@ pub async fn update(
     .bind(tenant_id)
     .bind(payload.amount)
     .bind(payload.payment_method.as_deref().map(str::trim))
-    .bind(payload.payment_date)
+    .bind(payment_date)
     .bind(payload.payment_type.as_deref().map(str::trim))
     .bind(payload.receipt_no)
     .bind(payload.notes)
@@ -414,6 +421,17 @@ fn validate_payment_type(payment_type: &str) -> Result<(), AppError> {
         "INCOME" | "REFUND" => Ok(()),
         _ => Err(AppError::Validation("type must be INCOME or REFUND".into())),
     }
+}
+
+fn parse_datetime_filter(value: &str, exclusive_end: bool) -> Result<DateTime<Utc>, AppError> {
+    if let Ok(datetime) = DateTime::parse_from_rfc3339(value) {
+        return Ok(datetime.with_timezone(&Utc));
+    }
+
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        .map_err(|_| AppError::Validation("paymentDate must be YYYY-MM-DD or RFC3339".into()))?;
+    let datetime = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+    Ok(if exclusive_end { datetime + Duration::days(1) } else { datetime })
 }
 
 #[cfg(test)]

@@ -61,9 +61,13 @@ impl IntoResponse for AppError {
             ),
             AppError::Database(error) => {
                 tracing::error!(?error, "database operation failed");
+                #[cfg(test)]
+                let body = ErrorResponse::with_details("資料庫暫時無法使用", error.to_string());
+                #[cfg(not(test))]
+                let body = ErrorResponse::new("資料庫暫時無法使用");
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    ErrorResponse::new("資料庫暫時無法使用"),
+                    body,
                 )
             }
             AppError::Io(error) => (

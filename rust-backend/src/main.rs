@@ -1083,7 +1083,6 @@ mod tests {
         let login_json: Value = serde_json::from_slice(&login_body).unwrap();
         let token = login_json["data"]["token"].as_str().unwrap();
 
-        let contract_no = format!("RC{}", &suffix[..10]);
         let create_response = app
             .clone()
             .oneshot(
@@ -1094,20 +1093,19 @@ mod tests {
                     .header("content-type", "application/json")
                     .body(Body::from(
                         json!({
-                            "contractNo": contract_no,
-                            "memberId": member_id,
-                            "planId": plan_id,
-                            "branchId": branch_id,
-                            "salesPersonId": employee_id,
-                            "status": "ACTIVE",
-                            "signDate": "2026-01-01",
-                            "startDate": "2026-01-01",
-                            "originalEndDate": "2026-12-31",
-                            "endDate": "2026-12-31",
-                            "totalAmount": 3000.0,
-                            "paidAmount": 0.0,
-                            "paymentStatus": "UNPAID",
-                            "termsAccepted": true
+                            "member_id": member_id,
+                            "plan_id": plan_id,
+                            "branch_id": branch_id,
+                            "sales_person_id": employee_id,
+                            "contract_status": "ACTIVE",
+                            "sign_date": "2026-01-01",
+                            "start_date": "2026-01-01",
+                            "original_end_date": "2026-12-31",
+                            "end_date": "2026-12-31",
+                            "total_amount": 3000.0,
+                            "paid_amount": 0.0,
+                            "payment_status": "UNPAID",
+                            "terms_accepted": true
                         })
                         .to_string(),
                     ))
@@ -1115,11 +1113,16 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_status = create_response.status();
         let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+        if create_status != StatusCode::CREATED {
+            panic!("create contract status {create_status}, body: {}", String::from_utf8_lossy(&create_body));
+        }
         let create_json: Value = serde_json::from_slice(&create_body).unwrap();
         let contract_id = create_json["data"]["id"].as_str().unwrap().to_string();
-        assert_eq!(create_json["data"]["remainingCounts"], 10);
+        assert!(create_json["data"]["contract_no"].as_str().unwrap().starts_with('C'));
+        assert_eq!(create_json["data"]["contract_status"], "ACTIVE");
+        assert_eq!(create_json["data"]["remaining_counts"], 10);
 
         let list_response = app
             .clone()
@@ -1136,6 +1139,7 @@ mod tests {
         let list_body = to_bytes(list_response.into_body(), usize::MAX).await.unwrap();
         let list_json: Value = serde_json::from_slice(&list_body).unwrap();
         assert_eq!(list_json["data"][0]["plan"]["planType"], "COUNT_BASED");
+        assert_eq!(list_json["data"][0]["contract_status"], "ACTIVE");
 
         let status_filter_response = app
             .clone()
@@ -1169,8 +1173,26 @@ mod tests {
         assert_eq!(update_response.status(), StatusCode::OK);
         let update_body = to_bytes(update_response.into_body(), usize::MAX).await.unwrap();
         let update_json: Value = serde_json::from_slice(&update_body).unwrap();
-        assert_eq!(update_json["data"]["paidAmount"], 1500.0);
-        assert_eq!(update_json["data"]["paymentStatus"], "PARTIAL");
+        assert_eq!(update_json["data"]["paid_amount"], 1500.0);
+        assert_eq!(update_json["data"]["payment_status"], "PARTIAL");
+
+        let pause_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/contracts/{contract_id}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"contract_status": "PAUSED"}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(pause_response.status(), StatusCode::OK);
+        let pause_body = to_bytes(pause_response.into_body(), usize::MAX).await.unwrap();
+        let pause_json: Value = serde_json::from_slice(&pause_body).unwrap();
+        assert_eq!(pause_json["data"]["contract_status"], "PAUSED");
 
         let delete_response = app
             .clone()
@@ -1187,7 +1209,7 @@ mod tests {
         assert_eq!(delete_response.status(), StatusCode::OK);
         let delete_body = to_bytes(delete_response.into_body(), usize::MAX).await.unwrap();
         let delete_json: Value = serde_json::from_slice(&delete_body).unwrap();
-        assert_eq!(delete_json["data"]["status"], "CANCELLED");
+        assert_eq!(delete_json["data"]["contract_status"], "TERMINATED");
 
         let contract_uuid = Uuid::parse_str(&contract_id).unwrap();
         sqlx::query("delete from contracts where id = $1")
@@ -1386,11 +1408,12 @@ mod tests {
                     .header("content-type", "application/json")
                     .body(Body::from(
                         json!({
-                            "contractId": contract_id,
+                            "contract_id": contract_id,
                             "amount": 1000.0,
-                            "paymentMethod": "CASH",
-                            "type": "INCOME",
-                            "receiptNo": format!("R{}", &suffix[..8])
+                            "payment_method": "CASH",
+                            "payment_type": "INCOME",
+                            "payment_date": "2026-01-01",
+                            "receipt_no": format!("R{}", &suffix[..8])
                         })
                         .to_string(),
                     ))
@@ -1402,13 +1425,15 @@ mod tests {
         let create_body = to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
         let create_json: Value = serde_json::from_slice(&create_body).unwrap();
         let payment_id = create_json["data"]["id"].as_str().unwrap().to_string();
+        assert_eq!(create_json["data"]["payment_type"], "INCOME");
+        assert_eq!(create_json["data"]["payment_method"], "CASH");
 
         let list_response = app
             .clone()
             .oneshot(
                 Request::builder()
                     .uri(format!(
-                        "/api/payments?id={payment_id}&payment_type=INCOME&startDate=2026-01-01T00:00:00Z&endDate=2027-01-01T00:00:00Z"
+                        "/api/payments?id={payment_id}&payment_type=INCOME&start_date=2026-01-01&end_date=2026-01-31"
                     ))
                     .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
