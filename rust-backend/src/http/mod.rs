@@ -23,6 +23,7 @@ mod members;
 mod membership_plans;
 mod member_app;
 mod member_fitness;
+mod member_support;
 mod payments;
 mod payroll;
 mod performance;
@@ -222,6 +223,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/measurements/latest", get(member_fitness::latest_measurement))
         .route("/api/member/measurements/stats", get(member_fitness::measurement_stats))
         .route("/api/member/measurements/{id}", delete(member_fitness::delete_measurement))
+        .route("/api/member/issues", get(member_support::list_issues).post(member_support::create_issue))
+        .route(
+            "/api/member/issues/{id}",
+            get(member_support::get_issue).put(member_support::update_issue),
+        )
+        .route("/api/member/support-tickets", post(member_support::create_support_ticket))
         .fallback(error::not_found)
         .with_state(state)
 }

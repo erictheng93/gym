@@ -635,3 +635,38 @@ create index if not exists workout_logs_member_id_idx on workout_logs(member_id)
 create index if not exists workout_logs_date_idx on workout_logs(date);
 create index if not exists body_measurements_member_id_idx on body_measurements(member_id);
 create index if not exists body_measurements_date_idx on body_measurements(date);
+
+create table if not exists member_issues (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    branch_id uuid not null references branches(id),
+    type varchar not null,
+    title varchar not null,
+    content text not null,
+    attachments jsonb,
+    status varchar not null default 'SUBMITTED',
+    assigned_to uuid references employees(id),
+    resolution text,
+    resolved_at timestamptz,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create table if not exists support_tickets (
+    id uuid primary key default gen_random_uuid(),
+    member_id uuid not null references members(id),
+    branch_id uuid not null references branches(id),
+    category varchar not null,
+    subject varchar not null,
+    description text not null,
+    status varchar not null default 'pending',
+    metadata jsonb,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create index if not exists member_issues_member_id_idx on member_issues(member_id);
+create index if not exists member_issues_status_idx on member_issues(status);
+create index if not exists member_issues_type_idx on member_issues(type);
+create index if not exists support_tickets_member_id_idx on support_tickets(member_id);
+create index if not exists support_tickets_status_idx on support_tickets(status);

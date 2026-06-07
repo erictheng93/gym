@@ -2137,6 +2137,50 @@ mod tests {
         let measurement_json: Value = serde_json::from_slice(&measurement_body).unwrap();
         let measurement_id = Uuid::parse_str(measurement_json["data"]["id"].as_str().unwrap()).unwrap();
 
+        let issue_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/issues")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "type": "EQUIPMENT",
+                    "title": "Rust issue smoke",
+                    "content": "Treadmill display does not turn on.",
+                    "attachments": [{ "id": "file-1", "filename": "photo.jpg", "type": "image/jpeg" }]
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(issue_response.status(), StatusCode::CREATED);
+        let issue_body = to_bytes(issue_response.into_body(), usize::MAX).await.unwrap();
+        let issue_json: Value = serde_json::from_slice(&issue_body).unwrap();
+        let issue_id = Uuid::parse_str(issue_json["data"]["id"].as_str().unwrap()).unwrap();
+        let issue_update_response = app.clone().oneshot(
+            Request::builder().method("PUT").uri(format!("/api/member/issues/{issue_id}"))
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "title": "Rust issue smoke updated",
+                    "content": "Treadmill display is still unavailable."
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(issue_update_response.status(), StatusCode::OK);
+
+        let support_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/support-tickets")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "member_id": member_id,
+                    "category": "app",
+                    "subject": "Rust support smoke",
+                    "description": "The member app needs assistance from support.",
+                    "status": "pending",
+                    "metadata": { "member_code": format!("RMM{}", &suffix[..8]) }
+                }).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(support_response.status(), StatusCode::CREATED);
+        let support_body = to_bytes(support_response.into_body(), usize::MAX).await.unwrap();
+        let support_json: Value = serde_json::from_slice(&support_body).unwrap();
+        assert_eq!(support_json["data"]["category"], "app");
+
         for uri in [
             "/api/member/me",
             "/api/member/profile",
@@ -2155,6 +2199,8 @@ mod tests {
             "/api/member/measurements",
             "/api/member/measurements/latest",
             "/api/member/measurements/stats?period=30",
+            "/api/member/issues?status=SUBMITTED&type=EQUIPMENT",
+            &format!("/api/member/issues/{issue_id}"),
         ] {
             let response = app.clone().oneshot(
                 Request::builder().uri(uri)
@@ -2187,6 +2233,8 @@ mod tests {
         sqlx::query("delete from payments where id = $1").bind(payment_id).execute(&pool).await.unwrap();
         sqlx::query("delete from contracts where id = $1").bind(contract_id).execute(&pool).await.unwrap();
         sqlx::query("delete from membership_plans where id = $1").bind(plan_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from member_issues where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
+        sqlx::query("delete from support_tickets where member_id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from member_credentials where id = $1").bind(credential_id).execute(&pool).await.unwrap();
         sqlx::query("delete from members where id = $1").bind(member_id).execute(&pool).await.unwrap();
         sqlx::query("delete from branches where id = $1").bind(branch_id).execute(&pool).await.unwrap();
