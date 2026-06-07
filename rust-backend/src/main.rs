@@ -2362,6 +2362,51 @@ mod tests {
         let login_json: Value = serde_json::from_slice(&login_body).unwrap();
         let token = login_json["data"]["accessToken"].as_str().unwrap();
 
+        let providers_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/oauth/providers")
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(providers_response.status(), StatusCode::OK);
+        let providers_body = to_bytes(providers_response.into_body(), usize::MAX).await.unwrap();
+        let providers_json: Value = serde_json::from_slice(&providers_body).unwrap();
+        assert!(providers_json["data"]["providers"].as_array().unwrap().iter().any(|provider| {
+            provider["provider"] == "google"
+        }));
+
+        let oauth_init_response = app.clone().oneshot(
+            Request::builder().uri("/api/member/oauth/google/init?redirect=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback%2Fgoogle")
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(oauth_init_response.status(), StatusCode::OK);
+        let oauth_init_body = to_bytes(oauth_init_response.into_body(), usize::MAX).await.unwrap();
+        let oauth_init_json: Value = serde_json::from_slice(&oauth_init_body).unwrap();
+        let oauth_state = oauth_init_json["data"]["state"].as_str().unwrap();
+        assert!(oauth_init_json["data"]["authUrl"].as_str().unwrap().contains(oauth_state));
+
+        let oauth_callback_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/oauth/google/callback")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"code": "dev-code", "state": oauth_state}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(oauth_callback_response.status(), StatusCode::OK);
+        let oauth_callback_body = to_bytes(oauth_callback_response.into_body(), usize::MAX).await.unwrap();
+        let oauth_callback_json: Value = serde_json::from_slice(&oauth_callback_body).unwrap();
+        assert_eq!(oauth_callback_json["data"]["needsRegistration"], true);
+
+        let oauth_link_response = app.clone().oneshot(
+            Request::builder().method("POST").uri("/api/member/oauth/link")
+                .header("x-member-token", token)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"provider": "google", "code": "dev-code"}).to_string())).unwrap()
+        ).await.unwrap();
+        assert_eq!(oauth_link_response.status(), StatusCode::OK);
+        let oauth_unlink_response = app.clone().oneshot(
+            Request::builder().method("DELETE").uri("/api/member/oauth/google")
+                .header("x-member-token", token)
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(oauth_unlink_response.status(), StatusCode::OK);
+
         let otp_send_response = app.clone().oneshot(
             Request::builder().method("POST").uri("/api/member/otp/send")
                 .header("content-type", "application/json")

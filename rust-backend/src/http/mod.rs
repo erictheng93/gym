@@ -26,6 +26,7 @@ mod member_app;
 mod member_auth_extra;
 mod member_fitness;
 mod member_notifications;
+mod member_oauth;
 mod member_reviews;
 mod member_support;
 mod payments;
@@ -238,6 +239,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/auth/forgot-password", post(member_auth_extra::forgot_password))
         .route("/api/member/auth/reset-password", post(member_auth_extra::reset_password))
         .route("/api/member/auth/change-password", post(member_auth_extra::change_password))
+        .route("/api/member/oauth/providers", get(member_oauth::providers))
+        .route("/api/member/oauth/{provider}/init", get(member_oauth::init))
+        .route("/api/member/oauth/{provider}/callback", post(member_oauth::callback))
+        .route("/api/member/oauth/link", post(member_oauth::link))
+        .route("/api/member/oauth/{provider}", delete(member_oauth::unlink))
         .route("/api/member/otp/send", post(member_auth_extra::send_otp))
         .route("/api/member/otp/verify", post(member_auth_extra::verify_otp))
         .route("/api/member/otp/verify-only", post(member_auth_extra::verify_otp_only))
