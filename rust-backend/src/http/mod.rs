@@ -77,6 +77,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/auth/refresh", post(auth::refresh))
         .route("/api/auth/me", get(auth::me).post(error::method_not_allowed))
+        .route("/api/auth/me/permissions", get(auth::permissions))
+        .route("/api/auth/change-password", post(auth::change_password))
         .route("/api/branches", get(branches::list).post(branches::create))
         .route(
             "/api/branches/{id}",
@@ -270,6 +272,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/member/contracts/{id}/resume", post(member_app::resume_contract))
         .route("/api/member/payments", get(member_app::list_payments))
         .route("/api/member_checkins", get(member_app::list_checkins))
+        .route("/api/member_checkins/{id}", get(member_app::get_checkin))
         .route("/api/member/goals", get(member_fitness::list_goals).post(member_fitness::create_goal))
         .route(
             "/api/member/goals/{id}",

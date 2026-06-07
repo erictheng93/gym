@@ -636,6 +636,32 @@ pub async fn list_checkins(
     Ok((StatusCode::OK, Json(paginated(checkins, filter.page.unwrap_or(1), filter.limit.unwrap_or(20)))))
 }
 
+pub async fn get_checkin(
+    auth: MemberAuthContext,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, AppError> {
+    let checkin = sqlx::query_as::<_, MemberCheckIn>(
+        r#"
+        select check_ins.id, coalesce(check_in_time, now()) as check_time,
+            coalesce(check_in_type, 'ENTRY') as check_type, check_in_method as verification_method,
+            check_ins.branch_id <> $4 as is_cross_branch,
+            json_build_object('id', branches.id, 'name', branches.name) as branch_id
+        from check_ins
+        join branches on branches.id = check_ins.branch_id
+        where check_ins.id = $1 and check_ins.member_id = $2 and branches.tenant_id = $3
+        "#,
+    )
+    .bind(id)
+    .bind(auth.member_id)
+    .bind(auth.tenant_id)
+    .bind(auth.branch_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    Ok((StatusCode::OK, Json(ApiResponse { success: true, data: checkin })))
+}
+
 async fn fetch_contracts(state: &AppState, auth: &MemberAuthContext) -> Result<Vec<MemberContract>, AppError> {
     sqlx::query_as::<_, MemberContract>(
         r#"

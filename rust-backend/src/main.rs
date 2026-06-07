@@ -66,7 +66,7 @@ fn build_app(state: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(AllowOrigin::mirror_request())
                 .allow_credentials(AllowCredentials::yes())
-                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
                 .allow_headers([
                     header::AUTHORIZATION,
                     header::CONTENT_TYPE,
@@ -273,6 +273,7 @@ mod tests {
         let token = login_json["data"]["token"].as_str().unwrap();
 
         let me_response = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/auth/me")
@@ -295,6 +296,74 @@ mod tests {
         assert_eq!(me_json["data"]["user"]["permissions"], permissions);
         assert_eq!(me_json["data"]["employee"]["id"], employee_id.to_string());
         assert_eq!(me_json["data"]["employee"]["branchId"], branch_id.to_string());
+
+        let permissions_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/auth/me/permissions")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(permissions_response.status(), StatusCode::OK);
+        let permissions_body = to_bytes(permissions_response.into_body(), usize::MAX).await.unwrap();
+        let permissions_json: Value = serde_json::from_slice(&permissions_body).unwrap();
+        assert_eq!(permissions_json["data"]["permissions"], permissions);
+        assert_eq!(permissions_json["data"]["role"], "ADMIN");
+        assert_eq!(permissions_json["data"]["jobTitleName"], format!("Rust Admin {suffix}"));
+        assert_eq!(permissions_json["data"]["hasEmployee"], true);
+
+        let change_password_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/change-password")
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"currentPassword": password, "newPassword": "NextPassw0rd!"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(change_password_response.status(), StatusCode::OK);
+
+        let old_password_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"email": email, "password": password}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(old_password_response.status(), StatusCode::UNAUTHORIZED);
+
+        let new_password_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"email": email, "password": "NextPassw0rd!"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(new_password_response.status(), StatusCode::OK);
 
         sqlx::query("delete from employees where id = $1")
             .bind(employee_id)

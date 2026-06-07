@@ -8,7 +8,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use bcrypt::verify;
+use bcrypt::{hash, verify};
 use jsonwebtoken::{
     decode, encode, get_current_timestamp, Algorithm, DecodingKey, EncodingKey, Header, Validation,
 };
@@ -30,6 +30,14 @@ const AUTH_COOKIE_NAME: &str = "gym-nexus-auth-token";
 pub struct LoginRequest {
     email: String,
     password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    #[serde(rename = "currentPassword")]
+    current_password: String,
+    #[serde(rename = "newPassword")]
+    new_password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -176,6 +184,59 @@ pub async fn me(auth: AuthContext) -> impl IntoResponse {
             },
         }),
     )
+}
+
+pub async fn permissions(auth: AuthContext) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            success: true,
+            data: json!({
+                "permissions": auth.user.permissions,
+                "role": auth.user.role,
+                "employeeId": auth.user.employee_id,
+                "jobTitleName": auth.employee.as_ref().and_then(|employee| employee.job_title_name.clone()),
+                "hasEmployee": auth.employee.is_some()
+            }),
+        }),
+    )
+}
+
+pub async fn change_password(
+    auth: AuthContext,
+    State(state): State<AppState>,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    validation::required_text("currentPassword", &payload.current_password)?;
+    validation::required_text("newPassword", &payload.new_password)?;
+
+    let password_hash = sqlx::query_scalar::<_, Option<String>>(
+        "select password_hash from users where id = $1 and coalesce(is_active, true) = true",
+    )
+    .bind(auth.user.id)
+    .fetch_optional(&state.db)
+    .await?
+    .flatten()
+    .ok_or(AppError::Unauthorized)?;
+
+    if !verify(payload.current_password, &password_hash).unwrap_or(false) {
+        return Err(AppError::InvalidCredentials);
+    }
+
+    let new_hash = hash(payload.new_password, 4).map_err(|_| AppError::Unauthorized)?;
+    sqlx::query("update users set password_hash = $2, updated_at = now() where id = $1")
+        .bind(auth.user.id)
+        .bind(new_hash)
+        .execute(&state.db)
+        .await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(ApiResponse {
+            success: true,
+            data: json!({ "message": "Password changed" }),
+        }),
+    ))
 }
 
 pub async fn logout() -> impl IntoResponse {
