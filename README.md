@@ -59,7 +59,7 @@
 |------|------|
 | **Cloudflare Pages** | 前端靜態部署 |
 | **Cloudflare R2** | 檔案儲存 (合約 PDF、簽名圖檔) |
-| **Coolify (VPS)** | Backend 容器部署 |
+| **Dokploy (VPS)** | Backend 容器部署 |
 | **Docker** | 本地開發環境 |
 
 ---

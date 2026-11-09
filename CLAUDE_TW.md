@@ -8,7 +8,7 @@ Gym Nexus 是一個多分店健身房管理系統 (CRM/ERP)，建構於：
 - **後端 (Backend):** Hono.js API + Drizzle ORM 運行於 Node.js 22
 - **資料庫 (Database):** PostgreSQL 17 + PostGIS 3.4
 - **前端 (Frontend):** Nuxt 3 (monorepo 架構，包含 admin-web、member-app、coach-app)
-- **基礎設施 (Infrastructure):** Cloudflare (Pages, Workers, R2) + VPS (Coolify)
+- **基礎設施 (Infrastructure):** Cloudflare (Pages, Workers, R2) + VPS (Dokploy)
 - **套件管理器 (Package Manager):** pnpm (必須使用 pnpm，請勿使用 npm 或 yarn)
 
 ## 開發指令 (Development Commands)

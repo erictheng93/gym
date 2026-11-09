@@ -6,7 +6,7 @@ Gym Nexus — multi-branch gym management system (CRM/ERP).
 
 - **Backend:** Hono.js + Drizzle ORM + PostgreSQL 17 + PostGIS
 - **Frontend:** Nuxt 4 monorepo (admin-web, member-app, coach-app)
-- **Infrastructure:** Cloudflare (Pages, Workers, R2) + VPS (Coolify)
+- **Infrastructure:** Cloudflare (Pages, Workers, R2) + VPS (Dokploy)
 - **Package Manager:** bun（必須使用 bun，不要使用 npm、yarn 或 pnpm）
 
 ## Commands
