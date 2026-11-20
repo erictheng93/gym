@@ -5,6 +5,7 @@
 
 import type { GoalType, GoalStatus } from '../schemas/goal.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 
 // Cache settings
 const CACHE_KEY_GOALS = 'member:goals'
@@ -46,7 +47,7 @@ export const useGoals = () => {
   const isOfflineData = useState('goals_is_offline', () => false)
 
   /**
-   * Fetch member's goals with optional filters
+   * Fetch member's goals with optional filters (with request deduplication)
    */
   const fetchGoals = async (options?: {
     status?: GoalStatus
@@ -55,14 +56,41 @@ export const useGoals = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `goals:${member.value.id}:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    const cacheKey = `${CACHE_KEY_GOALS}:${member.value.id}:${JSON.stringify(options || {})}`
+      const cacheKey = `${CACHE_KEY_GOALS}:${member.value!.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Goal[]>(cacheKey)
+          if (cached) {
+            goals.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.status) params.append('status', options.status)
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
+
+        const response = await $fetch<GoalsResponse>(`${apiUrl}/api/member/goals?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          goals.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Try cached data on network error
         const cached = await getCache<Goal[]>(cacheKey)
         if (cached) {
           goals.value = cached
@@ -70,34 +98,10 @@ export const useGoals = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.status) params.append('status', options.status)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
-
-      const response = await $fetch<GoalsResponse>(`${apiUrl}/api/member/goals?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        goals.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Try cached data on network error
-      const cached = await getCache<Goal[]>(cacheKey)
-      if (cached) {
-        goals.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**

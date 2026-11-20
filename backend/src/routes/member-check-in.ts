@@ -78,18 +78,29 @@ app.post(
       }, 400);
     }
 
-    // Verify member status
-    const [member] = await db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        fullName: members.fullName,
-        status: members.status,
-        branchId: members.branchId,
-      })
-      .from(members)
-      .where(eq(members.id, memberInfo.id))
-      .limit(1);
+    // Concurrently verify member status and branch exists
+    const [[member], [branch]] = await Promise.all([
+      db
+        .select({
+          id: members.id,
+          memberCode: members.memberCode,
+          fullName: members.fullName,
+          status: members.status,
+          branchId: members.branchId,
+        })
+        .from(members)
+        .where(eq(members.id, memberInfo.id))
+        .limit(1),
+      db
+        .select({
+          id: branches.id,
+          name: branches.name,
+          tenantId: branches.tenantId,
+        })
+        .from(branches)
+        .where(eq(branches.id, branchId))
+        .limit(1),
+    ]);
 
     if (!member || member.status !== 'ACTIVE') {
       return c.json({
@@ -99,17 +110,6 @@ app.post(
         memberStatus: member?.status,
       }, 403);
     }
-
-    // Verify branch exists
-    const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
-      .from(branches)
-      .where(eq(branches.id, branchId))
-      .limit(1);
 
     if (!branch) {
       return c.json({
@@ -433,43 +433,51 @@ app.get('/stats', async (c) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // Count this month
-  const [monthStats] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .where(and(
-      eq(checkIns.memberId, memberInfo.id),
-      gte(checkIns.checkInTime, monthStart),
-    ));
+  // Concurrently execute all stats queries
+  const [
+    [monthStats],
+    [thirtyDayStats],
+    [totalStats],
+    branchStats,
+  ] = await Promise.all([
+    // Count this month
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(checkIns)
+      .where(and(
+        eq(checkIns.memberId, memberInfo.id),
+        gte(checkIns.checkInTime, monthStart),
+      )),
 
-  // Count last 30 days
-  const [thirtyDayStats] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .where(and(
-      eq(checkIns.memberId, memberInfo.id),
-      gte(checkIns.checkInTime, thirtyDaysAgo),
-    ));
+    // Count last 30 days
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(checkIns)
+      .where(and(
+        eq(checkIns.memberId, memberInfo.id),
+        gte(checkIns.checkInTime, thirtyDaysAgo),
+      )),
 
-  // Total count
-  const [totalStats] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .where(eq(checkIns.memberId, memberInfo.id));
+    // Total count
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(checkIns)
+      .where(eq(checkIns.memberId, memberInfo.id)),
 
-  // Most visited branch
-  const branchStats = await db
-    .select({
-      branchId: checkIns.branchId,
-      branchName: branches.name,
-      count: sql<number>`count(*)`,
-    })
-    .from(checkIns)
-    .leftJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(eq(checkIns.memberId, memberInfo.id))
-    .groupBy(checkIns.branchId, branches.name)
-    .orderBy(desc(sql`count(*)`))
-    .limit(1);
+    // Most visited branch
+    db
+      .select({
+        branchId: checkIns.branchId,
+        branchName: branches.name,
+        count: sql<number>`count(*)`,
+      })
+      .from(checkIns)
+      .leftJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(eq(checkIns.memberId, memberInfo.id))
+      .groupBy(checkIns.branchId, branches.name)
+      .orderBy(desc(sql`count(*)`))
+      .limit(1),
+  ]);
 
   return c.json({
     success: true,

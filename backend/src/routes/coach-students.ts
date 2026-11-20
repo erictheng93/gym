@@ -225,18 +225,41 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Verify assignment
-  const [assignment] = await db
-    .select()
-    .from(coachMemberAssignments)
-    .where(
-      and(
-        eq(coachMemberAssignments.coachId, coach.id),
-        eq(coachMemberAssignments.memberId, id),
-        sql`${coachMemberAssignments.unassignedAt} IS NULL`
+  // Concurrently verify assignment and get member details
+  const [[assignment], [member]] = await Promise.all([
+    db
+      .select()
+      .from(coachMemberAssignments)
+      .where(
+        and(
+          eq(coachMemberAssignments.coachId, coach.id),
+          eq(coachMemberAssignments.memberId, id),
+          sql`${coachMemberAssignments.unassignedAt} IS NULL`
+        )
       )
-    )
-    .limit(1);
+      .limit(1),
+    db
+      .select({
+        id: members.id,
+        memberCode: members.memberCode,
+        fullName: members.fullName,
+        phone: members.phone,
+        email: members.email,
+        gender: members.gender,
+        birthday: members.birthday,
+        status: members.status,
+        avatar: members.avatar,
+        joinDate: members.joinDate,
+        address: members.address,
+        emergencyContact: members.emergencyContact,
+        emergencyPhone: members.emergencyPhone,
+        height: members.height,
+        notes: members.notes,
+      })
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1),
+  ]);
 
   if (!assignment) {
     return c.json({
@@ -246,29 +269,6 @@ app.get('/:id', async (c) => {
     }, 403);
   }
 
-  // Get member details
-  const [member] = await db
-    .select({
-      id: members.id,
-      memberCode: members.memberCode,
-      fullName: members.fullName,
-      phone: members.phone,
-      email: members.email,
-      gender: members.gender,
-      birthday: members.birthday,
-      status: members.status,
-      avatar: members.avatar,
-      joinDate: members.joinDate,
-      address: members.address,
-      emergencyContact: members.emergencyContact,
-      emergencyPhone: members.emergencyPhone,
-      height: members.height,
-      notes: members.notes,
-    })
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
-
   if (!member) {
     return c.json({
       success: false,
@@ -277,57 +277,79 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
-  // Get contracts
-  const contractsData = await db
-    .select({
-      id: contracts.id,
-      contractNo: contracts.contractNo,
-      status: contracts.status,
-      startDate: contracts.startDate,
-      endDate: contracts.endDate,
-      remainingCounts: contracts.remainingCounts,
-      planName: membershipPlans.name,
-      planType: membershipPlans.planType,
-    })
-    .from(contracts)
-    .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(eq(contracts.memberId, id))
-    .orderBy(desc(contracts.startDate));
+  // Concurrently fetch contracts, goals, measurements, class history, and notes
+  const [
+    contractsData,
+    goalsData,
+    measurementsData,
+    classHistory,
+    notesData,
+  ] = await Promise.all([
+    // Get contracts
+    db
+      .select({
+        id: contracts.id,
+        contractNo: contracts.contractNo,
+        status: contracts.status,
+        startDate: contracts.startDate,
+        endDate: contracts.endDate,
+        remainingCounts: contracts.remainingCounts,
+        planName: membershipPlans.name,
+        planType: membershipPlans.planType,
+      })
+      .from(contracts)
+      .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(eq(contracts.memberId, id))
+      .orderBy(desc(contracts.startDate)),
 
-  // Get goals
-  const goalsData = await db
-    .select()
-    .from(memberGoals)
-    .where(eq(memberGoals.memberId, id))
-    .orderBy(desc(memberGoals.createdAt))
-    .limit(5);
+    // Get goals
+    db
+      .select()
+      .from(memberGoals)
+      .where(eq(memberGoals.memberId, id))
+      .orderBy(desc(memberGoals.createdAt))
+      .limit(5),
 
-  // Get measurements
-  const measurementsData = await db
-    .select()
-    .from(bodyMeasurements)
-    .where(eq(bodyMeasurements.memberId, id))
-    .orderBy(desc(bodyMeasurements.date))
-    .limit(10);
+    // Get measurements
+    db
+      .select()
+      .from(bodyMeasurements)
+      .where(eq(bodyMeasurements.memberId, id))
+      .orderBy(desc(bodyMeasurements.date))
+      .limit(10),
 
-  // Get class history with this coach
-  const classHistory = await db
-    .select({
-      id: bookings.id,
-      scheduledAt: sql<string>`${classSessions.sessionDate}::text || 'T' || ${classSessions.startTime}::text`,
-      status: bookings.bookingStatus,
-      durationMinutes: sql<number>`EXTRACT(EPOCH FROM (${classSessions.endTime}::time - ${classSessions.startTime}::time)) / 60`,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .where(
-      and(
-        eq(bookings.memberId, id),
-        eq(classSessions.instructorId, coach.id)
+    // Get class history with this coach
+    db
+      .select({
+        id: bookings.id,
+        scheduledAt: sql<string>`${classSessions.sessionDate}::text || 'T' || ${classSessions.startTime}::text`,
+        status: bookings.bookingStatus,
+        durationMinutes: sql<number>`EXTRACT(EPOCH FROM (${classSessions.endTime}::time - ${classSessions.startTime}::time)) / 60`,
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .where(
+        and(
+          eq(bookings.memberId, id),
+          eq(classSessions.instructorId, coach.id)
+        )
       )
-    )
-    .orderBy(desc(classSessions.sessionDate))
-    .limit(20);
+      .orderBy(desc(classSessions.sessionDate))
+      .limit(20),
+
+    // Get notes
+    db
+      .select()
+      .from(coachNotes)
+      .where(
+        and(
+          eq(coachNotes.coachId, coach.id),
+          eq(coachNotes.memberId, id)
+        )
+      )
+      .orderBy(desc(coachNotes.createdAt))
+      .limit(20),
+  ]);
 
   // Get class records for these bookings
   const bookingIds = classHistory.map(h => h.id);
@@ -357,19 +379,6 @@ app.get('/:id', async (c) => {
       return acc;
     }, {} as typeof recordsMap);
   }
-
-  // Get notes
-  const notesData = await db
-    .select()
-    .from(coachNotes)
-    .where(
-      and(
-        eq(coachNotes.coachId, coach.id),
-        eq(coachNotes.memberId, id)
-      )
-    )
-    .orderBy(desc(coachNotes.createdAt))
-    .limit(20);
 
   return c.json({
     success: true,
@@ -483,20 +492,20 @@ app.get('/:id/notes', async (c) => {
     conditions.push(eq(coachNotes.noteType, note_type as 'PROGRESS' | 'INJURY' | 'PREFERENCE' | 'GOAL' | 'OTHER'));
   }
 
-  // Get notes
-  const notesData = await db
-    .select()
-    .from(coachNotes)
-    .where(and(...conditions))
-    .orderBy(desc(coachNotes.createdAt))
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(coachNotes)
-    .where(and(...conditions));
+  // Concurrently get notes and total count
+  const [notesData, [countResult]] = await Promise.all([
+    db
+      .select()
+      .from(coachNotes)
+      .where(and(...conditions))
+      .orderBy(desc(coachNotes.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(coachNotes)
+      .where(and(...conditions)),
+  ]);
 
   return c.json({
     success: true,

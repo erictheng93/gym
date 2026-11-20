@@ -188,18 +188,26 @@ app.get('/progress', async (c) => {
 
   const metricColumn = bodyMeasurements[metric as keyof typeof bodyMeasurements];
 
-  const measurements = await db
-    .select({
-      date: bodyMeasurements.date,
-      value: metricColumn as typeof bodyMeasurements.weight,
-    })
-    .from(bodyMeasurements)
-    .where(and(
-      eq(bodyMeasurements.memberId, memberInfo.id),
-      sql`${bodyMeasurements.date} >= ${startDateStr}`,
-      sql`${metricColumn} IS NOT NULL`,
-    ))
-    .orderBy(asc(bodyMeasurements.date));
+  const [measurements, [latest]] = await Promise.all([
+    db
+      .select({
+        date: bodyMeasurements.date,
+        value: metricColumn as typeof bodyMeasurements.weight,
+      })
+      .from(bodyMeasurements)
+      .where(and(
+        eq(bodyMeasurements.memberId, memberInfo.id),
+        sql`${bodyMeasurements.date} >= ${startDateStr}`,
+        sql`${metricColumn} IS NOT NULL`,
+      ))
+      .orderBy(asc(bodyMeasurements.date)),
+    db
+      .select()
+      .from(bodyMeasurements)
+      .where(eq(bodyMeasurements.memberId, memberInfo.id))
+      .orderBy(desc(bodyMeasurements.date))
+      .limit(1),
+  ]);
 
   if (measurements.length === 0) {
     return c.json({
@@ -237,14 +245,6 @@ app.get('/progress', async (c) => {
       trend = change > 0 ? 'up' : 'down';
     }
   }
-
-  // Get latest measurement for reference
-  const [latest] = await db
-    .select()
-    .from(bodyMeasurements)
-    .where(eq(bodyMeasurements.memberId, memberInfo.id))
-    .orderBy(desc(bodyMeasurements.date))
-    .limit(1);
 
   return c.json({
     success: true,

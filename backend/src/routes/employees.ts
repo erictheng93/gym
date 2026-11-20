@@ -84,36 +84,33 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [employee] = await db
-    .select({
-      employee: employees,
-      jobTitle: {
-        id: jobTitles.id,
-        name: jobTitles.name,
-        permissionsConfig: jobTitles.permissionsConfig,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(employees)
-    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
-    .leftJoin(branches, eq(employees.branchId, branches.id))
-    .where(eq(employees.id, id))
-    .limit(1);
+  const [[employee], branchIds] = await Promise.all([
+    db
+      .select({
+        employee: employees,
+        jobTitle: {
+          id: jobTitles.id,
+          name: jobTitles.name,
+          permissionsConfig: jobTitles.permissionsConfig,
+        },
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+      })
+      .from(employees)
+      .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+      .leftJoin(branches, eq(employees.branchId, branches.id))
+      .where(eq(employees.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!employee) {
     return c.json({ success: false, error: '員工不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, employee.employee.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!employee.employee.branchId || !branchIds.includes(employee.employee.branchId)) {
     return c.json({ success: false, error: '無權限存取此員工' }, 403);
   }
 
@@ -144,21 +141,16 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  if (!branch) {
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(employees)
-    .innerJoin(branches, eq(employees.branchId, branches.id))
-    .where(eq(branches.tenantId, tenantId));
+    .where(inArray(employees.branchId, branchIds));
 
   const employeeCount = Number(countResult?.count || 0);
   const employeeCode = `E${String(employeeCount + 1).padStart(5, '0')}`;
@@ -179,34 +171,25 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [employee] = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.id, id))
-    .limit(1);
+  const [[employee], branchIds] = await Promise.all([
+    db
+      .select()
+      .from(employees)
+      .where(eq(employees.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!employee) {
     return c.json({ success: false, error: '員工不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, employee.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!employee.branchId || !branchIds.includes(employee.branchId)) {
     return c.json({ success: false, error: '無權限修改此員工' }, 403);
   }
 
   if (data.branchId) {
-    const [newBranch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-      .limit(1);
-
-    if (!newBranch) {
+    if (!branchIds.includes(data.branchId)) {
       return c.json({ success: false, error: '無效的分店' }, 400);
     }
   }
