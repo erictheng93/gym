@@ -6,6 +6,9 @@
 import { useFetch } from '~/composables/core/useFetch'
 import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
 
+const inFlightShiftSchedulesMap = new Map<string, Promise<void>>()
+const inFlightEmployeeShiftsMap = new Map<string, Promise<void>>()
+
 export const useShiftSchedules = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
 
@@ -26,21 +29,31 @@ export const useShiftSchedules = () => {
    * 取得班表列表
    */
   const fetchShiftSchedules = async (branchId?: string) => {
-    isShiftLoading.value = true
-    try {
-      const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = branchId
+    const key = branchId || 'all'
+    const existing = inFlightShiftSchedulesMap.get(key)
+    if (existing) return existing
 
-      const result = await readItems<ShiftSchedule>('shift_schedules', {
-        filter,
-        sort: 'start_time'
-      })
-      shiftSchedules.value = result.data
-    } catch (error) {
-      console.error('Failed to fetch shift schedules:', error)
-    } finally {
-      isShiftLoading.value = false
-    }
+    const promise = (async () => {
+      isShiftLoading.value = true
+      try {
+        const filter: Record<string, unknown> = {}
+        if (branchId) filter.branch_id = branchId
+
+        const result = await readItems<ShiftSchedule>('shift_schedules', {
+          filter,
+          sort: 'start_time'
+        })
+        shiftSchedules.value = result.data
+      } catch (error) {
+        console.error('Failed to fetch shift schedules:', error)
+      } finally {
+        isShiftLoading.value = false
+        inFlightShiftSchedulesMap.delete(key)
+      }
+    })()
+
+    inFlightShiftSchedulesMap.set(key, promise)
+    return promise
   }
 
   /**
@@ -90,51 +103,61 @@ export const useShiftSchedules = () => {
     branchId?: string
     activeOnly?: boolean
   }) => {
-    isEmployeeShiftLoading.value = true
-    const { employeeId, shiftScheduleId, branchId, activeOnly = true } = options || {}
+    const key = JSON.stringify(options || {})
+    const existing = inFlightEmployeeShiftsMap.get(key)
+    if (existing) return existing
 
-    try {
-      const filter: Record<string, unknown> = {}
-      if (employeeId) filter.employee_id = employeeId
-      if (shiftScheduleId) filter.shift_schedule_id = shiftScheduleId
+    const promise = (async () => {
+      isEmployeeShiftLoading.value = true
+      const { employeeId, shiftScheduleId, branchId, activeOnly = true } = options || {}
 
-      if (activeOnly) {
-        const today = new Date().toISOString().split('T')[0]
-        filter.effective_date_lte = today
-        // For end_date null or >= today, we'll filter client-side
-      }
+      try {
+        const filter: Record<string, unknown> = {}
+        if (employeeId) filter.employee_id = employeeId
+        if (shiftScheduleId) filter.shift_schedule_id = shiftScheduleId
 
-      const result = await readItems<EmployeeShift>('employee_shifts', {
-        filter,
-        sort: 'date_created',
-        sortOrder: 'desc',
-        limit: 1000
-      })
+        if (activeOnly) {
+          const today = new Date().toISOString().split('T')[0]
+          filter.effective_date_lte = today
+          // For end_date null or >= today, we'll filter client-side
+        }
 
-      let filtered = result.data
-
-      // Filter for active shifts (end_date is null or >= today)
-      if (activeOnly) {
-        const today = new Date().toISOString().split('T')[0]!
-        filtered = filtered.filter(es =>
-          !es.end_date || es.end_date >= today
-        )
-      }
-
-      // Filter by branch if needed
-      if (branchId) {
-        filtered = filtered.filter(es => {
-          const employee = es.employee as Employee | undefined
-          return employee?.branch_id === branchId
+        const result = await readItems<EmployeeShift>('employee_shifts', {
+          filter,
+          sort: 'date_created',
+          sortOrder: 'desc',
+          limit: 1000
         })
-      }
 
-      employeeShifts.value = filtered
-    } catch (error) {
-      console.error('Failed to fetch employee shifts:', error)
-    } finally {
-      isEmployeeShiftLoading.value = false
-    }
+        let filtered = result.data
+
+        // Filter for active shifts (end_date is null or >= today)
+        if (activeOnly) {
+          const today = new Date().toISOString().split('T')[0]!
+          filtered = filtered.filter(es =>
+            !es.end_date || es.end_date >= today
+          )
+        }
+
+        // Filter by branch if needed
+        if (branchId) {
+          filtered = filtered.filter(es => {
+            const employee = es.employee as Employee | undefined
+            return employee?.branch_id === branchId
+          })
+        }
+
+        employeeShifts.value = filtered
+      } catch (error) {
+        console.error('Failed to fetch employee shifts:', error)
+      } finally {
+        isEmployeeShiftLoading.value = false
+        inFlightEmployeeShiftsMap.delete(key)
+      }
+    })()
+
+    inFlightEmployeeShiftsMap.set(key, promise)
+    return promise
   }
 
   /**
@@ -217,17 +240,16 @@ export const useShiftSchedules = () => {
     effectiveDate: string
     endDate?: string
   }) => {
-    const results: (EmployeeShift | null)[] = []
-
-    for (const employeeId of data.employeeIds) {
-      const result = await assignShiftToEmployee({
-        employeeId,
-        shiftScheduleId: data.shiftScheduleId,
-        effectiveDate: data.effectiveDate,
-        endDate: data.endDate
-      })
-      results.push(result)
-    }
+    const results = await Promise.all(
+      data.employeeIds.map(employeeId =>
+        assignShiftToEmployee({
+          employeeId,
+          shiftScheduleId: data.shiftScheduleId,
+          effectiveDate: data.effectiveDate,
+          endDate: data.endDate
+        })
+      )
+    )
 
     return results.filter((r): r is EmployeeShift => r !== null)
   }

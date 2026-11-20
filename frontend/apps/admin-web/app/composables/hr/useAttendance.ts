@@ -50,6 +50,8 @@ export interface MonthlyAttendanceStats {
 
 const inFlightTodaySummaryMap = new Map<string, Promise<TodayAttendanceSummary>>()
 const inFlightTodayAttendancesMap = new Map<string, Promise<void>>()
+const inFlightMonthlyStatsMap = new Map<string, Promise<MonthlyAttendanceStats[]>>()
+const inFlightEmployeeMonthlyMap = new Map<string, Promise<Attendance[]>>()
 
 export const useAttendance = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
@@ -441,102 +443,123 @@ export const useAttendance = () => {
     month: number
   }): Promise<MonthlyAttendanceStats[]> => {
     const { branchId, year, month } = options
+    const key = `${branchId || 'all'}-${year}-${month}`
+    const existing = inFlightMonthlyStatsMap.get(key)
+    if (existing) return existing
 
-    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+    const promise = (async () => {
+      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
+      const endDate = new Date(year, month, 0).toISOString().split('T')[0]
 
-    try {
-      const filter: Record<string, unknown> = {
-        attendance_date_gte: startDate,
-        attendance_date_lte: endDate
-      }
-      if (branchId) filter.branch_id = branchId
+      try {
+        const filter: Record<string, unknown> = {
+          attendance_date_gte: startDate,
+          attendance_date_lte: endDate
+        }
+        if (branchId) filter.branch_id = branchId
 
-      const result = await readItems<Attendance>('attendances', {
-        filter,
-        sort: 'employee_id',
-        limit: 10000
-      })
-      const attendances = result.data
+        const result = await readItems<Attendance>('attendances', {
+          filter,
+          sort: 'employee_id',
+          limit: 10000
+        })
+        const attendances = result.data
 
-      const statsMap = new Map<string, MonthlyAttendanceStats>()
+        const statsMap = new Map<string, MonthlyAttendanceStats>()
 
-      for (const att of attendances) {
-        const empId = att.employee_id
-        if (!statsMap.has(empId)) {
-          statsMap.set(empId, {
-            employeeId: empId,
-            employeeName: (att as unknown as { employee?: { full_name?: string } }).employee?.full_name || '',
-            employeeCode: (att as unknown as { employee?: { employee_code?: string } }).employee?.employee_code || '',
-            totalDays: 0,
-            presentDays: 0,
-            absentDays: 0,
-            lateDays: 0,
-            earlyLeaveDays: 0,
-            leaveDays: 0,
-            totalWorkHours: 0,
-            totalOvertimeHours: 0,
-            totalLateMinutes: 0
-          })
+        for (const att of attendances) {
+          const empId = att.employee_id
+          if (!statsMap.has(empId)) {
+            statsMap.set(empId, {
+              employeeId: empId,
+              employeeName: (att as unknown as { employee?: { full_name?: string } }).employee?.full_name || '',
+              employeeCode: (att as unknown as { employee?: { employee_code?: string } }).employee?.employee_code || '',
+              totalDays: 0,
+              presentDays: 0,
+              absentDays: 0,
+              lateDays: 0,
+              earlyLeaveDays: 0,
+              leaveDays: 0,
+              totalWorkHours: 0,
+              totalOvertimeHours: 0,
+              totalLateMinutes: 0
+            })
+          }
+
+          const stats = statsMap.get(empId)!
+          stats.totalDays++
+
+          switch (att.attendance_status) {
+            case 'PRESENT':
+              stats.presentDays++
+              break
+            case 'ABSENT':
+              stats.absentDays++
+              break
+            case 'LATE':
+              stats.lateDays++
+              stats.presentDays++
+              break
+            case 'EARLY_LEAVE':
+              stats.earlyLeaveDays++
+              stats.presentDays++
+              break
+            case 'LEAVE':
+              stats.leaveDays++
+              break
+          }
+
+          stats.totalWorkHours += att.work_hours || 0
+          stats.totalOvertimeHours += att.overtime_hours || 0
+          stats.totalLateMinutes += att.late_minutes || 0
         }
 
-        const stats = statsMap.get(empId)!
-        stats.totalDays++
-
-        switch (att.attendance_status) {
-          case 'PRESENT':
-            stats.presentDays++
-            break
-          case 'ABSENT':
-            stats.absentDays++
-            break
-          case 'LATE':
-            stats.lateDays++
-            stats.presentDays++
-            break
-          case 'EARLY_LEAVE':
-            stats.earlyLeaveDays++
-            stats.presentDays++
-            break
-          case 'LEAVE':
-            stats.leaveDays++
-            break
-        }
-
-        stats.totalWorkHours += att.work_hours || 0
-        stats.totalOvertimeHours += att.overtime_hours || 0
-        stats.totalLateMinutes += att.late_minutes || 0
+        return Array.from(statsMap.values())
+      } catch (error) {
+        console.error('Failed to fetch monthly attendance stats:', error)
+        return []
+      } finally {
+        inFlightMonthlyStatsMap.delete(key)
       }
+    })()
 
-      return Array.from(statsMap.values())
-    } catch (error) {
-      console.error('Failed to fetch monthly attendance stats:', error)
-      return []
-    }
+    inFlightMonthlyStatsMap.set(key, promise)
+    return promise
   }
 
   /**
    * 取得單一員工月度考勤詳情
    */
   const fetchEmployeeMonthlyAttendance = async (employeeId: string, year: number, month: number) => {
-    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+    const key = `${employeeId}-${year}-${month}`
+    const existing = inFlightEmployeeMonthlyMap.get(key)
+    if (existing) return existing
 
-    try {
-      const result = await readItems<Attendance>('attendances', {
-        filter: {
-          employee_id: employeeId,
-          attendance_date_gte: startDate,
-          attendance_date_lte: endDate
-        },
-        sort: 'attendance_date',
-        limit: 31
-      })
-      return result.data
-    } catch (error) {
-      console.error('Failed to fetch employee monthly attendance:', error)
-      return []
-    }
+    const promise = (async () => {
+      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
+      const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+
+      try {
+        const result = await readItems<Attendance>('attendances', {
+          filter: {
+            employee_id: employeeId,
+            attendance_date_gte: startDate,
+            attendance_date_lte: endDate
+          },
+          sort: 'attendance_date',
+          limit: 31
+        })
+        return result.data
+      } catch (error) {
+        console.error('Failed to fetch employee monthly attendance:', error)
+        return []
+      } finally {
+        inFlightEmployeeMonthlyMap.delete(key)
+      }
+    })()
+
+    inFlightEmployeeMonthlyMap.set(key, promise)
+    return promise
   }
 
   /**

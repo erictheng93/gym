@@ -10,6 +10,7 @@ interface BrandingCacheEntry {
 }
 
 const brandingCache = new Map<string, BrandingCacheEntry>();
+const inFlightBranding = new Map<string, Promise<TenantBranding | null>>();
 const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -18,8 +19,10 @@ const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export function invalidateBrandingCache(slug?: string): void {
   if (slug) {
     brandingCache.delete(slug);
+    inFlightBranding.delete(slug);
   } else {
     brandingCache.clear();
+    inFlightBranding.clear();
   }
 }
 
@@ -59,39 +62,56 @@ app.get('/', async (c) => {
   }
 
   try {
-    // Fetch tenant by slug
-    const [tenant] = await db
-      .select({
-        id: tenants.id,
-        name: tenants.name,
-        slug: tenants.slug,
-        settings: tenants.settings
-      })
-      .from(tenants)
-      .where(eq(tenants.slug, slug))
-      .limit(1);
+    let fetchPromise = inFlightBranding.get(slug);
+    if (!fetchPromise) {
+      fetchPromise = (async () => {
+        // Fetch tenant by slug
+        const [tenant] = await db
+          .select({
+            id: tenants.id,
+            name: tenants.name,
+            slug: tenants.slug,
+            settings: tenants.settings
+          })
+          .from(tenants)
+          .where(eq(tenants.slug, slug))
+          .limit(1);
+
+        if (!tenant) {
+          return null;
+        }
+
+        // Extract branding from settings JSONB
+        const settings = (tenant.settings || {}) as Record<string, unknown>;
+        const brandingData = settings.branding as Partial<TenantBranding> | undefined;
+
+        // Merge with defaults
+        const branding = mergeBranding(brandingData || {});
+
+        // Cache the result
+        brandingCache.set(slug, {
+          branding,
+          expiresAt: Date.now() + BRANDING_CACHE_TTL_MS
+        });
+
+        return branding;
+      })().finally(() => {
+        inFlightBranding.delete(slug);
+      });
+
+      inFlightBranding.set(slug, fetchPromise);
+    }
+
+    const branding = await fetchPromise;
 
     // If tenant not found, return default branding
-    if (!tenant) {
+    if (!branding) {
       c.header('Cache-Control', 'public, max-age=60');
       return c.json({
         success: true,
         data: DEFAULT_BRANDING
       });
     }
-
-    // Extract branding from settings JSONB
-    const settings = (tenant.settings || {}) as Record<string, unknown>;
-    const brandingData = settings.branding as Partial<TenantBranding> | undefined;
-
-    // Merge with defaults
-    const branding = mergeBranding(brandingData || {});
-
-    // Cache the result
-    brandingCache.set(slug, {
-      branding,
-      expiresAt: Date.now() + BRANDING_CACHE_TTL_MS
-    });
 
     // Return branding configuration
     c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
