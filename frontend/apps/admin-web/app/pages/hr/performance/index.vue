@@ -78,10 +78,13 @@ const handleRowClick = (review: typeof reviews.value[0]) => {
   navigateTo(`/hr/performance/${review.id}`)
 }
 
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : reviewDateFormatter.format(d)
 }
 
 // Table columns

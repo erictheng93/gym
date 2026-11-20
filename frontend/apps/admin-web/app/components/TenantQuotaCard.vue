@@ -38,9 +38,18 @@ const getQuotaColor = (resource: 'members' | 'employees' | 'branches' | 'storage
   return 'success'
 }
 
-// 格式化數字
+// 格式化數字與日期
+const quotaNumberFormatter = new Intl.NumberFormat('zh-TW')
+const quotaDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
 const formatNumber = (num: number) => {
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return quotaNumberFormatter.format(num)
+}
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : quotaDateFormatter.format(d)
 }
 </script>
 
@@ -65,7 +74,7 @@ const formatNumber = (num: number) => {
         </svg>
         <span v-if="isTrialExpired">試用期已過期</span>
         <span v-else>
-          試用至 {{ new Date(tenantInfo.trialEndsAt).toLocaleDateString('zh-TW') }}
+          試用至 {{ formatDate(tenantInfo.trialEndsAt) }}
         </span>
       </div>
     </div>

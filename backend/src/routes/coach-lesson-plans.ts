@@ -347,7 +347,10 @@ app.post(
         sessionId: data.session_id,
         tenantId: coach.tenantId || null,
       })
-      .returning();
+      .returning({
+        id: lessonPlans.id,
+        title: lessonPlans.title,
+      });
 
     return c.json({
       success: true,
@@ -539,7 +542,10 @@ app.post(
         sessionId: session_id || null,
         tenantId: coach.tenantId || null,
       })
-      .returning();
+      .returning({
+        id: lessonPlans.id,
+        title: lessonPlans.title,
+      });
 
     return c.json({
       success: true,

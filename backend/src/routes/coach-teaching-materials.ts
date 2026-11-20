@@ -524,7 +524,11 @@ app.post(
         createdBy: coach.id,
         tenantId: coach.tenantId,
       })
-      .returning();
+      .returning({
+        id: teachingMaterials.id,
+        type: teachingMaterials.type,
+        name: teachingMaterials.name,
+      });
 
     return c.json({
       success: true,

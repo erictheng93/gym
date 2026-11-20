@@ -274,8 +274,17 @@ app.post('/:id/convert', async (c) => {
     branchId: lead.lead.branchId,
     status: 'ACTIVE',
     joinDate: new Date().toISOString().split('T')[0],
-    notes: lead.lead.source ? `來源: ${lead.lead.source}` : undefined,
-  }).returning();
+  }).returning({
+    id: members.id,
+    fullName: members.fullName,
+    phone: members.phone,
+    email: members.email,
+    memberCode: members.memberCode,
+    branchId: members.branchId,
+    status: members.status,
+    joinDate: members.joinDate,
+    notes: members.notes,
+  });
 
   // Update lead status
   await db.update(leads).set({
