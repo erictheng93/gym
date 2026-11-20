@@ -198,8 +198,7 @@ app.get('/revenue', async (c) => {
   })();
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().slice(0, 10);
 
-  const tenantBranches = await getTenantBranches(tenantId);
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { total: 0, byBranch: [], byDay: [] } });
@@ -231,12 +230,18 @@ app.get('/revenue', async (c) => {
       .orderBy(sql`DATE(${payments.paymentDate})`),
   ]);
 
-  const mappedByBranch = byBranch.map(b => ({
-    branchId: b.branchId,
-    branchName: b.branchName,
-    total: Number(b.total),
-  }));
-  const total = mappedByBranch.reduce((sum, b) => sum + b.total, 0);
+  let total = 0;
+  const mappedByBranch = new Array(byBranch.length);
+  for (let i = 0; i < byBranch.length; i++) {
+    const b = byBranch[i];
+    const branchTotal = Number(b.total);
+    total += branchTotal;
+    mappedByBranch[i] = {
+      branchId: b.branchId,
+      branchName: b.branchName,
+      total: branchTotal,
+    };
+  }
 
   return c.json({
     success: true,
@@ -348,8 +353,7 @@ app.get('/member-activity', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days')) || 30;
 
-  const tenantBranches = await getTenantBranches(tenantId);
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { totalCheckIns: 0, byBranch: [], byDay: [] } });
@@ -382,13 +386,19 @@ app.get('/member-activity', async (c) => {
       .orderBy(sql`DATE(${checkIns.checkInTime})`),
   ]);
 
-  const mappedByBranch = byBranch.map(b => ({
-    branchId: b.branchId,
-    branchName: b.branchName,
-    checkInCount: Number(b.count),
-    uniqueMembers: Number(b.uniqueMembers),
-  }));
-  const totalCheckIns = mappedByBranch.reduce((sum, b) => sum + b.checkInCount, 0);
+  let totalCheckIns = 0;
+  const mappedByBranch = new Array(byBranch.length);
+  for (let i = 0; i < byBranch.length; i++) {
+    const b = byBranch[i];
+    const count = Number(b.count);
+    totalCheckIns += count;
+    mappedByBranch[i] = {
+      branchId: b.branchId,
+      branchName: b.branchName,
+      checkInCount: count,
+      uniqueMembers: Number(b.uniqueMembers),
+    };
+  }
 
   return c.json({
     success: true,
@@ -885,8 +895,9 @@ app.get('/branch-performance', async (c) => {
   }>();
 
   // Initialize all branches
+  const branchIdSet = new Set(branchIds);
   tenantBranches.forEach(b => {
-    if (branchIds.includes(b.id)) {
+    if (branchIdSet.has(b.id)) {
       branchMap.set(b.id, {
         branch_id: b.id,
         branch_name: b.name,
@@ -963,18 +974,33 @@ app.get('/branch-performance', async (c) => {
   const byGrowth = [...data].sort((a, b) => b.growth.revenue_change - a.growth.revenue_change);
   const byCheckIns = [...data].sort((a, b) => b.current_period.check_ins - a.current_period.check_ins);
 
-  // Add rank to each item
-  const dataWithRank = data.map(d => ({
-    ...d,
-    rank: byRevenue.findIndex(r => r.branch_id === d.branch_id) + 1,
-  }));
+  // Pre-index revenue rank for O(1) lookups
+  const rankMap = new Map<string, number>();
+  for (let i = 0; i < byRevenue.length; i++) {
+    rankMap.set(byRevenue[i].branch_id, i + 1);
+  }
 
-  // Calculate totals
-  const totalRevenue = data.reduce((sum, d) => sum + d.current_period.revenue, 0);
-  const totalPreviousRevenue = data.reduce((sum, d) => sum + d.previous_period.revenue, 0);
-  const totalNewMembers = data.reduce((sum, d) => sum + d.current_period.new_members, 0);
-  const totalCheckIns = data.reduce((sum, d) => sum + d.current_period.check_ins, 0);
-  const totalActiveContracts = data.reduce((sum, d) => sum + d.current_period.active_contracts, 0);
+  // Add rank to each item and calculate totals in a single pass
+  let totalRevenue = 0;
+  let totalPreviousRevenue = 0;
+  let totalNewMembers = 0;
+  let totalCheckIns = 0;
+  let totalActiveContracts = 0;
+
+  const dataWithRank = new Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    totalRevenue += d.current_period.revenue;
+    totalPreviousRevenue += d.previous_period.revenue;
+    totalNewMembers += d.current_period.new_members;
+    totalCheckIns += d.current_period.check_ins;
+    totalActiveContracts += d.current_period.active_contracts;
+
+    dataWithRank[i] = {
+      ...d,
+      rank: rankMap.get(d.branch_id) || 1,
+    };
+  }
 
   return c.json({
     success: true,
@@ -1101,17 +1127,18 @@ app.get('/branch-performance/export', async (c) => {
   ]);
 
   // Build export data
-  const exportData = tenantBranches
-    .filter(b => branchIds.includes(b.id))
-    .map(b => {
-      const revenue = currentRevenue.find(r => r.branchId === b.id);
-      const members = currentMembers.find(m => m.branchId === b.id);
-      const checkIns = currentCheckIns.find(c => c.branchId === b.id);
-      const contracts = currentContracts.find(c => c.branchId === b.id);
-      const prevRevenue = previousRevenue.find(r => r.branchId === b.id);
+  const revenueMap = new Map(currentRevenue.map(r => [r.branchId, Number(r.total)]));
+  const membersMap = new Map(currentMembers.map(m => [m.branchId, Number(m.count)]));
+  const checkInsMap = new Map(currentCheckIns.map(c => [c.branchId, Number(c.count)]));
+  const contractsMap = new Map(currentContracts.map(c => [c.branchId, Number(c.count)]));
+  const prevRevenueMap = new Map(previousRevenue.map(r => [r.branchId, Number(r.total)]));
+  const branchIdSet = new Set(branchIds);
 
-      const currentRev = Number(revenue?.total || 0);
-      const prevRev = Number(prevRevenue?.total || 0);
+  const exportData = tenantBranches
+    .filter(b => branchIdSet.has(b.id))
+    .map(b => {
+      const currentRev = revenueMap.get(b.id) || 0;
+      const prevRev = prevRevenueMap.get(b.id) || 0;
       const growth = prevRev === 0 ? (currentRev > 0 ? 100 : 0) : ((currentRev - prevRev) / prevRev) * 100;
 
       return {
@@ -1119,9 +1146,9 @@ app.get('/branch-performance/export', async (c) => {
         revenue: currentRev,
         previousRevenue: prevRev,
         revenueGrowth: growth.toFixed(1) + '%',
-        newMembers: Number(members?.count || 0),
-        checkIns: Number(checkIns?.count || 0),
-        activeContracts: Number(contracts?.count || 0),
+        newMembers: membersMap.get(b.id) || 0,
+        checkIns: checkInsMap.get(b.id) || 0,
+        activeContracts: contractsMap.get(b.id) || 0,
       };
     })
     .sort((a, b) => b.revenue - a.revenue);
@@ -1331,15 +1358,36 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classSessions.instructorId, classes.category),
   ]);
 
+  // Build lookup maps for O(1) coach metric lookups
+  const classCountMap = new Map(classesCount.map(c => [c.instructorId, c]));
+  const studentCountMap = new Map(studentsCount.map(s => [s.coachId, s]));
+  const reviewsMap = new Map(reviewsData.map(r => [r.instructorId, r]));
+  const bookingMap = new Map(bookingStats.map(b => [b.instructorId, b]));
+  const notesMap = new Map(notesCount.map(n => [n.coachId, n]));
+  const plansMap = new Map(lessonPlansCount.map(p => [p.coachId, p]));
+
+  // Group classes by category per instructor
+  const categoriesMap = new Map<string, Array<{ category: string | null; count: number }>>();
+  for (let i = 0; i < classesByCategory.length; i++) {
+    const item = classesByCategory[i];
+    if (!item.instructorId) continue;
+    let list = categoriesMap.get(item.instructorId);
+    if (!list) {
+      list = [];
+      categoriesMap.set(item.instructorId, list);
+    }
+    list.push({ category: item.category, count: Number(item.count) });
+  }
+
   // Build coach data
   const coachData = coachesWithClasses.map(coach => {
-    const classCount = classesCount.find(c => c.instructorId === coach.id);
-    const studentCount = studentsCount.find(s => s.coachId === coach.id);
-    const reviews = reviewsData.find(r => r.instructorId === coach.id);
-    const booking = bookingStats.find(b => b.instructorId === coach.id);
-    const notes = notesCount.find(n => n.coachId === coach.id);
-    const plans = lessonPlansCount.find(p => p.coachId === coach.id);
-    const categories = classesByCategory.filter(c => c.instructorId === coach.id);
+    const classCount = classCountMap.get(coach.id);
+    const studentCount = studentCountMap.get(coach.id);
+    const reviews = reviewsMap.get(coach.id);
+    const booking = bookingMap.get(coach.id);
+    const notes = notesMap.get(coach.id);
+    const plans = plansMap.get(coach.id);
+    const categories = categoriesMap.get(coach.id) || [];
 
     const attended = Number(booking?.attended || 0);
     const noShow = Number(booking?.noShow || 0);
@@ -1365,10 +1413,7 @@ app.get('/coach-performance', async (c) => {
         lesson_plans_created: Number(plans?.count || 0),
       },
       details: {
-        classes_by_category: categories.map(c => ({
-          category: c.category,
-          count: Number(c.count),
-        })),
+        classes_by_category: categories,
       },
     };
   });
@@ -1383,13 +1428,25 @@ app.get('/coach-performance', async (c) => {
         c.metrics.lesson_plans_created > 0
       );
 
-  // Calculate summary
+  // Calculate summary in a single pass
   const totalCoaches = filteredData.length;
-  const totalClasses = filteredData.reduce((sum, c) => sum + c.metrics.classes_taught, 0);
-  const totalStudents = filteredData.reduce((sum, c) => sum + c.metrics.total_students, 0);
-  const ratingsWithValues = filteredData.filter(c => c.metrics.satisfaction_rating !== null);
-  const avgSatisfaction = ratingsWithValues.length > 0
-    ? ratingsWithValues.reduce((sum, c) => sum + (c.metrics.satisfaction_rating || 0), 0) / ratingsWithValues.length
+  let totalClasses = 0;
+  let totalStudents = 0;
+  let satisfactionSum = 0;
+  let satisfactionCount = 0;
+
+  for (let i = 0; i < totalCoaches; i++) {
+    const m = filteredData[i].metrics;
+    totalClasses += m.classes_taught;
+    totalStudents += m.total_students;
+    if (m.satisfaction_rating !== null) {
+      satisfactionSum += m.satisfaction_rating;
+      satisfactionCount++;
+    }
+  }
+
+  const avgSatisfaction = satisfactionCount > 0
+    ? satisfactionSum / satisfactionCount
     : 0;
 
   return c.json({
@@ -1544,12 +1601,18 @@ app.get('/coach-performance/export', async (c) => {
     .groupBy(classSessions.instructorId),
   ]);
 
+  // Build lookup maps for O(1) coach metric lookups
+  const classCountMap = new Map(classesCount.map(c => [c.instructorId, c]));
+  const studentCountMap = new Map(studentsCount.map(s => [s.coachId, s]));
+  const reviewsMap = new Map(reviewsData.map(r => [r.instructorId, r]));
+  const bookingMap = new Map(bookingStats.map(b => [b.instructorId, b]));
+
   // Build export data
   const exportData = coachesWithClasses.map(coach => {
-    const classCount = classesCount.find(c => c.instructorId === coach.id);
-    const studentCount = studentsCount.find(s => s.coachId === coach.id);
-    const reviews = reviewsData.find(r => r.instructorId === coach.id);
-    const booking = bookingStats.find(b => b.instructorId === coach.id);
+    const classCount = classCountMap.get(coach.id);
+    const studentCount = studentCountMap.get(coach.id);
+    const reviews = reviewsMap.get(coach.id);
+    const booking = bookingMap.get(coach.id);
 
     const attended = Number(booking?.attended || 0);
     const noShow = Number(booking?.noShow || 0);

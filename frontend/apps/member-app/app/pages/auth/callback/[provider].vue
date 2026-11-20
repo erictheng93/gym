@@ -1,3 +1,11 @@
+<script lang="ts">
+const PROVIDER_NAMES: Record<string, string> = {
+  google: 'Google',
+  line: 'LINE',
+  apple: 'Apple',
+}
+</script>
+
 <script setup lang="ts">
 /**
  * OAuth Provider Callback 頁面
@@ -140,12 +148,6 @@ const goToLogin = () => {
 
 const goToCompleteProfile = () => {
   navigateTo('/auth/complete-profile')
-}
-
-const PROVIDER_NAMES: Record<string, string> = {
-  google: 'Google',
-  line: 'LINE',
-  apple: 'Apple',
 }
 
 // Provider 名稱對應
