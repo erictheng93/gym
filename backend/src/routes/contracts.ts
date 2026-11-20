@@ -181,32 +181,30 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [[[contract], branchIds], logs, contractPayments] = await Promise.all([
-    Promise.all([
-      db
-        .select({
-          contract: contracts,
-          member: {
-            id: members.id,
-            fullName: members.fullName,
-            memberCode: members.memberCode,
-            phone: members.phone,
-            email: members.email,
-          },
-          plan: {
-            id: membershipPlans.id,
-            name: membershipPlans.name,
-            planType: membershipPlans.planType,
-            price: membershipPlans.price,
-          },
-        })
-        .from(contracts)
-        .leftJoin(members, eq(contracts.memberId, members.id))
-        .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-        .where(eq(contracts.id, id))
-        .limit(1),
-      getTenantBranchIds(tenantId),
-    ]),
+  const [[contract], branchIds, logs, contractPayments] = await Promise.all([
+    db
+      .select({
+        contract: contracts,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+          phone: members.phone,
+          email: members.email,
+        },
+        plan: {
+          id: membershipPlans.id,
+          name: membershipPlans.name,
+          planType: membershipPlans.planType,
+          price: membershipPlans.price,
+        },
+      })
+      .from(contracts)
+      .leftJoin(members, eq(contracts.memberId, members.id))
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(eq(contracts.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
     db
       .select()
       .from(contractLogs)
@@ -249,12 +247,17 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
 
   const [[member], [plan], [countResult]] = await Promise.all([
     db
-      .select()
+      .select({ id: members.id })
       .from(members)
       .where(eq(members.id, data.memberId))
       .limit(1),
     db
-      .select()
+      .select({
+        id: membershipPlans.id,
+        planType: membershipPlans.planType,
+        durationMonths: membershipPlans.durationMonths,
+        classCounts: membershipPlans.classCounts,
+      })
       .from(membershipPlans)
       .where(eq(membershipPlans.id, data.planId))
       .limit(1),

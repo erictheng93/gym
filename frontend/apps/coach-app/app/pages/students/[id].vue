@@ -343,18 +343,21 @@ const noteForm = ref({
   content: '',
 })
 
+const studentDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const studentDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  return studentDateFormatter.format(new Date(dateStr))
 }
 
 const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-TW', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return studentDateTimeFormatter.format(new Date(dateStr))
 }
 
 const getGoalText = (goalType: string) => {

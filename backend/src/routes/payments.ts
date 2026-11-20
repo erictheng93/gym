@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, payments, contracts, members, branches } from '../db/index.js';
 import { eq, and, sql, desc, sum, inArray, gte, lte } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -38,10 +39,15 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
   }
 
-  let conditions = [inArray(payments.branchId, branchIds)];
+  let conditions: SQL[] = [];
 
   if (branchId) {
+    if (!branchIds.includes(branchId)) {
+      return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
+    }
     conditions.push(eq(payments.branchId, branchId));
+  } else {
+    conditions.push(inArray(payments.branchId, branchIds));
   }
 
   if (memberId) {
@@ -109,10 +115,18 @@ app.get('/summary', async (c) => {
     });
   }
 
-  let conditions = [inArray(payments.branchId, branchIds)];
+  let conditions: SQL[] = [];
 
   if (branchId) {
+    if (!branchIds.includes(branchId)) {
+      return c.json({
+        success: true,
+        data: { totalIncome: 0, totalRefund: 0, netIncome: 0, paymentCount: 0 },
+      });
+    }
     conditions.push(eq(payments.branchId, branchId));
+  } else {
+    conditions.push(inArray(payments.branchId, branchIds));
   }
 
   if (startDate) {
@@ -158,7 +172,7 @@ app.get('/export', async (c) => {
 
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(paymentsColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -168,10 +182,12 @@ app.get('/export', async (c) => {
     });
   }
 
-  let conditions = [inArray(payments.branchId, branchIds)];
+  let conditions: SQL[] = [];
 
   if (branchId) {
     conditions.push(eq(payments.branchId, branchId));
+  } else {
+    conditions.push(inArray(payments.branchId, branchIds));
   }
 
   if (startDate) {
@@ -184,9 +200,14 @@ app.get('/export', async (c) => {
 
   const result = await db
     .select({
-      payment: payments,
+      payment: {
+        receiptNo: payments.receiptNo,
+        amount: payments.amount,
+        paymentMethod: payments.paymentMethod,
+        paymentDate: payments.paymentDate,
+        type: payments.type,
+      },
       member: {
-        id: members.id,
         fullName: members.fullName,
         memberCode: members.memberCode,
       },
@@ -254,7 +275,7 @@ app.get('/:id', async (c) => {
   }
 
   const [branch] = await db
-    .select()
+    .select({ id: branches.id })
     .from(branches)
     .where(and(eq(branches.id, payment.payment.branchId!), eq(branches.tenantId, tenantId)))
     .limit(1);
@@ -279,7 +300,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   const data = c.req.valid('json');
 
   const [branch] = await db
-    .select()
+    .select({ id: branches.id })
     .from(branches)
     .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
     .limit(1);
@@ -289,7 +310,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   }
 
   const [member] = await db
-    .select()
+    .select({ id: members.id })
     .from(members)
     .where(eq(members.id, data.memberId))
     .limit(1);
@@ -328,7 +349,10 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
           )
         ),
       db
-        .select()
+        .select({
+          id: contracts.id,
+          totalAmount: contracts.totalAmount,
+        })
         .from(contracts)
         .where(eq(contracts.id, data.contractId))
         .limit(1),

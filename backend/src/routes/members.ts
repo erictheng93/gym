@@ -53,11 +53,11 @@ app.get('/', zValidator('query', querySchema), async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
 
-  let baseCondition = inArray(members.branchId, branchIds);
-
-  if (branchId) {
-    baseCondition = and(baseCondition, eq(members.branchId, branchId))!;
+  if (branchId && !branchIds.includes(branchId)) {
+    return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
+
+  let baseCondition = branchId ? eq(members.branchId, branchId) : inArray(members.branchId, branchIds);
 
   if (status) {
     // Case-insensitive status comparison
@@ -129,7 +129,7 @@ app.get('/export', async (c) => {
   const branchIds = tenantBranches.map(b => b.id);
   const branchMap = new Map(tenantBranches.map(b => [b.id, b.name]));
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(membersColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -139,18 +139,23 @@ app.get('/export', async (c) => {
     });
   }
 
-  let baseCondition = inArray(members.branchId, branchIds);
-
-  if (branchId) {
-    baseCondition = and(baseCondition, eq(members.branchId, branchId))!;
-  }
+  let baseCondition = branchId ? eq(members.branchId, branchId) : inArray(members.branchId, branchIds);
 
   if (status) {
     baseCondition = and(baseCondition, eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'))!;
   }
 
   const result = await db
-    .select()
+    .select({
+      memberCode: members.memberCode,
+      fullName: members.fullName,
+      phone: members.phone,
+      email: members.email,
+      gender: members.gender,
+      status: members.status,
+      joinDate: members.joinDate,
+      branchId: members.branchId,
+    })
     .from(members)
     .where(baseCondition)
     .orderBy(desc(members.createdAt));

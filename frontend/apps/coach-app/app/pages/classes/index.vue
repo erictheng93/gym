@@ -142,6 +142,17 @@ const offset = ref(0)
 const limit = 20
 
 // Generate week days for date strip
+const weekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
+const dateLabelFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+})
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 const weekDays = computed(() => {
   const today = new Date()
   const days = []
@@ -155,7 +166,7 @@ const weekDays = computed(() => {
     days.push({
       date: dateStr,
       day: date.getDate(),
-      weekday: date.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週', ''),
+      weekday: weekdayFormatter.format(date).replace('週', ''),
       isToday: i === 0,
     })
   }
@@ -180,11 +191,7 @@ const getDateLabel = () => {
     return '今日課程'
   }
 
-  return date.toLocaleDateString('zh-TW', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  })
+  return dateLabelFormatter.format(date)
 }
 
 const selectDate = (date: string) => {
@@ -219,10 +226,7 @@ const loadMore = async () => {
 }
 
 const formatTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return timeFormatter.format(new Date(dateStr))
 }
 
 const getTimeBlockClass = (status: string) => {

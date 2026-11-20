@@ -235,13 +235,20 @@ const getInitials = (name: string) => {
   return ((parts[0] ?? '').charAt(0) + (parts[parts.length - 1] ?? '').charAt(0)).toUpperCase()
 }
 
+const dateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+})
+
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 const formatDate = (date: Date) => {
-  return date.toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long'
-  })
+  return dateFormatter.format(date)
 }
 
 // Fetch today's classes
@@ -268,10 +275,7 @@ const fetchTodayClasses = async () => {
 }
 
 const formatTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return timeFormatter.format(new Date(dateStr))
 }
 
 const getStatusClass = (status: string) => {
