@@ -55,6 +55,13 @@ const MEASUREMENT_PROGRESS_LATEST_SELECT = {
   bmi: bodyMeasurements.bmi,
 };
 
+const MEASUREMENT_PROGRESS_METRIC_SELECT = {
+  weight: { date: bodyMeasurements.date, value: bodyMeasurements.weight },
+  bodyFat: { date: bodyMeasurements.date, value: bodyMeasurements.bodyFat },
+  muscleMass: { date: bodyMeasurements.date, value: bodyMeasurements.muscleMass },
+  bmi: { date: bodyMeasurements.date, value: bodyMeasurements.bmi },
+} as const;
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -224,14 +231,13 @@ app.get('/progress', async (c) => {
   startDate.setDate(startDate.getDate() - parseInt(period));
   const startDateStr = startDate.toISOString().slice(0, 10);
 
-  const metricColumn = bodyMeasurements[metric as keyof typeof bodyMeasurements];
+  const metricKey = metric as keyof typeof MEASUREMENT_PROGRESS_METRIC_SELECT;
+  const metricColumn = bodyMeasurements[metricKey];
+  const progressSelect = MEASUREMENT_PROGRESS_METRIC_SELECT[metricKey];
 
   const [measurements, [latest]] = await Promise.all([
     db
-      .select({
-        date: bodyMeasurements.date,
-        value: metricColumn as typeof bodyMeasurements.weight,
-      })
+      .select(progressSelect)
       .from(bodyMeasurements)
       .where(and(
         eq(bodyMeasurements.memberId, memberInfo.id),

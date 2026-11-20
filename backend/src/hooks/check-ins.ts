@@ -44,6 +44,32 @@ const CHECK_IN_RETURNING = {
   notes: memberCheckIns.notes,
 };
 
+const CHECK_IN_MEMBER_VALIDATE_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+  status: members.status,
+  branchId: members.branchId,
+} as const;
+
+const CHECK_IN_VALID_CONTRACT_SELECT = {
+  id: contracts.id,
+  status: contracts.status,
+  remainingCounts: contracts.remainingCounts,
+  endDate: contracts.endDate,
+  planType: membershipPlans.planType,
+} as const;
+
+const CHECK_IN_DEDUCT_CONTRACT_SELECT = {
+  id: contracts.id,
+  remainingCounts: contracts.remainingCounts,
+  memberId: contracts.memberId,
+} as const;
+
+const CHECK_IN_EXISTING_TODAY_SELECT = {
+  id: memberCheckIns.id,
+  checkTime: memberCheckIns.checkInTime,
+} as const;
+
 interface CheckInValidationResult {
   valid: boolean;
   error?: string;
@@ -74,12 +100,7 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
 
   // Get member info
   const [member] = await db
-    .select({
-      id: members.id,
-      fullName: members.fullName,
-      status: members.status,
-      branchId: members.branchId,
-    })
+    .select(CHECK_IN_MEMBER_VALIDATE_SELECT)
     .from(members)
     .where(eq(members.id, data.memberId));
 
@@ -101,13 +122,7 @@ export async function validateCheckIn(data: CheckInData): Promise<CheckInValidat
 
   // Get active contract with plan info
   const validContracts = await db
-    .select({
-      id: contracts.id,
-      status: contracts.status,
-      remainingCounts: contracts.remainingCounts,
-      endDate: contracts.endDate,
-      planType: membershipPlans.planType,
-    })
+    .select(CHECK_IN_VALID_CONTRACT_SELECT)
     .from(contracts)
     .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
     .where(
@@ -196,11 +211,7 @@ export async function deductSessionCount(contractId: string): Promise<{
 
     // Fallback: Manual deduction
     const [contract] = await db
-      .select({
-        id: contracts.id,
-        remainingCounts: contracts.remainingCounts,
-        memberId: contracts.memberId,
-      })
+      .select(CHECK_IN_DEDUCT_CONTRACT_SELECT)
       .from(contracts)
       .where(eq(contracts.id, contractId));
 
@@ -272,10 +283,7 @@ export async function hasCheckedInToday(memberId: string, branchId: string): Pro
   endOfDay.setHours(23, 59, 59, 999);
 
   const existingCheckIns = await db
-    .select({
-      id: memberCheckIns.id,
-      checkTime: memberCheckIns.checkInTime,
-    })
+    .select(CHECK_IN_EXISTING_TODAY_SELECT)
     .from(memberCheckIns)
     .where(
       and(

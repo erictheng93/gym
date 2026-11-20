@@ -9,6 +9,27 @@ import { calculatePaymentStatus } from './utils.js';
 
 type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
 
+const CONTRACT_PAYMENT_STATUS_SELECT = {
+  id: contracts.id,
+  totalAmount: contracts.totalAmount,
+  paymentStatus: contracts.paymentStatus,
+} as const;
+
+const PAYMENT_AMOUNT_TYPE_SELECT = {
+  id: payments.id,
+  amount: payments.amount,
+  type: payments.type,
+} as const;
+
+const CONTRACT_TOTAL_AMOUNT_SELECT = {
+  totalAmount: contracts.totalAmount,
+} as const;
+
+const PAYMENT_AMOUNT_ONLY_SELECT = {
+  amount: payments.amount,
+  type: payments.type,
+} as const;
+
 /**
  * Update contract payment status based on all payments
  * Called after payment create/update/delete operations
@@ -30,11 +51,7 @@ export async function updateContractPaymentStatus(contractId: string): Promise<v
 
     // Fallback: Calculate manually
     const [contract] = await db
-      .select({
-        id: contracts.id,
-        totalAmount: contracts.totalAmount,
-        paymentStatus: contracts.paymentStatus,
-      })
+      .select(CONTRACT_PAYMENT_STATUS_SELECT)
       .from(contracts)
       .where(eq(contracts.id, contractId));
 
@@ -42,11 +59,7 @@ export async function updateContractPaymentStatus(contractId: string): Promise<v
 
     // Get all payments for this contract
     const contractPayments = await db
-      .select({
-        id: payments.id,
-        amount: payments.amount,
-        type: payments.type,
-      })
+      .select(PAYMENT_AMOUNT_TYPE_SELECT)
       .from(payments)
       .where(eq(payments.contractId, contractId));
 
@@ -118,9 +131,7 @@ export async function getContractPaymentSummary(contractId: string): Promise<{
   status: PaymentStatus;
 }> {
   const [contract] = await db
-    .select({
-      totalAmount: contracts.totalAmount,
-    })
+    .select(CONTRACT_TOTAL_AMOUNT_SELECT)
     .from(contracts)
     .where(eq(contracts.id, contractId));
 
@@ -129,10 +140,7 @@ export async function getContractPaymentSummary(contractId: string): Promise<{
   }
 
   const contractPayments = await db
-    .select({
-      amount: payments.amount,
-      type: payments.type,
-    })
+    .select(PAYMENT_AMOUNT_ONLY_SELECT)
     .from(payments)
     .where(eq(payments.contractId, contractId));
 

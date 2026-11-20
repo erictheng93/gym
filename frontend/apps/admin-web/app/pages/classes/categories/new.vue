@@ -96,8 +96,11 @@ const handleSubmit = async () => {
 // Load data
 onMounted(async () => {
   try {
-    rootCategories.value = await fetchRootCategories()
-    await fetchBranches()
+    const [roots] = await Promise.all([
+      fetchRootCategories(),
+      fetchBranches()
+    ])
+    rootCategories.value = roots
   } catch (error) {
     console.error('Failed to load data:', error)
   }
