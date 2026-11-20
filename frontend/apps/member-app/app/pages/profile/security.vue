@@ -23,6 +23,14 @@ const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
 const error = ref('')
 const success = ref(false)
+let redirectTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+})
 
 // Password strength
 const passwordStrength = computed(() => {
@@ -82,8 +90,12 @@ const handleSubmit = async () => {
     confirmPassword.value = ''
 
     // Redirect after short delay
-    setTimeout(() => {
+    if (redirectTimer) {
+      clearTimeout(redirectTimer)
+    }
+    redirectTimer = setTimeout(() => {
       navigateTo('/profile')
+      redirectTimer = null
     }, 2000)
   } else {
     error.value = result.message || '密碼變更失敗，請確認當前密碼是否正確'

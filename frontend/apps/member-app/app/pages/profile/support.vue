@@ -34,6 +34,14 @@ const reportForm = reactive<ReportForm>({
 
 const isSubmitting = ref(false)
 const submitSuccess = ref(false)
+let submitSuccessTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (submitSuccessTimer) {
+    clearTimeout(submitSuccessTimer)
+    submitSuccessTimer = null
+  }
+})
 
 const reportCategories = [
   { value: 'booking', label: '課程預約問題' },
@@ -161,9 +169,13 @@ const submitReport = async () => {
     reportForm.description = ''
     reportForm.attachScreenshot = false
 
-    // 3 秒後隱藏成功訊息
-    setTimeout(() => {
+    // 5 秒後隱藏成功訊息
+    if (submitSuccessTimer) {
+      clearTimeout(submitSuccessTimer)
+    }
+    submitSuccessTimer = setTimeout(() => {
       submitSuccess.value = false
+      submitSuccessTimer = null
     }, 5000)
   } catch (error) {
     handleError(error, { fallbackMessage: '提交失敗，請稍後再試' })

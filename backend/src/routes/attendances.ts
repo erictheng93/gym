@@ -275,7 +275,12 @@ app.post('/', zValidator('json', createSchema), async (c) => {
       branchId: data.branch_id,
       checkIn: checkInTime,
     })
-    .returning();
+    .returning({
+      id: attendances.id,
+      employeeId: attendances.employeeId,
+      checkIn: attendances.checkIn,
+      branchId: attendances.branchId,
+    });
 
   return c.json({
     success: true,

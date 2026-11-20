@@ -266,7 +266,16 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 
   // Get current record
   const [record] = await db
-    .select()
+    .select({
+      id: salaryRecords.id,
+      status: salaryRecords.status,
+      baseSalary: salaryRecords.baseSalary,
+      overtimeHours: salaryRecords.overtimeHours,
+      hourlyRate: salaryRecords.hourlyRate,
+      commission: salaryRecords.commission,
+      bonus: salaryRecords.bonus,
+      deductions: salaryRecords.deductions,
+    })
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);

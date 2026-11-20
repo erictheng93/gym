@@ -261,8 +261,22 @@ app.get('/:id', async (c) => {
   const [payment] = await db
     .select({
       payment: payments,
-      member: members,
-      contract: contracts,
+      member: {
+        id: members.id,
+        fullName: members.fullName,
+        memberCode: members.memberCode,
+        phone: members.phone,
+        email: members.email,
+      },
+      contract: {
+        id: contracts.id,
+        contractNo: contracts.contractNo,
+        status: contracts.status,
+        startDate: contracts.startDate,
+        endDate: contracts.endDate,
+        totalAmount: contracts.totalAmount,
+        remainingCounts: contracts.remainingCounts,
+      },
     })
     .from(payments)
     .leftJoin(members, eq(payments.memberId, members.id))

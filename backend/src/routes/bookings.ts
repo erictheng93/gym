@@ -112,9 +112,34 @@ app.get('/:id', async (c) => {
     db
       .select({
         booking: bookings,
-        session: classSessions,
-        class: classes,
-        member: members,
+        session: {
+          id: classSessions.id,
+          branchId: classSessions.branchId,
+          classId: classSessions.classId,
+          instructorId: classSessions.instructorId,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          endTime: classSessions.endTime,
+          sessionStatus: classSessions.sessionStatus,
+          maxCapacity: classSessions.maxCapacity,
+          currentCount: classSessions.currentCount,
+          waitlistCount: classSessions.waitlistCount,
+        },
+        class: {
+          id: classes.id,
+          name: classes.name,
+          category: classes.category,
+          description: classes.description,
+          durationMinutes: classes.durationMinutes,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+          phone: members.phone,
+          email: members.email,
+          status: members.status,
+        },
       })
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
@@ -227,7 +252,15 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
       contractId: data.contractId,
       bookingStatus,
       waitlistPosition,
-    }).returning(),
+    }).returning({
+      id: bookings.id,
+      sessionId: bookings.sessionId,
+      memberId: bookings.memberId,
+      contractId: bookings.contractId,
+      bookingStatus: bookings.bookingStatus,
+      waitlistPosition: bookings.waitlistPosition,
+      createdAt: bookings.createdAt,
+    }),
     bookingStatus === 'CONFIRMED'
       ? db.update(classSessions).set({
           currentCount: currentCount + 1,

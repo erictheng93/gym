@@ -69,6 +69,40 @@ let scanInterval: NodeJS.Timeout | null = null
 const showQrScanner = ref(false)
 const qrCheckinResult = ref<{ success: boolean; message: string; member?: any; contract?: any } | null>(null)
 
+let checkinSuccessTimer: ReturnType<typeof setTimeout> | null = null
+let attendanceSuccessTimer: ReturnType<typeof setTimeout> | null = null
+
+const resetCheckinSuccess = () => {
+  if (checkinSuccessTimer) {
+    clearTimeout(checkinSuccessTimer)
+  }
+  isCheckinSuccess.value = true
+  checkinSuccessTimer = setTimeout(() => {
+    isCheckinSuccess.value = false
+    selectedMember.value = null
+    selectedContract.value = null
+    memberBranch.value = null
+    isCrossBranch.value = false
+    alreadyCheckedIn.value = false
+    qrCheckinResult.value = null
+    lastCheckinResult.value = {}
+    checkinSuccessTimer = null
+  }, 3000)
+}
+
+const resetAttendanceSuccess = () => {
+  if (attendanceSuccessTimer) {
+    clearTimeout(attendanceSuccessTimer)
+  }
+  isAttendanceSuccess.value = true
+  attendanceSuccessTimer = setTimeout(() => {
+    isAttendanceSuccess.value = false
+    selectedEmployee.value = null
+    todayAttendance.value = null
+    attendanceSuccessTimer = null
+  }, 3000)
+}
+
 onMounted(async () => {
   await Promise.all([
     fetchMembers(),
@@ -85,6 +119,14 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopScanner()
+  if (checkinSuccessTimer) {
+    clearTimeout(checkinSuccessTimer)
+    checkinSuccessTimer = null
+  }
+  if (attendanceSuccessTimer) {
+    clearTimeout(attendanceSuccessTimer)
+    attendanceSuccessTimer = null
+  }
 })
 
 // ============================================
@@ -159,17 +201,8 @@ const performMemberCheckin = async () => {
       remainingCounts: result?.remainingCounts
     }
 
-    isCheckinSuccess.value = true
     useToast().success(MESSAGES.SUCCESS.CHECKIN)
-    setTimeout(() => {
-      isCheckinSuccess.value = false
-      selectedMember.value = null
-      selectedContract.value = null
-      memberBranch.value = null
-      isCrossBranch.value = false
-      alreadyCheckedIn.value = false
-      lastCheckinResult.value = {}
-    }, 3000)
+    resetCheckinSuccess()
   } catch (error) {
     errorMessage.value = MESSAGES.ERRORS.CHECKIN
     console.error('Checkin failed:', error)
@@ -225,14 +258,8 @@ const performStaffCheckIn = async () => {
     })
 
     todayAttendance.value = result
-    isAttendanceSuccess.value = true
     useToast().success('上班打卡成功')
-
-    setTimeout(() => {
-      isAttendanceSuccess.value = false
-      selectedEmployee.value = null
-      todayAttendance.value = null
-    }, 3000)
+    resetAttendanceSuccess()
   } catch (error) {
     attendanceErrorMessage.value = '打卡失敗，請重試'
     console.error('Check-in failed:', error)
@@ -251,14 +278,8 @@ const performStaffCheckOut = async () => {
   try {
     const result = await performCheckOut(todayAttendance.value.id)
     todayAttendance.value = result
-    isAttendanceSuccess.value = true
     useToast().success('下班打卡成功')
-
-    setTimeout(() => {
-      isAttendanceSuccess.value = false
-      selectedEmployee.value = null
-      todayAttendance.value = null
-    }, 3000)
+    resetAttendanceSuccess()
   } catch (error) {
     attendanceErrorMessage.value = '打卡失敗，請重試'
     console.error('Check-out failed:', error)
@@ -393,14 +414,7 @@ const handleQrScan = async (payload: string) => {
         remainingCounts: result.contract?.remaining_counts
       }
       selectedMember.value = result.member
-      isCheckinSuccess.value = true
-
-      setTimeout(() => {
-        isCheckinSuccess.value = false
-        selectedMember.value = null
-        qrCheckinResult.value = null
-        lastCheckinResult.value = {}
-      }, 3000)
+      resetCheckinSuccess()
     } else {
       errorMessage.value = result.message
     }

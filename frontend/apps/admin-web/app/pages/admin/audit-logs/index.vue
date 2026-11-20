@@ -359,47 +359,53 @@ const changePage = (newPage) => {
   }
 }
 
-const getActionLabel = (action) => {
-  const labels = {
-    create: '创建',
-    update: '更新',
-    delete: '删除',
-    login: '登录',
-    logout: '登出'
-  }
-  return labels[action] || action
+const ACTION_LABELS: Record<string, string> = {
+  create: '创建',
+  update: '更新',
+  delete: '删除',
+  login: '登录',
+  logout: '登出'
 }
 
-const getResourceLabel = (resourceType) => {
-  const labels = {
-    members: '会员',
-    contracts: '合约',
-    payments: '支付',
-    employees: '员工',
-    branches: '分店',
-    users: '用户'
-  }
-  return labels[resourceType] || resourceType
+const RESOURCE_LABELS: Record<string, string> = {
+  members: '会员',
+  contracts: '合约',
+  payments: '支付',
+  employees: '员工',
+  branches: '分店',
+  users: '用户'
 }
 
-const getSeverityLabel = (severity) => {
-  const labels = {
-    info: '信息',
-    warning: '警告',
-    error: '错误',
-    critical: '严重'
-  }
-  return labels[severity] || severity
+const SEVERITY_LABELS: Record<string, string> = {
+  info: '信息',
+  warning: '警告',
+  error: '错误',
+  critical: '严重'
 }
 
-const formatNumber = (num) => {
+const auditNumberFormatter = new Intl.NumberFormat('zh-TW')
+const auditDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+
+const getActionLabel = (action: string) => ACTION_LABELS[action] || action
+const getResourceLabel = (resourceType: string) => RESOURCE_LABELS[resourceType] || resourceType
+const getSeverityLabel = (severity: string) => SEVERITY_LABELS[severity] || severity
+
+const formatNumber = (num: number | null | undefined) => {
   if (num === null || num === undefined) return '0'
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return auditNumberFormatter.format(num)
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: string) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : auditDateTimeFormatter.format(d)
 }
 
 const formatJSON = (obj) => {

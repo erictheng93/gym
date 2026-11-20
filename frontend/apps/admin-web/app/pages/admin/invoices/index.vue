@@ -307,28 +307,36 @@ const isOverdue = (invoice) => {
   return new Date(invoice.due_date) < new Date()
 }
 
-const getStatusLabel = (status) => {
-  const labels = {
-    draft: '草稿',
-    open: '待付款',
-    paid: '已付款',
-    void: '作废',
-    uncollectible: '无法收款'
-  }
-  return labels[status] || status
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: '草稿',
+  open: '待付款',
+  paid: '已付款',
+  void: '作废',
+  uncollectible: '无法收款'
 }
 
-const formatDate = (dateStr) => {
+const invoiceDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric'
+})
+
+const invoiceCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD'
+})
+
+const getStatusLabel = (status: string) => INVOICE_STATUS_LABELS[status] || status
+
+const formatDate = (dateStr: string) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : invoiceDateFormatter.format(d)
 }
 
-const formatCurrency = (amount) => {
+const formatCurrency = (amount: number | null | undefined) => {
   if (amount === null || amount === undefined) return '-'
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD'
-  }).format(amount)
+  return invoiceCurrencyFormatter.format(amount)
 }
 
 onMounted(() => {
