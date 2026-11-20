@@ -356,8 +356,8 @@ app.get('/:id', async (c) => {
       emergency_phone: member.emergencyPhone,
       height: member.height,
       member_notes: member.notes,
-      role: assignment.role,
-      assigned_at: assignment.assignedAt,
+      role: member.role,
+      assigned_at: member.assignedAt,
       contracts: contractsData.map(c => ({
         id: c.id,
         contract_no: c.contractNo,
