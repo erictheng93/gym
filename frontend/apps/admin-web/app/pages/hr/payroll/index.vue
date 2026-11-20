@@ -120,10 +120,16 @@ const handleBatchApprove = async () => {
 
 // Summary stats
 const summaryStats = computed(() => {
-  const pending = salaryRecords.value.filter(r => r.status === 'PENDING').length
-  const approved = salaryRecords.value.filter(r => r.status === 'APPROVED').length
-  const paid = salaryRecords.value.filter(r => r.status === 'PAID').length
-  const totalAmount = salaryRecords.value.reduce((sum, r) => sum + (r.net_salary || 0), 0)
+  let pending = 0
+  let approved = 0
+  let paid = 0
+  let totalAmount = 0
+  for (const r of salaryRecords.value) {
+    if (r.status === 'PENDING') pending++
+    else if (r.status === 'APPROVED') approved++
+    else if (r.status === 'PAID') paid++
+    totalAmount += (r.net_salary || 0)
+  }
   return { pending, approved, paid, totalAmount }
 })
 

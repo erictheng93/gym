@@ -1,5 +1,5 @@
 import { db, contracts, members, branches, notifications } from '../db/index.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { emailService } from '../services/email.js';
 
 const CRON_EXPIRING_CONTRACT_JOIN_SELECT = {
@@ -21,8 +21,8 @@ const CRON_EXPIRING_CONTRACT_JOIN_SELECT = {
   },
 };
 
-const CRON_NOTIFICATION_ID_SELECT = {
-  id: notifications.id,
+const CRON_NOTIFICATION_REF_SELECT = {
+  referenceId: notifications.referenceId,
 };
 
 export async function runContractExpiryCheck() {
@@ -58,20 +58,26 @@ async function checkExpiringContracts(daysAhead: number) {
 
   console.log(`[ContractExpiry] Found ${expiringContracts.length} contracts expiring in ${daysAhead} day(s)`);
 
+  if (expiringContracts.length === 0) return;
+
+  const contractIds = expiringContracts.map(c => c.contract.id);
+
+  // Batch query all existing notifications for these contracts in 1 query
+  const existingNotifications = await db
+    .select(CRON_NOTIFICATION_REF_SELECT)
+    .from(notifications)
+    .where(
+      and(
+        inArray(notifications.referenceId, contractIds),
+        eq(notifications.notificationType, `expiring_${daysAhead}d`)
+      )
+    );
+
+  const notifiedContractIds = new Set(existingNotifications.map(n => n.referenceId).filter(Boolean));
+
   for (const { contract, member, branch } of expiringContracts) {
     try {
-      const existingNotification = await db
-        .select(CRON_NOTIFICATION_ID_SELECT)
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.referenceId, contract.id),
-            eq(notifications.notificationType, `expiring_${daysAhead}d`)
-          )
-        )
-        .limit(1);
-
-      if (existingNotification.length > 0) {
+      if (notifiedContractIds.has(contract.id)) {
         continue;
       }
 

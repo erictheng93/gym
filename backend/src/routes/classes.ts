@@ -105,6 +105,23 @@ const CLASS_SCHEDULE_LIST_SELECT = {
   status: classSchedules.status,
 };
 
+const CLASS_ID_SELECT = {
+  id: classes.id,
+};
+
+const CLASS_BRANCH_ID_SELECT = {
+  id: classes.id,
+  branchId: classes.branchId,
+};
+
+const CLASS_SESSION_WITH_INSTRUCTOR_SELECT = {
+  session: CLASS_SESSION_SELECT,
+  instructor: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
@@ -238,7 +255,7 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
     .returning(CLASS_RETURNING);
 
   if (!updatedClass) {
-    const [exists] = await db.select({ id: classes.id }).from(classes).where(eq(classes.id, id)).limit(1);
+    const [exists] = await db.select(CLASS_ID_SELECT).from(classes).where(eq(classes.id, id)).limit(1);
     if (exists) {
       return c.json({ success: false, error: '無權限修改此課程' }, 403);
     }
@@ -257,19 +274,13 @@ app.get('/:id/sessions', async (c) => {
 
   const [[classItem], branchIds, sessions] = await Promise.all([
     db
-      .select({ id: classes.id, branchId: classes.branchId })
+      .select(CLASS_BRANCH_ID_SELECT)
       .from(classes)
       .where(eq(classes.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select({
-        session: CLASS_SESSION_SELECT,
-        instructor: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-      })
+      .select(CLASS_SESSION_WITH_INSTRUCTOR_SELECT)
       .from(classSessions)
       .leftJoin(employees, eq(classSessions.instructorId, employees.id))
       .where(
@@ -306,10 +317,7 @@ app.post('/schedules', zValidator('json', createScheduleSchema), async (c) => {
   const [tenantBranchIds, [classItem]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: classes.id,
-        branchId: classes.branchId,
-      })
+      .select(CLASS_BRANCH_ID_SELECT)
       .from(classes)
       .where(eq(classes.id, data.classId))
       .limit(1),
