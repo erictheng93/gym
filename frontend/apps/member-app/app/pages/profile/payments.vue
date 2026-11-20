@@ -114,14 +114,16 @@ const methodLabels = PAYMENT_METHOD_LABELS
 const totals = computed(() => {
   let income = 0
   let refund = 0
+  const list = payments.value
 
-  payments.value.forEach(p => {
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]!
     if (p.payment_type === 'INCOME') {
       income += p.amount
     } else {
       refund += p.amount
     }
-  })
+  }
 
   return {
     income,
@@ -133,16 +135,20 @@ const totals = computed(() => {
 // Group payments by month
 const groupedPayments = computed(() => {
   const groups: Record<string, Payment[]> = {}
+  const list = payments.value
 
-  payments.value.forEach(payment => {
+  for (let i = 0; i < list.length; i++) {
+    const payment = list[i]!
     const date = payment.payment_date ? new Date(payment.payment_date) : new Date()
     const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`
 
-    if (!groups[monthKey]) {
-      groups[monthKey] = []
+    const group = groups[monthKey]
+    if (group) {
+      group.push(payment)
+    } else {
+      groups[monthKey] = [payment]
     }
-    groups[monthKey].push(payment)
-  })
+  }
 
   return Object.entries(groups).map(([month, items]) => ({
     month,

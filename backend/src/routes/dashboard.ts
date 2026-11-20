@@ -57,6 +57,27 @@ const DASHBOARD_RECENT_ACTIVITIES_SELECT = {
 };
 
 
+const createDashboardMemberStatsSelect = (monthStartIso: string) => ({
+  total: count(),
+  active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
+  newThisMonth: sql<number>`count(*) filter (where ${members.createdAt} >= ${monthStartIso}::timestamptz)`,
+});
+
+const createDashboardContractStatsSelect = (todayStr: string, sevenDaysFromNow: string) => ({
+  active: count(),
+  expiringSoon: sql<number>`count(*) filter (where ${contracts.endDate} >= ${todayStr} and ${contracts.endDate} <= ${sevenDaysFromNow})`,
+});
+
+const createDashboardRevenueStatsSelect = (monthStartIso: string, lastMonthStartIso: string, lastMonthEndIso: string) => ({
+  thisMonth: sql<string>`COALESCE(SUM(CASE WHEN ${payments.paymentDate} >= ${monthStartIso}::timestamptz THEN ${payments.amount} ELSE 0 END), 0)`,
+  lastMonth: sql<string>`COALESCE(SUM(CASE WHEN ${payments.paymentDate} >= ${lastMonthStartIso}::timestamptz AND ${payments.paymentDate} <= ${lastMonthEndIso}::timestamptz THEN ${payments.amount} ELSE 0 END), 0)`,
+});
+
+const createDashboardCheckInStatsSelect = (todayStartIso: string) => ({
+  month: count(),
+  today: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${todayStartIso}::timestamptz)`,
+});
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -102,20 +123,13 @@ app.get('/overview', async (c) => {
   ] = await Promise.all([
     // Member stats (total, active, and new this month in a single scan)
     db
-      .select({
-        total: count(),
-        active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
-        newThisMonth: sql<number>`count(*) filter (where ${members.createdAt} >= ${monthStartDate.toISOString()}::timestamptz)`,
-      })
+      .select(createDashboardMemberStatsSelect(monthStartDate.toISOString()))
       .from(members)
       .where(inArray(members.branchId, branchIds)),
 
     // Contract stats (active and expiring soon in a single scan)
     db
-      .select({
-        active: count(),
-        expiringSoon: sql<number>`count(*) filter (where ${contracts.endDate} >= ${todayStr} and ${contracts.endDate} <= ${sevenDaysFromNow})`,
-      })
+      .select(createDashboardContractStatsSelect(todayStr, sevenDaysFromNow))
       .from(contracts)
       .where(
         and(
@@ -126,10 +140,11 @@ app.get('/overview', async (c) => {
 
     // Revenue stats (this month and last month in a single scan)
     db
-      .select({
-        thisMonth: sql<string>`COALESCE(SUM(CASE WHEN ${payments.paymentDate} >= ${monthStartDate.toISOString()}::timestamptz THEN ${payments.amount} ELSE 0 END), 0)`,
-        lastMonth: sql<string>`COALESCE(SUM(CASE WHEN ${payments.paymentDate} >= ${lastMonthStartDate.toISOString()}::timestamptz AND ${payments.paymentDate} <= ${lastMonthEndDate.toISOString()}::timestamptz THEN ${payments.amount} ELSE 0 END), 0)`,
-      })
+      .select(createDashboardRevenueStatsSelect(
+        monthStartDate.toISOString(),
+        lastMonthStartDate.toISOString(),
+        lastMonthEndDate.toISOString()
+      ))
       .from(payments)
       .where(
         and(
@@ -141,10 +156,7 @@ app.get('/overview', async (c) => {
 
     // Check-in stats (this month and today in a single scan)
     db
-      .select({
-        month: count(),
-        today: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${todayStart.toISOString()}::timestamptz)`,
-      })
+      .select(createDashboardCheckInStatsSelect(todayStart.toISOString()))
       .from(checkIns)
       .where(
         and(

@@ -157,11 +157,19 @@ const weekDays = computed(() => {
 const weekStats = computed(() => {
   if (!schedule.value?.classes) return { total: 0, completed: 0, upcoming: 0 }
 
+  let completed = 0
+  let upcoming = 0
   const classes = schedule.value.classes
+  for (let i = 0; i < classes.length; i++) {
+    const status = classes[i]!.status
+    if (status === 'COMPLETED') completed++
+    else if (status === 'BOOKED') upcoming++
+  }
+
   return {
     total: classes.length,
-    completed: classes.filter(c => c.status === 'COMPLETED').length,
-    upcoming: classes.filter(c => c.status === 'BOOKED').length,
+    completed,
+    upcoming,
   }
 })
 

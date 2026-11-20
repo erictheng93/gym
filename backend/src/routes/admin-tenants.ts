@@ -106,8 +106,18 @@ app.get('/', async (c) => {
       if (row.tenantId) branchMap.set(row.tenantId, Number(row.count || 0));
     }
 
-    // Map stats in-memory
-    const tenantsWithStats = tenantList.map((tenant) => {
+    // Map stats and compute aggregations in a single pass
+    let activeTenants = 0;
+    let trialTenants = 0;
+    let suspendedTenants = 0;
+    let tenantsAtRisk = 0;
+    let totalMembers = 0;
+    let totalEmployees = 0;
+    let totalBranches = 0;
+
+    const tenantsWithStats = new Array(tenantList.length);
+    for (let i = 0; i < tenantList.length; i++) {
+      const tenant = tenantList[i]!;
       const memberCount = memberMap.get(tenant.id) || 0;
       const employeeCount = employeeMap.get(tenant.id) || 0;
       const branchCount = branchMap.get(tenant.id) || 0;
@@ -116,41 +126,46 @@ app.get('/', async (c) => {
       const maxEmployees = tenant.maxEmployees || 10;
       const maxBranches = tenant.maxBranches || 1;
 
-      return {
+      const membersUsagePercent = Math.round((memberCount / maxMembers) * 100);
+      const employeesUsagePercent = Math.round((employeeCount / maxEmployees) * 100);
+      const branchesUsagePercent = Math.round((branchCount / maxBranches) * 100);
+
+      const status = tenant.tenantStatus || 'active';
+      if (status === 'active') activeTenants++;
+      else if (status === 'trial') trialTenants++;
+      else if (status === 'suspended') suspendedTenants++;
+
+      if (membersUsagePercent >= 90 || employeesUsagePercent >= 90 || branchesUsagePercent >= 90) {
+        tenantsAtRisk++;
+      }
+
+      totalMembers += memberCount;
+      totalEmployees += employeeCount;
+      totalBranches += branchCount;
+
+      tenantsWithStats[i] = {
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
         email: tenant.email || '',
         plan_type: tenant.planType || 'starter',
-        tenant_status: tenant.tenantStatus || 'active',
+        tenant_status: status,
         max_members: maxMembers,
         max_employees: maxEmployees,
         max_branches: maxBranches,
         current_members: memberCount,
         current_employees: employeeCount,
         current_branches: branchCount,
-        members_usage_percent: Math.round((memberCount / maxMembers) * 100),
-        employees_usage_percent: Math.round((employeeCount / maxEmployees) * 100),
-        branches_usage_percent: Math.round((branchCount / maxBranches) * 100),
+        members_usage_percent: membersUsagePercent,
+        employees_usage_percent: employeesUsagePercent,
+        branches_usage_percent: branchesUsagePercent,
         active_contracts: 0, // TODO: Calculate active contracts
         trial_ends_at: tenant.trialEndsAt?.toISOString() || null,
         date_created: tenant.createdAt?.toISOString() || new Date().toISOString(),
       };
-    });
+    }
 
-    // Calculate stats
     const totalTenants = tenantsWithStats.length;
-    const activeTenants = tenantsWithStats.filter(t => t.tenant_status === 'active').length;
-    const trialTenants = tenantsWithStats.filter(t => t.tenant_status === 'trial').length;
-    const suspendedTenants = tenantsWithStats.filter(t => t.tenant_status === 'suspended').length;
-    const tenantsAtRisk = tenantsWithStats.filter(t =>
-      t.members_usage_percent >= 90 ||
-      t.employees_usage_percent >= 90 ||
-      t.branches_usage_percent >= 90
-    ).length;
-    const totalMembers = tenantsWithStats.reduce((sum, t) => sum + t.current_members, 0);
-    const totalEmployees = tenantsWithStats.reduce((sum, t) => sum + t.current_employees, 0);
-    const totalBranches = tenantsWithStats.reduce((sum, t) => sum + t.current_branches, 0);
 
     return c.json({
       success: true,
