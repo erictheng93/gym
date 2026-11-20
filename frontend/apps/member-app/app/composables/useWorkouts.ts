@@ -396,7 +396,8 @@ export const useWorkouts = () => {
   const recentWorkouts = computed(() => {
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
-    return workouts.value.filter(w => new Date(w.date) >= weekAgo)
+    const weekAgoMs = weekAgo.getTime()
+    return workouts.value.filter(w => new Date(w.date).getTime() >= weekAgoMs)
   })
 
   /**

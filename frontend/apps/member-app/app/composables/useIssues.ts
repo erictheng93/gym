@@ -269,14 +269,23 @@ export const useIssues = () => {
   }
 
   /**
-   * Get issues by status
+   * Group issues by status in a single pass
    */
-  const pendingIssues = computed(() =>
-    issues.value.filter(i => ['SUBMITTED', 'IN_PROGRESS'].includes(i.status))
-  )
-  const resolvedIssues = computed(() =>
-    issues.value.filter(i => ['RESOLVED', 'CLOSED'].includes(i.status))
-  )
+  const groupedIssues = computed(() => {
+    const pending: Issue[] = []
+    const resolved: Issue[] = []
+    for (const i of issues.value) {
+      if (i.status === 'SUBMITTED' || i.status === 'IN_PROGRESS') {
+        pending.push(i)
+      } else if (i.status === 'RESOLVED' || i.status === 'CLOSED') {
+        resolved.push(i)
+      }
+    }
+    return { pending, resolved }
+  })
+
+  const pendingIssues = computed(() => groupedIssues.value.pending)
+  const resolvedIssues = computed(() => groupedIssues.value.resolved)
 
   return {
     issues,

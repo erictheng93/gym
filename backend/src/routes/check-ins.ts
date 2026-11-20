@@ -198,27 +198,27 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     });
   }
 
-  // Create check-in
-  const [newCheckIn] = await db.insert(checkIns).values({
-    memberId: data.memberId,
-    branchId: data.branchId,
-    contractId: data.contractId || activeContract?.id,
-    checkInType: data.checkInType,
-    checkInTime: new Date(),
-    processedById: user.employeeId,
-    notes: data.notes,
-  }).returning();
-
-  // Deduct session for COUNT_BASED contracts atomically
-  if (activePlan?.planType === 'COUNT_BASED' && activeContract) {
-    await db
-      .update(contracts)
-      .set({
-        remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)));
-  }
+  // Concurrently create check-in and deduct session for COUNT_BASED contracts
+  const [[newCheckIn]] = await Promise.all([
+    db.insert(checkIns).values({
+      memberId: data.memberId,
+      branchId: data.branchId,
+      contractId: data.contractId || activeContract?.id,
+      checkInType: data.checkInType,
+      checkInTime: new Date(),
+      processedById: user.employeeId,
+      notes: data.notes,
+    }).returning(),
+    activePlan?.planType === 'COUNT_BASED' && activeContract
+      ? db
+          .update(contracts)
+          .set({
+            remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)))
+      : Promise.resolve(null),
+  ]);
 
   return c.json({
     success: true,

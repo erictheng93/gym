@@ -251,11 +251,27 @@ export const useGoals = () => {
   }
 
   /**
-   * Get goals by status
+   * Group goals by status in a single pass
    */
-  const activeGoals = computed(() => goals.value.filter(g => g.status === 'IN_PROGRESS'))
-  const achievedGoals = computed(() => goals.value.filter(g => g.status === 'ACHIEVED'))
-  const abandonedGoals = computed(() => goals.value.filter(g => g.status === 'ABANDONED'))
+  const groupedGoals = computed(() => {
+    const active: Goal[] = []
+    const achieved: Goal[] = []
+    const abandoned: Goal[] = []
+    for (const g of goals.value) {
+      if (g.status === 'IN_PROGRESS') {
+        active.push(g)
+      } else if (g.status === 'ACHIEVED') {
+        achieved.push(g)
+      } else if (g.status === 'ABANDONED') {
+        abandoned.push(g)
+      }
+    }
+    return { active, achieved, abandoned }
+  })
+
+  const activeGoals = computed(() => groupedGoals.value.active)
+  const achievedGoals = computed(() => groupedGoals.value.achieved)
+  const abandonedGoals = computed(() => groupedGoals.value.abandoned)
 
   return {
     goals,

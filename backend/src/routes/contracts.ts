@@ -242,8 +242,12 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   // User context available for future audit logging: c.get('user')
   const data = c.req.valid('json');
 
-  const [branchIds, [member], [plan]] = await Promise.all([
-    getTenantBranchIds(tenantId),
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
+  }
+
+  const [[member], [plan], [countResult]] = await Promise.all([
     db
       .select()
       .from(members)
@@ -254,11 +258,11 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
       .from(membershipPlans)
       .where(eq(membershipPlans.id, data.planId))
       .limit(1),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(contracts)
+      .where(inArray(contracts.branchId, branchIds)),
   ]);
-
-  if (!branchIds.includes(data.branchId)) {
-    return c.json({ success: false, error: '無效的分店' }, 400);
-  }
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
@@ -267,11 +271,6 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   if (!plan) {
     return c.json({ success: false, error: '會籍方案不存在' }, 404);
   }
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(contracts)
-    .where(inArray(contracts.branchId, branchIds));
 
   const contractCount = Number(countResult?.count || 0);
   const contractNo = `C${new Date().getFullYear()}${String(contractCount + 1).padStart(6, '0')}`;
@@ -325,23 +324,20 @@ app.patch('/:id', zValidator('json', updateContractSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [contract] = await db
-    .select()
-    .from(contracts)
-    .where(eq(contracts.id, id))
-    .limit(1);
+  const [branchIds, [contract]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.id, id))
+      .limit(1),
+  ]);
 
   if (!contract) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, contract.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
@@ -361,23 +357,20 @@ app.post('/:id/activate', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [contract] = await db
-    .select()
-    .from(contracts)
-    .where(eq(contracts.id, id))
-    .limit(1);
+  const [branchIds, [contract]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.id, id))
+      .limit(1),
+  ]);
 
   if (!contract) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, contract.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
@@ -385,16 +378,20 @@ app.post('/:id/activate', async (c) => {
     return c.json({ success: false, error: '只有草稿狀態的合約可以啟用' }, 400);
   }
 
-  const [updatedContract] = await db
-    .update(contracts)
-    .set({ status: 'ACTIVE', updatedAt: new Date() })
-    .where(eq(contracts.id, id))
-    .returning();
-
-  await db.update(members).set({
-    status: 'ACTIVE',
-    updatedAt: new Date(),
-  }).where(eq(members.id, contract.memberId));
+  const [[updatedContract]] = await Promise.all([
+    db
+      .update(contracts)
+      .set({ status: 'ACTIVE', updatedAt: new Date() })
+      .where(eq(contracts.id, id))
+      .returning(),
+    db
+      .update(members)
+      .set({
+        status: 'ACTIVE',
+        updatedAt: new Date(),
+      })
+      .where(eq(members.id, contract.memberId)),
+  ]);
 
   return c.json({ success: true, data: updatedContract });
 });
@@ -405,23 +402,20 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
   // User context available for future audit logging: c.get('user')
   const data = c.req.valid('json');
 
-  const [contract] = await db
-    .select()
-    .from(contracts)
-    .where(eq(contracts.id, id))
-    .limit(1);
+  const [branchIds, [contract]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.id, id))
+      .limit(1),
+  ]);
 
   if (!contract) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, contract.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
@@ -440,25 +434,26 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
     newEndDate = currentEnd.toISOString().split('T')[0];
   }
 
-  await db.insert(contractLogs).values({
-    contractId: id,
-    logType: 'PAUSE',
-    startDate: data.startDate,
-    endDate: data.endDate,
-    daysAffected: daysAffected,
-    reason: data.reason,
-    tenantId: tenantId,
-  });
-
-  const [updatedContract] = await db
-    .update(contracts)
-    .set({
-      status: 'PAUSED',
-      endDate: newEndDate,
-      updatedAt: new Date(),
-    })
-    .where(eq(contracts.id, id))
-    .returning();
+  const [, [updatedContract]] = await Promise.all([
+    db.insert(contractLogs).values({
+      contractId: id,
+      logType: 'PAUSE',
+      startDate: data.startDate,
+      endDate: data.endDate,
+      daysAffected: daysAffected,
+      reason: data.reason,
+      tenantId: tenantId,
+    }),
+    db
+      .update(contracts)
+      .set({
+        status: 'PAUSED',
+        endDate: newEndDate,
+        updatedAt: new Date(),
+      })
+      .where(eq(contracts.id, id))
+      .returning(),
+  ]);
 
   // Member status stays ACTIVE - the contract is paused, not the member
   // They can still have other active contracts
@@ -470,23 +465,20 @@ app.post('/:id/resume', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [contract] = await db
-    .select()
-    .from(contracts)
-    .where(eq(contracts.id, id))
-    .limit(1);
+  const [branchIds, [contract]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.id, id))
+      .limit(1),
+  ]);
 
   if (!contract) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, contract.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
@@ -494,25 +486,27 @@ app.post('/:id/resume', async (c) => {
     return c.json({ success: false, error: '只有暫停狀態的合約可以恢復' }, 400);
   }
 
-  await db.insert(contractLogs).values({
-    contractId: id,
-    logType: 'RESUME',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    daysAffected: 0,
-    tenantId: tenantId,
-  });
+  const todayDateStr = new Date().toISOString().split('T')[0];
 
-  const [updatedContract] = await db
-    .update(contracts)
-    .set({ status: 'ACTIVE', updatedAt: new Date() })
-    .where(eq(contracts.id, id))
-    .returning();
-
-  await db.update(members).set({
-    status: 'ACTIVE',
-    updatedAt: new Date(),
-  }).where(eq(members.id, contract.memberId));
+  const [, [updatedContract]] = await Promise.all([
+    db.insert(contractLogs).values({
+      contractId: id,
+      logType: 'RESUME',
+      startDate: todayDateStr,
+      endDate: todayDateStr,
+      daysAffected: 0,
+      tenantId: tenantId,
+    }),
+    db
+      .update(contracts)
+      .set({ status: 'ACTIVE', updatedAt: new Date() })
+      .where(eq(contracts.id, id))
+      .returning(),
+    db.update(members).set({
+      status: 'ACTIVE',
+      updatedAt: new Date(),
+    }).where(eq(members.id, contract.memberId)),
+  ]);
 
   return c.json({ success: true, data: updatedContract });
 });
