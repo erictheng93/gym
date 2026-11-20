@@ -49,20 +49,20 @@ app.get(
     const { page, limit } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(bodyMeasurements.id) })
-      .from(bodyMeasurements)
-      .where(eq(bodyMeasurements.memberId, memberInfo.id));
-
-    // Get measurements
-    const measurements = await db
-      .select()
-      .from(bodyMeasurements)
-      .where(eq(bodyMeasurements.memberId, memberInfo.id))
-      .orderBy(desc(bodyMeasurements.date))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and measurements
+    const [[{ total }], measurements] = await Promise.all([
+      db
+        .select({ total: count(bodyMeasurements.id) })
+        .from(bodyMeasurements)
+        .where(eq(bodyMeasurements.memberId, memberInfo.id)),
+      db
+        .select()
+        .from(bodyMeasurements)
+        .where(eq(bodyMeasurements.memberId, memberInfo.id))
+        .orderBy(desc(bodyMeasurements.date))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

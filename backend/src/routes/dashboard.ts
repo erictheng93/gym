@@ -3,6 +3,7 @@ import { db, members, contracts, payments, checkIns, branches, classSessions } f
 import { eq, and, sql, gte, lte, count, sum, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -22,17 +23,8 @@ app.get('/overview', async (c) => {
   lastMonthEndDate.setHours(23, 59, 59, 999);
 
   // Get branch IDs for tenant
-  const branchConditions = [eq(branches.tenantId, tenantId)];
-  if (branchId) {
-    branchConditions.push(eq(branches.id, branchId));
-  }
-
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(and(...branchConditions));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const allTenantBranchIds = await getTenantBranchIds(tenantId);
+  const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
 
   if (branchIds.length === 0) {
     return c.json({
@@ -177,17 +169,8 @@ app.get('/revenue-trend', async (c) => {
   const branchId = c.req.query('branchId');
   const period = c.req.query('period') || 'daily'; // 'daily' or 'monthly'
 
-  const branchConditions = [eq(branches.tenantId, tenantId)];
-  if (branchId) {
-    branchConditions.push(eq(branches.id, branchId));
-  }
-
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(and(...branchConditions));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const allTenantBranchIds = await getTenantBranchIds(tenantId);
+  const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });

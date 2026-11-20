@@ -51,35 +51,34 @@ app.get('/', async (c) => {
     );
   }
 
-  const result = await db
-    .select({
-      notification: notifications,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions));
+  const [result, [countResult], [unreadCount]] = await Promise.all([
+    db
+      .select({
+        notification: notifications,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+      })
+      .from(notifications)
+      .innerJoin(branches, eq(notifications.branchId, branches.id))
+      .where(and(...conditions))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .innerJoin(branches, eq(notifications.branchId, branches.id))
+      .where(and(...conditions)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .innerJoin(branches, eq(notifications.branchId, branches.id))
+      .where(and(...conditions, isNull(notifications.readAt))),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  // Get unread count
-  const [unreadCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions, isNull(notifications.readAt)));
 
   return c.json({
     success: true,

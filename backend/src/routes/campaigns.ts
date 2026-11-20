@@ -55,30 +55,31 @@ app.get('/', async (c) => {
     conditions.push(eq(campaigns.campaignType, campaignType as typeof CAMPAIGN_TYPE[number]));
   }
 
-  const result = await db
-    .select({
-      campaign: campaigns,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(campaigns)
-    .leftJoin(branches, eq(campaigns.branchId, branches.id))
-    .leftJoin(employees, eq(campaigns.createdById, employees.id))
-    .where(and(...conditions))
-    .orderBy(desc(campaigns.startDate))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(campaigns)
-    .where(and(...conditions));
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select({
+        campaign: campaigns,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+        createdBy: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(campaigns)
+      .leftJoin(branches, eq(campaigns.branchId, branches.id))
+      .leftJoin(employees, eq(campaigns.createdById, employees.id))
+      .where(and(...conditions))
+      .orderBy(desc(campaigns.startDate))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(campaigns)
+      .where(and(...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 

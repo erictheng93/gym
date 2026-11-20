@@ -53,52 +53,8 @@ app.get('/', async (c) => {
     }, 404);
   }
 
-  // Get job title
-  const [jobTitle] = await db
-    .select({
-      id: jobTitles.id,
-      name: jobTitles.name,
-      code: jobTitles.code,
-    })
-    .from(jobTitles)
-    .where(eq(jobTitles.id, employee.jobTitleId))
-    .limit(1);
-
-  // Get branch info
-  const [branch] = await db
-    .select({
-      id: branches.id,
-      name: branches.name,
-    })
-    .from(branches)
-    .where(eq(branches.id, employee.branchId))
-    .limit(1);
-
-  // Get student count (assigned members)
-  const [studentCountResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(coachMemberAssignments)
-    .where(
-      and(
-        eq(coachMemberAssignments.coachId, coach.id),
-        sql`${coachMemberAssignments.unassignedAt} IS NULL`
-      )
-    );
-
-  // Get today's class count
+  // Date calculations for classes
   const today = new Date().toISOString().split('T')[0];
-  const [todayClassCountResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(classSessions)
-    .where(
-      and(
-        eq(classSessions.instructorId, coach.id),
-        eq(classSessions.sessionDate, today),
-        eq(classSessions.sessionStatus, 'SCHEDULED')
-      )
-    );
-
-  // Get this week's class count
   const now = new Date();
   const dayOfWeek = now.getDay();
   const monday = new Date(now);
@@ -109,16 +65,61 @@ app.get('/', async (c) => {
   const mondayStr = monday.toISOString().split('T')[0];
   const sundayStr = sunday.toISOString().split('T')[0];
 
-  const [weekClassCountResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(classSessions)
-    .where(
-      and(
-        eq(classSessions.instructorId, coach.id),
-        gte(classSessions.sessionDate, mondayStr),
-        lte(classSessions.sessionDate, sundayStr)
-      )
-    );
+  // Fetch job title, branch, and statistics concurrently
+  const [
+    [jobTitle],
+    [branch],
+    [studentCountResult],
+    [todayClassCountResult],
+    [weekClassCountResult],
+  ] = await Promise.all([
+    db
+      .select({
+        id: jobTitles.id,
+        name: jobTitles.name,
+        code: jobTitles.code,
+      })
+      .from(jobTitles)
+      .where(eq(jobTitles.id, employee.jobTitleId))
+      .limit(1),
+    db
+      .select({
+        id: branches.id,
+        name: branches.name,
+      })
+      .from(branches)
+      .where(eq(branches.id, employee.branchId))
+      .limit(1),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(coachMemberAssignments)
+      .where(
+        and(
+          eq(coachMemberAssignments.coachId, coach.id),
+          sql`${coachMemberAssignments.unassignedAt} IS NULL`
+        )
+      ),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(classSessions)
+      .where(
+        and(
+          eq(classSessions.instructorId, coach.id),
+          eq(classSessions.sessionDate, today),
+          eq(classSessions.sessionStatus, 'SCHEDULED')
+        )
+      ),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(classSessions)
+      .where(
+        and(
+          eq(classSessions.instructorId, coach.id),
+          gte(classSessions.sessionDate, mondayStr),
+          lte(classSessions.sessionDate, sundayStr)
+        )
+      ),
+  ]);
 
   return c.json({
     success: true,

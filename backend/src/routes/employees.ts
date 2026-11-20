@@ -5,6 +5,7 @@ import { db, employees, branches, jobTitles, users, attendances } from '../db/in
 import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -39,12 +40,7 @@ app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });

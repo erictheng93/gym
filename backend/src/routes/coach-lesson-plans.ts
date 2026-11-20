@@ -95,20 +95,20 @@ app.get('/', async (c) => {
     );
   }
 
-  // Get plans
-  const plansData = await db
-    .select()
-    .from(lessonPlans)
-    .where(and(...conditions))
-    .orderBy(desc(lessonPlans.createdAt))
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(lessonPlans)
-    .where(and(...conditions));
+  // Get plans and total count in parallel
+  const [plansData, [countResult]] = await Promise.all([
+    db
+      .select()
+      .from(lessonPlans)
+      .where(and(...conditions))
+      .orderBy(desc(lessonPlans.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(lessonPlans)
+      .where(and(...conditions)),
+  ]);
 
   return c.json({
     success: true,

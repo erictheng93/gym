@@ -5,6 +5,7 @@ import { db, classes, classSchedules, classSessions, branches, employees } from 
 import { eq, and, gte, lte, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -44,12 +45,7 @@ app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });
@@ -93,35 +89,32 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [classItem] = await db
-    .select({
-      class: classes,
-      instructor: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(classes)
-    .leftJoin(employees, eq(classes.instructorId, employees.id))
-    .leftJoin(branches, eq(classes.branchId, branches.id))
-    .where(eq(classes.id, id))
-    .limit(1);
+  const [[classItem], branchIds] = await Promise.all([
+    db
+      .select({
+        class: classes,
+        instructor: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+      })
+      .from(classes)
+      .leftJoin(employees, eq(classes.instructorId, employees.id))
+      .leftJoin(branches, eq(classes.branchId, branches.id))
+      .where(eq(classes.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!classItem) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, classItem.class.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(classItem.class.branchId)) {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
 
@@ -146,13 +139,8 @@ app.post('/', zValidator('json', createClassSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
@@ -166,23 +154,20 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [classItem] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, id))
-    .limit(1);
+  const [[classItem], branchIds] = await Promise.all([
+    db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!classItem) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, classItem.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(classItem.branchId)) {
     return c.json({ success: false, error: '無權限修改此課程' }, 403);
   }
 
@@ -208,23 +193,20 @@ app.get('/:id/sessions', async (c) => {
     return d.toISOString().split('T')[0];
   })();
 
-  const [classItem] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, id))
-    .limit(1);
+  const [[classItem], branchIds] = await Promise.all([
+    db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!classItem) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, classItem.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(classItem.branchId)) {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
 
