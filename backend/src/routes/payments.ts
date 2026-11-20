@@ -323,23 +323,24 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   }).returning();
 
   if (data.contractId) {
-    const existingPayments = await db
-      .select({ total: sum(payments.amount) })
-      .from(payments)
-      .where(
-        and(
-          eq(payments.contractId, data.contractId),
-          eq(payments.type, 'INCOME')
-        )
-      );
+    const [existingPayments, [contract]] = await Promise.all([
+      db
+        .select({ total: sum(payments.amount) })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.contractId, data.contractId),
+            eq(payments.type, 'INCOME')
+          )
+        ),
+      db
+        .select()
+        .from(contracts)
+        .where(eq(contracts.id, data.contractId))
+        .limit(1),
+    ]);
 
     const totalPaid = Number(existingPayments[0]?.total || 0);
-
-    const [contract] = await db
-      .select()
-      .from(contracts)
-      .where(eq(contracts.id, data.contractId))
-      .limit(1);
 
     if (contract) {
       const totalAmount = Number(contract.totalAmount || 0);

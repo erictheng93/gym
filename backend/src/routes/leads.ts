@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, leads, branches, employees, members } from '../db/index.js';
-import { eq, and, sql, desc, ilike, or } from 'drizzle-orm';
+import { eq, and, sql, desc, ilike, or, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -38,7 +39,22 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(branches.tenantId, tenantId)];
+  const branchIds = await getTenantBranchIds(tenantId);
+
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      pagination: {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      },
+    });
+  }
+
+  const conditions = [inArray(leads.branchId, branchIds)];
 
   if (branchId) {
     conditions.push(eq(leads.branchId, branchId));
@@ -85,7 +101,6 @@ app.get('/', async (c) => {
     db
       .select({ count: sql<number>`count(*)` })
       .from(leads)
-      .innerJoin(branches, eq(leads.branchId, branches.id))
       .where(and(...conditions)),
   ]);
 
@@ -157,13 +172,9 @@ app.post('/', zValidator('json', createLeadSchema), async (c) => {
   const data = c.req.valid('json');
 
   // Verify branch
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  if (!branch) {
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 

@@ -348,17 +348,14 @@ app.patch('/:id', zValidator('json', updateSchema), async (c) => {
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select()
-    .from(attendances)
+  const [deleted] = await db
+    .delete(attendances)
     .where(eq(attendances.id, id))
-    .limit(1);
+    .returning({ id: attendances.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '找不到考勤記錄' }, 404);
   }
-
-  await db.delete(attendances).where(eq(attendances.id, id));
 
   return c.json({ success: true, message: '考勤記錄已刪除' });
 });
