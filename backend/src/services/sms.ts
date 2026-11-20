@@ -131,6 +131,14 @@ export function isSmsEnabled(): boolean {
 // Branch-Specific Config (Multi-Tenant Support)
 // -----------------------------------------------------------------------------
 
+const BRANCH_SMS_CONFIG_SELECT = {
+  mitakeUsername: branchNotificationConfig.mitakeUsername,
+  mitakePassword: branchNotificationConfig.mitakePassword,
+  mitakeApiUrl: branchNotificationConfig.mitakeApiUrl,
+  smsCostPerMessage: branchNotificationConfig.smsCostPerMessage,
+  smsEnabled: branchNotificationConfig.smsEnabled,
+};
+
 /**
  * Get SMS config for a specific branch
  */
@@ -146,13 +154,7 @@ export async function getConfigForBranch(branchId?: string): Promise<SmsConfig> 
 
   try {
     const [row] = await db
-      .select({
-        mitakeUsername: branchNotificationConfig.mitakeUsername,
-        mitakePassword: branchNotificationConfig.mitakePassword,
-        mitakeApiUrl: branchNotificationConfig.mitakeApiUrl,
-        smsCostPerMessage: branchNotificationConfig.smsCostPerMessage,
-        smsEnabled: branchNotificationConfig.smsEnabled,
-      })
+      .select(BRANCH_SMS_CONFIG_SELECT)
       .from(branchNotificationConfig)
       .where(
         and(
@@ -580,6 +582,14 @@ export async function checkBalance(branchId?: string): Promise<BalanceResult> {
 // Usage Statistics
 // -----------------------------------------------------------------------------
 
+const SMS_USAGE_STATS_SELECT = {
+  totalMessages: sql<number>`count(*)::integer`,
+  totalSegments: sql<number>`coalesce(sum(segment_count), 0)::integer`,
+  totalCost: sql<string>`coalesce(sum(total_cost), 0)::decimal`,
+  successCount: sql<number>`count(*) filter (where delivery_status in ('submitted', 'delivered'))::integer`,
+  failureCount: sql<number>`count(*) filter (where delivery_status = 'failed')::integer`,
+};
+
 /**
  * Get SMS usage statistics for a branch
  */
@@ -593,13 +603,7 @@ export async function getUsageStats(
     const end = endDate || new Date();
 
     const result = await db
-      .select({
-        totalMessages: sql<number>`count(*)::integer`,
-        totalSegments: sql<number>`coalesce(sum(segment_count), 0)::integer`,
-        totalCost: sql<string>`coalesce(sum(total_cost), 0)::decimal`,
-        successCount: sql<number>`count(*) filter (where delivery_status in ('submitted', 'delivered'))::integer`,
-        failureCount: sql<number>`count(*) filter (where delivery_status = 'failed')::integer`,
-      })
+      .select(SMS_USAGE_STATS_SELECT)
       .from(smsLogs)
       .where(
         and(

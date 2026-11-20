@@ -85,6 +85,56 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
+const PDF_CONTRACT_SELECT = {
+  contractNo: contracts.contractNo,
+  startDate: contracts.startDate,
+  endDate: contracts.endDate,
+  totalAmount: contracts.totalAmount,
+  createdAt: contracts.createdAt,
+  memberId: contracts.memberId,
+  planId: contracts.planId,
+  branchId: contracts.branchId,
+};
+
+const PDF_CONTRACT_MEMBER_SELECT = {
+  fullName: members.fullName,
+  memberCode: members.memberCode,
+  phone: members.phone,
+  email: members.email,
+};
+
+const PDF_CONTRACT_PLAN_SELECT = {
+  name: membershipPlans.name,
+  planType: membershipPlans.planType,
+};
+
+const PDF_CONTRACT_BRANCH_SELECT = {
+  name: branches.name,
+  address: branches.address,
+};
+
+const PDF_PAYMENT_SELECT = {
+  id: payments.id,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  paymentDate: payments.paymentDate,
+  receiptNo: payments.receiptNo,
+  notes: payments.notes,
+  memberId: payments.memberId,
+  branchId: payments.branchId,
+};
+
+const PDF_INVOICE_MEMBER_SELECT = {
+  fullName: members.fullName,
+  memberCode: members.memberCode,
+};
+
+const PDF_INVOICE_BRANCH_SELECT = {
+  name: branches.name,
+  address: branches.address,
+  taxId: branches.taxId,
+};
+
 // -----------------------------------------------------------------------------
 // Contract PDF
 // -----------------------------------------------------------------------------
@@ -96,16 +146,7 @@ export async function generateContractPdf(contractId: string): Promise<PdfGenera
   try {
     // Fetch contract data
     const [contract] = await db
-      .select({
-        contractNo: contracts.contractNo,
-        startDate: contracts.startDate,
-        endDate: contracts.endDate,
-        totalAmount: contracts.totalAmount,
-        createdAt: contracts.createdAt,
-        memberId: contracts.memberId,
-        planId: contracts.planId,
-        branchId: contracts.branchId,
-      })
+      .select(PDF_CONTRACT_SELECT)
       .from(contracts)
       .where(eq(contracts.id, contractId))
       .limit(1);
@@ -114,35 +155,24 @@ export async function generateContractPdf(contractId: string): Promise<PdfGenera
       return { success: false, error: 'Contract not found' };
     }
 
-    // Fetch related data
-    const [member] = await db
-      .select({
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-        email: members.email,
-      })
-      .from(members)
-      .where(eq(members.id, contract.memberId))
-      .limit(1);
-
-    const [plan] = await db
-      .select({
-        name: membershipPlans.name,
-        planType: membershipPlans.planType,
-      })
-      .from(membershipPlans)
-      .where(eq(membershipPlans.id, contract.planId))
-      .limit(1);
-
-    const [branch] = await db
-      .select({
-        name: branches.name,
-        address: branches.address,
-      })
-      .from(branches)
-      .where(eq(branches.id, contract.branchId))
-      .limit(1);
+    // Fetch related data in parallel
+    const [[member], [plan], [branch]] = await Promise.all([
+      db
+        .select(PDF_CONTRACT_MEMBER_SELECT)
+        .from(members)
+        .where(eq(members.id, contract.memberId))
+        .limit(1),
+      db
+        .select(PDF_CONTRACT_PLAN_SELECT)
+        .from(membershipPlans)
+        .where(eq(membershipPlans.id, contract.planId))
+        .limit(1),
+      db
+        .select(PDF_CONTRACT_BRANCH_SELECT)
+        .from(branches)
+        .where(eq(branches.id, contract.branchId))
+        .limit(1),
+    ]);
 
     const contractData: ContractData = {
       contractNo: contract.contractNo,
@@ -376,16 +406,7 @@ export async function generateInvoicePdf(paymentId: string): Promise<PdfGenerati
   try {
     // Fetch payment data
     const [payment] = await db
-      .select({
-        id: payments.id,
-        amount: payments.amount,
-        paymentMethod: payments.paymentMethod,
-        paymentDate: payments.paymentDate,
-        receiptNo: payments.receiptNo,
-        notes: payments.notes,
-        memberId: payments.memberId,
-        branchId: payments.branchId,
-      })
+      .select(PDF_PAYMENT_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);
@@ -394,25 +415,19 @@ export async function generateInvoicePdf(paymentId: string): Promise<PdfGenerati
       return { success: false, error: 'Payment not found' };
     }
 
-    // Fetch related data
-    const [member] = await db
-      .select({
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      })
-      .from(members)
-      .where(eq(members.id, payment.memberId))
-      .limit(1);
-
-    const [branch] = await db
-      .select({
-        name: branches.name,
-        address: branches.address,
-        taxId: branches.taxId,
-      })
-      .from(branches)
-      .where(eq(branches.id, payment.branchId))
-      .limit(1);
+    // Fetch related data in parallel
+    const [[member], [branch]] = await Promise.all([
+      db
+        .select(PDF_INVOICE_MEMBER_SELECT)
+        .from(members)
+        .where(eq(members.id, payment.memberId))
+        .limit(1),
+      db
+        .select(PDF_INVOICE_BRANCH_SELECT)
+        .from(branches)
+        .where(eq(branches.id, payment.branchId))
+        .limit(1),
+    ]);
 
     const invoiceData: InvoiceData = {
       invoiceNo: payment.receiptNo || `INV-${payment.id.substring(0, 8).toUpperCase()}`,

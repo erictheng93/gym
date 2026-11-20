@@ -170,6 +170,26 @@
   </div>
 </template>
 
+<script lang="ts">
+const DIFFICULTY_ICON_CLASSES: Record<string, string> = {
+  BEGINNER: 'icon-green',
+  INTERMEDIATE: 'icon-orange',
+  ADVANCED: 'icon-red',
+}
+
+const DIFFICULTY_CLASSES: Record<string, string> = {
+  BEGINNER: 'badge-green',
+  INTERMEDIATE: 'badge-orange',
+  ADVANCED: 'badge-red',
+}
+
+const DIFFICULTY_TEXTS: Record<string, string> = {
+  BEGINNER: '初階',
+  INTERMEDIATE: '中階',
+  ADVANCED: '進階',
+}
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth',
@@ -241,30 +261,15 @@ const goToPlan = (id: string) => {
 }
 
 const getDifficultyIconClass = (difficulty: string | undefined) => {
-  const classes: Record<string, string> = {
-    BEGINNER: 'icon-green',
-    INTERMEDIATE: 'icon-orange',
-    ADVANCED: 'icon-red',
-  }
-  return classes[difficulty || ''] || 'icon-blue'
+  return DIFFICULTY_ICON_CLASSES[difficulty || ''] || 'icon-blue'
 }
 
 const getDifficultyClass = (difficulty: string) => {
-  const classes: Record<string, string> = {
-    BEGINNER: 'badge-green',
-    INTERMEDIATE: 'badge-orange',
-    ADVANCED: 'badge-red',
-  }
-  return classes[difficulty] || 'badge-gray'
+  return DIFFICULTY_CLASSES[difficulty] || 'badge-gray'
 }
 
 const getDifficultyText = (difficulty: string) => {
-  const texts: Record<string, string> = {
-    BEGINNER: '初階',
-    INTERMEDIATE: '中階',
-    ADVANCED: '進階',
-  }
-  return texts[difficulty] || difficulty
+  return DIFFICULTY_TEXTS[difficulty] || difficulty
 }
 
 const handleCopy = async (id: string) => {

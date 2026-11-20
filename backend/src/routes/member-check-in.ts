@@ -78,6 +78,12 @@ const CHECK_IN_STATS_BRANCH_SELECT = {
   count: sql<number>`count(*)`,
 };
 
+const createCheckInCountStatsSelect = (monthStart: Date, thirtyDaysAgo: Date) => ({
+  total: sql<number>`count(*)`,
+  thisMonth: sql<number>`count(case when ${checkIns.checkInTime} >= ${monthStart} then 1 end)`,
+  last30Days: sql<number>`count(case when ${checkIns.checkInTime} >= ${thirtyDaysAgo} then 1 end)`,
+});
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -480,11 +486,7 @@ app.get('/stats', async (c) => {
   ] = await Promise.all([
     // Counts (total, this month, last 30 days) computed in a single pass
     db
-      .select({
-        total: sql<number>`count(*)`,
-        thisMonth: sql<number>`count(case when ${checkIns.checkInTime} >= ${monthStart} then 1 end)`,
-        last30Days: sql<number>`count(case when ${checkIns.checkInTime} >= ${thirtyDaysAgo} then 1 end)`,
-      })
+      .select(createCheckInCountStatsSelect(monthStart, thirtyDaysAgo))
       .from(checkIns)
       .where(eq(checkIns.memberId, memberInfo.id)),
 
