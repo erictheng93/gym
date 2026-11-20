@@ -5,6 +5,7 @@ import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 import { useFetch } from '~/composables/core/useFetch'
 
 const inFlightMembersMap = new Map<string, Promise<void>>()
+const inFlightMemberDetailMap = new Map<string, Promise<Member | null>>()
 
 export const useMembers = () => {
   const { handleError } = useErrorHandler()
@@ -62,15 +63,25 @@ export const useMembers = () => {
   }
 
   const getMember = async (id: string): Promise<Member | null> => {
-    try {
-      return await readItem<Member>('members', id)
-    } catch (error) {
-      handleError(error, {
-        context: 'useMembers.getMember',
-        customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
-      })
-      return null
-    }
+    const existing = inFlightMemberDetailMap.get(id)
+    if (existing) return existing
+
+    const promise = (async () => {
+      try {
+        return await readItem<Member>('members', id)
+      } catch (error) {
+        handleError(error, {
+          context: 'useMembers.getMember',
+          customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightMemberDetailMap.delete(id)
+      }
+    })()
+
+    inFlightMemberDetailMap.set(id, promise)
+    return promise
   }
 
   const createMember = async (member: Partial<Member>): Promise<Member | null> => {

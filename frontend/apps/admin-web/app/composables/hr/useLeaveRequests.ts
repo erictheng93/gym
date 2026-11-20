@@ -6,6 +6,10 @@
 import { useFetch } from '~/composables/core/useFetch'
 import type { LeaveRequest, LeaveBalance, LeaveApprovalLog, Employee } from '~/types/schema'
 
+const inFlightLeaveBalancesMap = new Map<string, Promise<void>>()
+const inFlightLeaveRequestsMap = new Map<string, Promise<void>>()
+const inFlightPendingApprovalsMap = new Map<string, Promise<void>>()
+
 export const useLeaveRequests = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
 
@@ -28,17 +32,28 @@ export const useLeaveRequests = () => {
    */
   const fetchLeaveBalances = async (employeeId: string, year?: number) => {
     const currentYear = year || new Date().getFullYear()
-    try {
-      const result = await readItems<LeaveBalance>('leave_balances', {
-        filter: {
-          employee_id: employeeId,
-          year: currentYear
-        }
-      })
-      leaveBalances.value = result.data
-    } catch (error) {
-      console.error('Failed to fetch leave balances:', error)
-    }
+    const key = `${employeeId}-${currentYear}`
+    const existing = inFlightLeaveBalancesMap.get(key)
+    if (existing) return existing
+
+    const promise = (async () => {
+      try {
+        const result = await readItems<LeaveBalance>('leave_balances', {
+          filter: {
+            employee_id: employeeId,
+            year: currentYear
+          }
+        })
+        leaveBalances.value = result.data
+      } catch (error) {
+        console.error('Failed to fetch leave balances:', error)
+      } finally {
+        inFlightLeaveBalancesMap.delete(key)
+      }
+    })()
+
+    inFlightLeaveBalancesMap.set(key, promise)
+    return promise
   }
 
   // ============================================
@@ -54,64 +69,84 @@ export const useLeaveRequests = () => {
     page?: number
     limit?: number
   }) => {
-    isLeavesLoading.value = true
-    const { employeeId, status, page = 1, limit = 20 } = options || {}
+    const key = JSON.stringify(options || {})
+    const existing = inFlightLeaveRequestsMap.get(key)
+    if (existing) return existing
 
-    try {
-      const filter: Record<string, unknown> = {}
-      if (employeeId) filter.employee_id = employeeId
-      if (status) filter.leave_status = status
+    const promise = (async () => {
+      isLeavesLoading.value = true
+      const { employeeId, status, page = 1, limit = 20 } = options || {}
 
-      const result = await readItems<LeaveRequest>('leave_requests', {
-        filter,
-        sort: 'date_created',
-        sortOrder: 'desc',
-        limit,
-        page
-      })
+      try {
+        const filter: Record<string, unknown> = {}
+        if (employeeId) filter.employee_id = employeeId
+        if (status) filter.leave_status = status
 
-      leaveRequests.value = result.data
-      leavesTotalCount.value = result.total
-    } catch (error) {
-      console.error('Failed to fetch leave requests:', error)
-    } finally {
-      isLeavesLoading.value = false
-    }
+        const result = await readItems<LeaveRequest>('leave_requests', {
+          filter,
+          sort: 'date_created',
+          sortOrder: 'desc',
+          limit,
+          page
+        })
+
+        leaveRequests.value = result.data
+        leavesTotalCount.value = result.total
+      } catch (error) {
+        console.error('Failed to fetch leave requests:', error)
+      } finally {
+        isLeavesLoading.value = false
+        inFlightLeaveRequestsMap.delete(key)
+      }
+    })()
+
+    inFlightLeaveRequestsMap.set(key, promise)
+    return promise
   }
 
   /**
    * 取得待審核的休假申請（主管用）
    */
   const fetchPendingApprovals = async (supervisorId: string) => {
-    try {
-      const subordinatesResult = await readItems<Employee>('employees', {
-        filter: { supervisor_id: supervisorId }
-      })
+    const existing = inFlightPendingApprovalsMap.get(supervisorId)
+    if (existing) return existing
 
-      if (subordinatesResult.data.length === 0) {
-        pendingApprovals.value = []
-        return
+    const promise = (async () => {
+      try {
+        const subordinatesResult = await readItems<Employee>('employees', {
+          filter: { supervisor_id: supervisorId }
+        })
+
+        if (subordinatesResult.data.length === 0) {
+          pendingApprovals.value = []
+          return
+        }
+
+        const subordinateIds = subordinatesResult.data.map(e => e.id)
+
+        // Fetch pending leave requests for all subordinates
+        // Since the API might not support _in filter, we fetch all pending and filter client-side
+        const result = await readItems<LeaveRequest>('leave_requests', {
+          filter: {
+            leave_status: 'PENDING'
+          },
+          sort: 'submitted_at',
+          sortOrder: 'desc',
+          limit: 100
+        })
+
+        pendingApprovals.value = result.data.filter(lr =>
+          subordinateIds.includes(lr.employee_id)
+        )
+      } catch (error) {
+        console.error('Failed to fetch pending approvals:', error)
+      } finally {
+        inFlightPendingApprovalsMap.delete(supervisorId)
       }
+    })()
 
-      const subordinateIds = subordinatesResult.data.map(e => e.id)
-
-      // Fetch pending leave requests for all subordinates
-      // Since the API might not support _in filter, we fetch all pending and filter client-side
-      const result = await readItems<LeaveRequest>('leave_requests', {
-        filter: {
-          leave_status: 'PENDING'
-        },
-        sort: 'submitted_at',
-        sortOrder: 'desc',
-        limit: 100
-      })
-
-      pendingApprovals.value = result.data.filter(lr =>
-        subordinateIds.includes(lr.employee_id)
-      )
-    } catch (error) {
-      console.error('Failed to fetch pending approvals:', error)
-    }
+    inFlightPendingApprovalsMap.set(supervisorId, promise)
+    return promise
   }
 
   // ============================================

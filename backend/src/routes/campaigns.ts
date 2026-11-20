@@ -176,16 +176,6 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCamp
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(campaigns)
-    .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '活動不存在' }, 404);
-  }
-
   // Validate branch if updated
   if (data.branchId) {
     const branchIds = await getTenantBranchIds(tenantId);
@@ -207,7 +197,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCamp
     updateData.discountValue = data.discountValue ? String(data.discountValue) : null;
   }
 
-  const [updated] = await db.update(campaigns).set(updateData).where(eq(campaigns.id, id)).returning();
+  const [updated] = await db
+    .update(campaigns)
+    .set(updateData)
+    .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '活動不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -220,17 +218,14 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(campaigns)
+  const [deleted] = await db
+    .delete(campaigns)
     .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
-    .limit(1);
+    .returning({ id: campaigns.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '活動不存在' }, 404);
   }
-
-  await db.delete(campaigns).where(eq(campaigns.id, id));
 
   return c.json({ success: true, message: '活動已刪除' });
 });
