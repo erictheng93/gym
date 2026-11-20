@@ -543,23 +543,40 @@ const tabItems = [
 }
 
 .main-content.has-nav {
-  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
-/* iOS-Style Tab Bar */
+/* Next-Gen Floating Glass Capsule Dock */
 .tab-bar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  left: 16px;
+  right: 16px;
+  max-width: 440px;
+  margin: 0 auto;
   z-index: 100;
   display: flex;
   justify-content: space-around;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-top: 0.5px solid var(--glass-border);
-  padding-bottom: env(safe-area-inset-bottom);
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(18, 18, 20, 0.85);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  box-shadow:
+    0 16px 40px -10px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root.theme-light .tab-bar {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 12px 32px -8px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .tab-item {
@@ -568,20 +585,25 @@ const tabItems = [
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
+  padding: 8px 18px;
+  border-radius: 20px;
   text-decoration: none;
-  transition: all 0.2s var(--ease-apple);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-item:active {
   transform: scale(0.92);
 }
 
+.tab-item.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .tab-icon {
-  width: 24px;
-  height: 24px;
-  color: var(--text-tertiary);
-  transition: color 0.2s var(--ease-apple);
+  width: 22px;
+  height: 22px;
+  color: var(--text-tertiary, #8e8e93);
+  transition: all 0.2s ease;
 }
 
 .tab-icon :deep(svg) {
@@ -590,28 +612,30 @@ const tabItems = [
 }
 
 .tab-item.active .tab-icon {
-  color: var(--apple-blue);
+  color: var(--apple-blue, #0071e3);
+  filter: drop-shadow(0 0 8px rgba(0, 113, 227, 0.5));
 }
 
 .tab-label {
   font-size: 10px;
   font-weight: 500;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-  transition: color 0.2s var(--ease-apple);
+  color: var(--text-tertiary, #8e8e93);
+  margin-top: 3px;
+  transition: color 0.2s ease;
 }
 
 .tab-item.active .tab-label {
-  color: var(--apple-blue);
-  font-weight: 600;
+  color: var(--apple-blue, #0071e3);
+  font-weight: 700;
 }
 
 .tab-indicator {
   position: absolute;
-  top: 2px;
+  top: 4px;
   width: 4px;
   height: 4px;
-  background: var(--apple-blue);
+  background: var(--apple-blue, #0071e3);
+  box-shadow: 0 0 6px var(--apple-blue, #0071e3);
   border-radius: 50%;
 }
 
@@ -632,6 +656,6 @@ const tabItems = [
 }
 
 .dark .tab-bar {
-  background: var(--glass-bg);
+  background: rgba(18, 18, 20, 0.88);
 }
 </style>

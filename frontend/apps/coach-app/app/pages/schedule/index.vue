@@ -318,28 +318,30 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--separator);
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 20px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   padding: 12px 16px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .nav-button {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: none;
-  background: var(--fill-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--fill-tertiary, rgba(255, 255, 255, 0.08));
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s var(--ease-apple);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .nav-button:hover {
-  background: var(--fill-secondary);
+  background: var(--fill-secondary, rgba(255, 255, 255, 0.15));
+  transform: scale(1.05);
 }
 
 .nav-button:active {
@@ -361,31 +363,33 @@ onMounted(() => {
 
 .week-range {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .today-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
-  border: none;
-  background: rgba(0, 122, 255, 0.12);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 113, 227, 0.3);
+  background: rgba(0, 113, 227, 0.12);
   color: var(--apple-blue);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s var(--ease-apple);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .today-button:hover {
-  background: rgba(0, 122, 255, 0.2);
+  background: rgba(0, 113, 227, 0.22);
 }
 
 .today-button:active {
-  transform: scale(0.96);
+  transform: scale(0.94);
 }
 
 .today-button svg {
@@ -405,24 +409,33 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--separator);
-  padding: 16px;
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 18px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
+  padding: 16px 12px;
   text-align: center;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
 }
 
 .stat-number {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
   margin-bottom: 4px;
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
   font-size: 12px;
   color: var(--text-tertiary);
+  font-weight: 600;
 }
 
 .stat-total .stat-number {

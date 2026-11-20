@@ -331,24 +331,28 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   padding: 10px 14px;
-  border: none;
-  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  border-radius: 16px;
   background: transparent;
   cursor: pointer;
-  transition: all 0.2s var(--ease-apple);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   min-width: 44px;
 }
 
 .date-item:hover {
-  background: var(--fill-quaternary);
+  background: var(--fill-quaternary, rgba(255, 255, 255, 0.05));
+  transform: translateY(-2px);
 }
 
 .date-item:active {
-  transform: scale(0.95);
+  transform: scale(0.94);
 }
 
 .date-item.active {
-  background: var(--apple-blue);
+  background: var(--apple-blue, #0071e3);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 16px rgba(0, 113, 227, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .date-item.active .date-weekday,
@@ -365,8 +369,10 @@ onMounted(() => {
 
 .date-day {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .today-dot {
@@ -404,25 +410,28 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border-radius: var(--radius-pill);
-  font-size: 14px;
-  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
-  border: none;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   cursor: pointer;
-  background: var(--fill-tertiary);
+  background: var(--bg-secondary, #1c1c1e);
   color: var(--text-secondary);
-  transition: all 0.2s var(--ease-apple);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .filter-pill:active {
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 
 .filter-pill.active {
-  background: var(--apple-blue);
+  background: var(--apple-blue, #0071e3);
+  border-color: rgba(255, 255, 255, 0.2);
   color: white;
+  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .filter-dot {
@@ -503,31 +512,33 @@ onMounted(() => {
 }
 
 .list-card {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--separator);
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 20px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .class-item {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 14px 18px;
   cursor: pointer;
-  transition: background-color 0.15s var(--ease-apple);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .class-item:not(:last-child) {
-  border-bottom: 0.5px solid var(--separator);
+  border-bottom: 1px solid var(--separator, rgba(255, 255, 255, 0.06));
 }
 
 .class-item:hover {
-  background: var(--fill-quaternary);
+  background: var(--fill-quaternary, rgba(255, 255, 255, 0.04));
+  transform: translateX(2px);
 }
 
 .class-item:active {
-  background: var(--fill-tertiary);
+  transform: scale(0.99);
 }
 
 /* Time Block */
@@ -536,33 +547,40 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 56px;
+  min-width: 58px;
   padding: 8px 12px;
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   margin-right: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .time-block.time-booked {
   background: rgba(0, 122, 255, 0.12);
+  border-color: rgba(0, 122, 255, 0.25);
 }
 
 .time-block.time-completed {
   background: rgba(52, 199, 89, 0.12);
+  border-color: rgba(52, 199, 89, 0.25);
 }
 
 .time-block.time-cancelled {
   background: var(--fill-tertiary);
+  border-color: var(--separator);
 }
 
 .time-block.time-no-show {
   background: rgba(255, 59, 48, 0.12);
+  border-color: rgba(255, 59, 48, 0.25);
 }
 
 .time-display {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .time-duration {
