@@ -1,3 +1,13 @@
+<script lang="ts">
+const contractDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const contractNumberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
 // Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
@@ -108,14 +118,6 @@ const prevStep = () => {
     currentStep.value--
   }
 }
-
-const contractDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
-
-const contractNumberFormatter = new Intl.NumberFormat('zh-TW')
 
 const formatDate = (dateStr: string | undefined | null) => {
   if (!dateStr) return '—'

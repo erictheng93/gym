@@ -244,27 +244,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
-definePageMeta({
-  middleware: 'auth',
-})
-
-const route = useRoute()
-const router = useRouter()
-const { success, error: showError } = useToast()
-const { getClass, markAttendance, cancelClass } = useCoachClasses()
-
-const loading = ref(true)
-const classData = ref<Awaited<ReturnType<typeof getClass>>>(null)
-const submitting = ref(false)
-
-const showAttendanceModal = ref(false)
-const attendanceType = ref<'attended' | 'no_show'>('attended')
-const attendanceNotes = ref('')
-
-const showCancelModal = ref(false)
-const cancelReason = ref('')
-
+<script lang="ts">
 const classDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
   year: 'numeric',
   month: 'short',
@@ -303,6 +283,28 @@ const BOOKED_BY_TEXTS: Record<string, string> = {
   COACH: '教練預約',
   RECEPTION: '櫃台預約',
 }
+</script>
+
+<script setup lang="ts">
+definePageMeta({
+  middleware: 'auth',
+})
+
+const route = useRoute()
+const router = useRouter()
+const { success, error: showError } = useToast()
+const { getClass, markAttendance, cancelClass } = useCoachClasses()
+
+const loading = ref(true)
+const classData = ref<Awaited<ReturnType<typeof getClass>>>(null)
+const submitting = ref(false)
+
+const showAttendanceModal = ref(false)
+const attendanceType = ref<'attended' | 'no_show'>('attended')
+const attendanceNotes = ref('')
+
+const showCancelModal = ref(false)
+const cancelReason = ref('')
 
 const formatDateTime = (dateStr: string) => {
   if (!dateStr) return '—'

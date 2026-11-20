@@ -298,51 +298,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
-definePageMeta({
-  middleware: 'auth',
-})
-
-const route = useRoute()
-const router = useRouter()
-const { success, error: showError } = useToast()
-const { getStudent, createNote } = useStudents()
-
-const loading = ref(true)
-const student = ref<Awaited<ReturnType<typeof getStudent>>>(null)
-
-const tabs = [
-  { key: 'contracts', label: '合約' },
-  { key: 'goals', label: '目標' },
-  { key: 'measurements', label: '數據' },
-  { key: 'notes', label: '筆記' },
-  { key: 'history', label: '歷史' },
-]
-const activeTab = ref('contracts')
-
-const segmentIndicatorStyle = computed(() => {
-  const index = tabs.findIndex(t => t.key === activeTab.value)
-  return {
-    transform: `translateX(${index * 100}%)`,
-    width: `${100 / tabs.length}%`,
-  }
-})
-
-const noteTypes = [
-  { value: 'PROGRESS', label: '進度', color: 'blue' },
-  { value: 'GOAL', label: '目標', color: 'green' },
-  { value: 'INJURY', label: '傷病', color: 'red' },
-  { value: 'FEEDBACK', label: '回饋', color: 'purple' },
-  { value: 'GENERAL', label: '一般', color: 'gray' },
-]
-
-const showNoteForm = ref(false)
-const noteSubmitting = ref(false)
-const noteForm = ref({
-  note_type: 'PROGRESS',
-  content: '',
-})
-
+<script lang="ts">
 const studentDateFormatter = new Intl.DateTimeFormat('zh-TW')
 const studentDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
   month: 'short',
@@ -395,6 +351,56 @@ const STUDENT_NOTE_TYPE_COLORS: Record<string, string> = {
   FEEDBACK: 'purple',
   GENERAL: 'gray',
 }
+
+const STUDENT_TABS = [
+  { key: 'contracts', label: '合約' },
+  { key: 'goals', label: '目標' },
+  { key: 'measurements', label: '數據' },
+  { key: 'notes', label: '筆記' },
+  { key: 'history', label: '歷史' },
+]
+
+const STUDENT_NOTE_TYPES = [
+  { value: 'PROGRESS', label: '進度', color: 'blue' },
+  { value: 'GOAL', label: '目標', color: 'green' },
+  { value: 'INJURY', label: '傷病', color: 'red' },
+  { value: 'FEEDBACK', label: '回饋', color: 'purple' },
+  { value: 'GENERAL', label: '一般', color: 'gray' },
+]
+</script>
+
+<script setup lang="ts">
+definePageMeta({
+  middleware: 'auth',
+})
+
+const route = useRoute()
+const router = useRouter()
+const { success, error: showError } = useToast()
+const { getStudent, createNote } = useStudents()
+
+const loading = ref(true)
+const student = ref<Awaited<ReturnType<typeof getStudent>>>(null)
+
+const tabs = STUDENT_TABS
+const activeTab = ref('contracts')
+
+const segmentIndicatorStyle = computed(() => {
+  const index = tabs.findIndex(t => t.key === activeTab.value)
+  return {
+    transform: `translateX(${index * 100}%)`,
+    width: `${100 / tabs.length}%`,
+  }
+})
+
+const noteTypes = STUDENT_NOTE_TYPES
+
+const showNoteForm = ref(false)
+const noteSubmitting = ref(false)
+const noteForm = ref({
+  note_type: 'PROGRESS',
+  content: '',
+})
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-'

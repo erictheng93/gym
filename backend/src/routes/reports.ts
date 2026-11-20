@@ -41,6 +41,24 @@ const REPORT_EXPIRING_CONTRACT_SELECT = {
   tenantId: contracts.tenantId,
 };
 
+const REPORT_EXPIRING_MEMBER_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+  memberCode: members.memberCode,
+  phone: members.phone,
+};
+
+const REPORT_EXPIRING_BRANCH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+};
+
+const REPORT_EXPIRING_EXPORT_CONTRACT_SELECT = {
+  contractNo: contracts.contractNo,
+  endDate: contracts.endDate,
+  status: contracts.status,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -191,16 +209,8 @@ app.get('/contract-expiry', async (c) => {
   const expiringContracts = await db
     .select({
       contract: REPORT_EXPIRING_CONTRACT_SELECT,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
+      member: REPORT_EXPIRING_MEMBER_SELECT,
+      branch: REPORT_EXPIRING_BRANCH_SELECT,
     })
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
@@ -486,21 +496,9 @@ app.get('/contract-expiry/export', async (c) => {
 
   const expiringContracts = await db
     .select({
-      contract: {
-        contractNo: contracts.contractNo,
-        endDate: contracts.endDate,
-        status: contracts.status,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
+      contract: REPORT_EXPIRING_EXPORT_CONTRACT_SELECT,
+      member: REPORT_EXPIRING_MEMBER_SELECT,
+      branch: REPORT_EXPIRING_BRANCH_SELECT,
     })
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
