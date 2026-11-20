@@ -57,6 +57,9 @@ export interface CouponValidation {
   final_amount?: number
 }
 
+const inFlightCouponsMap = new Map<string, Promise<void>>()
+const inFlightSingleCouponMap = new Map<string, Promise<Coupon | null>>()
+
 export const useCoupons = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -78,54 +81,76 @@ export const useCoupons = () => {
     search?: string
     page?: number
     limit?: number
-  }) => {
-    isLoading.value = true
-    const { status, discountType, search, page = 1, limit = 20 } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      if (status) params.append('status', status)
-      if (discountType) params.append('discount_type', discountType)
-      if (search) params.append('search', search)
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: Coupon[]
-        meta: { total: number }
-      }>(`${apiUrl}/coupons?${params}`)
-
-      if (response.success) {
-        coupons.value = response.data
-        totalCount.value = response.meta.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'useCoupons.fetchCoupons',
-        customMessage: '取得優惠券列表失敗'
-      })
-      coupons.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightCouponsMap.has(key)) {
+      return inFlightCouponsMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { status, discountType, search, page = 1, limit = 20 } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        if (status) params.append('status', status)
+        if (discountType) params.append('discount_type', discountType)
+        if (search) params.append('search', search)
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: Coupon[]
+          meta: { total: number }
+        }>(`${apiUrl}/coupons?${params}`)
+
+        if (response.success) {
+          coupons.value = response.data
+          totalCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useCoupons.fetchCoupons',
+          customMessage: '取得優惠券列表失敗'
+        })
+        coupons.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightCouponsMap.delete(key)
+      }
+    })()
+
+    inFlightCouponsMap.set(key, promise)
+    return promise
   }
 
   /**
    * Get single coupon
    */
-  const getCoupon = async (id: string): Promise<Coupon | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons/${id}`)
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCoupons.getCoupon',
-        customMessage: '取得優惠券詳情失敗'
-      })
-      return null
+  const getCoupon = async (id: string, force = false): Promise<Coupon | null> => {
+    if (!force && inFlightSingleCouponMap.has(id)) {
+      return inFlightSingleCouponMap.get(id)!
     }
+
+    const promise = (async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons/${id}`)
+        return response.success ? response.data : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useCoupons.getCoupon',
+          customMessage: '取得優惠券詳情失敗'
+        })
+        return null
+      } finally {
+        inFlightSingleCouponMap.delete(id)
+      }
+    })()
+
+    inFlightSingleCouponMap.set(id, promise)
+    return promise
   }
 
   /**

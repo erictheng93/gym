@@ -54,24 +54,31 @@ app.get('/eligibility/:bookingId', async (c) => {
   const memberInfo = c.get('member')!;
   const bookingId = c.req.param('bookingId');
 
-  // Get booking with session info
-  const [booking] = await db
-    .select({
-      id: bookings.id,
-      memberId: bookings.memberId,
-      sessionId: bookings.sessionId,
-      bookingStatus: bookings.bookingStatus,
-      attendedAt: bookings.attendedAt,
-      sessionDate: classSessions.sessionDate,
-      sessionStatus: classSessions.sessionStatus,
-      classId: classSessions.classId,
-      className: classes.name,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(eq(bookings.id, bookingId))
-    .limit(1);
+  // Concurrently fetch booking with session info and check if already reviewed
+  const [[booking], [existingReview]] = await Promise.all([
+    db
+      .select({
+        id: bookings.id,
+        memberId: bookings.memberId,
+        sessionId: bookings.sessionId,
+        bookingStatus: bookings.bookingStatus,
+        attendedAt: bookings.attendedAt,
+        sessionDate: classSessions.sessionDate,
+        sessionStatus: classSessions.sessionStatus,
+        classId: classSessions.classId,
+        className: classes.name,
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(eq(bookings.id, bookingId))
+      .limit(1),
+    db
+      .select({ id: classReviews.id })
+      .from(classReviews)
+      .where(eq(classReviews.bookingId, bookingId))
+      .limit(1),
+  ]);
 
   if (!booking) {
     return c.json({
@@ -89,13 +96,6 @@ app.get('/eligibility/:bookingId', async (c) => {
       code: 'FORBIDDEN',
     }, 403);
   }
-
-  // Check if already reviewed
-  const [existingReview] = await db
-    .select({ id: classReviews.id })
-    .from(classReviews)
-    .where(eq(classReviews.bookingId, bookingId))
-    .limit(1);
 
   if (existingReview) {
     return c.json({
@@ -344,34 +344,37 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const reviewId = c.req.param('id');
 
-  // Get review
-  const [review] = await db
-    .select({
-      id: classReviews.id,
-      memberId: classReviews.memberId,
-    })
-    .from(classReviews)
-    .where(eq(classReviews.id, reviewId))
-    .limit(1);
+  // Fast-path: atomic delete with ownership check
+  const [deletedReview] = await db
+    .delete(classReviews)
+    .where(and(
+      eq(classReviews.id, reviewId),
+      eq(classReviews.memberId, memberInfo.id),
+    ))
+    .returning({ id: classReviews.id });
 
-  if (!review) {
+  if (!deletedReview) {
+    // Check if review exists to distinguish 403 vs 404
+    const [existing] = await db
+      .select({ id: classReviews.id })
+      .from(classReviews)
+      .where(eq(classReviews.id, reviewId))
+      .limit(1);
+
+    if (existing) {
+      return c.json({
+        success: false,
+        error: '無權限',
+        code: 'FORBIDDEN',
+      }, 403);
+    }
+
     return c.json({
       success: false,
       error: '評價不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  if (review.memberId !== memberInfo.id) {
-    return c.json({
-      success: false,
-      error: '無權限',
-      code: 'FORBIDDEN',
-    }, 403);
-  }
-
-  // Delete review
-  await db.delete(classReviews).where(eq(classReviews.id, reviewId));
 
   return c.json({
     success: true,
@@ -391,26 +394,16 @@ app.get(
     const { page, limit } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    // Get class info
-    const [classInfo] = await db
-      .select({
-        id: classes.id,
-        name: classes.name,
-      })
-      .from(classes)
-      .where(eq(classes.id, classId))
-      .limit(1);
-
-    if (!classInfo) {
-      return c.json({
-        success: false,
-        error: '課程不存在',
-        code: 'CLASS_NOT_FOUND',
-      }, 404);
-    }
-
-    // Concurrently get review stats and reviews list
-    const [[stats], reviews] = await Promise.all([
+    // Concurrently get class info, review stats, and reviews list
+    const [[classInfo], [stats], reviews] = await Promise.all([
+      db
+        .select({
+          id: classes.id,
+          name: classes.name,
+        })
+        .from(classes)
+        .where(eq(classes.id, classId))
+        .limit(1),
       db
         .select({
           avgRating: avg(classReviews.rating),
@@ -444,6 +437,14 @@ app.get(
         .limit(limit)
         .offset(offset),
     ]);
+
+    if (!classInfo) {
+      return c.json({
+        success: false,
+        error: '課程不存在',
+        code: 'CLASS_NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,

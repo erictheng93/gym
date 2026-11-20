@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, contractLogs, contracts, members, branches, employees, LOG_TYPE } from '../db/index.js';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -30,6 +31,20 @@ app.get('/', async (c) => {
   const page = Number(c.req.query('page')) || 1;
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
+
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      pagination: {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      },
+    });
+  }
 
   const conditions = [];
 
@@ -62,9 +77,8 @@ app.get('/', async (c) => {
       .from(contractLogs)
       .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
       .innerJoin(members, eq(contracts.memberId, members.id))
-      .innerJoin(branches, eq(contracts.branchId, branches.id))
       .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
-      .where(and(eq(branches.tenantId, tenantId), ...conditions))
+      .where(and(inArray(contracts.branchId, branchIds), ...conditions))
       .orderBy(desc(contractLogs.dateCreated))
       .limit(limit)
       .offset(offset),
@@ -72,8 +86,7 @@ app.get('/', async (c) => {
       .select({ count: sql<number>`count(*)` })
       .from(contractLogs)
       .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
-      .innerJoin(branches, eq(contracts.branchId, branches.id))
-      .where(and(eq(branches.tenantId, tenantId), ...conditions)),
+      .where(and(inArray(contracts.branchId, branchIds), ...conditions)),
   ]);
 
   const total = Number(countResult?.count || 0);
@@ -100,30 +113,31 @@ app.get('/contract/:contractId', async (c) => {
   const contractId = c.req.param('contractId');
   const tenantId = c.get('tenantId')!;
 
-  // Verify contract belongs to tenant
-  const [contract] = await db
-    .select()
-    .from(contracts)
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(and(eq(contracts.id, contractId), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  // Concurrently fetch branch IDs, logs, and verify contract tenant ownership
+  const [branchIds, logs, [contract]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select({
+        log: contractLogs,
+        createdBy: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(contractLogs)
+      .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+      .where(eq(contractLogs.contractId, contractId))
+      .orderBy(desc(contractLogs.dateCreated)),
+    db
+      .select({ branchId: contracts.branchId })
+      .from(contracts)
+      .where(eq(contracts.id, contractId))
+      .limit(1),
+  ]);
 
-  if (!contract) {
+  if (!contract || !contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
-
-  const logs = await db
-    .select({
-      log: contractLogs,
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(contractLogs)
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
-    .where(eq(contractLogs.contractId, contractId))
-    .orderBy(desc(contractLogs.dateCreated));
 
   return c.json({
     success: true,

@@ -207,32 +207,26 @@ app.put(
     const goalId = c.req.param('id');
     const updates = c.req.valid('json');
 
-    // Verify ownership
-    const [existing] = await db
-      .select({ id: memberGoals.id })
-      .from(memberGoals)
-      .where(and(
-        eq(memberGoals.id, goalId),
-        eq(memberGoals.memberId, memberInfo.id),
-      ))
-      .limit(1);
-
-    if (!existing) {
-      return c.json({
-        success: false,
-        error: '目標不存在',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
+    // Atomic update with ownership check
     const [goal] = await db
       .update(memberGoals)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(memberGoals.id, goalId))
+      .where(and(
+        eq(memberGoals.id, goalId),
+        eq(memberGoals.memberId, memberInfo.id),
+      ))
       .returning();
+
+    if (!goal) {
+      return c.json({
+        success: false,
+        error: '目標不存在',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,
@@ -262,25 +256,22 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const goalId = c.req.param('id');
 
-  // Verify ownership
-  const [existing] = await db
-    .select({ id: memberGoals.id })
-    .from(memberGoals)
+  // Atomic delete with ownership check
+  const [deleted] = await db
+    .delete(memberGoals)
     .where(and(
       eq(memberGoals.id, goalId),
       eq(memberGoals.memberId, memberInfo.id),
     ))
-    .limit(1);
+    .returning({ id: memberGoals.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({
       success: false,
       error: '目標不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  await db.delete(memberGoals).where(eq(memberGoals.id, goalId));
 
   return c.json({
     success: true,

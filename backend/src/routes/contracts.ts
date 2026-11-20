@@ -181,41 +181,32 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [[contract], branchIds] = await Promise.all([
-    db
-      .select({
-        contract: contracts,
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-          phone: members.phone,
-          email: members.email,
-        },
-        plan: {
-          id: membershipPlans.id,
-          name: membershipPlans.name,
-          planType: membershipPlans.planType,
-          price: membershipPlans.price,
-        },
-      })
-      .from(contracts)
-      .leftJoin(members, eq(contracts.memberId, members.id))
-      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-      .where(eq(contracts.id, id))
-      .limit(1),
-    getTenantBranchIds(tenantId),
-  ]);
-
-  if (!contract) {
-    return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  if (!branchIds.includes(contract.contract.branchId!)) {
-    return c.json({ success: false, error: '無權限存取此合約' }, 403);
-  }
-
-  const [logs, contractPayments] = await Promise.all([
+  const [[[contract], branchIds], logs, contractPayments] = await Promise.all([
+    Promise.all([
+      db
+        .select({
+          contract: contracts,
+          member: {
+            id: members.id,
+            fullName: members.fullName,
+            memberCode: members.memberCode,
+            phone: members.phone,
+            email: members.email,
+          },
+          plan: {
+            id: membershipPlans.id,
+            name: membershipPlans.name,
+            planType: membershipPlans.planType,
+            price: membershipPlans.price,
+          },
+        })
+        .from(contracts)
+        .leftJoin(members, eq(contracts.memberId, members.id))
+        .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+        .where(eq(contracts.id, id))
+        .limit(1),
+      getTenantBranchIds(tenantId),
+    ]),
     db
       .select()
       .from(contractLogs)
@@ -227,6 +218,14 @@ app.get('/:id', async (c) => {
       .where(eq(payments.contractId, id))
       .orderBy(desc(payments.createdAt)),
   ]);
+
+  if (!contract) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
+
+  if (!branchIds.includes(contract.contract.branchId!)) {
+    return c.json({ success: false, error: '無權限存取此合約' }, 403);
+  }
 
   return c.json({
     success: true,
@@ -243,12 +242,8 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   // User context available for future audit logging: c.get('user')
   const data = c.req.valid('json');
 
-  const branchIds = await getTenantBranchIds(tenantId);
-  if (!branchIds.includes(data.branchId)) {
-    return c.json({ success: false, error: '無效的分店' }, 400);
-  }
-
-  const [[member], [plan]] = await Promise.all([
+  const [branchIds, [member], [plan]] = await Promise.all([
+    getTenantBranchIds(tenantId),
     db
       .select()
       .from(members)
@@ -261,6 +256,10 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
       .limit(1),
   ]);
 
+  if (!branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
+  }
+
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
@@ -272,8 +271,7 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(contracts)
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(eq(branches.tenantId, tenantId));
+    .where(inArray(contracts.branchId, branchIds));
 
   const contractCount = Number(countResult?.count || 0);
   const contractNo = `C${new Date().getFullYear()}${String(contractCount + 1).padStart(6, '0')}`;
