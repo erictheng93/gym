@@ -506,7 +506,7 @@ const todayCountLabel = computed(() => {
       </div>
       <div class="header-stats">
         <div class="stat-badge" :class="`theme-${activeTab}`">
-          <span class="stat-number">{{ todayCountDisplay }}</span>
+          <span class="stat-number tabular-nums">{{ todayCountDisplay }}</span>
           <span class="stat-label">{{ todayCountLabel }}</span>
         </div>
       </div>
@@ -979,41 +979,50 @@ const todayCountLabel = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-md) var(--space-lg);
+  padding: 10px 20px;
   border-radius: var(--radius-xl);
   color: white;
-  transition: all var(--duration-fast) var(--ease-out);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .stat-badge.theme-member {
   background: linear-gradient(135deg, var(--color-member), #00c7be);
+  box-shadow: 0 4px 16px -2px rgba(0, 199, 190, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .stat-badge.theme-staff {
   background: linear-gradient(135deg, var(--color-staff), #7b79e5);
+  box-shadow: 0 4px 16px -2px rgba(123, 121, 229, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .stat-number {
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 30px;
   font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
 .stat-label {
-  font-size: 12px;
-  opacity: 0.9;
-  margin-top: var(--space-xs);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.95;
+  margin-top: 3px;
 }
 
-/* Tab Switcher */
+/* Tab Switcher - Luxury Capsule Dock */
 .tab-switcher {
   display: flex;
-  gap: var(--space-sm);
+  gap: 4px;
   margin-bottom: var(--space-xl);
   background: var(--color-bg-secondary);
-  padding: var(--space-xs);
-  border-radius: var(--radius-xl);
+  padding: 4px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
 }
 
 .tab-btn {
@@ -1022,15 +1031,15 @@ const todayCountLabel = computed(() => {
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
+  padding: 10px var(--space-lg);
   background: transparent;
   border: none;
-  border-radius: var(--radius-lg);
-  font-size: 15px;
+  border-radius: var(--radius-full);
+  font-size: 14.5px;
   font-weight: 500;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .tab-btn:hover {
@@ -1041,7 +1050,8 @@ const todayCountLabel = computed(() => {
 .tab-btn.active {
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--color-border-specular);
 }
 
 .checkin-layout {
@@ -1051,9 +1061,10 @@ const todayCountLabel = computed(() => {
 }
 
 .checkin-main {
-  background: var(--color-bg-primary);
+  background: var(--color-bg-secondary);
   border-radius: var(--radius-2xl);
   border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
   min-height: 600px;
   position: relative;
   overflow: hidden;
@@ -1094,20 +1105,22 @@ const todayCountLabel = computed(() => {
 }
 
 .success-icon {
-  width: 100px;
-  height: 100px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 0 rgba(255, 255, 255, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto var(--space-lg);
-  animation: scaleIn 0.4s ease-out;
+  animation: scaleIn 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 .success-content h2 {
@@ -1212,8 +1225,31 @@ const todayCountLabel = computed(() => {
   position: absolute;
   inset: 20%;
   border: 2px solid var(--color-accent);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 16px var(--color-accent-glow);
+  overflow: hidden;
+}
+
+.scanner-frame::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #30d158, transparent);
+  box-shadow: 0 0 12px 2px #30d158;
+  animation: laserScan 2.4s ease-in-out infinite;
+}
+
+@keyframes laserScan {
+  0%, 100% {
+    top: 5%;
+    opacity: 0.3;
+  }
+  50% {
+    top: 95%;
+    opacity: 1;
+  }
 }
 
 .scanner-hint {

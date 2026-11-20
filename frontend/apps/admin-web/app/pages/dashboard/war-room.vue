@@ -184,15 +184,19 @@ onUnmounted(() => {
     <!-- Header -->
     <header class="war-room-header">
       <div class="header-content">
-        <h1 class="text-display">戰情室</h1>
-        <p class="text-subhead text-secondary">即時掌握營運狀態</p>
+        <div class="header-telemetry-badge">
+          <AppBadge variant="accent" :dot="true" :glow="true" size="sm">TELEMETRY HUD</AppBadge>
+          <span class="system-badge-label uppercase-label tracking-widest">HQ COCKPIT ACTIVE</span>
+        </div>
+        <h1 class="text-display war-room-title">總部營運戰情室</h1>
+        <p class="text-subhead text-secondary">全場館即時遙測、營收趨勢、熱度分佈與合約風險監控</p>
       </div>
 
       <div class="header-controls">
         <!-- Branch Selector (HQ Only) -->
         <div v-if="isHeadquarter && branches.length > 1" class="control-group">
           <select v-model="selectedBranch" class="form-select">
-            <option value="">全部分店</option>
+            <option value="">全部分店場館</option>
             <option v-for="branch in branches" :key="branch.id" :value="branch.id">
               {{ branch.name }}
             </option>
@@ -217,18 +221,18 @@ onUnmounted(() => {
           @click="toggleLiveUpdates"
         >
           <span class="live-dot" />
-          LIVE
+          <span>即時遙測</span>
         </button>
 
         <!-- Export Menu -->
         <div class="export-dropdown">
           <button class="export-btn" @click="showExportMenu = !showExportMenu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" x2="12" y1="15" y2="3" />
             </svg>
-            匯出
+            <span>匯出</span>
           </button>
           <div v-if="showExportMenu" class="export-menu">
             <button @click="exportData('revenue', 'csv')">營收報表 (CSV)</button>
@@ -239,8 +243,8 @@ onUnmounted(() => {
         </div>
 
         <!-- Refresh Button -->
-        <button class="refresh-btn" :disabled="isLoading" @click="refresh">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spinning: isLoading }">
+        <button class="refresh-btn" :disabled="isLoading" @click="refresh" title="重新整理數據">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spinning: isLoading }">
             <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
             <path d="M21 3v5h-5" />
           </svg>
@@ -261,7 +265,7 @@ onUnmounted(() => {
     <section class="charts-section">
       <div class="charts-grid">
         <!-- Revenue Chart -->
-        <div class="chart-card">
+        <div class="chart-card glass-panel">
           <Suspense>
             <template #default>
               <LazyRevenueChart
@@ -279,7 +283,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Heatmap -->
-        <div class="chart-card">
+        <div class="chart-card glass-panel">
           <Suspense>
             <template #default>
               <LazyCheckinHeatmap
@@ -346,10 +350,31 @@ onUnmounted(() => {
   margin-bottom: var(--space-2xl);
   flex-wrap: wrap;
   gap: var(--space-lg);
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
-.header-content h1 {
+.header-telemetry-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   margin-bottom: var(--space-xs);
+}
+
+.system-badge-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  letter-spacing: 0.1em;
+}
+
+.war-room-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+  margin: 0 0 4px 0;
 }
 
 .header-controls {
@@ -365,38 +390,45 @@ onUnmounted(() => {
 }
 
 .form-select {
-  padding: var(--space-sm) var(--space-md);
+  padding: 8px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-full);
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
-  min-width: 140px;
+  min-width: 150px;
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .form-select:focus {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 12px var(--color-accent-glow);
 }
 
 .period-selector {
   display: flex;
   background: var(--color-bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: 2px;
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  gap: 2px;
 }
 
 .period-btn {
-  padding: var(--space-sm) var(--space-md);
+  padding: 6px 14px;
   border: none;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all var(--duration-fast) ease;
+  border-radius: var(--radius-full);
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .period-btn:hover {
@@ -404,24 +436,26 @@ onUnmounted(() => {
 }
 
 .period-btn.active {
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-primary);
   color: var(--color-text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--color-border-specular);
+  font-weight: 600;
 }
 
 .live-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
+  gap: 6px;
+  padding: 7px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-full);
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--duration-fast) ease;
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .live-toggle:hover {
@@ -432,7 +466,8 @@ onUnmounted(() => {
 .live-toggle.active {
   border-color: var(--color-success);
   color: var(--color-success);
-  background: rgba(52, 199, 89, 0.1);
+  background: rgba(52, 199, 89, 0.12);
+  box-shadow: 0 0 16px -2px rgba(52, 199, 89, 0.4), inset 0 1px 0 var(--color-border-specular);
 }
 
 .live-toggle .live-dot {
@@ -443,31 +478,33 @@ onUnmounted(() => {
 }
 
 .live-toggle.active .live-dot {
-  animation: pulse 2s infinite;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.3); }
 }
 
 .refresh-btn {
   width: 36px;
   height: 36px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-full);
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--duration-fast) ease;
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .refresh-btn:hover:not(:disabled) {
   border-color: var(--color-accent);
   color: var(--color-accent);
+  transform: rotate(30deg);
 }
 
 .refresh-btn:disabled {
@@ -483,16 +520,17 @@ onUnmounted(() => {
 .export-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-md);
+  gap: 6px;
+  padding: 7px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-full);
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--duration-fast) ease;
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .export-btn:hover {
@@ -507,28 +545,47 @@ onUnmounted(() => {
   margin-top: var(--space-xs);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 180px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl), inset 0 1px 0 var(--color-border-specular);
+  min-width: 190px;
   z-index: 100;
   overflow: hidden;
+  padding: 4px;
 }
 
 .export-menu button {
   display: block;
   width: 100%;
-  padding: var(--space-sm) var(--space-md);
+  padding: 9px 12px;
   border: none;
   background: transparent;
   color: var(--color-text-primary);
   font-size: 13px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background var(--duration-fast) ease;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) ease;
 }
 
 .export-menu button:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+/* Glass panel */
+.glass-panel {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  transition: box-shadow var(--duration-normal) ease, border-color var(--duration-normal) ease;
+}
+
+.glass-panel:hover {
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-md), 0 0 24px -6px var(--color-accent-glow);
 }
 
 /* Chart loading fallback */
@@ -538,12 +595,12 @@ onUnmounted(() => {
   justify-content: center;
   min-height: 280px;
   background: var(--color-bg-secondary);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
 }
 
 .chart-loading .loading-spinner {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: 3px solid var(--color-border);
   border-top-color: var(--color-accent);
   border-radius: 50%;
@@ -570,7 +627,7 @@ onUnmounted(() => {
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-lg);
+  gap: var(--space-xl);
 }
 
 .chart-card {
@@ -588,7 +645,7 @@ onUnmounted(() => {
 .bottom-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-lg);
+  gap: var(--space-xl);
 }
 
 .bottom-card {
@@ -619,8 +676,8 @@ onUnmounted(() => {
   }
 
   .period-btn {
-    padding: var(--space-sm);
-    font-size: 12px;
+    padding: 6px 10px;
+    font-size: 11.5px;
   }
 }
 </style>
