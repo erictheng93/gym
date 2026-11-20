@@ -22,6 +22,22 @@ const ICON_COLOR_MAP: Record<string, string> = {
   alert: 'orange',
   help: 'teal',
 }
+
+const menuItems = [
+  { icon: 'activity', label: '健身追蹤', description: '目標、體態、運動紀錄', path: '/fitness' },
+  { icon: 'history', label: '入場紀錄', description: '查看進出場記錄', path: '/profile/checkins' },
+  { icon: 'payment', label: '付款紀錄', description: '交易與帳單明細', path: '/profile/payments' },
+  { icon: 'bell', label: '通知設定', description: '管理推播與提醒', path: '/profile/notifications' },
+  { icon: 'alert', label: '問題回報', description: '回報問題與查看狀態', path: '/profile/issues' },
+  { icon: 'help', label: '聯絡客服', description: '問題諮詢與回報', path: '/profile/support' },
+]
+
+type ThemeModeType = 'light' | 'dark' | 'system'
+const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
+  { value: 'light', label: '淺色', icon: 'sun' },
+  { value: 'dark', label: '深色', icon: 'moon' },
+  { value: 'system', label: '系統', icon: 'auto' },
+]
 </script>
 
 <script setup lang="ts">
@@ -229,24 +245,8 @@ const membershipDuration = computed(() => {
   return months > 0 ? `${months} 個月` : '不到 1 個月'
 })
 
-const menuItems = [
-  { icon: 'activity', label: '健身追蹤', description: '目標、體態、運動紀錄', path: '/fitness' },
-  { icon: 'history', label: '入場紀錄', description: '查看進出場記錄', path: '/profile/checkins' },
-  { icon: 'payment', label: '付款紀錄', description: '交易與帳單明細', path: '/profile/payments' },
-  { icon: 'bell', label: '通知設定', description: '管理推播與提醒', path: '/profile/notifications' },
-  { icon: 'alert', label: '問題回報', description: '回報問題與查看狀態', path: '/profile/issues' },
-  { icon: 'help', label: '聯絡客服', description: '問題諮詢與回報', path: '/profile/support' },
-]
-
 // Theme settings
 const { themeMode, setTheme } = useTheme()
-
-type ThemeModeType = 'light' | 'dark' | 'system'
-const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
-  { value: 'light', label: '淺色', icon: 'sun' },
-  { value: 'dark', label: '深色', icon: 'moon' },
-  { value: 'system', label: '系統', icon: 'auto' },
-]
 
 const handleThemeChange = (mode: ThemeModeType) => {
   setTheme(mode)

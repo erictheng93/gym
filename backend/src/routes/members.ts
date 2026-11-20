@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, members, contracts, branches, membershipPlans } from '../db/index.js';
+import { db, members, contracts, membershipPlans, MEMBER_STATUS } from '../db/index.js';
 import { eq, and, or, ilike, sql, desc, asc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
-import { getTenantBranchIds } from '../utils/tenant-cache.js';
+import { getTenantBranchIds, getTenantBranches } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, membersColumns, translateStatus, translateGender } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
@@ -63,11 +63,6 @@ const MEMBER_CONTRACT_SELECT = {
 
 const COUNT_SELECT = {
   count: sql<number>`count(*)`,
-};
-
-const BRANCH_ID_NAME_SELECT = {
-  id: branches.id,
-  name: branches.name,
 };
 
 const MEMBER_EXPORT_SELECT = {
@@ -146,11 +141,13 @@ app.get('/', zValidator('query', querySchema), async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
 
-  let baseCondition = branchId ? eq(members.branchId, branchId) : inArray(members.branchId, branchIds);
+  let baseCondition = branchId
+    ? eq(members.branchId, branchId)
+    : (branchIds.length === 1 ? eq(members.branchId, branchIds[0]) : inArray(members.branchId, branchIds));
 
   if (status) {
-    // Case-insensitive status comparison
-    baseCondition = and(baseCondition, sql`lower(${members.status}) = lower(${status})`)!;
+    // Case-insensitive status comparison using index-friendly uppercase normalization
+    baseCondition = and(baseCondition, eq(members.status, status.toUpperCase() as typeof MEMBER_STATUS[number]))!;
   }
 
   if (search) {
@@ -210,11 +207,7 @@ app.get('/export', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { branchId, status, format = 'csv' } = c.req.query();
 
-  const tenantBranches = await db
-    .select(BRANCH_ID_NAME_SELECT)
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
   const branchMap = new Map(tenantBranches.map(b => [b.id, b.name]));
 
@@ -228,10 +221,12 @@ app.get('/export', async (c) => {
     });
   }
 
-  let baseCondition = branchId ? eq(members.branchId, branchId) : inArray(members.branchId, branchIds);
+  let baseCondition = branchId
+    ? eq(members.branchId, branchId)
+    : (branchIds.length === 1 ? eq(members.branchId, branchIds[0]) : inArray(members.branchId, branchIds));
 
   if (status) {
-    baseCondition = and(baseCondition, eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'))!;
+    baseCondition = and(baseCondition, eq(members.status, status.toUpperCase() as typeof MEMBER_STATUS[number]))!;
   }
 
   const result = await db
@@ -240,16 +235,20 @@ app.get('/export', async (c) => {
     .where(baseCondition)
     .orderBy(desc(members.createdAt));
 
-  const exportData = result.map(m => ({
-    memberCode: m.memberCode || '',
-    fullName: m.fullName || '',
-    phone: m.phone || '',
-    email: m.email || '',
-    gender: translateGender(m.gender),
-    status: translateStatus(m.status),
-    joinDate: m.joinDate || '',
-    branchName: branchMap.get(m.branchId!) || '',
-  }));
+  const exportData = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const m = result[i]!;
+    exportData[i] = {
+      memberCode: m.memberCode || '',
+      fullName: m.fullName || '',
+      phone: m.phone || '',
+      email: m.email || '',
+      gender: translateGender(m.gender),
+      status: translateStatus(m.status),
+      joinDate: m.joinDate || '',
+      branchName: branchMap.get(m.branchId!) || '',
+    };
+  }
 
   const filename = `會員列表_${new Date().toISOString().slice(0, 10)}`;
 

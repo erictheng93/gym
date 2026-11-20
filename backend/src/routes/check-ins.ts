@@ -156,7 +156,7 @@ app.get('/', async (c) => {
 
     const branchCondition = branchId
       ? eq(checkIns.branchId, branchId)
-      : inArray(checkIns.branchId, tenantBranchIds);
+      : (tenantBranchIds.length === 1 ? eq(checkIns.branchId, tenantBranchIds[0]) : inArray(checkIns.branchId, tenantBranchIds));
 
     const conditions = [branchCondition];
 
@@ -387,7 +387,7 @@ app.get('/stats/today', async (c) => {
 
   const branchCondition = branchId
     ? eq(checkIns.branchId, branchId)
-    : inArray(checkIns.branchId, tenantBranchIds);
+    : (tenantBranchIds.length === 1 ? eq(checkIns.branchId, tenantBranchIds[0]) : inArray(checkIns.branchId, tenantBranchIds));
 
   const whereCondition = and(
     branchCondition,

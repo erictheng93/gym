@@ -81,6 +81,9 @@ const createDashboardCheckInStatsSelect = (todayStartIso: string) => ({
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
+const buildBranchFilter = (column: any, ids: string[]) =>
+  ids.length === 1 ? eq(column, ids[0]) : inArray(column, ids);
+
 // Main dashboard overview
 app.get('/overview', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -125,7 +128,7 @@ app.get('/overview', async (c) => {
     db
       .select(createDashboardMemberStatsSelect(monthStartDate.toISOString()))
       .from(members)
-      .where(inArray(members.branchId, branchIds)),
+      .where(buildBranchFilter(members.branchId, branchIds)),
 
     // Contract stats (active and expiring soon in a single scan)
     db
@@ -133,7 +136,7 @@ app.get('/overview', async (c) => {
       .from(contracts)
       .where(
         and(
-          inArray(contracts.branchId, branchIds),
+          buildBranchFilter(contracts.branchId, branchIds),
           eq(contracts.status, 'ACTIVE')
         )
       ),
@@ -148,7 +151,7 @@ app.get('/overview', async (c) => {
       .from(payments)
       .where(
         and(
-          inArray(payments.branchId, branchIds),
+          buildBranchFilter(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
           gte(payments.paymentDate, lastMonthStartDate)
         )
@@ -160,7 +163,7 @@ app.get('/overview', async (c) => {
       .from(checkIns)
       .where(
         and(
-          inArray(checkIns.branchId, branchIds),
+          buildBranchFilter(checkIns.branchId, branchIds),
           gte(checkIns.checkInTime, monthStartDate)
         )
       ),
@@ -217,7 +220,7 @@ app.get('/revenue-trend', async (c) => {
       .from(payments)
       .where(
         and(
-          inArray(payments.branchId, branchIds),
+          buildBranchFilter(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
           gte(payments.paymentDate, sql`current_date - interval '12 months'`)
         )
@@ -240,7 +243,7 @@ app.get('/revenue-trend', async (c) => {
     .from(payments)
     .where(
       and(
-        inArray(payments.branchId, branchIds),
+        buildBranchFilter(payments.branchId, branchIds),
         eq(payments.type, 'INCOME'),
         gte(payments.paymentDate, sql`current_date - interval '30 days'`)
       )

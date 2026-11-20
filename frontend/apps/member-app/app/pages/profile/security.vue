@@ -1,3 +1,19 @@
+<script lang="ts">
+const HAS_DIGIT = /[0-9]/
+const HAS_LOWER = /[a-z]/
+const HAS_UPPER = /[A-Z]/
+const HAS_SPECIAL = /[^a-zA-Z0-9]/
+
+const EMPTY_STRENGTH = { level: 0, label: '', color: '' }
+const STRENGTH_LEVELS = [
+  EMPTY_STRENGTH,
+  { level: 1, label: '弱', color: 'weak' },
+  { level: 2, label: '普通', color: 'fair' },
+  { level: 3, label: '良好', color: 'good' },
+  { level: 4, label: '強', color: 'strong' },
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 安全設定頁面
@@ -35,25 +51,25 @@ onBeforeUnmount(() => {
 // Password strength
 const passwordStrength = computed(() => {
   const password = newPassword.value
-  if (!password) return { level: 0, label: '', color: '' }
+  if (!password) return EMPTY_STRENGTH
 
   let score = 0
 
   if (password.length >= 8) score += 1
   if (password.length >= 12) score += 1
-  if (/[0-9]/.test(password)) score += 1
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1
-  if (/[^a-zA-Z0-9]/.test(password)) score += 1
+  if (HAS_DIGIT.test(password)) score += 1
+  if (HAS_LOWER.test(password) && HAS_UPPER.test(password)) score += 1
+  if (HAS_SPECIAL.test(password)) score += 1
 
-  if (score <= 1) return { level: 1, label: '弱', color: 'weak' }
-  if (score <= 2) return { level: 2, label: '普通', color: 'fair' }
-  if (score <= 3) return { level: 3, label: '良好', color: 'good' }
-  return { level: 4, label: '強', color: 'strong' }
+  if (score <= 1) return STRENGTH_LEVELS[1]
+  if (score <= 2) return STRENGTH_LEVELS[2]
+  if (score <= 3) return STRENGTH_LEVELS[3]
+  return STRENGTH_LEVELS[4]
 })
 
 // Validation
 const passwordMeetsRequirements = computed(() => {
-  return newPassword.value.length >= 8 && /[0-9]/.test(newPassword.value)
+  return newPassword.value.length >= 8 && HAS_DIGIT.test(newPassword.value)
 })
 
 const passwordsMatch = computed(() => {
