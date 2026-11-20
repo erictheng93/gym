@@ -25,8 +25,9 @@ const loadReport = async () => {
   }
 }
 
+const numberFormatter = new Intl.NumberFormat('zh-TW')
 const formatNumber = (value: number) => {
-  return new Intl.NumberFormat('zh-TW').format(value)
+  return numberFormatter.format(value)
 }
 
 const formatPercent = (value: number | null) => {
@@ -39,19 +40,20 @@ const formatRating = (value: number | null) => {
   return value.toFixed(1)
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  YOGA: '瑜珈',
+  CARDIO: '有氧',
+  STRENGTH: '重訓',
+  DANCE: '舞蹈',
+  SPINNING: '飛輪',
+  PILATES: '皮拉提斯',
+  BOXING: '拳擊',
+  SWIMMING: '游泳',
+  OTHER: '其他',
+}
+
 const getCategoryLabel = (category: string | null) => {
-  const labels: Record<string, string> = {
-    YOGA: '瑜珈',
-    CARDIO: '有氧',
-    STRENGTH: '重訓',
-    DANCE: '舞蹈',
-    SPINNING: '飛輪',
-    PILATES: '皮拉提斯',
-    BOXING: '拳擊',
-    SWIMMING: '游泳',
-    OTHER: '其他',
-  }
-  return labels[category || ''] || category || '其他'
+  return CATEGORY_LABELS[category || ''] || category || '其他'
 }
 
 const openDetail = (coach: CoachPerformanceData) => {
@@ -75,10 +77,15 @@ const exportReport = async (format: 'csv' | 'excel') => {
   window.open(`${baseURL}/api/reports/coach-performance/export?${params}`, '_blank')
 }
 
-// Sort coaches by classes taught
+// Sort coaches by classes taught and pre-slice top categories for template rendering
 const sortedCoaches = computed(() => {
   if (!report.value) return []
-  return [...report.value.data].sort((a, b) => b.metrics.classes_taught - a.metrics.classes_taught)
+  return [...report.value.data]
+    .sort((a, b) => b.metrics.classes_taught - a.metrics.classes_taught)
+    .map(coach => ({
+      ...coach,
+      topCategories: coach.details.classes_by_category.slice(0, 3)
+    }))
 })
 
 // Get rating color class
@@ -255,7 +262,7 @@ onMounted(async () => {
 
           <div v-if="coach.details.classes_by_category.length > 0" class="coach-categories">
             <span
-              v-for="cat in coach.details.classes_by_category.slice(0, 3)"
+              v-for="cat in coach.topCategories"
               :key="cat.category"
               class="category-tag"
             >

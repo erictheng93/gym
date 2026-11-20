@@ -56,7 +56,16 @@ app.get(
         .from(bodyMeasurements)
         .where(eq(bodyMeasurements.memberId, memberInfo.id)),
       db
-        .select()
+        .select({
+          id: bodyMeasurements.id,
+          date: bodyMeasurements.date,
+          weight: bodyMeasurements.weight,
+          bodyFat: bodyMeasurements.bodyFat,
+          muscleMass: bodyMeasurements.muscleMass,
+          bmi: bodyMeasurements.bmi,
+          source: bodyMeasurements.source,
+          createdAt: bodyMeasurements.createdAt,
+        })
         .from(bodyMeasurements)
         .where(eq(bodyMeasurements.memberId, memberInfo.id))
         .orderBy(desc(bodyMeasurements.date))
@@ -277,7 +286,16 @@ app.get('/latest', async (c) => {
   const memberInfo = c.get('member')!;
 
   const [measurement] = await db
-    .select()
+    .select({
+      id: bodyMeasurements.id,
+      date: bodyMeasurements.date,
+      weight: bodyMeasurements.weight,
+      bodyFat: bodyMeasurements.bodyFat,
+      muscleMass: bodyMeasurements.muscleMass,
+      bmi: bodyMeasurements.bmi,
+      source: bodyMeasurements.source,
+      createdAt: bodyMeasurements.createdAt,
+    })
     .from(bodyMeasurements)
     .where(eq(bodyMeasurements.memberId, memberInfo.id))
     .orderBy(desc(bodyMeasurements.date))

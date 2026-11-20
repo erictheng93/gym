@@ -66,6 +66,10 @@ watch(currentPage, loadCoupons)
 
 onMounted(loadCoupons)
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 // Row click
 const handleRowClick = (coupon: typeof coupons.value[0]) => {
   navigateTo(`/marketing/coupons/${coupon.id}`)

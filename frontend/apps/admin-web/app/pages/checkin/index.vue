@@ -436,50 +436,54 @@ const formatTime = (iso: string) => {
   return new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 }
 
+const MEMBER_STATUS_CLASS_MAP: Record<string, string> = {
+  ACTIVE: 'active',
+  active: 'active',
+  EXPIRED: 'expired',
+  SUSPENDED: 'suspended',
+  PAUSED: 'paused'
+}
+
+const MEMBER_STATUS_LABEL_MAP: Record<string, string> = {
+  ACTIVE: STATUS.MEMBER.ACTIVE,
+  active: STATUS.MEMBER.ACTIVE,
+  EXPIRED: STATUS.MEMBER.EXPIRED,
+  SUSPENDED: STATUS.MEMBER.SUSPENDED,
+  PAUSED: STATUS.MEMBER.PAUSED
+}
+
+const ATTENDANCE_STATUS_CLASS_MAP: Record<string, string> = {
+  PRESENT: 'present',
+  LATE: 'late',
+  EARLY_LEAVE: 'early-leave',
+  ABSENT: 'absent',
+  LEAVE: 'leave',
+  HOLIDAY: 'holiday'
+}
+
+const ATTENDANCE_STATUS_LABEL_MAP: Record<string, string> = {
+  PRESENT: '正常',
+  LATE: '遲到',
+  EARLY_LEAVE: '早退',
+  ABSENT: '缺勤',
+  LEAVE: '請假',
+  HOLIDAY: '休假'
+}
+
 const getMemberStatusClass = (status: string) => {
-  const map: Record<string, string> = {
-    'ACTIVE': 'active',
-    'active': 'active',
-    'EXPIRED': 'expired',
-    'SUSPENDED': 'suspended',
-    'PAUSED': 'paused'
-  }
-  return map[status] || 'default'
+  return MEMBER_STATUS_CLASS_MAP[status] || 'default'
 }
 
 const getMemberStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    'ACTIVE': STATUS.MEMBER.ACTIVE,
-    'active': STATUS.MEMBER.ACTIVE,
-    'EXPIRED': STATUS.MEMBER.EXPIRED,
-    'SUSPENDED': STATUS.MEMBER.SUSPENDED,
-    'PAUSED': STATUS.MEMBER.PAUSED
-  }
-  return map[status] || status
+  return MEMBER_STATUS_LABEL_MAP[status] || status
 }
 
 const getAttendanceStatusClass = (status: string) => {
-  const map: Record<string, string> = {
-    'PRESENT': 'present',
-    'LATE': 'late',
-    'EARLY_LEAVE': 'early-leave',
-    'ABSENT': 'absent',
-    'LEAVE': 'leave',
-    'HOLIDAY': 'holiday'
-  }
-  return map[status] || 'default'
+  return ATTENDANCE_STATUS_CLASS_MAP[status] || 'default'
 }
 
 const getAttendanceStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    'PRESENT': '正常',
-    'LATE': '遲到',
-    'EARLY_LEAVE': '早退',
-    'ABSENT': '缺勤',
-    'LEAVE': '請假',
-    'HOLIDAY': '休假'
-  }
-  return map[status] || status
+  return ATTENDANCE_STATUS_LABEL_MAP[status] || status
 }
 
 const canMemberCheckin = computed(() => {

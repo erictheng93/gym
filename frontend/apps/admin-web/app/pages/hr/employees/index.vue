@@ -69,9 +69,12 @@ watch(currentPage, () => {
   loadEmployees()
 })
 
-// Initial load
 onMounted(async () => {
   await Promise.all([loadEmployees(), fetchBranches(), fetchJobTitles()])
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
 })
 
 // Row click handler - open modal
@@ -81,13 +84,14 @@ const handleRowClick = (employee: typeof employees.value[0]) => {
 }
 
 // Get avatar variant based on status
+const EMPLOYEE_STATUS_VARIANT_MAP: Record<string, 'green' | 'gray' | 'orange'> = {
+  ACTIVE: 'green',
+  RESIGNED: 'gray',
+  LEAVE: 'orange'
+}
+
 const getEmployeeStatusVariant = (status: string): 'green' | 'gray' | 'blue' | 'red' | 'orange' | 'pink' | 'purple' => {
-  const map: Record<string, 'green' | 'gray' | 'orange'> = {
-    ACTIVE: 'green',
-    RESIGNED: 'gray',
-    LEAVE: 'orange'
-  }
-  return map[status] || 'green'
+  return EMPLOYEE_STATUS_VARIANT_MAP[status] || 'green'
 }
 </script>
 

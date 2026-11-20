@@ -449,34 +449,18 @@ app.get('/stats', async (c) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // Concurrently execute all stats queries
+  // Concurrently execute count stats and most visited branch query
   const [
-    [monthStats],
-    [thirtyDayStats],
-    [totalStats],
+    [countStats],
     branchStats,
   ] = await Promise.all([
-    // Count this month
+    // Counts (total, this month, last 30 days) computed in a single pass
     db
-      .select({ count: sql<number>`count(*)` })
-      .from(checkIns)
-      .where(and(
-        eq(checkIns.memberId, memberInfo.id),
-        gte(checkIns.checkInTime, monthStart),
-      )),
-
-    // Count last 30 days
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(checkIns)
-      .where(and(
-        eq(checkIns.memberId, memberInfo.id),
-        gte(checkIns.checkInTime, thirtyDaysAgo),
-      )),
-
-    // Total count
-    db
-      .select({ count: sql<number>`count(*)` })
+      .select({
+        total: sql<number>`count(*)`,
+        thisMonth: sql<number>`count(case when ${checkIns.checkInTime} >= ${monthStart} then 1 end)`,
+        last30Days: sql<number>`count(case when ${checkIns.checkInTime} >= ${thirtyDaysAgo} then 1 end)`,
+      })
       .from(checkIns)
       .where(eq(checkIns.memberId, memberInfo.id)),
 
@@ -498,9 +482,9 @@ app.get('/stats', async (c) => {
   return c.json({
     success: true,
     data: {
-      thisMonth: Number(monthStats?.count || 0),
-      last30Days: Number(thirtyDayStats?.count || 0),
-      total: Number(totalStats?.count || 0),
+      thisMonth: Number(countStats?.thisMonth || 0),
+      last30Days: Number(countStats?.last30Days || 0),
+      total: Number(countStats?.total || 0),
       mostVisitedBranch: branchStats[0] ? {
         id: branchStats[0].branchId,
         name: branchStats[0].branchName,
