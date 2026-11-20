@@ -92,7 +92,17 @@ app.get('/:id', async (c) => {
 
   const [branchEmployees, [memberCount]] = await Promise.all([
     db
-      .select()
+      .select({
+        id: employees.id,
+        fullName: employees.fullName,
+        phone: employees.phone,
+        email: employees.email,
+        status: employees.status,
+        employmentType: employees.employmentType,
+        jobTitleId: employees.jobTitleId,
+        branchId: employees.branchId,
+        employeeCode: employees.employeeCode,
+      })
       .from(employees)
       .where(eq(employees.branchId, id))
       .orderBy(employees.fullName),
@@ -174,7 +184,7 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
 
   const [[branch], [employeeCount]] = await Promise.all([
     db
-      .select()
+      .select({ id: branches.id, tenantId: branches.tenantId, type: branches.type })
       .from(branches)
       .where(eq(branches.id, id))
       .limit(1),

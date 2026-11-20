@@ -107,12 +107,20 @@ app.get('/:id', async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: attendances.id,
+        createdAt: attendances.createdAt,
+        employeeId: attendances.employeeId,
+        checkIn: attendances.checkIn,
+        checkOut: attendances.checkOut,
+        workHours: attendances.workHours,
+        branchId: attendances.branchId,
+      })
       .from(attendances)
       .where(eq(attendances.employeeId, id))
       .orderBy(desc(attendances.createdAt))
       .limit(30)
-      .catch(() => [] as typeof attendances.$inferSelect[]),
+      .catch(() => []),
   ]);
 
   if (!employee) {

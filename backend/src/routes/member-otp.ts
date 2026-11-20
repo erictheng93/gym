@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
-import { eq, and, gt, desc } from 'drizzle-orm';
+import { eq, and, gt, desc, or, sql } from 'drizzle-orm';
 import { rateLimiter } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
@@ -122,9 +122,20 @@ app.post(
     const ipAddress = getClientIp(c);
     const userAgent = c.req.header('user-agent') || '';
 
+    const cleanDigits = identifier.replace(/\D/g, '');
+    const isPhone = type === 'phone' || (cleanDigits.startsWith('09') && cleanDigits.length === 10);
+    const dashedPhone = isPhone && cleanDigits.length === 10
+      ? `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}`
+      : identifier;
+
     // Find member by phone or email
     const whereClause = type === 'phone'
-      ? eq(members.phone, identifier)
+      ? or(
+          eq(members.phone, identifier),
+          eq(members.phone, cleanDigits),
+          eq(members.phone, dashedPhone),
+          eq(sql`replace(${members.phone}, '-', '')`, cleanDigits)
+        )
       : eq(members.email, identifier);
 
     const [member] = await db
@@ -161,11 +172,15 @@ app.post(
     const code = generateOtp();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    // Delete any existing OTP for this identifier
+    // Delete any existing OTP for this identifier (both raw and normalized)
     await db
       .delete(otpTokens)
       .where(and(
-        eq(otpTokens.identifier, identifier),
+        or(
+          eq(otpTokens.identifier, identifier),
+          eq(otpTokens.identifier, cleanDigits),
+          eq(otpTokens.identifier, dashedPhone)
+        ),
         eq(otpTokens.identifierType, type),
       ));
 
@@ -217,8 +232,14 @@ app.post(
     return c.json({
       success: true,
       message: '如果此帳號存在，驗證碼已發送',
-      // In development, return code for testing
-      ...(process.env.NODE_ENV === 'development' && { _devCode: code }),
+      // In development/test, return code for testing and frontend display
+      ...(process.env.NODE_ENV !== 'production' && {
+        _devCode: code,
+        data: {
+          otp: code,
+          expiresIn: 300,
+        },
+      }),
     });
   }
 );
@@ -234,12 +255,22 @@ app.post(
   async (c) => {
     const { identifier, type, code } = c.req.valid('json');
 
+    const cleanDigits = identifier.replace(/\D/g, '');
+    const isPhone = type === 'phone' || (cleanDigits.startsWith('09') && cleanDigits.length === 10);
+    const dashedPhone = isPhone && cleanDigits.length === 10
+      ? `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}`
+      : identifier;
+
     // Find valid OTP
     const [otp] = await db
       .select()
       .from(otpTokens)
       .where(and(
-        eq(otpTokens.identifier, identifier),
+        or(
+          eq(otpTokens.identifier, identifier),
+          eq(otpTokens.identifier, cleanDigits),
+          eq(otpTokens.identifier, dashedPhone)
+        ),
         eq(otpTokens.identifierType, type),
         eq(otpTokens.verified, false),
         gt(otpTokens.expiresAt, new Date()),
@@ -291,7 +322,12 @@ app.post(
 
     // Find member
     const whereClause = type === 'phone'
-      ? eq(members.phone, identifier)
+      ? or(
+          eq(members.phone, identifier),
+          eq(members.phone, cleanDigits),
+          eq(members.phone, dashedPhone),
+          eq(sql`replace(${members.phone}, '-', '')`, cleanDigits)
+        )
       : eq(members.email, identifier);
 
     const [member] = await db

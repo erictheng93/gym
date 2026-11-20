@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { hash, verify } from '@node-rs/argon2';
 import { db, members, branches, memberCredentials } from '../db/index.js';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, or, sql } from 'drizzle-orm';
 import { rateLimiter, memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import { memberJwtService, getTokenHash } from '../services/member-jwt.js';
@@ -63,8 +63,33 @@ const passwordResetRateLimiter = rateLimiter({
 // -----------------------------------------------------------------------------
 
 const loginSchema = z.object({
-  email: z.string().email('請輸入有效的 Email'),
+  email: z.string().optional(),
+  account: z.string().optional(),
+  phone: z.string().optional(),
   password: z.string().min(8, '密碼至少 8 個字元'),
+}).superRefine((data, ctx) => {
+  const identifier = (data.account || data.phone || data.email || '').trim();
+  if (!identifier) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: '請輸入電子郵件或手機號碼',
+      path: ['email'],
+    });
+    return;
+  }
+  // If email was provided alone (e.g. from existing API clients or tests),
+  // reject if it's neither a valid email nor a valid phone number.
+  if (data.email && !data.account && !data.phone) {
+    const isPhone = /^09[-\d]{8,10}$/.test(data.email) || /^09\d{8}$/.test(data.email.replace(/\D/g, ''));
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email);
+    if (!isEmail && !isPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '請輸入有效的 Email 或手機號碼',
+        path: ['email'],
+      });
+    }
+  }
 });
 
 const setPasswordSchema = z.object({
@@ -121,7 +146,30 @@ app.post(
   loginRateLimiter,
   zValidator('json', loginSchema),
   async (c) => {
-    const { email, password } = c.req.valid('json');
+    const { email, account, phone, password } = c.req.valid('json');
+    const identifier = (account || phone || email || '').trim();
+
+    const isEmail = identifier.includes('@');
+    const cleanDigits = identifier.replace(/\D/g, '');
+    const isPhone = cleanDigits.startsWith('09') && cleanDigits.length === 10;
+    const dashedPhone = isPhone ? `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}` : identifier;
+
+    let memberCondition;
+    if (isEmail) {
+      memberCondition = eq(members.email, identifier);
+    } else if (isPhone) {
+      memberCondition = or(
+        eq(members.phone, identifier),
+        eq(members.phone, dashedPhone),
+        eq(sql`replace(${members.phone}, '-', '')`, cleanDigits)
+      );
+    } else {
+      memberCondition = or(
+        eq(members.memberCode, identifier),
+        eq(members.email, identifier),
+        eq(members.phone, identifier)
+      );
+    }
 
     // Find member, credentials, and branch info in a single joined query
     const [result] = await db
@@ -145,13 +193,13 @@ app.post(
       .from(members)
       .leftJoin(memberCredentials, eq(members.id, memberCredentials.memberId))
       .leftJoin(branches, eq(members.branchId, branches.id))
-      .where(eq(members.email, email))
+      .where(memberCondition)
       .limit(1);
 
     if (!result || !result.member) {
       return c.json({
         success: false,
-        error: 'Email 或密碼錯誤',
+        error: '帳號或密碼錯誤',
         code: 'INVALID_CREDENTIALS',
       }, 401);
     }

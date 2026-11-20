@@ -206,12 +206,30 @@ app.get('/:id', async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: contractLogs.id,
+        contractId: contractLogs.contractId,
+        logType: contractLogs.logType,
+        startDate: contractLogs.startDate,
+        endDate: contractLogs.endDate,
+        daysAffected: contractLogs.daysAffected,
+        reason: contractLogs.reason,
+        dateCreated: contractLogs.dateCreated,
+      })
       .from(contractLogs)
       .where(eq(contractLogs.contractId, id))
       .orderBy(desc(contractLogs.dateCreated)),
     db
-      .select()
+      .select({
+        id: payments.id,
+        contractId: payments.contractId,
+        amount: payments.amount,
+        paymentMethod: payments.paymentMethod,
+        paymentDate: payments.paymentDate,
+        type: payments.type,
+        receiptNo: payments.receiptNo,
+        createdAt: payments.createdAt,
+      })
       .from(payments)
       .where(eq(payments.contractId, id))
       .orderBy(desc(payments.createdAt)),
@@ -330,7 +348,7 @@ app.patch('/:id', zValidator('json', updateContractSchema), async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({ id: contracts.id, branchId: contracts.branchId })
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),
@@ -363,7 +381,12 @@ app.post('/:id/activate', async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: contracts.id,
+        branchId: contracts.branchId,
+        status: contracts.status,
+        memberId: contracts.memberId,
+      })
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),
@@ -408,7 +431,12 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: contracts.id,
+        branchId: contracts.branchId,
+        status: contracts.status,
+        endDate: contracts.endDate,
+      })
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),
@@ -471,7 +499,12 @@ app.post('/:id/resume', async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: contracts.id,
+        branchId: contracts.branchId,
+        status: contracts.status,
+        memberId: contracts.memberId,
+      })
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),

@@ -26,6 +26,9 @@ const stats = ref({ active: 0, expired: 0, draft: 0 })
 // Batch selection state
 const selectedIds = ref<string[]>([])
 
+// Cached Intl formatter for exports
+const exportDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
 // Status options
 const statusOptions = [
   { value: '', label: MESSAGES.COMMON.ALL_STATUS },
@@ -135,8 +138,8 @@ const handleExportSelected = () => {
     c.contract_no,
     c.member?.full_name || '',
     c.plan?.name || '',
-    c.start_date ? new Date(c.start_date).toLocaleDateString('zh-TW') : '',
-    c.end_date ? new Date(c.end_date).toLocaleDateString('zh-TW') : '',
+    c.start_date ? exportDateFormatter.format(new Date(c.start_date)) : '',
+    c.end_date ? exportDateFormatter.format(new Date(c.end_date)) : '',
     c.total_amount,
     c.payment_status,
     c.contract_status

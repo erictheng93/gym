@@ -226,18 +226,18 @@ onUnmounted(() => {
             @submit.prevent="handleEmailLogin"
           >
             <div class="input-group">
-              <label for="email">電子郵件</label>
+              <label for="email">帳號（Email 或手機號碼）</label>
               <div class="input-wrapper">
                 <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <path d="m22 6-10 7L2 6" />
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
                 </svg>
                 <input
                   id="email"
                   v-model="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  autocomplete="email"
+                  type="text"
+                  placeholder="Email 或手機號碼 (例如 0911-111-111)"
+                  autocomplete="username"
                 />
               </div>
             </div>
@@ -331,6 +331,10 @@ onUnmounted(() => {
 
               <p class="otp-sent-hint">
                 驗證碼已發送至 <strong>{{ phone }}</strong>
+              </p>
+
+              <p v-if="devOtp" class="dev-otp-hint">
+                <span class="dev-badge">測試驗證碼</span> <strong>{{ devOtp }}</strong>
               </p>
 
               <div class="input-group">
@@ -815,6 +819,28 @@ onUnmounted(() => {
 
 .otp-sent-hint strong {
   color: var(--text-primary);
+}
+
+.dev-otp-hint {
+  font-size: 13px;
+  color: #10B981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.dev-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #10B981;
+  color: #FFFFFF;
+  margin-right: 6px;
 }
 
 .resend-section {

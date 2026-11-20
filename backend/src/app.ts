@@ -83,8 +83,8 @@ type Variables = AuthVariables & TenantVariables;
 const app = new Hono<{ Variables: Variables }>();
 
 // Parse CORS origins from environment variable or use defaults
-const configuredCorsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+const rawCorsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',')
   : [
       'http://localhost:3000',
       'http://localhost:3001',
@@ -100,19 +100,60 @@ const configuredCorsOrigins = process.env.CORS_ORIGIN
       'http://127.0.0.1:3005',
     ];
 
+const configuredCorsOrigins = rawCorsOrigins.map(o => o.trim().replace(/\/$/, '')).filter(Boolean);
+
 app.use('*', cors({
   origin: (origin) => {
     if (!origin) return '*';
-    if (configuredCorsOrigins.includes(origin)) return origin;
+    const normalized = origin.replace(/\/$/, '');
+    // Exact match
+    if (configuredCorsOrigins.includes(normalized)) return origin;
+    // Wildcard pattern match (e.g., https://*.pages.dev or *.gym-nexus.com)
+    for (const pattern of configuredCorsOrigins) {
+      if (pattern.includes('*')) {
+        const regexStr = '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$';
+        if (new RegExp(regexStr, 'i').test(normalized)) return origin;
+      }
+    }
     // Allow any localhost/127.0.0.1/0.0.0.0 on any port in development
-    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(origin)) {
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(normalized)) {
       return origin;
     }
     return undefined;
   },
   credentials: true,
-  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token', 'X-Coach-Token'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'Origin',
+    'X-Requested-With',
+    'X-Branch-Id',
+    'X-Tenant-Id',
+    'X-Member-Token',
+    'X-Coach-Token',
+    'X-CSRF-Token',
+    'X-Request-Id',
+    'X-API-Key',
+    'X-Webhook-Signature',
+    'X-Webhook-Timestamp',
+    'X-Line-Signature',
+    'Stripe-Signature',
+    'Cache-Control',
+    'Pragma',
+  ],
+  exposeHeaders: [
+    'Content-Disposition',
+    'Content-Length',
+    'X-Total-Count',
+    'X-Request-Id',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'Retry-After',
+  ],
+  maxAge: 86400,
 }));
 
 app.use('*', secureHeaders());
