@@ -172,5 +172,32 @@ describe('Tenant Routes', () => {
         expect(data.success).toBe(false);
       });
     });
+
+    describe('GET /api/admin/tenants', () => {
+      it('should return tenants list with stats using batch aggregation', async () => {
+        if (!dbAvailable) return;
+
+        const res = await app.request('/api/admin/tenants', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-Tenant-Id': TEST_TENANT_ID,
+          },
+        });
+
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.success).toBe(true);
+        expect(data).toHaveProperty('tenants');
+        expect(data).toHaveProperty('stats');
+        expect(Array.isArray(data.tenants)).toBe(true);
+        if (data.tenants.length > 0) {
+          const tenant = data.tenants[0];
+          expect(tenant).toHaveProperty('current_members');
+          expect(tenant).toHaveProperty('current_employees');
+          expect(tenant).toHaveProperty('current_branches');
+        }
+      });
+    });
   });
 });

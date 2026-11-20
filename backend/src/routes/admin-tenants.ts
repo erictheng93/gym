@@ -33,26 +33,42 @@ app.get('/', async (c) => {
       .from(tenants)
       .orderBy(asc(tenants.name));
 
-    // Get counts for each tenant
-    const tenantsWithStats = await Promise.all(
-      tenantList.map(async (tenant) => {
-        const [memberCount, employeeCount, branchCount] = await Promise.all([
-          db
-            .select({ count: count() })
-            .from(members)
-            .where(eq(members.tenantId, tenant.id))
-            .then(rows => Number(rows[0]?.count || 0)),
-          db
-            .select({ count: count() })
-            .from(employees)
-            .where(eq(employees.tenantId, tenant.id))
-            .then(rows => Number(rows[0]?.count || 0)),
-          db
-            .select({ count: count() })
-            .from(branches)
-            .where(eq(branches.tenantId, tenant.id))
-            .then(rows => Number(rows[0]?.count || 0)),
-        ]);
+    // Batch aggregate member, employee, and branch counts grouped by tenantId (O(1) queries instead of 1+3N)
+    const [memberCounts, employeeCounts, branchCounts] = await Promise.all([
+      db
+        .select({ tenantId: members.tenantId, count: count() })
+        .from(members)
+        .groupBy(members.tenantId),
+      db
+        .select({ tenantId: employees.tenantId, count: count() })
+        .from(employees)
+        .groupBy(employees.tenantId),
+      db
+        .select({ tenantId: branches.tenantId, count: count() })
+        .from(branches)
+        .groupBy(branches.tenantId),
+    ]);
+
+    const memberMap = new Map<string, number>();
+    for (const row of memberCounts) {
+      if (row.tenantId) memberMap.set(row.tenantId, Number(row.count || 0));
+    }
+
+    const employeeMap = new Map<string, number>();
+    for (const row of employeeCounts) {
+      if (row.tenantId) employeeMap.set(row.tenantId, Number(row.count || 0));
+    }
+
+    const branchMap = new Map<string, number>();
+    for (const row of branchCounts) {
+      if (row.tenantId) branchMap.set(row.tenantId, Number(row.count || 0));
+    }
+
+    // Map counts for each tenant
+    const tenantsWithStats = tenantList.map((tenant) => {
+      const memberCount = memberMap.get(tenant.id) || 0;
+      const employeeCount = employeeMap.get(tenant.id) || 0;
+      const branchCount = branchMap.get(tenant.id) || 0;
 
         const maxMembers = tenant.maxMembers || 100;
         const maxEmployees = tenant.maxEmployees || 10;
@@ -78,8 +94,7 @@ app.get('/', async (c) => {
           trial_ends_at: tenant.trialEndsAt?.toISOString() || null,
           date_created: tenant.createdAt?.toISOString() || new Date().toISOString(),
         };
-      })
-    );
+      });
 
     // Calculate stats
     const totalTenants = tenantsWithStats.length;
