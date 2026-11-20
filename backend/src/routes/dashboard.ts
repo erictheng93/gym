@@ -11,8 +11,9 @@ app.use('*', requireTenant);
 
 // Main dashboard overview
 app.get('/overview', async (c) => {
-  const tenantId = c.get('tenantId')!;
-  const branchId = c.req.query('branchId');
+  try {
+    const tenantId = c.get('tenantId')!;
+    const branchId = c.req.query('branchId');
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -46,75 +47,82 @@ app.get('/overview', async (c) => {
     });
   }
 
-  // Member stats
-  const [memberStats] = await db
-    .select({
-      total: count(),
-      active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
-    })
-    .from(members)
-    .where(inArray(members.branchId, branchIds));
-
-  const [newMembersThisMonth] = await db
-    .select({ count: count() })
-    .from(members)
-    .where(
-      and(
-        inArray(members.branchId, branchIds),
-        gte(members.createdAt, monthStartDate)
-      )
-    );
-
-  // Contract stats
-  const [contractStats] = await db
-    .select({
-      active: count(),
-    })
-    .from(contracts)
-    .where(
-      and(
-        inArray(contracts.branchId, branchIds),
-        eq(contracts.status, 'ACTIVE')
-      )
-    );
-
   // Contracts expiring in 7 days
   const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const [expiringContracts] = await db
-    .select({ count: count() })
-    .from(contracts)
-    .where(
-      and(
-        inArray(contracts.branchId, branchIds),
-        eq(contracts.status, 'ACTIVE'),
-        gte(contracts.endDate, todayStr),
-        lte(contracts.endDate, sevenDaysFromNow)
-      )
-    );
 
-  // Revenue stats
-  const [thisMonthRevenue] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(
-      and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, monthStartDate)
-      )
-    );
+  // Check-in stats start time for today
+  const todayStart = new Date(today);
+  todayStart.setHours(0, 0, 0, 0);
 
-  const [lastMonthRevenue] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(
-      and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, lastMonthStartDate),
-        lte(payments.paymentDate, lastMonthEndDate)
-      )
-    );
+  const monthStartIso = monthStartDate.toISOString();
+  const todayStartIso = todayStart.toISOString();
+
+  // Execute aggregated queries concurrently in parallel
+  const [
+    [memberStats],
+    [contractStats],
+    [thisMonthRevenue],
+    [lastMonthRevenue],
+    [checkInStats],
+  ] = await Promise.all([
+    // Combined member stats: total, active, new this month
+    db
+      .select({
+        total: count(),
+        active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
+        newThisMonth: sql<number>`count(*) filter (where ${members.createdAt} >= ${monthStartIso}::timestamptz)`,
+      })
+      .from(members)
+      .where(inArray(members.branchId, branchIds)),
+
+    // Combined contract stats: active, expiring in 7 days
+    db
+      .select({
+        active: count(),
+        expiringSoon: sql<number>`count(*) filter (where ${contracts.endDate} >= ${todayStr}::date and ${contracts.endDate} <= ${sevenDaysFromNow}::date)`,
+      })
+      .from(contracts)
+      .where(
+        and(
+          inArray(contracts.branchId, branchIds),
+          eq(contracts.status, 'ACTIVE')
+        )
+      ),
+
+    // Revenue this month
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, monthStartDate)
+        )
+      ),
+
+    // Revenue last month
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, lastMonthStartDate),
+          lte(payments.paymentDate, lastMonthEndDate)
+        )
+      ),
+
+    // Combined check-in stats: today, this month
+    db
+      .select({
+        today: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${todayStartIso}::timestamptz)`,
+        thisMonth: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${monthStartIso}::timestamptz)`,
+      })
+      .from(checkIns)
+      .where(inArray(checkIns.branchId, branchIds)),
+  ]);
 
   const thisMonthTotal = Number(thisMonthRevenue?.total || 0);
   const lastMonthTotal = Number(lastMonthRevenue?.total || 0);
@@ -122,41 +130,17 @@ app.get('/overview', async (c) => {
     ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100).toFixed(1)
     : '0.0';
 
-  // Check-in stats
-  const todayStart = new Date(today);
-  todayStart.setHours(0, 0, 0, 0);
-
-  const [todayCheckIns] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(
-      and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, todayStart)
-      )
-    );
-
-  const [monthCheckIns] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(
-      and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, monthStartDate)
-      )
-    );
-
   return c.json({
     success: true,
     data: {
       members: {
         total: Number(memberStats?.total || 0),
         active: Number(memberStats?.active || 0),
-        newThisMonth: Number(newMembersThisMonth?.count || 0),
+        newThisMonth: Number(memberStats?.newThisMonth || 0),
       },
       contracts: {
         active: Number(contractStats?.active || 0),
-        expiringSoon: Number(expiringContracts?.count || 0),
+        expiringSoon: Number(contractStats?.expiringSoon || 0),
       },
       revenue: {
         thisMonth: thisMonthTotal,
@@ -164,11 +148,14 @@ app.get('/overview', async (c) => {
         growth: parseFloat(revenueGrowth),
       },
       checkIns: {
-        today: Number(todayCheckIns?.count || 0),
-        thisMonth: Number(monthCheckIns?.count || 0),
+        today: Number(checkInStats?.today || 0),
+        thisMonth: Number(checkInStats?.thisMonth || 0),
       },
     },
   });
+} catch (err: any) {
+  return c.json({ success: false, error: err?.stack || String(err) }, 500);
+}
 });
 
 // Revenue trend (last 30 days or by month)
