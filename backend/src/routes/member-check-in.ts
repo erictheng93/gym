@@ -78,8 +78,32 @@ app.post(
       }, 400);
     }
 
-    // Concurrently verify member status and branch exists
-    const [[member], [branch]] = await Promise.all([
+    // Date ranges for contract and check-in checks
+    const today = new Date().toISOString().split('T')[0];
+    const contractConditions = [
+      eq(contracts.memberId, memberInfo.id),
+      eq(contracts.status, 'ACTIVE'),
+      lte(contracts.startDate, today),
+      gte(contracts.endDate, today),
+    ];
+
+    // If specific contract provided in QR, use it
+    if (qrPayload.c) {
+      contractConditions.push(eq(contracts.id, qrPayload.c));
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Concurrently verify member status, branch, active contract, and today's check-in in 1 round trip
+    const [
+      [member],
+      [branch],
+      [contractResult],
+      [existingCheckIn],
+    ] = await Promise.all([
       db
         .select({
           id: members.id,
@@ -100,6 +124,29 @@ app.post(
         .from(branches)
         .where(eq(branches.id, branchId))
         .limit(1),
+      db
+        .select({
+          contract: contracts,
+          plan: membershipPlans,
+        })
+        .from(contracts)
+        .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+        .where(and(...contractConditions))
+        .orderBy(desc(contracts.endDate))
+        .limit(1),
+      db
+        .select({
+          id: checkIns.id,
+          checkInTime: checkIns.checkInTime,
+        })
+        .from(checkIns)
+        .where(and(
+          eq(checkIns.memberId, memberInfo.id),
+          eq(checkIns.branchId, branchId),
+          gte(checkIns.checkInTime, todayStart),
+          lte(checkIns.checkInTime, todayEnd),
+        ))
+        .limit(1),
     ]);
 
     if (!member || member.status !== 'ACTIVE') {
@@ -118,31 +165,6 @@ app.post(
         code: 'BRANCH_NOT_FOUND',
       }, 404);
     }
-
-    // Get active contract
-    const today = new Date().toISOString().split('T')[0];
-    const contractConditions = [
-      eq(contracts.memberId, member.id),
-      eq(contracts.status, 'ACTIVE'),
-      lte(contracts.startDate, today),
-      gte(contracts.endDate, today),
-    ];
-
-    // If specific contract provided in QR, use it
-    if (qrPayload.c) {
-      contractConditions.push(eq(contracts.id, qrPayload.c));
-    }
-
-    const [contractResult] = await db
-      .select({
-        contract: contracts,
-        plan: membershipPlans,
-      })
-      .from(contracts)
-      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-      .where(and(...contractConditions))
-      .orderBy(desc(contracts.endDate))
-      .limit(1);
 
     const activeContract = contractResult?.contract;
     const activePlan = contractResult?.plan;
@@ -171,26 +193,6 @@ app.post(
         }, 400);
       }
     }
-
-    // Check if already checked in today at this branch
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const [existingCheckIn] = await db
-      .select({
-        id: checkIns.id,
-        checkInTime: checkIns.checkInTime,
-      })
-      .from(checkIns)
-      .where(and(
-        eq(checkIns.memberId, member.id),
-        eq(checkIns.branchId, branchId),
-        gte(checkIns.checkInTime, todayStart),
-        lte(checkIns.checkInTime, todayEnd),
-      ))
-      .limit(1);
 
     if (existingCheckIn) {
       return c.json({

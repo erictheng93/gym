@@ -8,6 +8,11 @@ import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { DAY_OF_WEEK_NAMES } from '@gym-nexus/shared'
 
+// In-flight request deduplication maps
+const inFlightSchedulesMap = new Map<string, Promise<void>>()
+const inFlightSessionsMap = new Map<string, Promise<void>>()
+const inFlightSingleSessionMap = new Map<string, Promise<ClassSession | null>>()
+
 export const useClassSchedule = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
@@ -22,7 +27,7 @@ export const useClassSchedule = () => {
   // ============================================
 
   /**
-   * 獲取課程排程列表
+   * 獲取課程排程列表（支援請求去重）
    */
   const fetchSchedules = async (options?: {
     branchId?: string
@@ -30,30 +35,42 @@ export const useClassSchedule = () => {
     dayOfWeek?: number
     isRecurring?: boolean
   }) => {
-    isLoading.value = true
-    const { branchId, classId, dayOfWeek, isRecurring } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = branchId
-      if (classId) filter.class_id = classId
-      if (typeof dayOfWeek === 'number') filter.day_of_week = dayOfWeek
-      if (typeof isRecurring === 'boolean') filter.is_recurring = isRecurring
-
-      const { data } = await readItems<ClassSchedule>('class_schedules', {
-        filter,
-        sort: 'day_of_week'
-      })
-
-      schedules.value = data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassSchedule.fetchSchedules',
-        customMessage: '載入課程排程失敗'
-      })
-    } finally {
-      isLoading.value = false
+    const key = JSON.stringify(options || {})
+    const existing = inFlightSchedulesMap.get(key)
+    if (existing) {
+      return existing
     }
+
+    const requestPromise = (async () => {
+      isLoading.value = true
+      const { branchId, classId, dayOfWeek, isRecurring } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+        if (branchId) filter.branch_id = branchId
+        if (classId) filter.class_id = classId
+        if (typeof dayOfWeek === 'number') filter.day_of_week = dayOfWeek
+        if (typeof isRecurring === 'boolean') filter.is_recurring = isRecurring
+
+        const { data } = await readItems<ClassSchedule>('class_schedules', {
+          filter,
+          sort: 'day_of_week'
+        })
+
+        schedules.value = data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassSchedule.fetchSchedules',
+          customMessage: '載入課程排程失敗'
+        })
+      } finally {
+        isLoading.value = false
+        inFlightSchedulesMap.delete(key)
+      }
+    })()
+
+    inFlightSchedulesMap.set(key, requestPromise)
+    return requestPromise
   }
 
   /**
@@ -109,7 +126,7 @@ export const useClassSchedule = () => {
   // ============================================
 
   /**
-   * 獲取課程場次列表
+   * 獲取課程場次列表（支援請求去重）
    */
   const fetchSessions = async (options?: {
     branchId?: string
@@ -119,48 +136,72 @@ export const useClassSchedule = () => {
     sessionStatus?: string
     instructorId?: string
   }) => {
-    isLoading.value = true
-    const { branchId, classId, startDate, endDate, sessionStatus, instructorId } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = branchId
-      if (classId) filter.class_id = classId
-      if (sessionStatus) filter.session_status = sessionStatus
-      if (instructorId) filter.instructor_id = instructorId
-      if (startDate) filter.start_date = startDate
-      if (endDate) filter.end_date = endDate
-
-      const { data } = await readItems<ClassSession>('class_sessions', {
-        filter,
-        sort: 'session_date'
-      })
-
-      sessions.value = data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassSchedule.fetchSessions',
-        customMessage: '載入課程場次失敗'
-      })
-    } finally {
-      isLoading.value = false
+    const key = JSON.stringify(options || {})
+    const existing = inFlightSessionsMap.get(key)
+    if (existing) {
+      return existing
     }
+
+    const requestPromise = (async () => {
+      isLoading.value = true
+      const { branchId, classId, startDate, endDate, sessionStatus, instructorId } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+        if (branchId) filter.branch_id = branchId
+        if (classId) filter.class_id = classId
+        if (sessionStatus) filter.session_status = sessionStatus
+        if (instructorId) filter.instructor_id = instructorId
+        if (startDate) filter.start_date = startDate
+        if (endDate) filter.end_date = endDate
+
+        const { data } = await readItems<ClassSession>('class_sessions', {
+          filter,
+          sort: 'session_date'
+        })
+
+        sessions.value = data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassSchedule.fetchSessions',
+          customMessage: '載入課程場次失敗'
+        })
+      } finally {
+        isLoading.value = false
+        inFlightSessionsMap.delete(key)
+      }
+    })()
+
+    inFlightSessionsMap.set(key, requestPromise)
+    return requestPromise
   }
 
   /**
-   * 獲取單一場次詳情（包含預約列表）
+   * 獲取單一場次詳情（包含預約列表，支援請求去重）
    */
   const getSession = async (id: string): Promise<ClassSession | null> => {
-    try {
-      const data = await readItem<ClassSession>('class_sessions', id)
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassSchedule.getSession',
-        customMessage: '載入課程場次失敗'
-      })
-      return null
+    const existing = inFlightSingleSessionMap.get(id)
+    if (existing) {
+      return existing
     }
+
+    const requestPromise = (async () => {
+      try {
+        const data = await readItem<ClassSession>('class_sessions', id)
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassSchedule.getSession',
+          customMessage: '載入課程場次失敗'
+        })
+        return null
+      } finally {
+        inFlightSingleSessionMap.delete(id)
+      }
+    })()
+
+    inFlightSingleSessionMap.set(id, requestPromise)
+    return requestPromise
   }
 
   /**

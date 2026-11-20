@@ -42,34 +42,56 @@ app.get('/', async (c) => {
     return sunday.toISOString().split('T')[0];
   })();
 
-  // Get sessions in date range
-  const sessionsData = await db
-    .select({
-      id: classSessions.id,
-      classId: classSessions.classId,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      endTime: classSessions.endTime,
-      room: classSessions.room,
-      maxCapacity: classSessions.maxCapacity,
-      currentCount: classSessions.currentCount,
-      waitlistCount: classSessions.waitlistCount,
-      sessionStatus: classSessions.sessionStatus,
-      className: classes.name,
-      classCategory: classes.category,
-      classDuration: classes.durationMinutes,
-      branchId: classSessions.branchId,
-    })
-    .from(classSessions)
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(
-      and(
-        eq(classSessions.instructorId, coach.id),
-        gte(classSessions.sessionDate, startDate),
-        lte(classSessions.sessionDate, endDate)
+  // Concurrently fetch sessions in date range and recurring schedule (availability)
+  const [sessionsData, availability] = await Promise.all([
+    db
+      .select({
+        id: classSessions.id,
+        classId: classSessions.classId,
+        sessionDate: classSessions.sessionDate,
+        startTime: classSessions.startTime,
+        endTime: classSessions.endTime,
+        room: classSessions.room,
+        maxCapacity: classSessions.maxCapacity,
+        currentCount: classSessions.currentCount,
+        waitlistCount: classSessions.waitlistCount,
+        sessionStatus: classSessions.sessionStatus,
+        className: classes.name,
+        classCategory: classes.category,
+        classDuration: classes.durationMinutes,
+        branchId: classSessions.branchId,
+      })
+      .from(classSessions)
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(
+        and(
+          eq(classSessions.instructorId, coach.id),
+          gte(classSessions.sessionDate, startDate),
+          lte(classSessions.sessionDate, endDate)
+        )
       )
-    )
-    .orderBy(classSessions.sessionDate, classSessions.startTime);
+      .orderBy(classSessions.sessionDate, classSessions.startTime),
+    db
+      .select({
+        dayOfWeek: classSchedules.dayOfWeek,
+        startTime: classSchedules.startTime,
+        endTime: classSchedules.endTime,
+        classId: classSchedules.classId,
+        className: classes.name,
+        room: classSchedules.room,
+        maxCapacity: classSchedules.maxCapacity,
+        isRecurring: classSchedules.isRecurring,
+      })
+      .from(classSchedules)
+      .innerJoin(classes, eq(classSchedules.classId, classes.id))
+      .where(
+        and(
+          eq(classSchedules.instructorId, coach.id),
+          eq(classSchedules.status, 'active')
+        )
+      )
+      .orderBy(classSchedules.dayOfWeek, classSchedules.startTime),
+  ]);
 
   // Get bookings for these sessions
   const sessionIds = sessionsData.map(s => s.id);
@@ -143,28 +165,6 @@ app.get('/', async (c) => {
     } : null,
     all_members: bookingsBySession[session.id] || [],
   }));
-
-  // Get recurring schedule (availability)
-  const availability = await db
-    .select({
-      dayOfWeek: classSchedules.dayOfWeek,
-      startTime: classSchedules.startTime,
-      endTime: classSchedules.endTime,
-      classId: classSchedules.classId,
-      className: classes.name,
-      room: classSchedules.room,
-      maxCapacity: classSchedules.maxCapacity,
-      isRecurring: classSchedules.isRecurring,
-    })
-    .from(classSchedules)
-    .innerJoin(classes, eq(classSchedules.classId, classes.id))
-    .where(
-      and(
-        eq(classSchedules.instructorId, coach.id),
-        eq(classSchedules.status, 'active')
-      )
-    )
-    .orderBy(classSchedules.dayOfWeek, classSchedules.startTime);
 
   // Format availability
   const formattedAvailability = availability.map(slot => ({

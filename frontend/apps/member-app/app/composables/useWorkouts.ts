@@ -135,21 +135,24 @@ export const useWorkouts = () => {
   }
 
   /**
-   * Get a single workout by ID
+   * Get a single workout by ID (with request deduplication)
    */
   const getWorkout = async (id: string): Promise<Workout | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Workout }>(
-        `${apiUrl}/api/member/workouts/${id}`,
-        { headers: getAuthHeader() }
-      )
+    const dedupKey = `workout:${member.value.id}:${id}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Workout }>(
+          `${apiUrl}/api/member/workouts/${id}`,
+          { headers: getAuthHeader() }
+        )
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**

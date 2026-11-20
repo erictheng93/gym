@@ -6,6 +6,7 @@
 
 import type { ClassSession } from './useClasses'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 import { formatDateWithDay } from '@gym-nexus/shared'
 
 // Cache keys
@@ -80,7 +81,7 @@ export const useBookings = () => {
   }
 
   /**
-   * Fetch member's bookings with offline support
+   * Fetch member's bookings with offline support (with request deduplication)
    */
   const fetchMyBookings = async (options?: {
     status?: string
@@ -89,15 +90,47 @@ export const useBookings = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `bookings:${member.value.id}:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    // Build cache key based on options
-    const cacheKey = `${CACHE_KEY_MY_BOOKINGS}:${member.value.id}:${JSON.stringify(options || {})}`
+      // Build cache key based on options
+      const cacheKey = `${CACHE_KEY_MY_BOOKINGS}:${member.value!.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try to use cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try to use cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Booking[]>(cacheKey)
+          if (cached) {
+            myBookings.value = cached
+            splitBookings(cached)
+            isOfflineData.value = true
+            return cached
+          }
+          // No cached data available
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.status) params.append('status', options.status)
+        if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
+        if (options?.limit) params.append('limit', String(options.limit))
+
+        const response = await $fetch<BookingsResponse>(`${apiUrl}/api/member/bookings?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          myBookings.value = response.data
+          splitBookings(response.data)
+
+          // Cache the response for offline use
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // On network error, try to use cached data
         const cached = await getCache<Booking[]>(cacheKey)
         if (cached) {
           myBookings.value = cached
@@ -105,40 +138,11 @@ export const useBookings = () => {
           isOfflineData.value = true
           return cached
         }
-        // No cached data available
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.status) params.append('status', options.status)
-      if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
-      if (options?.limit) params.append('limit', String(options.limit))
-
-      const response = await $fetch<BookingsResponse>(`${apiUrl}/api/member/bookings?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        myBookings.value = response.data
-        splitBookings(response.data)
-
-        // Cache the response for offline use
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // On network error, try to use cached data
-      const cached = await getCache<Booking[]>(cacheKey)
-      if (cached) {
-        myBookings.value = cached
-        splitBookings(cached)
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
