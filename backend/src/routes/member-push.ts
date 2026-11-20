@@ -16,6 +16,25 @@ import { pushService } from '../services/push.js';
 const app = new Hono<{ Variables: MemberVariables }>();
 
 // -----------------------------------------------------------------------------
+// Hoisted Query Projections
+// -----------------------------------------------------------------------------
+
+const PUSH_SUBSCRIPTION_ID_SELECT = {
+  id: pushSubscriptions.id,
+};
+
+const PUSH_SUBSCRIPTION_LIST_SELECT = {
+  id: pushSubscriptions.id,
+  endpoint: pushSubscriptions.endpoint,
+  userAgent: pushSubscriptions.userAgent,
+  isActive: pushSubscriptions.isActive,
+  notifyBookingReminder: pushSubscriptions.notifyBookingReminder,
+  notifyClassCancelled: pushSubscriptions.notifyClassCancelled,
+  notifyContractExpiry: pushSubscriptions.notifyContractExpiry,
+  createdAt: pushSubscriptions.createdAt,
+};
+
+// -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
 
@@ -77,7 +96,7 @@ app.post(
 
     // Check if subscription already exists
     const [existingSubscription] = await db
-      .select({ id: pushSubscriptions.id })
+      .select(PUSH_SUBSCRIPTION_ID_SELECT)
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.endpoint, endpoint))
       .limit(1);
@@ -157,16 +176,7 @@ app.get('/subscriptions', async (c) => {
   const memberInfo = c.get('member')!;
 
   const subscriptions = await db
-    .select({
-      id: pushSubscriptions.id,
-      endpoint: pushSubscriptions.endpoint,
-      userAgent: pushSubscriptions.userAgent,
-      isActive: pushSubscriptions.isActive,
-      notifyBookingReminder: pushSubscriptions.notifyBookingReminder,
-      notifyClassCancelled: pushSubscriptions.notifyClassCancelled,
-      notifyContractExpiry: pushSubscriptions.notifyContractExpiry,
-      createdAt: pushSubscriptions.createdAt,
-    })
+    .select(PUSH_SUBSCRIPTION_LIST_SELECT)
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.memberId, memberInfo.id));
 

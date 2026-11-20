@@ -14,6 +14,50 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+// -----------------------------------------------------------------------------
+// Hoisted Query Projections
+// -----------------------------------------------------------------------------
+
+const MEMBER_TAGS_SELECT = {
+  id: members.id,
+  tags: members.tags,
+};
+
+const MEMBER_CONTACT_SELECT = {
+  email: members.email,
+  phone: members.phone,
+};
+
+const PUSH_SUB_ID_SELECT = {
+  id: pushSubscriptions.id,
+};
+
+const SOCIAL_DISPLAY_NAME_SELECT = {
+  displayName: memberSocialAccounts.displayName,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const NOTIFICATION_HISTORY_SELECT = {
+  id: notifications.id,
+  type: notifications.notificationType,
+  title: notifications.title,
+  message: notifications.message,
+  data: notifications.data,
+  isRead: notifications.isRead,
+  readAt: notifications.readAt,
+  priority: notifications.priority,
+  createdAt: notifications.createdAt,
+  referenceType: notifications.referenceType,
+  referenceId: notifications.referenceId,
+};
+
+const NOTIFICATION_ID_RETURNING = {
+  id: notifications.id,
+};
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -111,10 +155,7 @@ app.get('/preferences', async (c) => {
 
   // Get member with preferences from tags/notes or dedicated column
   const [member] = await db
-    .select({
-      id: members.id,
-      tags: members.tags,
-    })
+    .select(MEMBER_TAGS_SELECT)
     .from(members)
     .where(eq(members.id, memberInfo.id))
     .limit(1);
@@ -155,10 +196,7 @@ app.put(
 
     // Get current member data
     const [member] = await db
-      .select({
-        id: members.id,
-        tags: members.tags,
-      })
+      .select(MEMBER_TAGS_SELECT)
       .from(members)
       .where(eq(members.id, memberInfo.id))
       .limit(1);
@@ -226,15 +264,12 @@ app.get('/channels', async (c) => {
   // Concurrently fetch member info, push subscriptions, and LINE connection
   const [[member], pushSubs, lineSocial] = await Promise.all([
     db
-      .select({
-        email: members.email,
-        phone: members.phone,
-      })
+      .select(MEMBER_CONTACT_SELECT)
       .from(members)
       .where(eq(members.id, memberInfo.id))
       .limit(1),
     db
-      .select({ id: pushSubscriptions.id })
+      .select(PUSH_SUB_ID_SELECT)
       .from(pushSubscriptions)
       .where(and(
         eq(pushSubscriptions.memberId, memberInfo.id),
@@ -242,9 +277,7 @@ app.get('/channels', async (c) => {
       ))
       .limit(1),
     db
-      .select({
-        displayName: memberSocialAccounts.displayName,
-      })
+      .select(SOCIAL_DISPLAY_NAME_SELECT)
       .from(memberSocialAccounts)
       .where(and(
         eq(memberSocialAccounts.memberId, memberInfo.id),
@@ -311,23 +344,11 @@ app.get(
     // Concurrently get total count and notifications
     const [[{ count }], notificationList] = await Promise.all([
       db
-        .select({ count: sql<number>`count(*)` })
+        .select(COUNT_SELECT)
         .from(notifications)
         .where(and(...conditions)),
       db
-        .select({
-          id: notifications.id,
-          type: notifications.notificationType,
-          title: notifications.title,
-          message: notifications.message,
-          data: notifications.data,
-          isRead: notifications.isRead,
-          readAt: notifications.readAt,
-          priority: notifications.priority,
-          createdAt: notifications.createdAt,
-          referenceType: notifications.referenceType,
-          referenceId: notifications.referenceId,
-        })
+        .select(NOTIFICATION_HISTORY_SELECT)
         .from(notifications)
         .where(and(...conditions))
         .orderBy(desc(notifications.createdAt))
@@ -372,7 +393,7 @@ app.get('/unread-count', async (c) => {
   const memberInfo = c.get('member')!;
 
   const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select(COUNT_SELECT)
     .from(notifications)
     .where(and(
       eq(notifications.targetMemberId, memberInfo.id),
@@ -408,7 +429,7 @@ app.post('/:id/read', async (c) => {
       eq(notifications.id, notificationId),
       eq(notifications.targetMemberId, memberInfo.id),
     ))
-    .returning({ id: notifications.id });
+    .returning(NOTIFICATION_ID_RETURNING);
 
   if (!updated) {
     return c.json({

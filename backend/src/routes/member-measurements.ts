@@ -14,6 +14,47 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+// -----------------------------------------------------------------------------
+// Hoisted Query Projections
+// -----------------------------------------------------------------------------
+
+const MEASUREMENT_SELECT = {
+  id: bodyMeasurements.id,
+  date: bodyMeasurements.date,
+  weight: bodyMeasurements.weight,
+  bodyFat: bodyMeasurements.bodyFat,
+  muscleMass: bodyMeasurements.muscleMass,
+  bmi: bodyMeasurements.bmi,
+  source: bodyMeasurements.source,
+  createdAt: bodyMeasurements.createdAt,
+};
+
+const MEASUREMENT_TOTAL_COUNT_SELECT = {
+  total: count(bodyMeasurements.id),
+};
+
+const MEASUREMENT_INSERT_RETURNING = {
+  id: bodyMeasurements.id,
+  date: bodyMeasurements.date,
+  weight: bodyMeasurements.weight,
+  bodyFat: bodyMeasurements.bodyFat,
+  muscleMass: bodyMeasurements.muscleMass,
+  bmi: bodyMeasurements.bmi,
+  source: bodyMeasurements.source,
+};
+
+const MEASUREMENT_ID_RETURNING = {
+  id: bodyMeasurements.id,
+};
+
+const MEASUREMENT_PROGRESS_LATEST_SELECT = {
+  date: bodyMeasurements.date,
+  weight: bodyMeasurements.weight,
+  bodyFat: bodyMeasurements.bodyFat,
+  muscleMass: bodyMeasurements.muscleMass,
+  bmi: bodyMeasurements.bmi,
+};
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -52,20 +93,11 @@ app.get(
     // Concurrently get total count and measurements
     const [[{ total }], measurements] = await Promise.all([
       db
-        .select({ total: count(bodyMeasurements.id) })
+        .select(MEASUREMENT_TOTAL_COUNT_SELECT)
         .from(bodyMeasurements)
         .where(eq(bodyMeasurements.memberId, memberInfo.id)),
       db
-        .select({
-          id: bodyMeasurements.id,
-          date: bodyMeasurements.date,
-          weight: bodyMeasurements.weight,
-          bodyFat: bodyMeasurements.bodyFat,
-          muscleMass: bodyMeasurements.muscleMass,
-          bmi: bodyMeasurements.bmi,
-          source: bodyMeasurements.source,
-          createdAt: bodyMeasurements.createdAt,
-        })
+        .select(MEASUREMENT_SELECT)
         .from(bodyMeasurements)
         .where(eq(bodyMeasurements.memberId, memberInfo.id))
         .orderBy(desc(bodyMeasurements.date))
@@ -117,15 +149,7 @@ app.post(
       bmi: data.bmi,
       source: data.source,
       rawData: data.rawData,
-    }).returning({
-      id: bodyMeasurements.id,
-      date: bodyMeasurements.date,
-      weight: bodyMeasurements.weight,
-      bodyFat: bodyMeasurements.bodyFat,
-      muscleMass: bodyMeasurements.muscleMass,
-      bmi: bodyMeasurements.bmi,
-      source: bodyMeasurements.source,
-    });
+    }).returning(MEASUREMENT_INSERT_RETURNING);
 
     return c.json({
       success: true,
@@ -160,7 +184,7 @@ app.delete('/:id', async (c) => {
       eq(bodyMeasurements.id, measurementId),
       eq(bodyMeasurements.memberId, memberInfo.id),
     ))
-    .returning({ id: bodyMeasurements.id });
+    .returning(MEASUREMENT_ID_RETURNING);
 
   if (!deleted) {
     return c.json({
@@ -216,13 +240,7 @@ app.get('/progress', async (c) => {
       ))
       .orderBy(asc(bodyMeasurements.date)),
     db
-      .select({
-        date: bodyMeasurements.date,
-        weight: bodyMeasurements.weight,
-        bodyFat: bodyMeasurements.bodyFat,
-        muscleMass: bodyMeasurements.muscleMass,
-        bmi: bodyMeasurements.bmi,
-      })
+      .select(MEASUREMENT_PROGRESS_LATEST_SELECT)
       .from(bodyMeasurements)
       .where(eq(bodyMeasurements.memberId, memberInfo.id))
       .orderBy(desc(bodyMeasurements.date))
@@ -294,16 +312,7 @@ app.get('/latest', async (c) => {
   const memberInfo = c.get('member')!;
 
   const [measurement] = await db
-    .select({
-      id: bodyMeasurements.id,
-      date: bodyMeasurements.date,
-      weight: bodyMeasurements.weight,
-      bodyFat: bodyMeasurements.bodyFat,
-      muscleMass: bodyMeasurements.muscleMass,
-      bmi: bodyMeasurements.bmi,
-      source: bodyMeasurements.source,
-      createdAt: bodyMeasurements.createdAt,
-    })
+    .select(MEASUREMENT_SELECT)
     .from(bodyMeasurements)
     .where(eq(bodyMeasurements.memberId, memberInfo.id))
     .orderBy(desc(bodyMeasurements.date))
