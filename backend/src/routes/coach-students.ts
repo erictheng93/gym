@@ -88,6 +88,60 @@ const COUNT_SELECT = {
   count: sql<number>`count(*)`,
 };
 
+const STUDENT_DETAIL_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+  status: contracts.status,
+  startDate: contracts.startDate,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  planName: membershipPlans.name,
+  planType: membershipPlans.planType,
+};
+
+const STUDENT_DETAIL_GOAL_SELECT = {
+  id: memberGoals.id,
+  goalType: memberGoals.goalType,
+  targetValue: memberGoals.targetValue,
+  currentValue: memberGoals.currentValue,
+  startDate: memberGoals.startDate,
+  targetDate: memberGoals.targetDate,
+  status: memberGoals.status,
+};
+
+const STUDENT_DETAIL_MEASUREMENT_SELECT = {
+  id: bodyMeasurements.id,
+  date: bodyMeasurements.date,
+  weight: bodyMeasurements.weight,
+  bodyFat: bodyMeasurements.bodyFat,
+  muscleMass: bodyMeasurements.muscleMass,
+  bmi: bodyMeasurements.bmi,
+  source: bodyMeasurements.source,
+};
+
+const STUDENT_DETAIL_CLASS_HISTORY_SELECT = {
+  id: bookings.id,
+  scheduledAt: sql<string>`${classSessions.sessionDate}::text || 'T' || ${classSessions.startTime}::text`,
+  status: bookings.bookingStatus,
+  durationMinutes: sql<number>`EXTRACT(EPOCH FROM (${classSessions.endTime}::time - ${classSessions.startTime}::time)) / 60`,
+};
+
+const STUDENT_DETAIL_NOTE_SELECT = {
+  id: coachNotes.id,
+  noteType: coachNotes.noteType,
+  content: coachNotes.content,
+  isPrivate: coachNotes.isPrivate,
+  createdAt: coachNotes.createdAt,
+  updatedAt: coachNotes.updatedAt,
+};
+
+const STUDENT_DETAIL_CLASS_RECORD_SELECT = {
+  bookingId: classRecords.bookingId,
+  mainContent: classRecords.mainContent,
+  coachNotes: classRecords.coachNotes,
+  nextPlan: classRecords.nextPlan,
+};
+
 // -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
@@ -142,12 +196,12 @@ app.get('/', async (c) => {
   // Get members with assignment details in a single query + count in parallel
   const countQuery = (search || status)
     ? db
-        .select({ count: sql<number>`count(*)` })
+        .select(COUNT_SELECT)
         .from(coachMemberAssignments)
         .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
         .where(and(...conditions))
     : db
-        .select({ count: sql<number>`count(*)` })
+        .select(COUNT_SELECT)
         .from(coachMemberAssignments)
         .where(and(...conditions));
 
@@ -279,16 +333,7 @@ app.get('/:id', async (c) => {
   ] = await Promise.all([
     // Get contracts
     db
-      .select({
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-        status: contracts.status,
-        startDate: contracts.startDate,
-        endDate: contracts.endDate,
-        remainingCounts: contracts.remainingCounts,
-        planName: membershipPlans.name,
-        planType: membershipPlans.planType,
-      })
+      .select(STUDENT_DETAIL_CONTRACT_SELECT)
       .from(contracts)
       .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
       .where(eq(contracts.memberId, id))
@@ -296,15 +341,7 @@ app.get('/:id', async (c) => {
 
     // Get goals
     db
-      .select({
-        id: memberGoals.id,
-        goalType: memberGoals.goalType,
-        targetValue: memberGoals.targetValue,
-        currentValue: memberGoals.currentValue,
-        startDate: memberGoals.startDate,
-        targetDate: memberGoals.targetDate,
-        status: memberGoals.status,
-      })
+      .select(STUDENT_DETAIL_GOAL_SELECT)
       .from(memberGoals)
       .where(eq(memberGoals.memberId, id))
       .orderBy(desc(memberGoals.createdAt))
@@ -312,15 +349,7 @@ app.get('/:id', async (c) => {
 
     // Get measurements
     db
-      .select({
-        id: bodyMeasurements.id,
-        date: bodyMeasurements.date,
-        weight: bodyMeasurements.weight,
-        bodyFat: bodyMeasurements.bodyFat,
-        muscleMass: bodyMeasurements.muscleMass,
-        bmi: bodyMeasurements.bmi,
-        source: bodyMeasurements.source,
-      })
+      .select(STUDENT_DETAIL_MEASUREMENT_SELECT)
       .from(bodyMeasurements)
       .where(eq(bodyMeasurements.memberId, id))
       .orderBy(desc(bodyMeasurements.date))
@@ -328,12 +357,7 @@ app.get('/:id', async (c) => {
 
     // Get class history with this coach
     db
-      .select({
-        id: bookings.id,
-        scheduledAt: sql<string>`${classSessions.sessionDate}::text || 'T' || ${classSessions.startTime}::text`,
-        status: bookings.bookingStatus,
-        durationMinutes: sql<number>`EXTRACT(EPOCH FROM (${classSessions.endTime}::time - ${classSessions.startTime}::time)) / 60`,
-      })
+      .select(STUDENT_DETAIL_CLASS_HISTORY_SELECT)
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
       .where(
@@ -347,14 +371,7 @@ app.get('/:id', async (c) => {
 
     // Get notes
     db
-      .select({
-        id: coachNotes.id,
-        noteType: coachNotes.noteType,
-        content: coachNotes.content,
-        isPrivate: coachNotes.isPrivate,
-        createdAt: coachNotes.createdAt,
-        updatedAt: coachNotes.updatedAt,
-      })
+      .select(STUDENT_DETAIL_NOTE_SELECT)
       .from(coachNotes)
       .where(
         and(
@@ -368,7 +385,7 @@ app.get('/:id', async (c) => {
 
   // Get class records for these bookings
   const bookingIds = classHistory.map(h => h.id);
-  let recordsMap: Record<string, {
+  const recordsMap: Record<string, {
     mainContent: unknown;
     coachNotes: string | null;
     nextPlan: string | null;
@@ -376,23 +393,17 @@ app.get('/:id', async (c) => {
 
   if (bookingIds.length > 0) {
     const records = await db
-      .select({
-        bookingId: classRecords.bookingId,
-        mainContent: classRecords.mainContent,
-        coachNotes: classRecords.coachNotes,
-        nextPlan: classRecords.nextPlan,
-      })
+      .select(STUDENT_DETAIL_CLASS_RECORD_SELECT)
       .from(classRecords)
       .where(inArray(classRecords.bookingId, bookingIds));
 
-    recordsMap = records.reduce((acc, r) => {
-      acc[r.bookingId] = {
+    for (const r of records) {
+      recordsMap[r.bookingId] = {
         mainContent: r.mainContent,
         coachNotes: r.coachNotes,
         nextPlan: r.nextPlan,
       };
-      return acc;
-    }, {} as typeof recordsMap);
+    }
   }
 
   return c.json({

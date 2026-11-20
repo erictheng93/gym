@@ -12,6 +12,20 @@ import {
 // =============================================================================
 // Handles callbacks from payment gateways
 
+const PAYMENT_STATUS_SELECT = {
+  id: payments.id,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  paymentDate: payments.paymentDate,
+  type: payments.type,
+  receiptNo: payments.receiptNo,
+  notes: payments.notes,
+};
+
+const PAYMENT_CONTRACT_ID_SELECT = {
+  contractId: payments.contractId,
+};
+
 const app = new Hono();
 
 // -----------------------------------------------------------------------------
@@ -285,15 +299,7 @@ app.get('/:id/status', async (c) => {
 
   try {
     const [payment] = await db
-      .select({
-        id: payments.id,
-        amount: payments.amount,
-        paymentMethod: payments.paymentMethod,
-        paymentDate: payments.paymentDate,
-        type: payments.type,
-        receiptNo: payments.receiptNo,
-        notes: payments.notes,
-      })
+      .select(PAYMENT_STATUS_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);
@@ -343,7 +349,7 @@ async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDe
 
     // Get payment details to update contract
     const [payment] = await db
-      .select({ contractId: payments.contractId })
+      .select(PAYMENT_CONTRACT_ID_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);

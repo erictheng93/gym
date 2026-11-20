@@ -143,8 +143,16 @@ const calculateDays = computed(() => {
 })
 
 // 取得假別餘額
+const leaveBalancesMap = computed(() => {
+  const map = new Map<string, typeof leaveBalances.value[0]>()
+  for (const b of leaveBalances.value) {
+    map.set(b.leave_type, b)
+  }
+  return map
+})
+
 const getBalance = (type: string) => {
-  const balance = leaveBalances.value.find(b => b.leave_type === type)
+  const balance = leaveBalancesMap.value.get(type)
   if (!balance) return { total: 0, used: 0, remaining: 0 }
   return {
     total: balance.total_days,

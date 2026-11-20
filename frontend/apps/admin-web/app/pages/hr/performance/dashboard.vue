@@ -44,8 +44,7 @@ const loadDashboard = async () => {
 watch([selectedBranch, selectedPeriod], loadDashboard)
 
 onMounted(async () => {
-  await fetchBranches()
-  await loadDashboard()
+  await Promise.all([fetchBranches(), loadDashboard()])
 })
 
 // Get score class

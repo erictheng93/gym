@@ -80,8 +80,7 @@ const loadStats = async () => {
 
 watch([selectedBranch, selectedType, startDate, endDate], () => {
   currentPage.value = 1
-  loadPayments()
-  loadStats()
+  Promise.all([loadPayments(), loadStats()])
 })
 
 watch(currentPage, () => {

@@ -30,6 +30,16 @@ const FILE_RETURNING = {
   metadata: files.metadata,
 };
 
+const FILE_ID_SELECT = {
+  id: files.id,
+};
+
+const FILE_STORAGE_STATS_SELECT = {
+  size: files.size,
+  mimeType: files.mimeType,
+  folder: files.folder,
+};
+
 const app = new Hono<{ Variables: Variables }>();
 
 /**
@@ -115,7 +125,7 @@ app.get('/:id/download', async (c) => {
   const { expires = '3600' } = c.req.query();
 
   const [file] = await db
-    .select({ id: files.id })
+    .select(FILE_ID_SELECT)
     .from(files)
     .where(
       and(
@@ -274,7 +284,7 @@ app.delete('/:id', async (c) => {
   const { id } = c.req.param();
 
   const [existingFile] = await db
-    .select({ id: files.id })
+    .select(FILE_ID_SELECT)
     .from(files)
     .where(
       and(
@@ -305,11 +315,7 @@ app.get('/stats', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const allFiles = await db
-    .select({
-      size: files.size,
-      mimeType: files.mimeType,
-      folder: files.folder,
-    })
+    .select(FILE_STORAGE_STATS_SELECT)
     .from(files)
     .where(eq(files.tenantId, tenantId));
 
