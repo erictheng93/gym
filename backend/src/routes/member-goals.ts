@@ -140,7 +140,17 @@ app.post(
       targetDate: data.targetDate,
       notes: data.notes,
       status: 'IN_PROGRESS',
-    }).returning();
+    }).returning({
+      id: memberGoals.id,
+      goalType: memberGoals.goalType,
+      targetValue: memberGoals.targetValue,
+      currentValue: memberGoals.currentValue,
+      startDate: memberGoals.startDate,
+      targetDate: memberGoals.targetDate,
+      status: memberGoals.status,
+      notes: memberGoals.notes,
+      createdAt: memberGoals.createdAt,
+    });
 
     return c.json({
       success: true,
@@ -240,7 +250,17 @@ app.put(
         eq(memberGoals.id, goalId),
         eq(memberGoals.memberId, memberInfo.id),
       ))
-      .returning();
+      .returning({
+        id: memberGoals.id,
+        goalType: memberGoals.goalType,
+        targetValue: memberGoals.targetValue,
+        currentValue: memberGoals.currentValue,
+        startDate: memberGoals.startDate,
+        targetDate: memberGoals.targetDate,
+        status: memberGoals.status,
+        notes: memberGoals.notes,
+        updatedAt: memberGoals.updatedAt,
+      });
 
     if (!goal) {
       return c.json({

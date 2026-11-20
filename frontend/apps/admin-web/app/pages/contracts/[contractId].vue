@@ -60,6 +60,13 @@ const selectedMember = ref<Member | null>(null)
 const isSearching = ref(false)
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
 
+onBeforeUnmount(() => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+    searchTimeout = null
+  }
+})
+
 // 會員搜尋 (debounced)
 const searchMembers = async (query: string) => {
   if (!query || query.length < 2) {

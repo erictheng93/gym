@@ -136,7 +136,15 @@ app.post(
       calories: data.calories,
       exercises: data.exercises,
       notes: data.notes,
-    }).returning();
+    }).returning({
+      id: workoutLogs.id,
+      date: workoutLogs.date,
+      duration: workoutLogs.duration,
+      calories: workoutLogs.calories,
+      exercises: workoutLogs.exercises,
+      notes: workoutLogs.notes,
+      createdAt: workoutLogs.createdAt,
+    });
 
     const workoutData = {
       id: workout.id,
@@ -231,7 +239,14 @@ app.put(
         eq(workoutLogs.id, workoutId),
         eq(workoutLogs.memberId, memberInfo.id),
       ))
-      .returning();
+      .returning({
+        id: workoutLogs.id,
+        date: workoutLogs.date,
+        duration: workoutLogs.duration,
+        calories: workoutLogs.calories,
+        exercises: workoutLogs.exercises,
+        notes: workoutLogs.notes,
+      });
 
     if (!workout) {
       return c.json({
