@@ -218,6 +218,39 @@ app.post('/reviews', async (c) => {
     }
   }
 
+const REVIEW_RETURNING = {
+  id: performanceReviews.id,
+  employeeId: performanceReviews.employeeId,
+  reviewerId: performanceReviews.reviewerId,
+  reviewPeriod: performanceReviews.reviewPeriod,
+  reviewType: performanceReviews.reviewType,
+  status: performanceReviews.status,
+  overallScore: performanceReviews.overallScore,
+  reviewerComments: performanceReviews.reviewerComments,
+  improvementPlan: performanceReviews.improvementPlan,
+  approvedBy: performanceReviews.approvedBy,
+  approvedAt: performanceReviews.approvedAt,
+  submittedAt: performanceReviews.submittedAt,
+  reviewedAt: performanceReviews.reviewedAt,
+  kpiData: performanceReviews.kpiData,
+  createdAt: performanceReviews.createdAt,
+  updatedAt: performanceReviews.updatedAt,
+};
+
+const KPI_TEMPLATE_RETURNING = {
+  id: kpiTemplates.id,
+  name: kpiTemplates.name,
+  description: kpiTemplates.description,
+  jobTitleId: kpiTemplates.jobTitleId,
+  reviewType: kpiTemplates.reviewType,
+  kpis: kpiTemplates.kpis,
+  isDefault: kpiTemplates.isDefault,
+  isActive: kpiTemplates.isActive,
+  createdBy: kpiTemplates.createdBy,
+  createdAt: kpiTemplates.createdAt,
+  updatedAt: kpiTemplates.updatedAt,
+};
+
   const [created] = await db.insert(performanceReviews)
     .values({
       employeeId: employee_id,
@@ -228,7 +261,7 @@ app.post('/reviews', async (c) => {
       reviewerComments: comments,
       status: 'DRAFT',
     })
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   return c.json({ success: true, data: created }, 201);
 });
@@ -254,7 +287,7 @@ app.patch('/reviews/:id', async (c) => {
   const [updated] = await db.update(performanceReviews)
     .set(updateData)
     .where(eq(performanceReviews.id, id))
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
@@ -281,7 +314,7 @@ app.post('/reviews/:id/submit', async (c) => {
       eq(performanceReviews.id, id),
       eq(performanceReviews.status, 'DRAFT')
     ))
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   if (updated) {
     return c.json({ success: true, data: updated });
@@ -310,7 +343,7 @@ app.post('/reviews/:id/approve', async (c) => {
 
   // Concurrently fetch existing review and approver's employee record
   const [existingList, approverEmployeeList] = await Promise.all([
-    db.select()
+    db.select({ id: performanceReviews.id, status: performanceReviews.status })
       .from(performanceReviews)
       .where(eq(performanceReviews.id, id))
       .limit(1),
@@ -341,7 +374,7 @@ app.post('/reviews/:id/approve', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(performanceReviews.id, id))
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   return c.json({ success: true, data: updated });
 });
@@ -355,7 +388,11 @@ app.post('/reviews/:id/reject', async (c) => {
   const body = await c.req.json();
   const { reason } = body;
 
-  const existing = await db.select()
+  const existing = await db.select({
+    id: performanceReviews.id,
+    status: performanceReviews.status,
+    reviewerComments: performanceReviews.reviewerComments,
+  })
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -375,7 +412,7 @@ app.post('/reviews/:id/reject', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(performanceReviews.id, id))
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   return c.json({ success: true, data: updated });
 });
@@ -439,7 +476,7 @@ app.post('/kpi-templates', async (c) => {
       isDefault: is_default || false,
       createdBy,
     })
-    .returning();
+    .returning(KPI_TEMPLATE_RETURNING);
 
   return c.json({ success: true, data: created }, 201);
 });

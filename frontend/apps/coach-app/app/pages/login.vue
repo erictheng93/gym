@@ -187,10 +187,23 @@ const toggleDark = () => {
   }
 }
 
+let shakeTimer: ReturnType<typeof setTimeout> | null = null
+
 const triggerShake = () => {
   isShaking.value = true
-  setTimeout(() => { isShaking.value = false }, 500)
+  if (shakeTimer) clearTimeout(shakeTimer)
+  shakeTimer = setTimeout(() => {
+    isShaking.value = false
+    shakeTimer = null
+  }, 500)
 }
+
+onBeforeUnmount(() => {
+  if (shakeTimer) {
+    clearTimeout(shakeTimer)
+    shakeTimer = null
+  }
+})
 
 const handleLogin = async () => {
   error.value = ''

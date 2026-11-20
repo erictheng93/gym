@@ -76,10 +76,23 @@ const handleSubmit = async () => {
   }
 }
 
+let shakeTimer: ReturnType<typeof setTimeout> | null = null
+
 const triggerShake = () => {
   isShaking.value = true
-  setTimeout(() => { isShaking.value = false }, TIMING.SHAKE_DURATION)
+  if (shakeTimer) clearTimeout(shakeTimer)
+  shakeTimer = setTimeout(() => {
+    isShaking.value = false
+    shakeTimer = null
+  }, TIMING.SHAKE_DURATION)
 }
+
+onBeforeUnmount(() => {
+  if (shakeTimer) {
+    clearTimeout(shakeTimer)
+    shakeTimer = null
+  }
+})
 </script>
 
 <template>

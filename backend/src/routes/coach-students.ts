@@ -561,7 +561,13 @@ app.post(
         isPrivate: is_private,
         tenantId: coach.tenantId || null,
       })
-      .returning();
+      .returning({
+        id: coachNotes.id,
+        noteType: coachNotes.noteType,
+        content: coachNotes.content,
+        isPrivate: coachNotes.isPrivate,
+        createdAt: coachNotes.createdAt,
+      });
 
     return c.json({
       success: true,
@@ -615,7 +621,14 @@ app.patch(
           eq(coachNotes.memberId, id)
         )
       )
-      .returning();
+      .returning({
+        id: coachNotes.id,
+        noteType: coachNotes.noteType,
+        content: coachNotes.content,
+        isPrivate: coachNotes.isPrivate,
+        createdAt: coachNotes.createdAt,
+        updatedAt: coachNotes.updatedAt,
+      });
 
     if (!updatedNote) {
       return c.json({
