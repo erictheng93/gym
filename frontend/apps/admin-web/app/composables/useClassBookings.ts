@@ -16,6 +16,10 @@ export const BOOKING_STATUS_LABELS: Record<string, { label: string; color: strin
   NO_SHOW: { label: '未出席', color: 'red' }
 }
 
+// In-flight request deduplication maps
+const inFlightBookingsMap = new Map<string, Promise<void>>()
+const inFlightSingleBookingMap = new Map<string, Promise<Booking | null>>()
+
 export const useClassBookings = () => {
   const { readItems, readItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
@@ -26,7 +30,7 @@ export const useClassBookings = () => {
   const totalCount = useState('class_bookings_total', () => 0)
 
   /**
-   * 獲取預約列表
+   * 獲取預約列表（支援請求去重）
    */
   const fetchBookings = async (options?: {
     page?: number
@@ -37,51 +41,75 @@ export const useClassBookings = () => {
     startDate?: string
     endDate?: string
   }) => {
-    isLoading.value = true
-    const { page = 1, limit = 20, sessionId, memberId, bookingStatus, startDate, endDate } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-      if (sessionId) filter.session_id = sessionId
-      if (memberId) filter.member_id = memberId
-      if (bookingStatus) filter.booking_status = bookingStatus
-      if (startDate) filter.start_date = startDate
-      if (endDate) filter.end_date = endDate
-
-      const { data, total } = await readItems<Booking>('bookings', {
-        page,
-        limit,
-        filter,
-        sort: 'booked_at',
-        sortOrder: 'desc'
-      })
-
-      bookings.value = data
-      totalCount.value = total
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.fetchBookings',
-        customMessage: '載入預約資料失敗'
-      })
-    } finally {
-      isLoading.value = false
+    const key = JSON.stringify(options || {})
+    const existing = inFlightBookingsMap.get(key)
+    if (existing) {
+      return existing
     }
+
+    const requestPromise = (async () => {
+      isLoading.value = true
+      const { page = 1, limit = 20, sessionId, memberId, bookingStatus, startDate, endDate } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+        if (sessionId) filter.session_id = sessionId
+        if (memberId) filter.member_id = memberId
+        if (bookingStatus) filter.booking_status = bookingStatus
+        if (startDate) filter.start_date = startDate
+        if (endDate) filter.end_date = endDate
+
+        const { data, total } = await readItems<Booking>('bookings', {
+          page,
+          limit,
+          filter,
+          sort: 'booked_at',
+          sortOrder: 'desc'
+        })
+
+        bookings.value = data
+        totalCount.value = total
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassBookings.fetchBookings',
+          customMessage: '載入預約資料失敗'
+        })
+      } finally {
+        isLoading.value = false
+        inFlightBookingsMap.delete(key)
+      }
+    })()
+
+    inFlightBookingsMap.set(key, requestPromise)
+    return requestPromise
   }
 
   /**
-   * 獲取單一預約詳情
+   * 獲取單一預約詳情（支援請求去重）
    */
   const getBooking = async (id: string): Promise<Booking | null> => {
-    try {
-      const data = await readItem<Booking>('bookings', id)
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.getBooking',
-        customMessage: '載入預約資料失敗'
-      })
-      return null
+    const existing = inFlightSingleBookingMap.get(id)
+    if (existing) {
+      return existing
     }
+
+    const requestPromise = (async () => {
+      try {
+        const data = await readItem<Booking>('bookings', id)
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassBookings.getBooking',
+          customMessage: '載入預約資料失敗'
+        })
+        return null
+      } finally {
+        inFlightSingleBookingMap.delete(id)
+      }
+    })()
+
+    inFlightSingleBookingMap.set(id, requestPromise)
+    return requestPromise
   }
 
   /**

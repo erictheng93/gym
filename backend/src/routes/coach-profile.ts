@@ -28,31 +28,6 @@ app.use('*', coachAuthMiddleware, requireCoach);
 app.get('/', async (c) => {
   const coach = c.get('coach')!;
 
-  // Get full employee info
-  const [employee] = await db
-    .select({
-      id: employees.id,
-      employeeCode: employees.employeeCode,
-      fullName: employees.fullName,
-      email: employees.email,
-      phone: employees.phone,
-      branchId: employees.branchId,
-      jobTitleId: employees.jobTitleId,
-      status: employees.status,
-      tenantId: employees.tenantId,
-    })
-    .from(employees)
-    .where(eq(employees.id, coach.id))
-    .limit(1);
-
-  if (!employee) {
-    return c.json({
-      success: false,
-      error: '找不到教練資料',
-      code: 'NOT_FOUND',
-    }, 404);
-  }
-
   // Date calculations for classes
   const today = new Date().toISOString().split('T')[0];
   const now = new Date();
@@ -65,30 +40,32 @@ app.get('/', async (c) => {
   const mondayStr = monday.toISOString().split('T')[0];
   const sundayStr = sunday.toISOString().split('T')[0];
 
-  // Fetch job title, branch, and statistics concurrently
+  // Fetch full employee info with joined branch/jobTitle and statistics concurrently in a single round trip
   const [
-    [jobTitle],
-    [branch],
+    [employee],
     [studentCountResult],
     [todayClassCountResult],
     [weekClassCountResult],
   ] = await Promise.all([
     db
       .select({
-        id: jobTitles.id,
-        name: jobTitles.name,
-        code: jobTitles.code,
+        id: employees.id,
+        employeeCode: employees.employeeCode,
+        fullName: employees.fullName,
+        email: employees.email,
+        phone: employees.phone,
+        branchId: employees.branchId,
+        branchName: branches.name,
+        jobTitleId: employees.jobTitleId,
+        jobTitleName: jobTitles.name,
+        jobTitleCode: jobTitles.code,
+        status: employees.status,
+        tenantId: employees.tenantId,
       })
-      .from(jobTitles)
-      .where(eq(jobTitles.id, employee.jobTitleId))
-      .limit(1),
-    db
-      .select({
-        id: branches.id,
-        name: branches.name,
-      })
-      .from(branches)
-      .where(eq(branches.id, employee.branchId))
+      .from(employees)
+      .leftJoin(branches, eq(employees.branchId, branches.id))
+      .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+      .where(eq(employees.id, coach.id))
       .limit(1),
     db
       .select({ count: sql<number>`count(*)` })
@@ -121,6 +98,14 @@ app.get('/', async (c) => {
       ),
   ]);
 
+  if (!employee) {
+    return c.json({
+      success: false,
+      error: '找不到教練資料',
+      code: 'NOT_FOUND',
+    }, 404);
+  }
+
   return c.json({
     success: true,
     data: {
@@ -130,9 +115,9 @@ app.get('/', async (c) => {
       email: employee.email,
       phone: employee.phone,
       branch_id: employee.branchId,
-      branch_name: branch?.name,
-      job_title: jobTitle?.name,
-      job_title_code: jobTitle?.code,
+      branch_name: employee.branchName,
+      job_title: employee.jobTitleName,
+      job_title_code: employee.jobTitleCode,
       status: employee.status,
       stats: {
         student_count: Number(studentCountResult?.count || 0),

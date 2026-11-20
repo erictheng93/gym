@@ -207,29 +207,23 @@ app.put(
     const workoutId = c.req.param('id');
     const updates = c.req.valid('json');
 
-    // Verify ownership
-    const [existing] = await db
-      .select({ id: workoutLogs.id })
-      .from(workoutLogs)
+    // Atomic update with ownership check in a single round trip
+    const [workout] = await db
+      .update(workoutLogs)
+      .set(updates)
       .where(and(
         eq(workoutLogs.id, workoutId),
         eq(workoutLogs.memberId, memberInfo.id),
       ))
-      .limit(1);
+      .returning();
 
-    if (!existing) {
+    if (!workout) {
       return c.json({
         success: false,
         error: '運動紀錄不存在',
         code: 'NOT_FOUND',
       }, 404);
     }
-
-    const [workout] = await db
-      .update(workoutLogs)
-      .set(updates)
-      .where(eq(workoutLogs.id, workoutId))
-      .returning();
 
     const workoutData = {
       id: workout.id,
@@ -259,25 +253,22 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const workoutId = c.req.param('id');
 
-  // Verify ownership
-  const [existing] = await db
-    .select({ id: workoutLogs.id })
-    .from(workoutLogs)
+  // Atomic delete with ownership check in a single round trip
+  const [deleted] = await db
+    .delete(workoutLogs)
     .where(and(
       eq(workoutLogs.id, workoutId),
       eq(workoutLogs.memberId, memberInfo.id),
     ))
-    .limit(1);
+    .returning({ id: workoutLogs.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({
       success: false,
       error: '運動紀錄不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  await db.delete(workoutLogs).where(eq(workoutLogs.id, workoutId));
 
   return c.json({
     success: true,

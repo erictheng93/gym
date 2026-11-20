@@ -217,37 +217,35 @@ app.put(
 app.get('/channels', async (c) => {
   const memberInfo = c.get('member')!;
 
-  // Get member info for email/phone
-  const [member] = await db
-    .select({
-      email: members.email,
-      phone: members.phone,
-    })
-    .from(members)
-    .where(eq(members.id, memberInfo.id))
-    .limit(1);
-
-  // Check push subscriptions
-  const pushSubs = await db
-    .select({ id: pushSubscriptions.id })
-    .from(pushSubscriptions)
-    .where(and(
-      eq(pushSubscriptions.memberId, memberInfo.id),
-      eq(pushSubscriptions.isActive, true),
-    ))
-    .limit(1);
-
-  // Check LINE connection
-  const lineSocial = await db
-    .select({
-      displayName: memberSocialAccounts.displayName,
-    })
-    .from(memberSocialAccounts)
-    .where(and(
-      eq(memberSocialAccounts.memberId, memberInfo.id),
-      eq(memberSocialAccounts.provider, 'line'),
-    ))
-    .limit(1);
+  // Concurrently fetch member info, push subscriptions, and LINE connection
+  const [[member], pushSubs, lineSocial] = await Promise.all([
+    db
+      .select({
+        email: members.email,
+        phone: members.phone,
+      })
+      .from(members)
+      .where(eq(members.id, memberInfo.id))
+      .limit(1),
+    db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .where(and(
+        eq(pushSubscriptions.memberId, memberInfo.id),
+        eq(pushSubscriptions.isActive, true),
+      ))
+      .limit(1),
+    db
+      .select({
+        displayName: memberSocialAccounts.displayName,
+      })
+      .from(memberSocialAccounts)
+      .where(and(
+        eq(memberSocialAccounts.memberId, memberInfo.id),
+        eq(memberSocialAccounts.provider, 'line'),
+      ))
+      .limit(1),
+  ]);
 
   const channels = [
     {
