@@ -17,7 +17,7 @@ const createJobTitleSchema = z.object({
   description: z.string().optional(),
   level: z.number().int().min(0).max(10).optional(),
   sort: z.number().int().optional(),
-  permissionsConfig: z.record(z.unknown()).optional(),
+  permissionsConfig: z.record(z.string(), z.unknown()).optional(),
 });
 
 const updateJobTitleSchema = createJobTitleSchema.partial();

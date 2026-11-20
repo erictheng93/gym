@@ -23,6 +23,8 @@ router.post('/:id/cancel', LeaveController.cancelLeave)
 router.get('/pending', LeaveController.getPendingApprovals)
 
 // Balance
+router.get('/balance', LeaveController.getLeaveBalance)
+router.get('/balance/:id', LeaveController.getLeaveBalance)
 router.get('/balance/:employeeId', LeaveController.getLeaveBalance)
 
 export default router

@@ -29,7 +29,7 @@ const createMeasurementSchema = z.object({
   muscleMass: z.number().min(10).max(200).optional(), // kg
   bmi: z.number().min(10).max(60).optional(),
   source: z.enum(['MANUAL', 'INBODY', 'APPLE_HEALTH']).default('MANUAL'),
-  rawData: z.record(z.unknown()).optional(),
+  rawData: z.record(z.string(), z.unknown()).optional(),
 });
 
 const listQuerySchema = z.object({

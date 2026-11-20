@@ -18,7 +18,7 @@ const createBranchSchema = z.object({
   address: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   taxId: z.string().optional().nullable(),
-  settings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
 });
 
 const updateBranchSchema = createBranchSchema.partial();

@@ -67,7 +67,7 @@ const attendanceSchema = z.object({
   notes: z.string().optional(),
   class_record: z.object({
     warmup: z.string().optional(),
-    main: z.record(z.unknown()).optional(),
+    main: z.record(z.string(), z.unknown()).optional(),
     cooldown: z.string().optional(),
     member_condition: z.string().optional(),
     coach_notes: z.string().optional(),
