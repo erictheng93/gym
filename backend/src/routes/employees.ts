@@ -185,7 +185,7 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
   const [newEmployee] = await db.insert(employees).values({
     ...data,
     employeeCode,
-    hireDate: data.hireDate || new Date().toISOString().split('T')[0],
+    hireDate: data.hireDate || new Date().toISOString().slice(0, 10),
     basicSalary: data.basicSalary ? String(data.basicSalary) : null,
     tenantId,
   }).returning(EMPLOYEE_RETURNING);

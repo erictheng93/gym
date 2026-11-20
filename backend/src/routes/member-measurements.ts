@@ -198,7 +198,7 @@ app.get('/progress', async (c) => {
   // Get all measurements within period
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - parseInt(period));
-  const startDateStr = startDate.toISOString().split('T')[0];
+  const startDateStr = startDate.toISOString().slice(0, 10);
 
   const metricColumn = bodyMeasurements[metric as keyof typeof bodyMeasurements];
 

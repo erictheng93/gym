@@ -178,7 +178,7 @@ app.get('/export', async (c) => {
     paymentStatus: translateStatus(r.contract.paymentStatus),
   }));
 
-  const filename = `合約列表_${new Date().toISOString().split('T')[0]}`;
+  const filename = `合約列表_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const exportResult = await generateExcel(contractsColumns, exportData, '合約列表');
@@ -330,7 +330,7 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   if (plan.planType === 'TIME_BASED' && plan.durationMonths) {
     const start = new Date(data.startDate);
     start.setMonth(start.getMonth() + plan.durationMonths);
-    endDate = start.toISOString().split('T')[0];
+    endDate = start.toISOString().slice(0, 10);
   } else if (plan.planType === 'COUNT_BASED' && plan.classCounts) {
     remainingCounts = plan.classCounts;
   }
@@ -339,14 +339,14 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   if (!endDate) {
     const start = new Date(data.startDate);
     start.setFullYear(start.getFullYear() + 1);
-    endDate = start.toISOString().split('T')[0];
+    endDate = start.toISOString().slice(0, 10);
   }
 
   const [newContract] = await db.insert(contracts).values({
     contractNo,
     memberId: data.memberId,
     planId: data.planId,
-    signDate: new Date().toISOString().split('T')[0],
+    signDate: new Date().toISOString().slice(0, 10),
     startDate: data.startDate,
     endDate,
     originalEndDate: endDate,
@@ -490,7 +490,7 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
   if (contract.endDate) {
     const currentEnd = new Date(contract.endDate);
     currentEnd.setDate(currentEnd.getDate() + daysAffected);
-    newEndDate = currentEnd.toISOString().split('T')[0];
+    newEndDate = currentEnd.toISOString().slice(0, 10);
   }
 
   const [, [updatedContract]] = await Promise.all([
@@ -550,7 +550,7 @@ app.post('/:id/resume', async (c) => {
     return c.json({ success: false, error: '只有暫停狀態的合約可以恢復' }, 400);
   }
 
-  const todayDateStr = new Date().toISOString().split('T')[0];
+  const todayDateStr = new Date().toISOString().slice(0, 10);
 
   const [, [updatedContract]] = await Promise.all([
     db.insert(contractLogs).values({

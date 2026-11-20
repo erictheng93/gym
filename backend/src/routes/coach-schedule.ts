@@ -35,11 +35,11 @@ app.get('/', async (c) => {
   const monday = new Date(today);
   monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
 
-  const startDate = start_date || monday.toISOString().split('T')[0];
+  const startDate = start_date || monday.toISOString().slice(0, 10);
   const endDate = end_date || (() => {
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    return sunday.toISOString().split('T')[0];
+    return sunday.toISOString().slice(0, 10);
   })();
 
   // Concurrently fetch sessions in date range and recurring schedule (availability)
@@ -198,7 +198,7 @@ app.get('/', async (c) => {
 
 app.get('/today', async (c) => {
   const coach = c.get('coach')!;
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   // Get today's sessions
   const sessionsData = await db

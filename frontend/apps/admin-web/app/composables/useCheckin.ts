@@ -269,7 +269,7 @@ export const useCheckin = () => {
 
     const promise = (async () => {
       try {
-        const today = new Date().toISOString().split('T')[0] || ''
+        const today = new Date().toISOString().slice(0, 10) || ''
         const params = new URLSearchParams()
         params.append('memberId', memberId)
         params.append('status', 'ACTIVE')

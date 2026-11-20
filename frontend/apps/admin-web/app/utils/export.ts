@@ -201,7 +201,7 @@ export async function exportRevenueReport(data: any[], format: 'csv' | 'excel' |
   }
 
   const formattedData = formatReportDataForExport(data, fieldMapping)
-  const filename = `營收報表_${new Date().toISOString().split('T')[0]}`
+  const filename = `營收報表_${new Date().toISOString().slice(0, 10)}`
 
   switch (format) {
     case 'csv':
@@ -231,7 +231,7 @@ export async function exportMemberGrowthReport(data: any[], format: 'csv' | 'exc
   }
 
   const formattedData = formatReportDataForExport(data, fieldMapping)
-  const filename = `會員成長報表_${new Date().toISOString().split('T')[0]}`
+  const filename = `會員成長報表_${new Date().toISOString().slice(0, 10)}`
 
   switch (format) {
     case 'csv':
@@ -268,7 +268,7 @@ export async function exportContractExpiryReport(data: any[], format: 'csv' | 'e
   }
 
   const formattedData = formatReportDataForExport(data, fieldMapping)
-  const filename = `合約到期提醒_${new Date().toISOString().split('T')[0]}`
+  const filename = `合約到期提醒_${new Date().toISOString().slice(0, 10)}`
 
   switch (format) {
     case 'csv':
@@ -301,7 +301,7 @@ export async function exportMemberActivityReport(data: any[], format: 'csv' | 'e
   }
 
   const formattedData = formatReportDataForExport(data, fieldMapping)
-  const filename = `會員活躍度報表_${new Date().toISOString().split('T')[0]}`
+  const filename = `會員活躍度報表_${new Date().toISOString().slice(0, 10)}`
 
   switch (format) {
     case 'csv':

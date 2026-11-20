@@ -241,11 +241,11 @@ app.get('/export', async (c) => {
     memberCode: r.member?.memberCode || '',
     amount: parseFloat(r.payment.amount || '0'),
     paymentMethod: translatePaymentMethod(r.payment.paymentMethod),
-    paymentDate: r.payment.paymentDate?.toISOString().split('T')[0] || '',
+    paymentDate: r.payment.paymentDate?.toISOString().slice(0, 10) || '',
     type: translatePaymentType(r.payment.type),
   }));
 
-  const filename = `付款記錄_${new Date().toISOString().split('T')[0]}`;
+  const filename = `付款記錄_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const exportResult = await generateExcel(paymentsColumns, exportData, '付款記錄');

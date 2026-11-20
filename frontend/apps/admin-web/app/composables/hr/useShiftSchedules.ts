@@ -131,7 +131,7 @@ export const useShiftSchedules = () => {
         if (shiftScheduleId) filter.shift_schedule_id = shiftScheduleId
 
         if (activeOnly) {
-          const today = new Date().toISOString().split('T')[0]
+          const today = new Date().toISOString().slice(0, 10)
           filter.effective_date_lte = today
           // For end_date null or >= today, we'll filter client-side
         }
@@ -147,7 +147,7 @@ export const useShiftSchedules = () => {
 
         // Filter for active shifts (end_date is null or >= today)
         if (activeOnly) {
-          const today = new Date().toISOString().split('T')[0]!
+          const today = new Date().toISOString().slice(0, 10)!
           filtered = filtered.filter(es =>
             !es.end_date || es.end_date >= today
           )
@@ -178,7 +178,7 @@ export const useShiftSchedules = () => {
    * 取得班表的指派員工
    */
   const fetchShiftEmployees = async (shiftScheduleId: string) => {
-    const today = new Date().toISOString().split('T')[0]!
+    const today = new Date().toISOString().slice(0, 10)!
 
     const result = await readItems<EmployeeShift>('employee_shifts', {
       filter: {
@@ -200,7 +200,7 @@ export const useShiftSchedules = () => {
    * 取得員工的當前班表
    */
   const getEmployeeCurrentShift = async (employeeId: string) => {
-    const today = new Date().toISOString().split('T')[0]!
+    const today = new Date().toISOString().slice(0, 10)!
 
     const result = await readItems<EmployeeShift>('employee_shifts', {
       filter: {
@@ -231,7 +231,7 @@ export const useShiftSchedules = () => {
 
     if (currentShift && currentShift.shift_schedule_id !== data.shiftScheduleId) {
       await updateItem<EmployeeShift>('employee_shifts', currentShift.id, {
-        end_date: new Date(new Date(data.effectiveDate).getTime() - 86400000).toISOString().split('T')[0]
+        end_date: new Date(new Date(data.effectiveDate).getTime() - 86400000).toISOString().slice(0, 10)
       })
     }
 
@@ -290,7 +290,7 @@ export const useShiftSchedules = () => {
     yesterday.setDate(yesterday.getDate() - 1)
 
     const result = await updateItem<EmployeeShift>('employee_shifts', shiftId, {
-      end_date: yesterday.toISOString().split('T')[0]
+      end_date: yesterday.toISOString().slice(0, 10)
     })
     return result
   }

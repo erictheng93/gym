@@ -128,6 +128,63 @@ const REPORT_COACH_CLASSES_BY_CATEGORY_SELECT = {
   count: count(),
 };
 
+const REPORT_MEMBER_GROWTH_TOTAL_SELECT = {
+  count: count(),
+};
+
+const REPORT_MEMBER_GROWTH_BY_MONTH_SELECT = {
+  month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
+  count: count(),
+};
+
+const REPORT_EXPIRING_JOIN_SELECT = {
+  contract: REPORT_EXPIRING_CONTRACT_SELECT,
+  member: REPORT_EXPIRING_MEMBER_SELECT,
+  branch: REPORT_EXPIRING_BRANCH_SELECT,
+};
+
+const REPORT_EXPIRING_EXPORT_JOIN_SELECT = {
+  contract: REPORT_EXPIRING_EXPORT_CONTRACT_SELECT,
+  member: REPORT_EXPIRING_MEMBER_SELECT,
+  branch: REPORT_EXPIRING_BRANCH_SELECT,
+};
+
+const REPORT_MEMBER_ACTIVITY_BY_BRANCH_SELECT = {
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+  count: count(),
+  uniqueMembers: sql<number>`COUNT(DISTINCT ${checkIns.memberId})`,
+};
+
+const REPORT_MEMBER_ACTIVITY_BY_DAY_SELECT = {
+  date: sql<string>`DATE(${checkIns.checkInTime})`,
+  count: count(),
+};
+
+const REPORT_REVENUE_EXPORT_BY_DAY_SELECT = {
+  date: sql<string>`DATE(${payments.paymentDate})`,
+  branchId: payments.branchId,
+  branchName: branches.name,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_COACH_EMPLOYEES_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchId: employees.branchId,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const REPORT_COACH_EXPORT_EMPLOYEES_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchId: employees.branchId,
+  branchName: branches.name,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -137,9 +194,9 @@ app.get('/revenue', async (c) => {
   const startDate = c.req.query('startDate') || c.req.query('start_date') || (() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split('T')[0];
+    return d.toISOString().slice(0, 10);
   })();
-  const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
+  const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().slice(0, 10);
 
   const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
@@ -216,14 +273,11 @@ app.get('/member-growth', async (c) => {
 
   const [[totalResult], byMonth] = await Promise.all([
     db
-      .select({ count: count() })
+      .select(REPORT_MEMBER_GROWTH_TOTAL_SELECT)
       .from(members)
       .where(and(...conditions, eq(members.status, 'ACTIVE'))),
     db
-      .select({
-        month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
-        count: count(),
-      })
+      .select(REPORT_MEMBER_GROWTH_BY_MONTH_SELECT)
       .from(members)
       .where(and(...conditions, gte(members.createdAt, startDate)))
       .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
@@ -264,16 +318,12 @@ app.get('/contract-expiry', async (c) => {
   const conditions = [
     branchCondition,
     eq(contracts.status, 'ACTIVE'),
-    gte(contracts.endDate, today.toISOString().split('T')[0]),
-    lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
+    gte(contracts.endDate, today.toISOString().slice(0, 10)),
+    lte(contracts.endDate, futureDate.toISOString().slice(0, 10)),
   ];
 
   const expiringContracts = await db
-    .select({
-      contract: REPORT_EXPIRING_CONTRACT_SELECT,
-      member: REPORT_EXPIRING_MEMBER_SELECT,
-      branch: REPORT_EXPIRING_BRANCH_SELECT,
-    })
+    .select(REPORT_EXPIRING_JOIN_SELECT)
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
     .innerJoin(branches, eq(contracts.branchId, branches.id))
@@ -319,21 +369,13 @@ app.get('/member-activity', async (c) => {
 
   const [byBranch, byDay] = await Promise.all([
     db
-      .select({
-        branchId: checkIns.branchId,
-        branchName: branches.name,
-        count: count(),
-        uniqueMembers: sql<number>`COUNT(DISTINCT ${checkIns.memberId})`,
-      })
+      .select(REPORT_MEMBER_ACTIVITY_BY_BRANCH_SELECT)
       .from(checkIns)
       .innerJoin(branches, eq(checkIns.branchId, branches.id))
       .where(and(...conditions))
       .groupBy(checkIns.branchId, branches.name),
     db
-      .select({
-        date: sql<string>`DATE(${checkIns.checkInTime})`,
-        count: count(),
-      })
+      .select(REPORT_MEMBER_ACTIVITY_BY_DAY_SELECT)
       .from(checkIns)
       .where(and(...conditions))
       .groupBy(sql`DATE(${checkIns.checkInTime})`)
@@ -371,9 +413,9 @@ app.get('/revenue/export', async (c) => {
   const startDate = c.req.query('startDate') || c.req.query('start_date') || (() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split('T')[0];
+    return d.toISOString().slice(0, 10);
   })();
-  const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
+  const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().slice(0, 10);
   const format = c.req.query('format') || 'csv';
 
   const tenantBranches = await getTenantBranches(tenantId);
@@ -401,12 +443,7 @@ app.get('/revenue/export', async (c) => {
   ];
 
   const byDay = await db
-    .select({
-      date: sql<string>`DATE(${payments.paymentDate})`,
-      branchId: payments.branchId,
-      branchName: branches.name,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    .select(REPORT_REVENUE_EXPORT_BY_DAY_SELECT)
     .from(payments)
     .innerJoin(branches, eq(payments.branchId, branches.id))
     .where(and(...conditions))
@@ -478,10 +515,7 @@ app.get('/member-growth/export', async (c) => {
   startDate.setMonth(startDate.getMonth() - months);
 
   const byMonth = await db
-    .select({
-      month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
-      count: count(),
-    })
+    .select(REPORT_MEMBER_GROWTH_BY_MONTH_SELECT)
     .from(members)
     .where(and(...conditions, gte(members.createdAt, startDate)))
     .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
@@ -492,7 +526,7 @@ app.get('/member-growth/export', async (c) => {
     count: Number(m.count),
   }));
 
-  const filename = `會員成長報表_${new Date().toISOString().split('T')[0]}`;
+  const filename = `會員成長報表_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(memberGrowthColumns, exportData, '會員成長報表');
@@ -552,16 +586,12 @@ app.get('/contract-expiry/export', async (c) => {
   const conditions = [
     branchCondition,
     eq(contracts.status, 'ACTIVE'),
-    gte(contracts.endDate, today.toISOString().split('T')[0]),
-    lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
+    gte(contracts.endDate, today.toISOString().slice(0, 10)),
+    lte(contracts.endDate, futureDate.toISOString().slice(0, 10)),
   ];
 
   const expiringContracts = await db
-    .select({
-      contract: REPORT_EXPIRING_EXPORT_CONTRACT_SELECT,
-      member: REPORT_EXPIRING_MEMBER_SELECT,
-      branch: REPORT_EXPIRING_BRANCH_SELECT,
-    })
+    .select(REPORT_EXPIRING_EXPORT_JOIN_SELECT)
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
     .innerJoin(branches, eq(contracts.branchId, branches.id))
@@ -581,7 +611,7 @@ app.get('/contract-expiry/export', async (c) => {
     status: translateStatus(c.contract.status),
   }));
 
-  const filename = `合約到期提醒_${new Date().toISOString().split('T')[0]}`;
+  const filename = `合約到期提醒_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(contractExpiryColumns, exportData, '合約到期提醒');
@@ -644,10 +674,7 @@ app.get('/member-activity/export', async (c) => {
   ];
 
   const byDay = await db
-    .select({
-      date: sql<string>`DATE(${checkIns.checkInTime})`,
-      count: count(),
-    })
+    .select(REPORT_MEMBER_ACTIVITY_BY_DAY_SELECT)
     .from(checkIns)
     .where(and(...conditions))
     .groupBy(sql`DATE(${checkIns.checkInTime})`)
@@ -658,7 +685,7 @@ app.get('/member-activity/export', async (c) => {
     count: Number(d.count),
   }));
 
-  const filename = `會員活躍度報表_${new Date().toISOString().split('T')[0]}`;
+  const filename = `會員活躍度報表_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(memberActivityColumns, exportData, '會員活躍度報表');
@@ -745,8 +772,8 @@ app.get('/branch-performance', async (c) => {
     return c.json({
       success: true,
       period: {
-        current: { start: currentStart.toISOString().split('T')[0], end: currentEnd.toISOString().split('T')[0] },
-        previous: { start: previousStart.toISOString().split('T')[0], end: previousEnd.toISOString().split('T')[0] },
+        current: { start: currentStart.toISOString().slice(0, 10), end: currentEnd.toISOString().slice(0, 10) },
+        previous: { start: previousStart.toISOString().slice(0, 10), end: previousEnd.toISOString().slice(0, 10) },
       },
       summary: {
         total_revenue: 0,
@@ -952,8 +979,8 @@ app.get('/branch-performance', async (c) => {
   return c.json({
     success: true,
     period: {
-      current: { start: currentStart.toISOString().split('T')[0], end: currentEnd.toISOString().split('T')[0] },
-      previous: { start: previousStart.toISOString().split('T')[0], end: previousEnd.toISOString().split('T')[0] },
+      current: { start: currentStart.toISOString().slice(0, 10), end: currentEnd.toISOString().slice(0, 10) },
+      previous: { start: previousStart.toISOString().slice(0, 10), end: previousEnd.toISOString().slice(0, 10) },
     },
     summary: {
       total_revenue: totalRevenue,
@@ -1099,7 +1126,7 @@ app.get('/branch-performance/export', async (c) => {
     })
     .sort((a, b) => b.revenue - a.revenue);
 
-  const filename = `分店業績報表_${new Date().toISOString().split('T')[0]}`;
+  const filename = `分店業績報表_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(branchPerformanceColumns, exportData, '分店業績報表');
@@ -1167,7 +1194,7 @@ app.get('/coach-performance', async (c) => {
   if (branchIds.length === 0) {
     return c.json({
       success: true,
-      period: { start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0] },
+      period: { start_date: startDate.toISOString().slice(0, 10), end_date: endDate.toISOString().slice(0, 10) },
       summary: {
         total_coaches: 0,
         total_classes_taught: 0,
@@ -1189,14 +1216,7 @@ app.get('/coach-performance', async (c) => {
 
   // Get coaches who are instructors (have taught classes)
   const coachesWithClasses = await db
-    .select({
-      id: employees.id,
-      fullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchId: employees.branchId,
-      branchName: branches.name,
-      jobTitleName: jobTitles.name,
-    })
+    .select(REPORT_COACH_EMPLOYEES_SELECT)
     .from(employees)
     .innerJoin(branches, eq(employees.branchId, branches.id))
     .innerJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
@@ -1208,7 +1228,7 @@ app.get('/coach-performance', async (c) => {
   if (coachIdList.length === 0) {
     return c.json({
       success: true,
-      period: { start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0] },
+      period: { start_date: startDate.toISOString().slice(0, 10), end_date: endDate.toISOString().slice(0, 10) },
       summary: {
         total_coaches: 0,
         total_classes_taught: 0,
@@ -1236,8 +1256,8 @@ app.get('/coach-performance', async (c) => {
       isNotNull(classSessions.instructorId),
       inArray(classSessions.instructorId, coachIdList),
       eq(classSessions.sessionStatus, 'COMPLETED'),
-      gte(classSessions.sessionDate, startDate.toISOString().split('T')[0]),
-      lte(classSessions.sessionDate, endDate.toISOString().split('T')[0])
+      gte(classSessions.sessionDate, startDate.toISOString().slice(0, 10)),
+      lte(classSessions.sessionDate, endDate.toISOString().slice(0, 10))
     ))
     .groupBy(classSessions.instructorId),
 
@@ -1272,8 +1292,8 @@ app.get('/coach-performance', async (c) => {
     .where(and(
       isNotNull(classSessions.instructorId),
       inArray(classSessions.instructorId, coachIdList),
-      gte(classSessions.sessionDate, startDate.toISOString().split('T')[0]),
-      lte(classSessions.sessionDate, endDate.toISOString().split('T')[0])
+      gte(classSessions.sessionDate, startDate.toISOString().slice(0, 10)),
+      lte(classSessions.sessionDate, endDate.toISOString().slice(0, 10))
     ))
     .groupBy(classSessions.instructorId),
 
@@ -1305,8 +1325,8 @@ app.get('/coach-performance', async (c) => {
       isNotNull(classSessions.instructorId),
       inArray(classSessions.instructorId, coachIdList),
       eq(classSessions.sessionStatus, 'COMPLETED'),
-      gte(classSessions.sessionDate, startDate.toISOString().split('T')[0]),
-      lte(classSessions.sessionDate, endDate.toISOString().split('T')[0])
+      gte(classSessions.sessionDate, startDate.toISOString().slice(0, 10)),
+      lte(classSessions.sessionDate, endDate.toISOString().slice(0, 10))
     ))
     .groupBy(classSessions.instructorId, classes.category),
   ]);
@@ -1374,7 +1394,7 @@ app.get('/coach-performance', async (c) => {
 
   return c.json({
     success: true,
-    period: { start_date: startDate.toISOString().split('T')[0], end_date: endDate.toISOString().split('T')[0] },
+    period: { start_date: startDate.toISOString().slice(0, 10), end_date: endDate.toISOString().slice(0, 10) },
     summary: {
       total_coaches: totalCoaches,
       total_classes_taught: totalClasses,
@@ -1451,13 +1471,7 @@ app.get('/coach-performance/export', async (c) => {
   }
 
   const coachesWithClasses = await db
-    .select({
-      id: employees.id,
-      fullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchId: employees.branchId,
-      branchName: branches.name,
-    })
+    .select(REPORT_COACH_EXPORT_EMPLOYEES_SELECT)
     .from(employees)
     .innerJoin(branches, eq(employees.branchId, branches.id))
     .where(and(...coachConditions));
@@ -1491,8 +1505,8 @@ app.get('/coach-performance/export', async (c) => {
       isNotNull(classSessions.instructorId),
       inArray(classSessions.instructorId, coachIdList),
       eq(classSessions.sessionStatus, 'COMPLETED'),
-      gte(classSessions.sessionDate, startDate.toISOString().split('T')[0]),
-      lte(classSessions.sessionDate, endDate.toISOString().split('T')[0])
+      gte(classSessions.sessionDate, startDate.toISOString().slice(0, 10)),
+      lte(classSessions.sessionDate, endDate.toISOString().slice(0, 10))
     ))
     .groupBy(classSessions.instructorId),
 
@@ -1524,8 +1538,8 @@ app.get('/coach-performance/export', async (c) => {
     .where(and(
       isNotNull(classSessions.instructorId),
       inArray(classSessions.instructorId, coachIdList),
-      gte(classSessions.sessionDate, startDate.toISOString().split('T')[0]),
-      lte(classSessions.sessionDate, endDate.toISOString().split('T')[0])
+      gte(classSessions.sessionDate, startDate.toISOString().slice(0, 10)),
+      lte(classSessions.sessionDate, endDate.toISOString().slice(0, 10))
     ))
     .groupBy(classSessions.instructorId),
   ]);
@@ -1555,7 +1569,7 @@ app.get('/coach-performance/export', async (c) => {
     };
   }).filter(c => c.classesTaught > 0 || c.totalStudents > 0);
 
-  const filename = `教練績效報表_${new Date().toISOString().split('T')[0]}`;
+  const filename = `教練績效報表_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(coachPerformanceColumns, exportData, '教練績效報表');

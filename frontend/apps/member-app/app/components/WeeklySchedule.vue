@@ -28,7 +28,7 @@ const weekDates = computed(() => {
   for (let i = 0; i < 7; i++) {
     const date = new Date(today)
     date.setDate(today.getDate() + i)
-    const dateStr = date.toISOString().split('T')[0] ?? ''
+    const dateStr = date.toISOString().slice(0, 10) ?? ''
     dates.push({
       date: dateStr,
       dayOfWeek: date.getDay(),

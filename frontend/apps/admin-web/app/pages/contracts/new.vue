@@ -35,7 +35,7 @@ const form = reactive({
   member_id: route.query.member as string || '',
   plan_id: '',
   branch_id: '',
-  start_date: new Date().toISOString().split('T')[0],
+  start_date: new Date().toISOString().slice(0, 10),
   total_amount: 0,
   notes: '',
   digital_signature: ''
@@ -50,7 +50,7 @@ const calculatedEndDate = computed(() => {
 
   const start = new Date(form.start_date)
   start.setMonth(start.getMonth() + selectedPlan.value.duration_months)
-  return start.toISOString().split('T')[0]
+  return start.toISOString().slice(0, 10)
 })
 
 // 當選擇方案時自動更新金額
@@ -142,7 +142,7 @@ const handleSubmit = async () => {
       start_date: form.start_date,
       end_date: calculatedEndDate.value,
       original_end_date: calculatedEndDate.value,
-      sign_date: new Date().toISOString().split('T')[0],
+      sign_date: new Date().toISOString().slice(0, 10),
       total_amount: form.total_amount,
       notes: form.notes,
       digital_signature: form.digital_signature,

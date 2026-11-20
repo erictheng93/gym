@@ -143,7 +143,7 @@ app.post(
     }
 
     // Date ranges for contract and check-in checks
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().slice(0, 10);
     const contractConditions = [
       eq(contracts.memberId, memberInfo.id),
       eq(contracts.status, 'ACTIVE'),

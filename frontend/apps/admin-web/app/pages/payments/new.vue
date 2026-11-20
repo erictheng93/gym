@@ -26,7 +26,7 @@ const form = reactive({
   amount: 0,
   payment_method: 'CASH' as 'CASH' | 'CREDIT_CARD' | 'LINE_PAY' | 'TRANSFER',
   payment_type: 'INCOME' as 'INCOME' | 'REFUND',
-  payment_date: new Date().toISOString().split('T')[0]!,
+  payment_date: new Date().toISOString().slice(0, 10)!,
   branch_id: '',
   notes: ''
 })

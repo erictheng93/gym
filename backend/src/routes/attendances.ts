@@ -234,8 +234,8 @@ app.get('/:id', async (c) => {
   else if (earlyLeaveMinutes > 0) attendanceStatus = 'EARLY_LEAVE';
 
   const attendanceDateStr = checkInDate
-    ? checkInDate.toISOString().split('T')[0]
-    : new Date().toISOString().split('T')[0];
+    ? checkInDate.toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
 
   return c.json({
     success: true,

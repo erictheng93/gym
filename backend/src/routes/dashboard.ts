@@ -28,6 +28,34 @@ const DASHBOARD_CLASS_SESSION_SELECT = {
   cancelledAt: classSessions.cancelledAt,
   cancelledBy: classSessions.cancelledBy,
 };
+const DASHBOARD_MONTHLY_REVENUE_SELECT = {
+  month: sql<string>`to_char(${payments.paymentDate}, 'YYYY-MM')`,
+  total: sum(payments.amount),
+};
+
+const DASHBOARD_DAILY_REVENUE_SELECT = {
+  date: sql<string>`${payments.paymentDate}::date`,
+  total: sum(payments.amount),
+};
+
+const DASHBOARD_BRANCH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+};
+
+const DASHBOARD_TODAYS_CLASSES_SELECT = {
+  session: DASHBOARD_CLASS_SESSION_SELECT,
+  branch: DASHBOARD_BRANCH_SELECT,
+};
+
+const DASHBOARD_RECENT_ACTIVITIES_SELECT = {
+  id: checkIns.id,
+  type: sql<string>`'check_in'`,
+  timestamp: checkIns.checkInTime,
+  memberName: members.fullName,
+  branchName: branches.name,
+};
+
 
 app.use('*', requireAuth);
 app.use('*', requireTenant);
@@ -38,7 +66,7 @@ app.get('/overview', async (c) => {
   const branchId = c.req.query('branchId');
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = today.toISOString().slice(0, 10);
   const monthStartDate = new Date(today.getFullYear(), today.getMonth(), 1);
   const lastMonthStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const lastMonthEndDate = new Date(today.getFullYear(), today.getMonth(), 0);
@@ -61,7 +89,7 @@ app.get('/overview', async (c) => {
   }
 
   // Precalculate date boundaries
-  const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const todayStart = new Date(today);
   todayStart.setHours(0, 0, 0, 0);
 
@@ -173,10 +201,7 @@ app.get('/revenue-trend', async (c) => {
   if (period === 'monthly') {
     // Last 12 months
     const result = await db
-      .select({
-        month: sql<string>`to_char(${payments.paymentDate}, 'YYYY-MM')`,
-        total: sum(payments.amount),
-      })
+      .select(DASHBOARD_MONTHLY_REVENUE_SELECT)
       .from(payments)
       .where(
         and(
@@ -199,10 +224,7 @@ app.get('/revenue-trend', async (c) => {
 
   // Daily - last 30 days
   const result = await db
-    .select({
-      date: sql<string>`${payments.paymentDate}::date`,
-      total: sum(payments.amount),
-    })
+    .select(DASHBOARD_DAILY_REVENUE_SELECT)
     .from(payments)
     .where(
       and(
@@ -227,7 +249,7 @@ app.get('/revenue-trend', async (c) => {
 app.get('/todays-classes', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   const allTenantBranchIds = await getTenantBranchIds(tenantId);
   const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
@@ -241,13 +263,7 @@ app.get('/todays-classes', async (c) => {
     : inArray(classSessions.branchId, branchIds);
 
   const sessions = await db
-    .select({
-      session: DASHBOARD_CLASS_SESSION_SELECT,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(DASHBOARD_TODAYS_CLASSES_SELECT)
     .from(classSessions)
     .innerJoin(branches, eq(classSessions.branchId, branches.id))
     .where(and(branchCondition, eq(classSessions.sessionDate, today)))
@@ -287,13 +303,7 @@ app.get('/recent-activities', async (c) => {
 
   // Get recent check-ins as activities
   const recentCheckIns = await db
-    .select({
-      id: checkIns.id,
-      type: sql<string>`'check_in'`,
-      timestamp: checkIns.checkInTime,
-      memberName: members.fullName,
-      branchName: branches.name,
-    })
+    .select(DASHBOARD_RECENT_ACTIVITIES_SELECT)
     .from(checkIns)
     .innerJoin(members, eq(checkIns.memberId, members.id))
     .innerJoin(branches, eq(checkIns.branchId, branches.id))

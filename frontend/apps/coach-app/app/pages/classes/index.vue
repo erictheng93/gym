@@ -149,7 +149,7 @@ const router = useRouter()
 const { success, error: showError } = useToast()
 const { classes, loading, total, fetchClasses, markAttendance } = useCoachClasses()
 
-const selectedDate = ref(new Date().toISOString().split('T')[0])
+const selectedDate = ref(new Date().toISOString().slice(0, 10))
 const selectedStatus = ref('')
 const offset = ref(0)
 const limit = 20
@@ -164,7 +164,7 @@ const weekDays = computed(() => {
   for (let i = -3; i <= 3; i++) {
     const date = new Date(today)
     date.setDate(today.getDate() + i)
-    const dateStr = date.toISOString().split('T')[0] ?? ''
+    const dateStr = date.toISOString().slice(0, 10) ?? ''
 
     days.push({
       date: dateStr,
@@ -188,7 +188,7 @@ const statusOptions = [
 const getDateLabel = () => {
   if (!selectedDate.value) return ''
   const date = new Date(selectedDate.value)
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toISOString().slice(0, 10)
 
   if (selectedDate.value === today) {
     return '今日課程'

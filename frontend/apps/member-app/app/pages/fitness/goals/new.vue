@@ -175,7 +175,7 @@ const handleSubmit = async () => {
           v-model="form.target_date"
           type="date"
           class="form-input"
-          :min="new Date().toISOString().split('T')[0]"
+          :min="new Date().toISOString().slice(0, 10)"
         >
       </div>
 
