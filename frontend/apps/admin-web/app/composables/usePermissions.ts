@@ -30,6 +30,8 @@ const state = reactive<PermissionState>({
   employeeStatus: 'unknown',
 })
 
+let inFlightPermissionsPromise: Promise<void> | null = null
+
 export const usePermissions = () => {
   const config = useRuntimeConfig()
   const { user } = useAuth()
@@ -38,7 +40,7 @@ export const usePermissions = () => {
   /**
    * 取得當前使用者的有效權限
    */
-  const fetchPermissions = async () => {
+  const fetchPermissions = async (force = false) => {
     if (!user.value?.id) {
       console.warn('[usePermissions] No user logged in')
       state.permissions = null
@@ -46,61 +48,70 @@ export const usePermissions = () => {
       return
     }
 
-    state.isLoading = true
-    state.employeeStatus = 'loading'
-    state.error = null
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/auth/me/permissions`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch permissions')
-      }
-
-      const data = result.data
-
-      // Handle employee status
-      if (data.employeeStatus === 'no_employee') {
-        console.warn('[usePermissions] No employee record found for user - using read-only mode')
-        state.employeeStatus = 'no_employee'
-        state.permissions = getDefaultReadOnlyPermissions()
-        return
-      }
-
-      if (data.employeeStatus === 'inactive') {
-        console.warn('[usePermissions] Employee record is not active')
-        state.employeeStatus = 'inactive'
-        state.permissions = getDefaultReadOnlyPermissions()
-        return
-      }
-
-      state.employeeStatus = 'active'
-
-      if (data.jobTitleName) {
-        console.log('[usePermissions] Using job title permissions:', data.jobTitleName)
-      }
-
-      state.permissions = data.permissions || {}
-    } catch (error) {
-      console.error('[usePermissions] Failed to fetch permissions:', error)
-      state.error = error as Error
-      state.permissions = {}
-      state.employeeStatus = 'unknown'
-    } finally {
-      state.isLoading = false
+    if (!force && inFlightPermissionsPromise) {
+      return inFlightPermissionsPromise
     }
+
+    inFlightPermissionsPromise = (async () => {
+      state.isLoading = true
+      state.employeeStatus = 'loading'
+      state.error = null
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/auth/me/permissions`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+
+        const result = await response.json()
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch permissions')
+        }
+
+        const data = result.data
+
+        // Handle employee status
+        if (data.employeeStatus === 'no_employee') {
+          console.warn('[usePermissions] No employee record found for user - using read-only mode')
+          state.employeeStatus = 'no_employee'
+          state.permissions = getDefaultReadOnlyPermissions()
+          return
+        }
+
+        if (data.employeeStatus === 'inactive') {
+          console.warn('[usePermissions] Employee record is not active')
+          state.employeeStatus = 'inactive'
+          state.permissions = getDefaultReadOnlyPermissions()
+          return
+        }
+
+        state.employeeStatus = 'active'
+
+        if (data.jobTitleName) {
+          console.log('[usePermissions] Using job title permissions:', data.jobTitleName)
+        }
+
+        state.permissions = data.permissions || {}
+      } catch (error) {
+        console.error('[usePermissions] Failed to fetch permissions:', error)
+        state.error = error as Error
+        state.permissions = {}
+        state.employeeStatus = 'unknown'
+      } finally {
+        state.isLoading = false
+        inFlightPermissionsPromise = null
+      }
+    })()
+
+    return inFlightPermissionsPromise
   }
 
   /**

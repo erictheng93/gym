@@ -3,30 +3,41 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import type { JobTitle } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
+let inFlightJobTitlesPromise: Promise<void> | null = null
+
 export const useJobTitles = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const jobTitles = useState<JobTitle[]>('job_titles', () => [])
   const isLoading = useState('job_titles_loading', () => false)
 
-  const fetchJobTitles = async () => {
-    isLoading.value = true
-    try {
-      const { data } = await readItems<JobTitle>('job-titles', {
-        filter: { status: 'active' },
-        sort: 'name',
-        limit: 1000
-      })
-      jobTitles.value = data
-    } catch (error) {
-      handleError(error, {
-        context: 'useJobTitles.fetchJobTitles',
-        customMessage: MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED
-      })
-      jobTitles.value = []
-    } finally {
-      isLoading.value = false
+  const fetchJobTitles = async (force = false) => {
+    if (!force && inFlightJobTitlesPromise) {
+      return inFlightJobTitlesPromise
     }
+
+    inFlightJobTitlesPromise = (async () => {
+      isLoading.value = true
+      try {
+        const { data } = await readItems<JobTitle>('job-titles', {
+          filter: { status: 'active' },
+          sort: 'name',
+          limit: 1000
+        })
+        jobTitles.value = data
+      } catch (error) {
+        handleError(error, {
+          context: 'useJobTitles.fetchJobTitles',
+          customMessage: MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED
+        })
+        jobTitles.value = []
+      } finally {
+        isLoading.value = false
+        inFlightJobTitlesPromise = null
+      }
+    })()
+
+    return inFlightJobTitlesPromise
   }
 
   const getJobTitle = async (id: string) => {
