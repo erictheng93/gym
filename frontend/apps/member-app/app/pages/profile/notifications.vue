@@ -19,54 +19,6 @@ const NOTIFICATION_STATUS_CLASS_MAP: Record<string, string> = {
   failed: 'status-error',
   pending: 'status-pending',
 }
-</script>
-
-<script setup lang="ts">
-definePageMeta({
-  middleware: 'auth'
-})
-
-const { addToast } = useToast()
-
-// Push notifications composable (existing)
-const {
-  isSupported: pushSupported,
-  isSubscribed: pushSubscribed,
-  isLoading: pushLoading,
-  canSubscribe: pushCanSubscribe,
-  isDenied: pushDenied,
-  subscribe: subscribePush,
-  unsubscribe: unsubscribePush,
-} = usePushNotifications()
-
-// Multi-channel notification preferences (new)
-const {
-  preferences,
-  availableChannels,
-  channelDetails,
-  history,
-  isLoading,
-  fetchPreferences,
-  updatePreferences,
-  togglePreference,
-  fetchChannelDetails,
-  fetchHistory,
-  loadMoreHistory,
-  hasMoreHistory,
-  getChannelLabel,
-  getNotificationTypeLabel,
-} = useNotificationPreferences()
-
-const isSaving = ref(false)
-const activeTab = ref<'settings' | 'history'>('settings')
-
-// Load data on mount
-onMounted(async () => {
-  await Promise.all([
-    fetchPreferences(),
-    fetchChannelDetails(),
-  ])
-})
 
 // Channel icons
 const channelIcons = {
@@ -136,6 +88,54 @@ const notificationTypes: Array<{
     icon: 'info',
   },
 ]
+</script>
+
+<script setup lang="ts">
+definePageMeta({
+  middleware: 'auth'
+})
+
+const { addToast } = useToast()
+
+// Push notifications composable (existing)
+const {
+  isSupported: pushSupported,
+  isSubscribed: pushSubscribed,
+  isLoading: pushLoading,
+  canSubscribe: pushCanSubscribe,
+  isDenied: pushDenied,
+  subscribe: subscribePush,
+  unsubscribe: unsubscribePush,
+} = usePushNotifications()
+
+// Multi-channel notification preferences (new)
+const {
+  preferences,
+  availableChannels,
+  channelDetails,
+  history,
+  isLoading,
+  fetchPreferences,
+  updatePreferences,
+  togglePreference,
+  fetchChannelDetails,
+  fetchHistory,
+  loadMoreHistory,
+  hasMoreHistory,
+  getChannelLabel,
+  getNotificationTypeLabel,
+} = useNotificationPreferences()
+
+const isSaving = ref(false)
+const activeTab = ref<'settings' | 'history'>('settings')
+
+// Load data on mount
+onMounted(async () => {
+  await Promise.all([
+    fetchPreferences(),
+    fetchChannelDetails(),
+  ])
+})
 
 // Handle push subscription
 const handlePushSubscribe = async () => {

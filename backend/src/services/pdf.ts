@@ -656,7 +656,7 @@ async function generatePdfFromHtml(html: string): Promise<Buffer> {
   const page = await browser.newPage();
 
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'load' });
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -675,16 +675,17 @@ async function generatePdfFromHtml(html: string): Promise<Buffer> {
   }
 }
 
+const PAYMENT_METHOD_NAMES: Record<string, string> = {
+  CASH: '現金',
+  CREDIT_CARD: '信用卡',
+  DEBIT_CARD: '金融卡',
+  BANK_TRANSFER: '銀行轉帳',
+  LINE_PAY: 'LINE Pay',
+  OTHER: '其他',
+};
+
 function formatPaymentMethod(method: string | null): string {
-  const methods: Record<string, string> = {
-    CASH: '現金',
-    CREDIT_CARD: '信用卡',
-    DEBIT_CARD: '金融卡',
-    BANK_TRANSFER: '銀行轉帳',
-    LINE_PAY: 'LINE Pay',
-    OTHER: '其他',
-  };
-  return methods[method || ''] || method || '未指定';
+  return PAYMENT_METHOD_NAMES[method || ''] || method || '未指定';
 }
 
 // -----------------------------------------------------------------------------
