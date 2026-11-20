@@ -1,3 +1,28 @@
+<script lang="ts">
+import { PAGES } from '~/constants'
+
+const leaveDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
+const leaveDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const LEAVE_STATUS_BADGE_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
+  PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
+  APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
+  REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
+  CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' },
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 休假管理頁面
@@ -146,39 +171,9 @@ const LEAVE_TYPE_COLOR_MAP: Record<string, string> = {
   OTHER: '#5856d6',
 }
 
-const STATUS_BADGE_CONFIG_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
-  PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
-  APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
-  REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
-  CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' },
-}
-
-const leaveDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-})
-
-const leaveDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
-// 取得假別標籤
-const getLeaveTypeLabel = (type: string) => {
-  return LEAVE_TYPE_LABEL_MAP[type] || type
-}
-
-const getLeaveTypeColor = (type: string) => {
-  return LEAVE_TYPE_COLOR_MAP[type] || '#8e8e93'
-}
-
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } => {
-  return STATUS_BADGE_CONFIG_MAP[status] || { label: status, variant: 'default' }
+  return LEAVE_STATUS_BADGE_MAP[status] || { label: status, variant: 'default' }
 }
 
 // 格式化日期
