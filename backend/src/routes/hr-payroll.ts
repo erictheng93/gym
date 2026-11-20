@@ -499,33 +499,34 @@ app.get('/promotions', async (c) => {
   if (employee_id) conditions.push(eq(promotionRecords.employeeId, employee_id));
   if (type) conditions.push(eq(promotionRecords.type, type as 'PROMOTION' | 'TRANSFER' | 'DEMOTION'));
 
-  const records = await db
-    .select({
-      id: promotionRecords.id,
-      employeeId: promotionRecords.employeeId,
-      type: promotionRecords.type,
-      fromJobTitleId: promotionRecords.fromJobTitleId,
-      toJobTitleId: promotionRecords.toJobTitleId,
-      fromBranchId: promotionRecords.fromBranchId,
-      toBranchId: promotionRecords.toBranchId,
-      effectiveDate: promotionRecords.effectiveDate,
-      newBaseSalary: promotionRecords.newBaseSalary,
-      reason: promotionRecords.reason,
-      createdAt: promotionRecords.createdAt,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-    })
-    .from(promotionRecords)
-    .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(promotionRecords.effectiveDate))
-    .limit(parseInt(limit))
-    .offset(parseInt(offset));
-
-  const countResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(promotionRecords)
-    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  const [records, countResult] = await Promise.all([
+    db
+      .select({
+        id: promotionRecords.id,
+        employeeId: promotionRecords.employeeId,
+        type: promotionRecords.type,
+        fromJobTitleId: promotionRecords.fromJobTitleId,
+        toJobTitleId: promotionRecords.toJobTitleId,
+        fromBranchId: promotionRecords.fromBranchId,
+        toBranchId: promotionRecords.toBranchId,
+        effectiveDate: promotionRecords.effectiveDate,
+        newBaseSalary: promotionRecords.newBaseSalary,
+        reason: promotionRecords.reason,
+        createdAt: promotionRecords.createdAt,
+        employeeName: employees.fullName,
+        employeeCode: employees.employeeCode,
+      })
+      .from(promotionRecords)
+      .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(promotionRecords.effectiveDate))
+      .limit(parseInt(limit))
+      .offset(parseInt(offset)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(promotionRecords)
+      .where(conditions.length > 0 ? and(...conditions) : undefined),
+  ]);
 
   return c.json({
     success: true,

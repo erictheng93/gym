@@ -244,5 +244,45 @@ export default defineNuxtConfig({
         }
       }
     }
+  },
+
+  // Vite configuration with chunk splitting
+  vite: {
+    server: {
+      fs: {
+        strict: false,
+        allow: ['..']
+      }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            // Core Vue/Nuxt - loaded on every page
+            if (id.includes('node_modules/vue') ||
+                id.includes('node_modules/@vue') ||
+                id.includes('node_modules/nuxt')) {
+              return 'vue-core'
+            }
+
+            // Sentry - Error tracking, can be loaded async
+            if (id.includes('node_modules/@sentry')) {
+              return 'sentry-vendor'
+            }
+
+            // Zod - Schema validation
+            if (id.includes('node_modules/zod')) {
+              return 'zod-vendor'
+            }
+
+            // QR scanning
+            if (id.includes('node_modules/jsqr')) {
+              return 'qr-vendor'
+            }
+          }
+        }
+      },
+      chunkSizeWarningLimit: 550
+    }
   }
 })

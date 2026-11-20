@@ -135,18 +135,19 @@ export default defineNuxtConfig({
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
       runtimeCaching: [
         {
-          // API 請求 - Network First
-          urlPattern: /^https:\/\/.*\/items\/.*/i,
+          // API 請求 - Network First with offline fallback
+          urlPattern: /\/api\/.*/i,
           handler: 'NetworkFirst',
           options: {
             cacheName: 'api-cache',
             expiration: {
-              maxEntries: 50,
+              maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24
             },
             cacheableResponse: {
               statuses: [0, 200]
-            }
+            },
+            networkTimeoutSeconds: 5,
           }
         },
         {
@@ -156,8 +157,20 @@ export default defineNuxtConfig({
           options: {
             cacheName: 'image-cache',
             expiration: {
-              maxEntries: 30,
+              maxEntries: 50,
               maxAgeSeconds: 60 * 60 * 24 * 7
+            }
+          }
+        },
+        {
+          // 字型 - Cache First (long-lived)
+          urlPattern: /\.(?:woff2?|ttf|otf|eot)$/i,
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'font-cache',
+            expiration: {
+              maxEntries: 20,
+              maxAgeSeconds: 60 * 60 * 24 * 365
             }
           }
         }
@@ -232,6 +245,46 @@ export default defineNuxtConfig({
           ].join('; ')
         }
       }
+    }
+  },
+
+  // Vite configuration with chunk splitting
+  vite: {
+    server: {
+      fs: {
+        strict: false,
+        allow: ['..']
+      }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            // Core Vue/Nuxt - loaded on every page
+            if (id.includes('node_modules/vue') ||
+                id.includes('node_modules/@vue') ||
+                id.includes('node_modules/nuxt')) {
+              return 'vue-core'
+            }
+
+            // Sentry - Error tracking, can be loaded async
+            if (id.includes('node_modules/@sentry')) {
+              return 'sentry-vendor'
+            }
+
+            // Zod - Schema validation
+            if (id.includes('node_modules/zod')) {
+              return 'zod-vendor'
+            }
+
+            // QR scanning
+            if (id.includes('node_modules/jsqr')) {
+              return 'qr-vendor'
+            }
+          }
+        }
+      },
+      chunkSizeWarningLimit: 550
     }
   }
 })

@@ -5,6 +5,7 @@ import { db, branches, employees, members } from '../db/index.js';
 import { eq, sql, desc } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { invalidateTenantBranchesCache } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -65,16 +66,17 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '無權限存取此分店' }, 403);
   }
 
-  const branchEmployees = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.branchId, id))
-    .orderBy(employees.fullName);
-
-  const [memberCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(eq(members.branchId, id));
+  const [branchEmployees, [memberCount]] = await Promise.all([
+    db
+      .select()
+      .from(employees)
+      .where(eq(employees.branchId, id))
+      .orderBy(employees.fullName),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(eq(members.branchId, id)),
+  ]);
 
   return c.json({
     success: true,
@@ -104,6 +106,8 @@ app.post('/', requireRole('super_admin', 'admin'), zValidator('json', createBran
     code: branchCode,
     tenantId,
   }).returning();
+
+  invalidateTenantBranchesCache(tenantId);
 
   return c.json({ success: true, data: newBranch }, 201);
 });
@@ -135,6 +139,8 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     })
     .where(eq(branches.id, id))
     .returning();
+
+  invalidateTenantBranchesCache(tenantId);
 
   return c.json({ success: true, data: updatedBranch });
 });
@@ -174,6 +180,8 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
     .update(branches)
     .set({ status: 'archived', updatedAt: new Date() })
     .where(eq(branches.id, id));
+
+  invalidateTenantBranchesCache(tenantId);
 
   return c.json({ success: true, message: '分店已封存' });
 });

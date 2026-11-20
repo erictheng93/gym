@@ -53,33 +53,34 @@ app.get('/', async (c) => {
     conditions.push(gte(coupons.validUntil, today));
   }
 
-  const result = await db
-    .select({
-      coupon: coupons,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      campaign: {
-        id: campaigns.id,
-        name: campaigns.name,
-      },
-      usageCount: sql<number>`(
-        SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = ${coupons.id}
-      )`,
-    })
-    .from(coupons)
-    .leftJoin(branches, eq(coupons.branchId, branches.id))
-    .leftJoin(campaigns, eq(coupons.campaignId, campaigns.id))
-    .where(and(...conditions))
-    .orderBy(desc(coupons.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(coupons)
-    .where(and(...conditions));
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select({
+        coupon: coupons,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+        campaign: {
+          id: campaigns.id,
+          name: campaigns.name,
+        },
+        usageCount: sql<number>`(
+          SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = ${coupons.id}
+        )`,
+      })
+      .from(coupons)
+      .leftJoin(branches, eq(coupons.branchId, branches.id))
+      .leftJoin(campaigns, eq(coupons.campaignId, campaigns.id))
+      .where(and(...conditions))
+      .orderBy(desc(coupons.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(coupons)
+      .where(and(...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 
@@ -133,31 +134,36 @@ app.post('/validate', async (c) => {
     }, 400);
   }
 
-  // Check usage limit
-  if (coupon.usageLimit) {
-    const [usageCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(couponUsages)
-      .where(eq(couponUsages.couponId, coupon.id));
+  // Check usage limits concurrently if applicable
+  const needUsageLimit = !!coupon.usageLimit;
+  const needMemberLimit = Boolean(memberId && coupon.usageLimitPerMember);
 
-    if (Number(usageCount?.count || 0) >= coupon.usageLimit) {
+  if (needUsageLimit || needMemberLimit) {
+    const [usageCountResult, memberUsageCountResult] = await Promise.all([
+      needUsageLimit
+        ? db
+            .select({ count: sql<number>`count(*)` })
+            .from(couponUsages)
+            .where(eq(couponUsages.couponId, coupon.id))
+        : Promise.resolve(null),
+      needMemberLimit
+        ? db
+            .select({ count: sql<number>`count(*)` })
+            .from(couponUsages)
+            .where(
+              and(
+                eq(couponUsages.couponId, coupon.id),
+                eq(couponUsages.memberId, memberId!)
+              )
+            )
+        : Promise.resolve(null),
+    ]);
+
+    if (usageCountResult && Number(usageCountResult[0]?.count || 0) >= coupon.usageLimit!) {
       return c.json({ success: false, error: '優惠碼已達使用上限' }, 400);
     }
-  }
 
-  // Check per-member limit
-  if (memberId && coupon.usageLimitPerMember) {
-    const [memberUsageCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(couponUsages)
-      .where(
-        and(
-          eq(couponUsages.couponId, coupon.id),
-          eq(couponUsages.memberId, memberId)
-        )
-      );
-
-    if (Number(memberUsageCount?.count || 0) >= coupon.usageLimitPerMember) {
+    if (memberUsageCountResult && Number(memberUsageCountResult[0]?.count || 0) >= coupon.usageLimitPerMember!) {
       return c.json({ success: false, error: '您已達此優惠碼使用次數上限' }, 400);
     }
   }

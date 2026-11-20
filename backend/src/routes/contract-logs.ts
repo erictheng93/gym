@@ -42,39 +42,39 @@ app.get('/', async (c) => {
   }
 
   // Get logs with contract and member info
-  const result = await db
-    .select({
-      log: contractLogs,
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(contractLogs)
-    .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
-    .innerJoin(members, eq(contracts.memberId, members.id))
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
-    .where(and(eq(branches.tenantId, tenantId), ...conditions))
-    .orderBy(desc(contractLogs.dateCreated))
-    .limit(limit)
-    .offset(offset);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(contractLogs)
-    .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(and(eq(branches.tenantId, tenantId), ...conditions));
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select({
+        log: contractLogs,
+        contract: {
+          id: contracts.id,
+          contractNo: contracts.contractNo,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+        },
+        createdBy: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(contractLogs)
+      .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
+      .innerJoin(members, eq(contracts.memberId, members.id))
+      .innerJoin(branches, eq(contracts.branchId, branches.id))
+      .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+      .where(and(eq(branches.tenantId, tenantId), ...conditions))
+      .orderBy(desc(contractLogs.dateCreated))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(contractLogs)
+      .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
+      .innerJoin(branches, eq(contracts.branchId, branches.id))
+      .where(and(eq(branches.tenantId, tenantId), ...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 

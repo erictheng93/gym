@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { hash } from '@node-rs/argon2';
+import { eq } from 'drizzle-orm';
 import app from '../src/app.js';
+import { db, users } from '../src/db/index.js';
 import { dbAvailable } from './setup.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
   getAuthToken,
+  TEST_USER_ID,
   TEST_USER_PASSWORD,
 } from './helpers.js';
 
@@ -127,6 +131,10 @@ describe('Staff Auth - Extended', () => {
         expect(res.status).toBe(200);
         const data = await res.json();
         expect(data.success).toBe(true);
+
+        // Restore password for subsequent tests
+        const passwordHash = await hash(TEST_USER_PASSWORD);
+        await db.update(users).set({ passwordHash }).where(eq(users.id, TEST_USER_ID));
       });
     });
 

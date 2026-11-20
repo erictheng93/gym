@@ -101,6 +101,7 @@ vi.mock('drizzle-orm', () => ({
 // =============================================================================
 
 import app from '../src/routes/payments.js';
+import { clearTenantCache } from '../src/utils/tenant-cache.js';
 
 // =============================================================================
 // TESTS
@@ -110,6 +111,7 @@ describe('Payment Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbResults = [];
+    clearTenantCache();
   });
 
   // Helper to POST a payment

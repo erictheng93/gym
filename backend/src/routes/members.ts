@@ -5,6 +5,7 @@ import { db, members, contracts, branches, membershipPlans } from '../db/index.j
 import { eq, and, or, ilike, sql, desc, asc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, membersColumns, translateStatus, translateGender } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
@@ -46,12 +47,7 @@ app.get('/', zValidator('query', querySchema), async (c) => {
   const { page, limit, search, branchId, status, sortBy, sortOrder } = c.req.valid('query');
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
@@ -89,20 +85,21 @@ app.get('/', zValidator('query', querySchema), async (c) => {
 
   const orderBy = sortOrder === 'asc' ? asc(sortColumn) : desc(sortColumn);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(baseCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(baseCondition),
+    db
+      .select()
+      .from(members)
+      .where(baseCondition)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select()
-    .from(members)
-    .where(baseCondition)
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -200,23 +197,21 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
+  const [member, branchIds] = await Promise.all([
+    db
+      .select()
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1)
+      .then(rows => rows[0]),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, member.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(member.branchId!)) {
     return c.json({ success: false, error: '無權限存取此會員' }, 403);
   }
 
@@ -239,21 +234,15 @@ app.post('/', zValidator('json', createMemberSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(members)
-    .innerJoin(branches, eq(members.branchId, branches.id))
-    .where(eq(branches.tenantId, tenantId));
+    .where(inArray(members.branchId, branchIds));
 
   const memberCount = Number(countResult?.count || 0);
 
