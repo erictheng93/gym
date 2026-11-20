@@ -1,3 +1,8 @@
+<script lang="ts">
+const quotaNumberFormatter = new Intl.NumberFormat('zh-TW')
+const quotaDateFormatter = new Intl.DateTimeFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { useTenant } from '~/composables/useTenant'
 
@@ -39,8 +44,6 @@ const getQuotaColor = (resource: 'members' | 'employees' | 'branches' | 'storage
 }
 
 // 格式化數字與日期
-const quotaNumberFormatter = new Intl.NumberFormat('zh-TW')
-const quotaDateFormatter = new Intl.DateTimeFormat('zh-TW')
 
 const formatNumber = (num: number) => {
   return quotaNumberFormatter.format(num)

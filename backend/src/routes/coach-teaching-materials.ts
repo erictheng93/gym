@@ -35,6 +35,60 @@ const TEACHING_MATERIAL_SELECT = {
   tenantId: teachingMaterials.tenantId,
 };
 
+const TEACHING_MATERIAL_COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const TEACHING_MATERIAL_LIST_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  name: teachingMaterials.name,
+  description: teachingMaterials.description,
+  fileId: teachingMaterials.fileId,
+  videoUrl: teachingMaterials.videoUrl,
+  thumbnailUrl: teachingMaterials.thumbnailUrl,
+  muscleGroups: teachingMaterials.muscleGroups,
+  equipment: teachingMaterials.equipment,
+  difficulty: teachingMaterials.difficulty,
+  createdAt: teachingMaterials.createdAt,
+};
+
+const TEACHING_MATERIAL_CATEGORY_SELECT = {
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  count: sql<number>`count(*)`,
+};
+
+const TEACHING_MATERIAL_MUSCLE_GROUPS_SELECT = {
+  muscleGroups: teachingMaterials.muscleGroups,
+};
+
+const TEACHING_MATERIAL_EQUIPMENT_SELECT = {
+  equipment: teachingMaterials.equipment,
+};
+
+const TEACHING_MATERIAL_SEARCH_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  name: teachingMaterials.name,
+  description: teachingMaterials.description,
+  thumbnailUrl: teachingMaterials.thumbnailUrl,
+  muscleGroups: teachingMaterials.muscleGroups,
+  equipment: teachingMaterials.equipment,
+  difficulty: teachingMaterials.difficulty,
+};
+
+const TEACHING_MATERIAL_RELATED_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  name: teachingMaterials.name,
+  category: teachingMaterials.category,
+  difficulty: teachingMaterials.difficulty,
+  muscleGroups: teachingMaterials.muscleGroups,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -125,27 +179,14 @@ app.get('/', async (c) => {
   // Get materials and total count in parallel
   const [initialMaterialsData, [countResult]] = await Promise.all([
     db
-      .select({
-        id: teachingMaterials.id,
-        type: teachingMaterials.type,
-        category: teachingMaterials.category,
-        name: teachingMaterials.name,
-        description: teachingMaterials.description,
-        fileId: teachingMaterials.fileId,
-        videoUrl: teachingMaterials.videoUrl,
-        thumbnailUrl: teachingMaterials.thumbnailUrl,
-        muscleGroups: teachingMaterials.muscleGroups,
-        equipment: teachingMaterials.equipment,
-        difficulty: teachingMaterials.difficulty,
-        createdAt: teachingMaterials.createdAt,
-      })
+      .select(TEACHING_MATERIAL_LIST_SELECT)
       .from(teachingMaterials)
       .where(and(...conditions))
       .orderBy(teachingMaterials.category, teachingMaterials.name)
       .limit(limitNum)
       .offset(offsetNum),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(TEACHING_MATERIAL_COUNT_SELECT)
       .from(teachingMaterials)
       .where(and(...conditions)),
   ]);
@@ -203,11 +244,7 @@ app.get('/categories', async (c) => {
 
   // Get categories grouped by type
   const categoriesData = await db
-    .select({
-      type: teachingMaterials.type,
-      category: teachingMaterials.category,
-      count: sql<number>`count(*)`,
-    })
+    .select(TEACHING_MATERIAL_CATEGORY_SELECT)
     .from(teachingMaterials)
     .where(
       and(
@@ -246,7 +283,7 @@ app.get('/muscle-groups', async (c) => {
 
   // Get all unique muscle groups
   const materialsData = await db
-    .select({ muscleGroups: teachingMaterials.muscleGroups })
+    .select(TEACHING_MATERIAL_MUSCLE_GROUPS_SELECT)
     .from(teachingMaterials)
     .where(
       and(
@@ -281,7 +318,7 @@ app.get('/equipment', async (c) => {
 
   // Get all unique equipment
   const materialsData = await db
-    .select({ equipment: teachingMaterials.equipment })
+    .select(TEACHING_MATERIAL_EQUIPMENT_SELECT)
     .from(teachingMaterials)
     .where(
       and(
@@ -351,17 +388,7 @@ app.get('/search', async (c) => {
 
   // Get materials
   let materialsData = await db
-    .select({
-      id: teachingMaterials.id,
-      type: teachingMaterials.type,
-      category: teachingMaterials.category,
-      name: teachingMaterials.name,
-      description: teachingMaterials.description,
-      thumbnailUrl: teachingMaterials.thumbnailUrl,
-      muscleGroups: teachingMaterials.muscleGroups,
-      equipment: teachingMaterials.equipment,
-      difficulty: teachingMaterials.difficulty,
-    })
+    .select(TEACHING_MATERIAL_SEARCH_SELECT)
     .from(teachingMaterials)
     .where(and(...conditions))
     .orderBy(teachingMaterials.name)
@@ -456,14 +483,7 @@ app.get('/:id', async (c) => {
 
   if (muscleGroups.length > 0) {
     const allMaterials = await db
-      .select({
-        id: teachingMaterials.id,
-        type: teachingMaterials.type,
-        name: teachingMaterials.name,
-        category: teachingMaterials.category,
-        difficulty: teachingMaterials.difficulty,
-        muscleGroups: teachingMaterials.muscleGroups,
-      })
+      .select(TEACHING_MATERIAL_RELATED_SELECT)
       .from(teachingMaterials)
       .where(
         and(

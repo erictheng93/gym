@@ -85,6 +85,43 @@ const KPI_TEMPLATE_SELECT = {
   date_created: kpiTemplates.createdAt,
 };
 
+const PERFORMANCE_COUNT_SELECT = { count: sql<number>`count(*)` };
+
+const PERFORMANCE_TEMPLATE_KPIS_SELECT = { kpis: kpiTemplates.kpis };
+
+const PERFORMANCE_ID_SELECT = { id: performanceReviews.id };
+
+const PERFORMANCE_STATUS_SELECT = {
+  id: performanceReviews.id,
+  status: performanceReviews.status,
+};
+
+const EMPLOYEE_ID_SELECT = { id: employees.id };
+
+const PERFORMANCE_REJECT_SELECT = {
+  id: performanceReviews.id,
+  status: performanceReviews.status,
+  reviewerComments: performanceReviews.reviewerComments,
+};
+
+const PERFORMANCE_STATS_STATUS_SELECT = {
+  status: performanceReviews.status,
+  count: sql<number>`count(*)`,
+};
+
+const PERFORMANCE_STATS_SCORE_SELECT = {
+  avg: sql<string>`avg(${performanceReviews.overallScore})`,
+  excellent: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 90)`,
+  good: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 70 and ${performanceReviews.overallScore} < 90)`,
+  poor: sql<number>`count(*) filter (where ${performanceReviews.overallScore} < 70)`,
+};
+
+const PERFORMANCE_STATS_TOP_PERFORMERS_SELECT = {
+  id: performanceReviews.employeeId,
+  full_name: employees.fullName,
+  score: performanceReviews.overallScore,
+};
+
 // -----------------------------------------------------------------------------
 // GET /reviews - List performance reviews with filters
 // -----------------------------------------------------------------------------
@@ -131,7 +168,7 @@ app.get('/reviews', async (c) => {
       .orderBy(desc(performanceReviews.createdAt))
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
-    db.select({ count: sql<number>`count(*)` })
+    db.select(PERFORMANCE_COUNT_SELECT)
       .from(performanceReviews)
       .where(whereClause),
   ]);
@@ -236,7 +273,7 @@ app.post('/reviews', async (c) => {
   // If template_id is provided, fetch KPIs from template
   let kpiData: unknown[] = [];
   if (template_id) {
-    const template = await db.select({ kpis: kpiTemplates.kpis })
+    const template = await db.select(PERFORMANCE_TEMPLATE_KPIS_SELECT)
       .from(kpiTemplates)
       .where(eq(kpiTemplates.id, template_id))
       .limit(1);
@@ -316,7 +353,7 @@ app.post('/reviews/:id/submit', async (c) => {
   }
 
   // Discriminate between 404 and 400
-  const existing = await db.select({ id: performanceReviews.id })
+  const existing = await db.select(PERFORMANCE_ID_SELECT)
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -338,12 +375,12 @@ app.post('/reviews/:id/approve', async (c) => {
 
   // Concurrently fetch existing review and approver's employee record
   const [existingList, approverEmployeeList] = await Promise.all([
-    db.select({ id: performanceReviews.id, status: performanceReviews.status })
+    db.select(PERFORMANCE_STATUS_SELECT)
       .from(performanceReviews)
       .where(eq(performanceReviews.id, id))
       .limit(1),
     user?.id
-      ? db.select({ id: employees.id })
+      ? db.select(EMPLOYEE_ID_SELECT)
           .from(employees)
           .where(eq(employees.userId, user.id))
           .limit(1)
@@ -383,11 +420,7 @@ app.post('/reviews/:id/reject', async (c) => {
   const body = await c.req.json();
   const { reason } = body;
 
-  const existing = await db.select({
-    id: performanceReviews.id,
-    status: performanceReviews.status,
-    reviewerComments: performanceReviews.reviewerComments,
-  })
+  const existing = await db.select(PERFORMANCE_REJECT_SELECT)
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -441,7 +474,7 @@ app.post('/kpi-templates', async (c) => {
   // Find creator's employee record
   let createdBy: string | null = null;
   if (user?.id) {
-    const creatorEmployee = await db.select({ id: employees.id })
+    const creatorEmployee = await db.select(EMPLOYEE_ID_SELECT)
       .from(employees)
       .where(eq(employees.userId, user.id))
       .limit(1);
@@ -513,28 +546,16 @@ app.get('/team-dashboard', async (c) => {
   // 2. average score & score distribution in a single combined query
   // 3. top performers with left-joined employee names (no separate query)
   const [stats, [scoreStats], topPerformers] = await Promise.all([
-    db.select({
-      status: performanceReviews.status,
-      count: sql<number>`count(*)`,
-    })
+    db.select(PERFORMANCE_STATS_STATUS_SELECT)
       .from(performanceReviews)
       .where(whereClause)
       .groupBy(performanceReviews.status),
 
-    db.select({
-      avg: sql<string>`avg(${performanceReviews.overallScore})`,
-      excellent: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 90)`,
-      good: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 70 and ${performanceReviews.overallScore} < 90)`,
-      poor: sql<number>`count(*) filter (where ${performanceReviews.overallScore} < 70)`,
-    })
+    db.select(PERFORMANCE_STATS_SCORE_SELECT)
       .from(performanceReviews)
       .where(approvedWhere),
 
-    db.select({
-      id: performanceReviews.employeeId,
-      full_name: employees.fullName,
-      score: performanceReviews.overallScore,
-    })
+    db.select(PERFORMANCE_STATS_TOP_PERFORMERS_SELECT)
       .from(performanceReviews)
       .leftJoin(employees, eq(performanceReviews.employeeId, employees.id))
       .where(approvedWhere)

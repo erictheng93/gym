@@ -1,3 +1,30 @@
+<script lang="ts">
+import { MESSAGES } from '~/constants'
+
+const exportDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
+const BATCH_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: '有效',
+  SUSPENDED: '暫停',
+  BANNED: '停權'
+}
+
+const AVATAR_VARIANTS: Record<string, 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'gray'> = {
+  ACTIVE: 'blue',
+  EXPIRED: 'gray',
+  SUSPENDED: 'orange',
+  BANNED: 'red'
+}
+
+const statusOptions = [
+  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
+  { value: 'ACTIVE', label: '有效' },
+  { value: 'EXPIRED', label: '過期' },
+  { value: 'SUSPENDED', label: '暫停' },
+  { value: 'BANNED', label: '停權' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 會員管理頁面
@@ -5,7 +32,7 @@
  * Apple-style UI 設計
  * 使用 DataList 組件，卡片式呈現
  */
-import { MESSAGES, PAGES, PAGINATION, TIMING } from '~/constants'
+import { PAGES, PAGINATION, TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
@@ -27,28 +54,11 @@ const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 // Batch selection state
 const selectedIds = ref<string[]>([])
 
-// Cached Intl formatter and mappings
-const exportDateFormatter = new Intl.DateTimeFormat('zh-TW')
-const BATCH_STATUS_LABELS: Record<string, string> = {
-  ACTIVE: '有效',
-  SUSPENDED: '暫停',
-  BANNED: '停權'
-}
-
 // Modal state
 const showModal = ref(false)
 const selectedMember = ref<typeof members.value[0] | null>(null)
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-// Status options
-const statusOptions = [
-  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
-  { value: 'ACTIVE', label: '有效' },
-  { value: 'EXPIRED', label: '過期' },
-  { value: 'SUSPENDED', label: '暫停' },
-  { value: 'BANNED', label: '停權' }
-]
 
 // Load members with current filters
 const loadMembers = async () => {
@@ -186,13 +196,7 @@ watch(currentPage, () => {
 
 // Get avatar variant based on status
 const getAvatarVariant = (status: string) => {
-  const variants: Record<string, 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'gray'> = {
-    ACTIVE: 'blue',
-    EXPIRED: 'gray',
-    SUSPENDED: 'orange',
-    BANNED: 'red'
-  }
-  return variants[status] || 'blue'
+  return AVATAR_VARIANTS[status] || 'blue'
 }
 
 // Branch name lookup map for O(1) row rendering

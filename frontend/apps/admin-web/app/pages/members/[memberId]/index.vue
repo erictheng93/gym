@@ -1,5 +1,41 @@
+<script lang="ts">
+import { STATUS, LABELS } from '~/constants'
+
+const MEMBER_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
+  EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
+  SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
+  BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
+}
+
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
+}
+
+const GENDER_LABEL_MAP: Record<string, string> = {
+  M: LABELS.GENDER.MALE,
+  F: LABELS.GENDER.FEMALE,
+  O: LABELS.GENDER.OTHER,
+  MALE: LABELS.GENDER.MALE,
+  FEMALE: LABELS.GENDER.FEMALE,
+  OTHER: LABELS.GENDER.OTHER
+}
+
+const memberDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const memberCurrencyFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
-import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
 
 definePageMeta({
@@ -41,38 +77,6 @@ const loadMember = async () => {
 }
 
 onMounted(loadMember)
-
-const MEMBER_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
-  ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
-  EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
-  SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
-  BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
-}
-
-const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
-  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
-}
-
-const GENDER_LABEL_MAP: Record<string, string> = {
-  M: LABELS.GENDER.MALE,
-  F: LABELS.GENDER.FEMALE,
-  O: LABELS.GENDER.OTHER,
-  MALE: LABELS.GENDER.MALE,
-  FEMALE: LABELS.GENDER.FEMALE,
-  OTHER: LABELS.GENDER.OTHER
-}
-
-const memberDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
-
-const memberCurrencyFormatter = new Intl.NumberFormat('zh-TW')
 
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return '—'

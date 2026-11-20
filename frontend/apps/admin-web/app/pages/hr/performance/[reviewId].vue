@@ -1,3 +1,18 @@
+<script lang="ts">
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return '—'
+  return reviewDateFormatter.format(date)
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 績效考核詳情頁面
@@ -46,20 +61,6 @@ onMounted(async () => {
     }
   }
 })
-
-// Format date
-const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
-
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  const date = new Date(dateStr)
-  if (Number.isNaN(date.getTime())) return '—'
-  return reviewDateFormatter.format(date)
-}
 
 // Check if current user is reviewer
 const isReviewer = computed(() => {

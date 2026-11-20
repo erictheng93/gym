@@ -118,7 +118,7 @@ describe('Check-ins API', () => {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          memberId: '00000000-0000-0000-0000-999999999999',
+          memberId: '00000000-0000-4000-8000-999999999999',
           branchId: TEST_BRANCH_ID,
         }),
       });

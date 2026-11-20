@@ -1,3 +1,8 @@
+<script lang="ts">
+const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })
+const numberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
@@ -191,12 +196,10 @@ const loadReports = async () => {
   }
 }
 
-const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })
 const formatCurrency = (value: number) => {
   return currencyFormatter.format(value)
 }
 
-const numberFormatter = new Intl.NumberFormat('zh-TW')
 const formatNumber = (value: number) => {
   return numberFormatter.format(value)
 }

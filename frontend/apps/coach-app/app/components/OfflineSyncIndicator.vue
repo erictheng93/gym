@@ -1,3 +1,7 @@
+<script lang="ts">
+const syncTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+</script>
+
 <script setup lang="ts">
 /**
  * OfflineSyncIndicator Component
@@ -62,8 +66,6 @@ const statusColor = computed(() => {
   if (hasPendingRequests.value) return 'pending'
   return 'synced'
 })
-
-const syncTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
 // Format timestamp for display
 const formatTime = (ts: number) => {
