@@ -185,6 +185,9 @@ const REPORT_COACH_EXPORT_EMPLOYEES_SELECT = {
   branchName: branches.name,
 };
 
+const buildBranchFilter = (column: any, branchIds: string[]) =>
+  branchIds.length === 1 ? eq(column, branchIds[0]) : inArray(column, branchIds);
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -206,7 +209,7 @@ app.get('/revenue', async (c) => {
 
   const branchCondition = branchId
     ? eq(payments.branchId, branchId)
-    : inArray(payments.branchId, branchIds);
+    : buildBranchFilter(payments.branchId, branchIds);
 
   const conditions = [
     branchCondition,
@@ -269,7 +272,7 @@ app.get('/member-growth', async (c) => {
 
   const branchCondition = branchId
     ? eq(members.branchId, branchId)
-    : inArray(members.branchId, branchIds);
+    : buildBranchFilter(members.branchId, branchIds);
 
   const conditions = [branchCondition];
 
@@ -318,7 +321,7 @@ app.get('/contract-expiry', async (c) => {
 
   const branchCondition = branchId
     ? eq(contracts.branchId, branchId)
-    : inArray(contracts.branchId, branchIds);
+    : buildBranchFilter(contracts.branchId, branchIds);
 
   const conditions = [
     branchCondition,
@@ -364,7 +367,7 @@ app.get('/member-activity', async (c) => {
 
   const branchCondition = branchId
     ? eq(checkIns.branchId, branchId)
-    : inArray(checkIns.branchId, branchIds);
+    : buildBranchFilter(checkIns.branchId, branchIds);
 
   const conditions = [
     branchCondition,
@@ -443,7 +446,7 @@ app.get('/revenue/export', async (c) => {
 
   const branchCondition = branchId
     ? eq(payments.branchId, branchId)
-    : inArray(payments.branchId, branchIds);
+    : buildBranchFilter(payments.branchId, branchIds);
 
   const conditions = [
     branchCondition,
@@ -517,7 +520,7 @@ app.get('/member-growth/export', async (c) => {
 
   const branchCondition = branchId
     ? eq(members.branchId, branchId)
-    : inArray(members.branchId, branchIds);
+    : buildBranchFilter(members.branchId, branchIds);
 
   const conditions = [branchCondition];
 
@@ -591,7 +594,7 @@ app.get('/contract-expiry/export', async (c) => {
 
   const branchCondition = branchId
     ? eq(contracts.branchId, branchId)
-    : inArray(contracts.branchId, branchIds);
+    : buildBranchFilter(contracts.branchId, branchIds);
 
   const conditions = [
     branchCondition,
@@ -676,7 +679,7 @@ app.get('/member-activity/export', async (c) => {
 
   const branchCondition = branchId
     ? eq(checkIns.branchId, branchId)
-    : inArray(checkIns.branchId, branchIds);
+    : buildBranchFilter(checkIns.branchId, branchIds);
 
   const conditions = [
     branchCondition,
@@ -811,7 +814,7 @@ app.get('/branch-performance', async (c) => {
     db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
-      inArray(payments.branchId, branchIds),
+      buildBranchFilter(payments.branchId, branchIds),
       eq(payments.type, 'INCOME'),
       gte(payments.paymentDate, currentStart),
       lte(payments.paymentDate, currentEnd)
@@ -822,7 +825,7 @@ app.get('/branch-performance', async (c) => {
     db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
     .from(members)
     .where(and(
-      inArray(members.branchId, branchIds),
+      buildBranchFilter(members.branchId, branchIds),
       gte(members.createdAt, currentStart),
       lte(members.createdAt, currentEnd)
     ))
@@ -832,7 +835,7 @@ app.get('/branch-performance', async (c) => {
     db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
     .from(checkIns)
     .where(and(
-      inArray(checkIns.branchId, branchIds),
+      buildBranchFilter(checkIns.branchId, branchIds),
       gte(checkIns.checkInTime, currentStart),
       lte(checkIns.checkInTime, currentEnd)
     ))
@@ -842,7 +845,7 @@ app.get('/branch-performance', async (c) => {
     db.select(REPORT_BRANCH_CONTRACTS_COUNT_SELECT)
     .from(contracts)
     .where(and(
-      inArray(contracts.branchId, branchIds),
+      buildBranchFilter(contracts.branchId, branchIds),
       eq(contracts.status, 'ACTIVE')
     ))
     .groupBy(contracts.branchId),
@@ -852,7 +855,7 @@ app.get('/branch-performance', async (c) => {
       ? db.select(REPORT_BRANCH_REVENUE_SELECT)
         .from(payments)
         .where(and(
-          inArray(payments.branchId, branchIds),
+          buildBranchFilter(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
           gte(payments.paymentDate, previousStart),
           lte(payments.paymentDate, previousEnd)
@@ -865,7 +868,7 @@ app.get('/branch-performance', async (c) => {
       ? db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
         .from(members)
         .where(and(
-          inArray(members.branchId, branchIds),
+          buildBranchFilter(members.branchId, branchIds),
           gte(members.createdAt, previousStart),
           lte(members.createdAt, previousEnd)
         ))
@@ -877,7 +880,7 @@ app.get('/branch-performance', async (c) => {
       ? db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
         .from(checkIns)
         .where(and(
-          inArray(checkIns.branchId, branchIds),
+          buildBranchFilter(checkIns.branchId, branchIds),
           gte(checkIns.checkInTime, previousStart),
           lte(checkIns.checkInTime, previousEnd)
         ))
@@ -1093,7 +1096,7 @@ app.get('/branch-performance/export', async (c) => {
     db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
-      inArray(payments.branchId, branchIds),
+      buildBranchFilter(payments.branchId, branchIds),
       eq(payments.type, 'INCOME'),
       gte(payments.paymentDate, currentStart),
       lte(payments.paymentDate, currentEnd)
@@ -1102,23 +1105,23 @@ app.get('/branch-performance/export', async (c) => {
 
     db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
     .from(members)
-    .where(and(inArray(members.branchId, branchIds), gte(members.createdAt, currentStart), lte(members.createdAt, currentEnd)))
+    .where(and(buildBranchFilter(members.branchId, branchIds), gte(members.createdAt, currentStart), lte(members.createdAt, currentEnd)))
     .groupBy(members.branchId),
 
     db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
     .from(checkIns)
-    .where(and(inArray(checkIns.branchId, branchIds), gte(checkIns.checkInTime, currentStart), lte(checkIns.checkInTime, currentEnd)))
+    .where(and(buildBranchFilter(checkIns.branchId, branchIds), gte(checkIns.checkInTime, currentStart), lte(checkIns.checkInTime, currentEnd)))
     .groupBy(checkIns.branchId),
 
     db.select(REPORT_BRANCH_CONTRACTS_COUNT_SELECT)
     .from(contracts)
-    .where(and(inArray(contracts.branchId, branchIds), eq(contracts.status, 'ACTIVE')))
+    .where(and(buildBranchFilter(contracts.branchId, branchIds), eq(contracts.status, 'ACTIVE')))
     .groupBy(contracts.branchId),
 
     db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
-      inArray(payments.branchId, branchIds),
+      buildBranchFilter(payments.branchId, branchIds),
       eq(payments.type, 'INCOME'),
       gte(payments.paymentDate, previousStart),
       lte(payments.paymentDate, previousEnd)
@@ -1234,7 +1237,7 @@ app.get('/coach-performance', async (c) => {
 
   // Get coaches (employees with coach role or instructors)
   let coachConditions = [
-    inArray(employees.branchId, branchIds),
+    buildBranchFilter(employees.branchId, branchIds),
     eq(employees.status, 'ACTIVE'),
   ];
   if (coachId) {
@@ -1520,7 +1523,7 @@ app.get('/coach-performance/export', async (c) => {
   }
 
   let coachConditions = [
-    inArray(employees.branchId, branchIds),
+    buildBranchFilter(employees.branchId, branchIds),
     eq(employees.status, 'ACTIVE'),
   ];
   if (coachId) {

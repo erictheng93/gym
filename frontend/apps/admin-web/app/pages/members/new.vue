@@ -1,10 +1,20 @@
+<script lang="ts">
+import { LABELS } from '~/constants'
+
+const genderOptions = [
+  { value: 'M', label: LABELS.GENDER.MALE },
+  { value: 'F', label: LABELS.GENDER.FEMALE },
+  { value: 'O', label: LABELS.GENDER.OTHER }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增會員頁面
  *
  * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
-import { MESSAGES, PAGES, LABELS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import { createMemberSchema, type CreateMemberInput } from '~/schemas/member.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
@@ -46,12 +56,6 @@ const {
 const { isSubmitting, submit } = useFormSubmit()
 
 // Options
-const genderOptions = [
-  { value: 'M', label: LABELS.GENDER.MALE },
-  { value: 'F', label: LABELS.GENDER.FEMALE },
-  { value: 'O', label: LABELS.GENDER.OTHER }
-]
-
 const branchOptions = computed(() =>
   branches.value.map(b => ({ value: b.id, label: b.name }))
 )

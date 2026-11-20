@@ -115,6 +115,7 @@ app.get('/', async (c) => {
   }
 
   // Get logs with contract and member info
+  const branchCondition = branchIds.length === 1 ? eq(contracts.branchId, branchIds[0]) : inArray(contracts.branchId, branchIds);
   const [result, [countResult]] = await Promise.all([
     db
       .select(CONTRACT_LOG_WITH_RELATIONS_SELECT)
@@ -122,7 +123,7 @@ app.get('/', async (c) => {
       .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
       .innerJoin(members, eq(contracts.memberId, members.id))
       .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
-      .where(and(inArray(contracts.branchId, branchIds), ...conditions))
+      .where(and(branchCondition, ...conditions))
       .orderBy(desc(contractLogs.dateCreated))
       .limit(limit)
       .offset(offset),
@@ -130,19 +131,25 @@ app.get('/', async (c) => {
       .select(COUNT_SELECT)
       .from(contractLogs)
       .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
-      .where(and(inArray(contracts.branchId, branchIds), ...conditions)),
+      .where(and(branchCondition, ...conditions)),
   ]);
 
   const total = Number(countResult?.count || 0);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.log,
       contract: r.contract,
       member: r.member,
       createdBy: r.createdBy,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
     pagination: {
       total,
       page,
@@ -198,10 +205,11 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
+  const branchCondition = tenantBranchIds.length === 1 ? eq(contracts.branchId, tenantBranchIds[0]) : inArray(contracts.branchId, tenantBranchIds);
   const [contract] = await db
     .select(CONTRACT_ID_SELECT)
     .from(contracts)
-    .where(and(eq(contracts.id, data.contractId), inArray(contracts.branchId, tenantBranchIds)))
+    .where(and(eq(contracts.id, data.contractId), branchCondition))
     .limit(1);
 
   if (!contract) {

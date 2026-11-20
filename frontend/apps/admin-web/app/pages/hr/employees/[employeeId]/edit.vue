@@ -1,3 +1,17 @@
+<script lang="ts">
+const employmentStatusOptions = [
+  { value: 'ACTIVE', label: '在職' },
+  { value: 'RESIGNED', label: '離職' },
+  { value: 'LEAVE', label: '留停' }
+]
+
+const employmentTypeOptions = [
+  { value: 'FULL_TIME', label: '正職' },
+  { value: 'PART_TIME', label: '兼職' },
+  { value: 'FREELANCE', label: '外包' }
+]
+</script>
+
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { PERMISSION_MODULES, createEmptyPermissions } from '~/constants/permissions'
@@ -40,18 +54,6 @@ const form = reactive({
   basic_salary: null as number | null,
   custom_permissions: createEmptyPermissions()
 })
-
-const employmentStatusOptions = [
-  { value: 'ACTIVE', label: '在職' },
-  { value: 'RESIGNED', label: '離職' },
-  { value: 'LEAVE', label: '留停' }
-]
-
-const employmentTypeOptions = [
-  { value: 'FULL_TIME', label: '正職' },
-  { value: 'PART_TIME', label: '兼職' },
-  { value: 'FREELANCE', label: '外包' }
-]
 
 const branchOptions = computed(() =>
   branches.value.map(b => ({ value: b.id, label: b.name }))

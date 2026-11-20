@@ -1,3 +1,12 @@
+<script lang="ts">
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'PENDING', label: '待審核' },
+  { value: 'APPROVED', label: '已核准' },
+  { value: 'PAID', label: '已發放' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 薪資管理頁面
@@ -32,13 +41,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: '待審核' },
-  { value: 'APPROVED', label: '已核准' },
-  { value: 'PAID', label: '已發放' }
-]
 
 // Get current period (YYYY-MM)
 function getCurrentPeriod() {

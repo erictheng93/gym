@@ -1,3 +1,17 @@
+<script lang="ts">
+const employmentStatusOptions = [
+  { value: 'ACTIVE', label: '在職' },
+  { value: 'RESIGNED', label: '離職' },
+  { value: 'LEAVE', label: '留停' }
+]
+
+const employmentTypeOptions = [
+  { value: 'FULL_TIME', label: '正職' },
+  { value: 'PART_TIME', label: '兼職' },
+  { value: 'FREELANCE', label: '外包' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增員工頁面
@@ -49,18 +63,6 @@ const supervisorOptions = computed(() =>
     .filter(e => e.employment_status === 'ACTIVE')
     .map(e => ({ value: e.id, label: e.full_name }))
 )
-
-const employmentStatusOptions = [
-  { value: 'ACTIVE', label: '在職' },
-  { value: 'RESIGNED', label: '離職' },
-  { value: 'LEAVE', label: '留停' }
-]
-
-const employmentTypeOptions = [
-  { value: 'FULL_TIME', label: '正職' },
-  { value: 'PART_TIME', label: '兼職' },
-  { value: 'FREELANCE', label: '外包' }
-]
 
 // Initial load
 onMounted(async () => {

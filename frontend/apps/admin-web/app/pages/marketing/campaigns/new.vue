@@ -1,3 +1,20 @@
+<script lang="ts">
+const typeOptions = [
+  { value: 'PROMOTION', label: '促銷活動' },
+  { value: 'SEASONAL', label: '季節活動' },
+  { value: 'REFERRAL', label: '推薦活動' },
+  { value: 'RETENTION', label: '留存活動' }
+]
+
+const segmentOptions = [
+  { value: '', label: '全部會員' },
+  { value: 'CHAMPIONS', label: '冠軍會員' },
+  { value: 'LOYAL', label: '忠誠會員' },
+  { value: 'AT_RISK', label: '風險會員' },
+  { value: 'LOST', label: '流失會員' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增行銷活動頁面
@@ -37,21 +54,6 @@ const additionalData = ref({
   associated_coupons: [] as string[],
   target_branches: [] as string[]
 })
-
-const typeOptions = [
-  { value: 'PROMOTION', label: '促銷活動' },
-  { value: 'SEASONAL', label: '季節活動' },
-  { value: 'REFERRAL', label: '推薦活動' },
-  { value: 'RETENTION', label: '留存活動' }
-]
-
-const segmentOptions = [
-  { value: '', label: '全部會員' },
-  { value: 'CHAMPIONS', label: '冠軍會員' },
-  { value: 'LOYAL', label: '忠誠會員' },
-  { value: 'AT_RISK', label: '風險會員' },
-  { value: 'LOST', label: '流失會員' }
-]
 
 onMounted(async () => {
   await Promise.all([fetchCoupons({ limit: 100 }), fetchBranches()])

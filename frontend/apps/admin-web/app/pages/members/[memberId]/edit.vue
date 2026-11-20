@@ -1,3 +1,18 @@
+<script lang="ts">
+const genderOptions = [
+  { value: 'M', label: '男' },
+  { value: 'F', label: '女' },
+  { value: 'O', label: '其他' }
+]
+
+const statusOptions = [
+  { value: 'ACTIVE', label: '有效' },
+  { value: 'EXPIRED', label: '過期' },
+  { value: 'SUSPENDED', label: '暫停' },
+  { value: 'BANNED', label: '停權' }
+]
+</script>
+
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { MESSAGES } from '~/constants'
@@ -46,19 +61,6 @@ const {
 
 // Form submission helper
 const { isSubmitting, submit } = useFormSubmit()
-
-const genderOptions = [
-  { value: 'M', label: '男' },
-  { value: 'F', label: '女' },
-  { value: 'O', label: '其他' }
-]
-
-const statusOptions = [
-  { value: 'ACTIVE', label: '有效' },
-  { value: 'EXPIRED', label: '過期' },
-  { value: 'SUSPENDED', label: '暫停' },
-  { value: 'BANNED', label: '停權' }
-]
 
 const branchOptions = computed(() =>
   branches.value.map(branch => ({
