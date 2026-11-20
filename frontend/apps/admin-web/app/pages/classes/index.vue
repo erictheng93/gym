@@ -86,6 +86,10 @@ onMounted(async () => {
   ])
 })
 
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
+
 // Row click handler
 const handleRowClick = (classItem: typeof classes.value[0]) => {
   navigateTo(`/classes/${classItem.id}`)

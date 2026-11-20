@@ -126,8 +126,15 @@ app.post(
         .limit(1),
       db
         .select({
-          contract: contracts,
-          plan: membershipPlans,
+          contract: {
+            id: contracts.id,
+            contractNo: contracts.contractNo,
+            remainingCounts: contracts.remainingCounts,
+            endDate: contracts.endDate,
+          },
+          plan: {
+            planType: membershipPlans.planType,
+          },
         })
         .from(contracts)
         .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
@@ -234,7 +241,10 @@ app.post(
         checkInType: 'ENTRY',
         checkInMethod: 'QR_CODE',
         checkInTime: new Date(),
-      }).returning(),
+      }).returning({
+        id: checkIns.id,
+        checkInTime: checkIns.checkInTime,
+      }),
       isCountBased
         ? db.update(contracts).set({
             remainingCounts: newRemainingCounts,
