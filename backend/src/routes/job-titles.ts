@@ -22,12 +22,26 @@ const createJobTitleSchema = z.object({
 
 const updateJobTitleSchema = createJobTitleSchema.partial();
 
+const JOB_TITLE_SELECT = {
+  id: jobTitles.id,
+  createdAt: jobTitles.createdAt,
+  name: jobTitles.name,
+  code: jobTitles.code,
+  description: jobTitles.description,
+  level: jobTitles.level,
+  sort: jobTitles.sort,
+  permissionsConfig: jobTitles.permissionsConfig,
+  tenantId: jobTitles.tenantId,
+};
+
+const JOB_TITLE_RETURNING = JOB_TITLE_SELECT;
+
 // List job titles
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const result = await db
-    .select()
+    .select(JOB_TITLE_SELECT)
     .from(jobTitles)
     .where(eq(jobTitles.tenantId, tenantId))
     .orderBy(jobTitles.name);
@@ -44,7 +58,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [jobTitle] = await db
-    .select()
+    .select(JOB_TITLE_SELECT)
     .from(jobTitles)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
     .limit(1);
@@ -58,18 +72,6 @@ app.get('/:id', async (c) => {
     data: jobTitle,
   });
 });
-
-const JOB_TITLE_RETURNING = {
-  id: jobTitles.id,
-  createdAt: jobTitles.createdAt,
-  name: jobTitles.name,
-  code: jobTitles.code,
-  description: jobTitles.description,
-  level: jobTitles.level,
-  sort: jobTitles.sort,
-  permissionsConfig: jobTitles.permissionsConfig,
-  tenantId: jobTitles.tenantId,
-};
 
 // Create job title (admin/manager only)
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createJobTitleSchema), async (c) => {

@@ -1,3 +1,7 @@
+<script lang="ts">
+const planPriceFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
 import type { MembershipPlan } from '~/types/schema'
@@ -122,7 +126,7 @@ const handleSubmit = async () => {
 }
 
 const formatPrice = (value: number) => {
-  return new Intl.NumberFormat('zh-TW').format(value)
+  return planPriceFormatter.format(value)
 }
 </script>
 

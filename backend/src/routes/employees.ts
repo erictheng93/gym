@@ -36,6 +36,28 @@ const updateEmployeeSchema = z.object({
   basicSalary: z.coerce.number().optional().nullable(),
 });
 
+const EMPLOYEE_SELECT = {
+  id: employees.id,
+  userId: employees.userId,
+  branchId: employees.branchId,
+  jobTitleId: employees.jobTitleId,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  phone: employees.phone,
+  email: employees.email,
+  status: employees.status,
+  employmentType: employees.employmentType,
+  hireDate: employees.hireDate,
+  resignDate: employees.resignDate,
+  basicSalary: employees.basicSalary,
+  customPermissions: employees.customPermissions,
+  createdAt: employees.createdAt,
+  updatedAt: employees.updatedAt,
+  tenantId: employees.tenantId,
+};
+
+const EMPLOYEE_RETURNING = EMPLOYEE_SELECT;
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
@@ -56,7 +78,7 @@ app.get('/', async (c) => {
 
   const result = await db
     .select({
-      employee: employees,
+      employee: EMPLOYEE_SELECT,
       jobTitle: {
         id: jobTitles.id,
         name: jobTitles.name,
@@ -89,7 +111,7 @@ app.get('/:id', async (c) => {
   const [[employee], branchIds, recentAttendances] = await Promise.all([
     db
       .select({
-        employee: employees,
+        employee: EMPLOYEE_SELECT,
         jobTitle: {
           id: jobTitles.id,
           name: jobTitles.name,
@@ -141,26 +163,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const EMPLOYEE_RETURNING = {
-  id: employees.id,
-  userId: employees.userId,
-  branchId: employees.branchId,
-  jobTitleId: employees.jobTitleId,
-  employeeCode: employees.employeeCode,
-  fullName: employees.fullName,
-  phone: employees.phone,
-  email: employees.email,
-  status: employees.status,
-  employmentType: employees.employmentType,
-  hireDate: employees.hireDate,
-  resignDate: employees.resignDate,
-  basicSalary: employees.basicSalary,
-  customPermissions: employees.customPermissions,
-  createdAt: employees.createdAt,
-  updatedAt: employees.updatedAt,
-  tenantId: employees.tenantId,
-};
 
 app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json', createEmployeeSchema), async (c) => {
   const tenantId = c.get('tenantId')!;

@@ -1,3 +1,7 @@
+<script lang="ts">
+const planPriceFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 /**
  * 新增會籍方案頁面
@@ -81,7 +85,7 @@ const handleSubmit = async () => {
 }
 
 const formatPrice = (value: number) => {
-  return new Intl.NumberFormat('zh-TW').format(value)
+  return planPriceFormatter.format(value)
 }
 </script>
 

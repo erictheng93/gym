@@ -29,6 +29,29 @@ const createCampaignSchema = z.object({
 
 const updateCampaignSchema = createCampaignSchema.partial();
 
+const CAMPAIGN_SELECT = {
+  id: campaigns.id,
+  status: campaigns.status,
+  createdAt: campaigns.createdAt,
+  updatedAt: campaigns.updatedAt,
+  tenantId: campaigns.tenantId,
+  branchId: campaigns.branchId,
+  name: campaigns.name,
+  description: campaigns.description,
+  campaignType: campaigns.campaignType,
+  startDate: campaigns.startDate,
+  endDate: campaigns.endDate,
+  targetAudience: campaigns.targetAudience,
+  budget: campaigns.budget,
+  discountType: campaigns.discountType,
+  discountValue: campaigns.discountValue,
+  isActive: campaigns.isActive,
+  terms: campaigns.terms,
+  createdById: campaigns.createdById,
+};
+
+const CAMPAIGN_RETURNING = CAMPAIGN_SELECT;
+
 // List campaigns
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -59,7 +82,7 @@ app.get('/', async (c) => {
   const [result, [countResult]] = await Promise.all([
     db
       .select({
-        campaign: campaigns,
+        campaign: CAMPAIGN_SELECT,
         branch: {
           id: branches.id,
           name: branches.name,
@@ -107,7 +130,7 @@ app.get('/:id', async (c) => {
 
   const [result] = await db
     .select({
-      campaign: campaigns,
+      campaign: CAMPAIGN_SELECT,
       branch: {
         id: branches.id,
         name: branches.name,
@@ -136,27 +159,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const CAMPAIGN_RETURNING = {
-  id: campaigns.id,
-  status: campaigns.status,
-  createdAt: campaigns.createdAt,
-  updatedAt: campaigns.updatedAt,
-  tenantId: campaigns.tenantId,
-  branchId: campaigns.branchId,
-  name: campaigns.name,
-  description: campaigns.description,
-  campaignType: campaigns.campaignType,
-  startDate: campaigns.startDate,
-  endDate: campaigns.endDate,
-  targetAudience: campaigns.targetAudience,
-  budget: campaigns.budget,
-  discountType: campaigns.discountType,
-  discountValue: campaigns.discountValue,
-  isActive: campaigns.isActive,
-  terms: campaigns.terms,
-  createdById: campaigns.createdById,
-};
 
 // Create campaign
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createCampaignSchema), async (c) => {

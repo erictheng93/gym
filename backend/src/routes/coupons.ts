@@ -31,6 +31,29 @@ const createCouponSchema = z.object({
 
 const updateCouponSchema = createCouponSchema.partial().omit({ code: true });
 
+const COUPON_SELECT = {
+  id: coupons.id,
+  status: coupons.status,
+  createdAt: coupons.createdAt,
+  updatedAt: coupons.updatedAt,
+  tenantId: coupons.tenantId,
+  branchId: coupons.branchId,
+  campaignId: coupons.campaignId,
+  code: coupons.code,
+  name: coupons.name,
+  description: coupons.description,
+  discountType: coupons.discountType,
+  discountValue: coupons.discountValue,
+  minPurchase: coupons.minPurchase,
+  maxDiscount: coupons.maxDiscount,
+  validFrom: coupons.validFrom,
+  validUntil: coupons.validUntil,
+  usageLimit: coupons.usageLimit,
+  usageLimitPerMember: coupons.usageLimitPerMember,
+  isActive: coupons.isActive,
+  applicablePlans: coupons.applicablePlans,
+};
+
 // List coupons
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -56,7 +79,7 @@ app.get('/', async (c) => {
   const [result, [countResult]] = await Promise.all([
     db
       .select({
-        coupon: coupons,
+        coupon: COUPON_SELECT,
         branch: {
           id: branches.id,
           name: branches.name,
@@ -189,28 +212,7 @@ app.post('/validate', async (c) => {
   });
 });
 
-const COUPON_RETURNING = {
-  id: coupons.id,
-  status: coupons.status,
-  createdAt: coupons.createdAt,
-  updatedAt: coupons.updatedAt,
-  tenantId: coupons.tenantId,
-  branchId: coupons.branchId,
-  campaignId: coupons.campaignId,
-  code: coupons.code,
-  name: coupons.name,
-  description: coupons.description,
-  discountType: coupons.discountType,
-  discountValue: coupons.discountValue,
-  minPurchase: coupons.minPurchase,
-  maxDiscount: coupons.maxDiscount,
-  validFrom: coupons.validFrom,
-  validUntil: coupons.validUntil,
-  usageLimit: coupons.usageLimit,
-  usageLimitPerMember: coupons.usageLimitPerMember,
-  isActive: coupons.isActive,
-  applicablePlans: coupons.applicablePlans,
-};
+const COUPON_RETURNING = COUPON_SELECT;
 
 const COUPON_USAGE_RETURNING = {
   id: couponUsages.id,

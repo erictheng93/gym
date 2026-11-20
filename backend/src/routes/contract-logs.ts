@@ -23,6 +23,25 @@ const createLogSchema = z.object({
   targetMemberId: z.string().uuid().optional(),
 });
 
+const CONTRACT_LOG_SELECT = {
+  id: contractLogs.id,
+  contractId: contractLogs.contractId,
+  logType: contractLogs.logType,
+  startDate: contractLogs.startDate,
+  endDate: contractLogs.endDate,
+  daysAffected: contractLogs.daysAffected,
+  reason: contractLogs.reason,
+  createdByEmployee: contractLogs.createdByEmployee,
+  branchId: contractLogs.branchId,
+  originalMemberId: contractLogs.originalMemberId,
+  targetMemberId: contractLogs.targetMemberId,
+  status: contractLogs.status,
+  dateCreated: contractLogs.dateCreated,
+  tenantId: contractLogs.tenantId,
+};
+
+const CONTRACT_LOG_RETURNING = CONTRACT_LOG_SELECT;
+
 // List contract logs
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -60,7 +79,7 @@ app.get('/', async (c) => {
   const [result, [countResult]] = await Promise.all([
     db
       .select({
-        log: contractLogs,
+        log: CONTRACT_LOG_SELECT,
         contract: {
           id: contracts.id,
           contractNo: contracts.contractNo,
@@ -118,7 +137,7 @@ app.get('/contract/:contractId', async (c) => {
     getTenantBranchIds(tenantId),
     db
       .select({
-        log: contractLogs,
+        log: CONTRACT_LOG_SELECT,
         createdBy: {
           id: employees.id,
           fullName: employees.fullName,
@@ -147,23 +166,6 @@ app.get('/contract/:contractId', async (c) => {
     })),
   });
 });
-
-const CONTRACT_LOG_RETURNING = {
-  id: contractLogs.id,
-  contractId: contractLogs.contractId,
-  logType: contractLogs.logType,
-  startDate: contractLogs.startDate,
-  endDate: contractLogs.endDate,
-  daysAffected: contractLogs.daysAffected,
-  reason: contractLogs.reason,
-  createdByEmployee: contractLogs.createdByEmployee,
-  branchId: contractLogs.branchId,
-  originalMemberId: contractLogs.originalMemberId,
-  targetMemberId: contractLogs.targetMemberId,
-  status: contractLogs.status,
-  dateCreated: contractLogs.dateCreated,
-  tenantId: contractLogs.tenantId,
-};
 
 // Create contract log (usually created automatically by contract operations)
 app.post('/', zValidator('json', createLogSchema), async (c) => {
