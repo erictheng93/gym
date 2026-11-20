@@ -1,3 +1,8 @@
+<script lang="ts">
+const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })
+const numberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
@@ -74,6 +79,8 @@ const stats = computed(() => {
   }
 })
 
+const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'] as const
+
 // Last 6 months revenue data
 const revenueByMonth = computed(() => {
   if (!revenueReport.value) return []
@@ -96,9 +103,8 @@ const revenueByMonth = computed(() => {
     .slice(-6)
     .map(([key, revenue]) => {
       const [, month] = key.split('-')
-      const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
       return {
-        month: monthNames[parseInt(month!) - 1],
+        month: MONTH_NAMES[parseInt(month!) - 1],
         revenue
       }
     })
@@ -191,8 +197,18 @@ const loadReports = async () => {
 }
 
 const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(value)
+  return currencyFormatter.format(value)
 }
+
+const formatNumber = (value: number) => {
+  return numberFormatter.format(value)
+}
+
+const PERIOD_TABS = [
+  { value: 'week', label: MESSAGES.TIME.THIS_WEEK },
+  { value: 'month', label: MESSAGES.TIME.THIS_MONTH },
+  { value: 'year', label: MESSAGES.TIME.THIS_YEAR },
+]
 
 const formatPercent = (value: number) => {
   const prefix = value > 0 ? '+' : ''
@@ -232,7 +248,7 @@ onMounted(async () => {
         </select>
         <div class="period-tabs">
           <button
-            v-for="period in [{ value: 'week', label: MESSAGES.TIME.THIS_WEEK }, { value: 'month', label: MESSAGES.TIME.THIS_MONTH }, { value: 'year', label: MESSAGES.TIME.THIS_YEAR }]"
+            v-for="period in PERIOD_TABS"
             :key="period.value"
             :class="{ active: selectedPeriod === period.value }"
             @click="selectedPeriod = period.value"
@@ -301,7 +317,7 @@ onMounted(async () => {
             {{ formatPercent(stats.checkinsChange) }}
           </span>
         </div>
-        <div class="metric-value">{{ stats.checkins.toLocaleString() }}</div>
+        <div class="metric-value">{{ formatNumber(stats.checkins) }}</div>
         <div class="metric-label">{{ PAGES.REPORTS.CHECKINS }}</div>
       </div>
     </div>

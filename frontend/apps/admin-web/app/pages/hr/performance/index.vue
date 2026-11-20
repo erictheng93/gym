@@ -1,3 +1,22 @@
+<script lang="ts">
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : reviewDateFormatter.format(d)
+}
+
+const columns = [
+  { key: 'employee', label: '員工', slot: 'employee' },
+  { key: 'review_period', label: '考核期間' },
+  { key: 'review_type', label: '類型', slot: 'type' },
+  { key: 'score', label: '分數', slot: 'score' },
+  { key: 'status', label: '狀態', slot: 'status' },
+  { key: 'date_created', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 績效考核列表頁面
@@ -77,22 +96,6 @@ onMounted(loadReviews)
 const handleRowClick = (review: typeof reviews.value[0]) => {
   navigateTo(`/hr/performance/${review.id}`)
 }
-
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
-}
-
-// Table columns
-const columns = [
-  { key: 'employee', label: '員工', slot: 'employee' },
-  { key: 'review_period', label: '考核期間' },
-  { key: 'review_type', label: '類型', slot: 'type' },
-  { key: 'score', label: '分數', slot: 'score' },
-  { key: 'status', label: '狀態', slot: 'status' },
-  { key: 'date_created', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
-]
 </script>
 
 <template>

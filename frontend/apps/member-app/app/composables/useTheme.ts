@@ -12,6 +12,7 @@ const DEFAULT_THEME: ThemeMode = 'dark'
 // Global state (shared across components)
 const themeMode = ref<ThemeMode>(DEFAULT_THEME)
 const resolvedTheme = ref<'light' | 'dark'>('dark')
+let isMediaListenerInitialized = false
 
 export function useTheme() {
   const isClient = import.meta.client
@@ -74,14 +75,17 @@ export function useTheme() {
     resolvedTheme.value = resolveTheme(mode)
     applyTheme(resolvedTheme.value)
 
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    mediaQuery.addEventListener('change', () => {
-      if (themeMode.value === 'system') {
-        resolvedTheme.value = getSystemTheme()
-        applyTheme(resolvedTheme.value)
-      }
-    })
+    // Listen for system theme changes (attach at most once across the lifecycle)
+    if (!isMediaListenerInitialized) {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      mediaQuery.addEventListener('change', () => {
+        if (themeMode.value === 'system') {
+          resolvedTheme.value = getSystemTheme()
+          applyTheme(resolvedTheme.value)
+        }
+      })
+      isMediaListenerInitialized = true
+    }
   }
 
   // Computed properties

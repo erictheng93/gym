@@ -237,7 +237,7 @@ describe('useAuthMethods', () => {
         'http://localhost:8056/api/member/auth/login',
         {
           method: 'POST',
-          body: { email: 'test@example.com', password: 'password123' },
+          body: { email: 'test@example.com', account: 'test@example.com', password: 'password123' },
         }
       )
       expect(mockSetTokens).toHaveBeenCalledWith('access-token', 'refresh-token')

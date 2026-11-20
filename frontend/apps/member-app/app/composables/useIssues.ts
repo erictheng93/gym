@@ -6,10 +6,34 @@
 import type { IssueType, IssueStatus } from '../schemas/issue.schema'
 import { ISSUE_STATUS_COLORS } from '../schemas/issue.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 
 // Cache settings
 const CACHE_KEY_ISSUES = 'member:issues'
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
+  EQUIPMENT: '設備問題',
+  SERVICE: '服務問題',
+  SUGGESTION: '意見建議',
+  COMPLAINT: '客訴反映',
+}
+
+const ISSUE_TYPE_ICONS: Record<IssueType, string> = {
+  EQUIPMENT: 'tool',
+  SERVICE: 'users',
+  SUGGESTION: 'lightbulb',
+  COMPLAINT: 'alert-triangle',
+}
+
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const issueDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 export interface Issue {
   id: string
@@ -61,14 +85,41 @@ export const useIssues = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
-
     const cacheKey = `${CACHE_KEY_ISSUES}:${member.value.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+    return deduplicateRequest(cacheKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
+
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Issue[]>(cacheKey)
+          if (cached) {
+            issues.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.status) params.append('status', options.status)
+        if (options?.type) params.append('type', options.type)
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
+
+        const response = await $fetch<IssuesResponse>(`${apiUrl}/api/member/issues?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          issues.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Try cached data on network error
         const cached = await getCache<Issue[]>(cacheKey)
         if (cached) {
           issues.value = cached
@@ -76,35 +127,10 @@ export const useIssues = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.status) params.append('status', options.status)
-      if (options?.type) params.append('type', options.type)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
-
-      const response = await $fetch<IssuesResponse>(`${apiUrl}/api/member/issues?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        issues.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Try cached data on network error
-      const cached = await getCache<Issue[]>(cacheKey)
-      if (cached) {
-        issues.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -113,16 +139,18 @@ export const useIssues = () => {
   const getIssue = async (id: string): Promise<Issue | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Issue }>(
-        `${apiUrl}/api/member/issues/${id}`,
-        { headers: getAuthHeader() }
-      )
+    return deduplicateRequest(`member:issue:${id}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Issue }>(
+          `${apiUrl}/api/member/issues/${id}`,
+          { headers: getAuthHeader() }
+        )
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**
@@ -220,26 +248,14 @@ export const useIssues = () => {
    * Get type label
    */
   const getTypeLabel = (type: IssueType): string => {
-    const labels: Record<IssueType, string> = {
-      EQUIPMENT: '設備問題',
-      SERVICE: '服務問題',
-      SUGGESTION: '意見建議',
-      COMPLAINT: '客訴反映',
-    }
-    return labels[type] || type
+    return ISSUE_TYPE_LABELS[type] || type
   }
 
   /**
    * Get type icon
    */
   const getTypeIcon = (type: IssueType): string => {
-    const icons: Record<IssueType, string> = {
-      EQUIPMENT: 'tool',
-      SERVICE: 'users',
-      SUGGESTION: 'lightbulb',
-      COMPLAINT: 'alert-triangle',
-    }
-    return icons[type] || 'help-circle'
+    return ISSUE_TYPE_ICONS[type] || 'help-circle'
   }
 
   /**
@@ -253,25 +269,29 @@ export const useIssues = () => {
    * Format date for display
    */
   const formatDate = (dateStr: string): string => {
+    if (!dateStr) return '—'
     const date = new Date(dateStr)
-    return date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return isNaN(date.getTime()) ? '—' : issueDateFormatter.format(date)
   }
 
   /**
-   * Get issues by status
+   * Group issues by status in a single pass
    */
-  const pendingIssues = computed(() =>
-    issues.value.filter(i => ['SUBMITTED', 'IN_PROGRESS'].includes(i.status))
-  )
-  const resolvedIssues = computed(() =>
-    issues.value.filter(i => ['RESOLVED', 'CLOSED'].includes(i.status))
-  )
+  const groupedIssues = computed(() => {
+    const pending: Issue[] = []
+    const resolved: Issue[] = []
+    for (const i of issues.value) {
+      if (i.status === 'SUBMITTED' || i.status === 'IN_PROGRESS') {
+        pending.push(i)
+      } else if (i.status === 'RESOLVED' || i.status === 'CLOSED') {
+        resolved.push(i)
+      }
+    }
+    return { pending, resolved }
+  })
+
+  const pendingIssues = computed(() => groupedIssues.value.pending)
+  const resolvedIssues = computed(() => groupedIssues.value.resolved)
 
   return {
     issues,

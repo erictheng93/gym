@@ -13,6 +13,82 @@ import type { CoachVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
+const TEACHING_MATERIAL_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  name: teachingMaterials.name,
+  description: teachingMaterials.description,
+  fileId: teachingMaterials.fileId,
+  videoUrl: teachingMaterials.videoUrl,
+  thumbnailUrl: teachingMaterials.thumbnailUrl,
+  muscleGroups: teachingMaterials.muscleGroups,
+  equipment: teachingMaterials.equipment,
+  difficulty: teachingMaterials.difficulty,
+  instructions: teachingMaterials.instructions,
+  tips: teachingMaterials.tips,
+  commonMistakes: teachingMaterials.commonMistakes,
+  isActive: teachingMaterials.isActive,
+  createdBy: teachingMaterials.createdBy,
+  createdAt: teachingMaterials.createdAt,
+  updatedAt: teachingMaterials.updatedAt,
+  tenantId: teachingMaterials.tenantId,
+};
+
+const TEACHING_MATERIAL_COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const TEACHING_MATERIAL_LIST_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  name: teachingMaterials.name,
+  description: teachingMaterials.description,
+  fileId: teachingMaterials.fileId,
+  videoUrl: teachingMaterials.videoUrl,
+  thumbnailUrl: teachingMaterials.thumbnailUrl,
+  muscleGroups: teachingMaterials.muscleGroups,
+  equipment: teachingMaterials.equipment,
+  difficulty: teachingMaterials.difficulty,
+  createdAt: teachingMaterials.createdAt,
+};
+
+const TEACHING_MATERIAL_CATEGORY_SELECT = {
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  count: sql<number>`count(*)`,
+};
+
+const TEACHING_MATERIAL_MUSCLE_GROUPS_SELECT = {
+  muscleGroups: teachingMaterials.muscleGroups,
+};
+
+const TEACHING_MATERIAL_EQUIPMENT_SELECT = {
+  equipment: teachingMaterials.equipment,
+};
+
+const TEACHING_MATERIAL_SEARCH_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  name: teachingMaterials.name,
+  description: teachingMaterials.description,
+  thumbnailUrl: teachingMaterials.thumbnailUrl,
+  muscleGroups: teachingMaterials.muscleGroups,
+  equipment: teachingMaterials.equipment,
+  difficulty: teachingMaterials.difficulty,
+};
+
+const TEACHING_MATERIAL_RELATED_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  name: teachingMaterials.name,
+  category: teachingMaterials.category,
+  difficulty: teachingMaterials.difficulty,
+  muscleGroups: teachingMaterials.muscleGroups,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -100,27 +176,22 @@ app.get('/', async (c) => {
   // For muscle_groups and equipment, we need to use JSON containment
   // This is a simplified approach - in production you might want GIN indexes
 
-  // Get materials
-  let materialsData = await db
-    .select({
-      id: teachingMaterials.id,
-      type: teachingMaterials.type,
-      category: teachingMaterials.category,
-      name: teachingMaterials.name,
-      description: teachingMaterials.description,
-      fileId: teachingMaterials.fileId,
-      videoUrl: teachingMaterials.videoUrl,
-      thumbnailUrl: teachingMaterials.thumbnailUrl,
-      muscleGroups: teachingMaterials.muscleGroups,
-      equipment: teachingMaterials.equipment,
-      difficulty: teachingMaterials.difficulty,
-      createdAt: teachingMaterials.createdAt,
-    })
-    .from(teachingMaterials)
-    .where(and(...conditions))
-    .orderBy(teachingMaterials.category, teachingMaterials.name)
-    .limit(limitNum)
-    .offset(offsetNum);
+  // Get materials and total count in parallel
+  const [initialMaterialsData, [countResult]] = await Promise.all([
+    db
+      .select(TEACHING_MATERIAL_LIST_SELECT)
+      .from(teachingMaterials)
+      .where(and(...conditions))
+      .orderBy(teachingMaterials.category, teachingMaterials.name)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select(TEACHING_MATERIAL_COUNT_SELECT)
+      .from(teachingMaterials)
+      .where(and(...conditions)),
+  ]);
+
+  let materialsData = initialMaterialsData;
 
   // Filter by muscle_groups if provided
   if (muscle_groups) {
@@ -139,12 +210,6 @@ app.get('/', async (c) => {
       return targetEquipment.some(e => equip.includes(e));
     });
   }
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(teachingMaterials)
-    .where(and(...conditions));
 
   return c.json({
     success: true,
@@ -179,11 +244,7 @@ app.get('/categories', async (c) => {
 
   // Get categories grouped by type
   const categoriesData = await db
-    .select({
-      type: teachingMaterials.type,
-      category: teachingMaterials.category,
-      count: sql<number>`count(*)`,
-    })
+    .select(TEACHING_MATERIAL_CATEGORY_SELECT)
     .from(teachingMaterials)
     .where(
       and(
@@ -222,7 +283,7 @@ app.get('/muscle-groups', async (c) => {
 
   // Get all unique muscle groups
   const materialsData = await db
-    .select({ muscleGroups: teachingMaterials.muscleGroups })
+    .select(TEACHING_MATERIAL_MUSCLE_GROUPS_SELECT)
     .from(teachingMaterials)
     .where(
       and(
@@ -257,7 +318,7 @@ app.get('/equipment', async (c) => {
 
   // Get all unique equipment
   const materialsData = await db
-    .select({ equipment: teachingMaterials.equipment })
+    .select(TEACHING_MATERIAL_EQUIPMENT_SELECT)
     .from(teachingMaterials)
     .where(
       and(
@@ -327,17 +388,7 @@ app.get('/search', async (c) => {
 
   // Get materials
   let materialsData = await db
-    .select({
-      id: teachingMaterials.id,
-      type: teachingMaterials.type,
-      category: teachingMaterials.category,
-      name: teachingMaterials.name,
-      description: teachingMaterials.description,
-      thumbnailUrl: teachingMaterials.thumbnailUrl,
-      muscleGroups: teachingMaterials.muscleGroups,
-      equipment: teachingMaterials.equipment,
-      difficulty: teachingMaterials.difficulty,
-    })
+    .select(TEACHING_MATERIAL_SEARCH_SELECT)
     .from(teachingMaterials)
     .where(and(...conditions))
     .orderBy(teachingMaterials.name)
@@ -384,11 +435,17 @@ app.get('/search', async (c) => {
 app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
-
-  // Get material
-  const [material] = await db
-    .select()
+  // Get material and file info in a single query
+  const [result] = await db
+    .select({
+      material: TEACHING_MATERIAL_SELECT,
+      fileId: files.id,
+      filename: files.filename,
+      mimeType: files.mimeType,
+      size: files.size,
+    })
     .from(teachingMaterials)
+    .leftJoin(files, eq(teachingMaterials.fileId, files.id))
     .where(
       and(
         eq(teachingMaterials.id, id),
@@ -397,7 +454,7 @@ app.get('/:id', async (c) => {
     )
     .limit(1);
 
-  if (!material) {
+  if (!result) {
     return c.json({
       success: false,
       error: '找不到教學資源',
@@ -405,29 +462,13 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
-  // Get file info if linked
-  let fileInfo = null;
-  if (material.fileId) {
-    const [file] = await db
-      .select({
-        id: files.id,
-        filename: files.filename,
-        mimeType: files.mimeType,
-        size: files.size,
-      })
-      .from(files)
-      .where(eq(files.id, material.fileId))
-      .limit(1);
-
-    if (file) {
-      fileInfo = {
-        id: file.id,
-        filename: file.filename,
-        mime_type: file.mimeType,
-        size: file.size,
-      };
-    }
-  }
+  const { material } = result;
+  const fileInfo = result.fileId ? {
+    id: result.fileId,
+    filename: result.filename,
+    mime_type: result.mimeType,
+    size: result.size,
+  } : null;
 
   // Get related materials (same muscle groups or category)
   const muscleGroups = material.muscleGroups as string[] || [];
@@ -442,14 +483,7 @@ app.get('/:id', async (c) => {
 
   if (muscleGroups.length > 0) {
     const allMaterials = await db
-      .select({
-        id: teachingMaterials.id,
-        type: teachingMaterials.type,
-        name: teachingMaterials.name,
-        category: teachingMaterials.category,
-        difficulty: teachingMaterials.difficulty,
-        muscleGroups: teachingMaterials.muscleGroups,
-      })
+      .select(TEACHING_MATERIAL_RELATED_SELECT)
       .from(teachingMaterials)
       .where(
         and(
@@ -532,7 +566,11 @@ app.post(
         createdBy: coach.id,
         tenantId: coach.tenantId,
       })
-      .returning();
+      .returning({
+        id: teachingMaterials.id,
+        type: teachingMaterials.type,
+        name: teachingMaterials.name,
+      });
 
     return c.json({
       success: true,
@@ -558,26 +596,6 @@ app.patch(
     const { id } = c.req.param();
     const data = c.req.valid('json');
 
-    // Verify material exists and belongs to tenant
-    const [existingMaterial] = await db
-      .select()
-      .from(teachingMaterials)
-      .where(
-        and(
-          eq(teachingMaterials.id, id),
-          eq(teachingMaterials.tenantId, coach.tenantId)
-        )
-      )
-      .limit(1);
-
-    if (!existingMaterial) {
-      return c.json({
-        success: false,
-        error: '找不到教學資源',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
     // Build update object
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -596,11 +614,25 @@ app.patch(
     if (data.common_mistakes !== undefined) updateData.commonMistakes = data.common_mistakes;
     if (data.is_active !== undefined) updateData.isActive = data.is_active;
 
-    // Update material
-    await db
+    // Atomic update with tenant check
+    const [updatedMaterial] = await db
       .update(teachingMaterials)
       .set(updateData)
-      .where(eq(teachingMaterials.id, id));
+      .where(
+        and(
+          eq(teachingMaterials.id, id),
+          eq(teachingMaterials.tenantId, coach.tenantId)
+        )
+      )
+      .returning({ id: teachingMaterials.id });
+
+    if (!updatedMaterial) {
+      return c.json({
+        success: false,
+        error: '找不到教學資源',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,
@@ -617,34 +649,29 @@ app.delete('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Verify material exists and belongs to tenant
-  const [existingMaterial] = await db
-    .select()
-    .from(teachingMaterials)
+  // Atomic soft delete with tenant check
+  const [deletedMaterial] = await db
+    .update(teachingMaterials)
+    .set({
+      isActive: false,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(teachingMaterials.id, id),
-        eq(teachingMaterials.tenantId, coach.tenantId)
+        eq(teachingMaterials.tenantId, coach.tenantId),
+        eq(teachingMaterials.isActive, true)
       )
     )
-    .limit(1);
+    .returning({ id: teachingMaterials.id });
 
-  if (!existingMaterial) {
+  if (!deletedMaterial) {
     return c.json({
       success: false,
       error: '找不到教學資源',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  // Soft delete (set isActive to false)
-  await db
-    .update(teachingMaterials)
-    .set({
-      isActive: false,
-      updatedAt: new Date(),
-    })
-    .where(eq(teachingMaterials.id, id));
 
   return c.json({
     success: true,

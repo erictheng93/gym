@@ -254,6 +254,45 @@
   </div>
 </template>
 
+<script lang="ts">
+const MESSAGE_TYPE_LABELS: Record<string, string> = {
+  text: '文字',
+  flex: 'Flex Message',
+}
+
+const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  booking_confirmation: '預約確認',
+  booking_reminder_24h: '課程提醒 (24h)',
+  booking_reminder_2h: '課程提醒 (2h)',
+  booking_cancelled: '預約取消',
+  class_cancelled: '課程取消',
+  contract_expiry_7d: '會籍到期 (7天)',
+  contract_expiry_3d: '會籍到期 (3天)',
+  contract_expiry_1d: '會籍到期 (1天)',
+  payment_confirmation: '付款確認',
+  welcome: '歡迎訊息',
+  otp: 'OTP 驗證碼',
+  test: '測試',
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  line: 'LINE',
+  push: '推播',
+  email: 'Email',
+  sms: '簡訊',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  sent: '已發送',
+  delivered: '已送達',
+  failed: '失敗',
+  pending: '待處理',
+}
+
+const usageMonthFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long' })
+const usageDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth'
@@ -409,10 +448,11 @@ async function exportCsv() {
 function formatPeriod(period: string) {
   if (!period) return '-'
   const date = new Date(period)
+  if (Number.isNaN(date.getTime())) return '-'
   if (filters.value.groupBy === 'month') {
-    return date.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' })
+    return usageMonthFormatter.format(date)
   }
-  return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+  return usageDayFormatter.format(date)
 }
 
 function getBranchName(branchId: string) {
@@ -421,50 +461,20 @@ function getBranchName(branchId: string) {
 }
 
 function getMessageTypeLabel(type: string) {
-  const labels: Record<string, string> = {
-    text: '文字',
-    flex: 'Flex Message',
-  }
-  return labels[type] || type
+  return MESSAGE_TYPE_LABELS[type] || type
 }
 
 function getNotificationTypeLabel(type: string) {
-  const labels: Record<string, string> = {
-    booking_confirmation: '預約確認',
-    booking_reminder_24h: '課程提醒 (24h)',
-    booking_reminder_2h: '課程提醒 (2h)',
-    booking_cancelled: '預約取消',
-    class_cancelled: '課程取消',
-    contract_expiry_7d: '會籍到期 (7天)',
-    contract_expiry_3d: '會籍到期 (3天)',
-    contract_expiry_1d: '會籍到期 (1天)',
-    payment_confirmation: '付款確認',
-    welcome: '歡迎訊息',
-    otp: 'OTP 驗證碼',
-    test: '測試',
-  }
-  return labels[type] || type
+  return NOTIFICATION_TYPE_LABELS[type] || type
 }
 
 function getChannelLabel(channel: string | null) {
   if (!channel) return '-'
-  const labels: Record<string, string> = {
-    line: 'LINE',
-    push: '推播',
-    email: 'Email',
-    sms: '簡訊',
-  }
-  return labels[channel] || channel
+  return CHANNEL_LABELS[channel] || channel
 }
 
 function getStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    sent: '已發送',
-    delivered: '已送達',
-    failed: '失敗',
-    pending: '待處理',
-  }
-  return labels[status] || status
+  return STATUS_LABELS[status] || status
 }
 </script>
 

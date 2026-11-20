@@ -10,6 +10,24 @@ import crypto from 'crypto';
 const CSRF_COOKIE_NAME = 'csrf_token';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 const CSRF_TOKEN_LENGTH = 32;
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+const CSP_HEADER_VALUE = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'", // Allow inline scripts for some SSR frameworks
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https:",
+  "frame-ancestors 'none'",
+].join('; ');
+
+const PERMISSIONS_POLICY_HEADER_VALUE = [
+  'camera=()',
+  'microphone=()',
+  'geolocation=()',
+  'payment=()',
+].join(', ');
 
 /**
  * Generate a cryptographically secure random token
@@ -45,7 +63,7 @@ export const csrfProtection = createMiddleware(async (c, next) => {
   const path = c.req.path;
 
   // Skip CSRF for safe methods
-  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+  if (SAFE_METHODS.has(method)) {
     // Set or refresh CSRF token cookie
     let csrfToken = getCookie(c, CSRF_COOKIE_NAME);
     if (!csrfToken) {
@@ -53,7 +71,7 @@ export const csrfProtection = createMiddleware(async (c, next) => {
       setCookie(c, CSRF_COOKIE_NAME, csrfToken, {
         httpOnly: false, // Frontend needs to read this
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
+        sameSite: 'Lax',
         path: '/',
         maxAge: 60 * 60 * 24, // 24 hours
       });
@@ -138,23 +156,10 @@ export const extraSecurityHeaders = createMiddleware(async (c, next) => {
   await next();
 
   // Content Security Policy - restrict resource loading
-  c.header('Content-Security-Policy', [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'", // Allow inline scripts for some SSR frameworks
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' https:",
-    "frame-ancestors 'none'",
-  ].join('; '));
+  c.header('Content-Security-Policy', CSP_HEADER_VALUE);
 
   // Permissions Policy - restrict browser features
-  c.header('Permissions-Policy', [
-    'camera=()',
-    'microphone=()',
-    'geolocation=()',
-    'payment=()',
-  ].join(', '));
+  c.header('Permissions-Policy', PERMISSIONS_POLICY_HEADER_VALUE);
 
   // Additional security headers
   c.header('X-Permitted-Cross-Domain-Policies', 'none');

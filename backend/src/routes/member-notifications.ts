@@ -179,26 +179,32 @@ app.put(
       notificationPreferences: newPreferences,
     };
 
-    await db
-      .update(members)
-      .set({
-        tags: newTags,
-        updatedAt: new Date(),
-      })
-      .where(eq(members.id, memberInfo.id));
+    const updatePromises: Promise<unknown>[] = [
+      db
+        .update(members)
+        .set({
+          tags: newTags,
+          updatedAt: new Date(),
+        })
+        .where(eq(members.id, memberInfo.id)),
+    ];
 
     // Also update push subscription preferences if push settings changed
     if (updates.types) {
-      await db
-        .update(pushSubscriptions)
-        .set({
-          notifyBookingReminder: newPreferences.types.booking_reminder,
-          notifyClassCancelled: newPreferences.types.class_cancelled,
-          notifyContractExpiry: newPreferences.types.contract_expiry,
-          updatedAt: new Date(),
-        })
-        .where(eq(pushSubscriptions.memberId, memberInfo.id));
+      updatePromises.push(
+        db
+          .update(pushSubscriptions)
+          .set({
+            notifyBookingReminder: newPreferences.types.booking_reminder,
+            notifyClassCancelled: newPreferences.types.class_cancelled,
+            notifyContractExpiry: newPreferences.types.contract_expiry,
+            updatedAt: new Date(),
+          })
+          .where(eq(pushSubscriptions.memberId, memberInfo.id))
+      );
     }
+
+    await Promise.all(updatePromises);
 
     return c.json({
       success: true,
@@ -217,37 +223,35 @@ app.put(
 app.get('/channels', async (c) => {
   const memberInfo = c.get('member')!;
 
-  // Get member info for email/phone
-  const [member] = await db
-    .select({
-      email: members.email,
-      phone: members.phone,
-    })
-    .from(members)
-    .where(eq(members.id, memberInfo.id))
-    .limit(1);
-
-  // Check push subscriptions
-  const pushSubs = await db
-    .select({ id: pushSubscriptions.id })
-    .from(pushSubscriptions)
-    .where(and(
-      eq(pushSubscriptions.memberId, memberInfo.id),
-      eq(pushSubscriptions.isActive, true),
-    ))
-    .limit(1);
-
-  // Check LINE connection
-  const lineSocial = await db
-    .select({
-      displayName: memberSocialAccounts.displayName,
-    })
-    .from(memberSocialAccounts)
-    .where(and(
-      eq(memberSocialAccounts.memberId, memberInfo.id),
-      eq(memberSocialAccounts.provider, 'line'),
-    ))
-    .limit(1);
+  // Concurrently fetch member info, push subscriptions, and LINE connection
+  const [[member], pushSubs, lineSocial] = await Promise.all([
+    db
+      .select({
+        email: members.email,
+        phone: members.phone,
+      })
+      .from(members)
+      .where(eq(members.id, memberInfo.id))
+      .limit(1),
+    db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .where(and(
+        eq(pushSubscriptions.memberId, memberInfo.id),
+        eq(pushSubscriptions.isActive, true),
+      ))
+      .limit(1),
+    db
+      .select({
+        displayName: memberSocialAccounts.displayName,
+      })
+      .from(memberSocialAccounts)
+      .where(and(
+        eq(memberSocialAccounts.memberId, memberInfo.id),
+        eq(memberSocialAccounts.provider, 'line'),
+      ))
+      .limit(1),
+  ]);
 
   const channels = [
     {
@@ -304,32 +308,32 @@ app.get(
       conditions.push(eq(notifications.notificationType, type));
     }
 
-    // Get total count
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(notifications)
-      .where(and(...conditions));
-
-    // Get notifications
-    const notificationList = await db
-      .select({
-        id: notifications.id,
-        type: notifications.notificationType,
-        title: notifications.title,
-        message: notifications.message,
-        data: notifications.data,
-        isRead: notifications.isRead,
-        readAt: notifications.readAt,
-        priority: notifications.priority,
-        createdAt: notifications.createdAt,
-        referenceType: notifications.referenceType,
-        referenceId: notifications.referenceId,
-      })
-      .from(notifications)
-      .where(and(...conditions))
-      .orderBy(desc(notifications.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and notifications
+    const [[{ count }], notificationList] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(notifications)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: notifications.id,
+          type: notifications.notificationType,
+          title: notifications.title,
+          message: notifications.message,
+          data: notifications.data,
+          isRead: notifications.isRead,
+          readAt: notifications.readAt,
+          priority: notifications.priority,
+          createdAt: notifications.createdAt,
+          referenceType: notifications.referenceType,
+          referenceId: notifications.referenceId,
+        })
+        .from(notifications)
+        .where(and(...conditions))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

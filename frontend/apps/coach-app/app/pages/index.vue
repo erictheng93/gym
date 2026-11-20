@@ -203,6 +203,20 @@
   </div>
 </template>
 
+<script lang="ts">
+const dateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+})
+
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+</script>
+
 <script setup lang="ts">
 import type { ClassBooking } from '~/types/coach'
 
@@ -236,12 +250,7 @@ const getInitials = (name: string) => {
 }
 
 const formatDate = (date: Date) => {
-  return date.toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long'
-  })
+  return dateFormatter.format(date)
 }
 
 // Fetch today's classes
@@ -267,33 +276,35 @@ const fetchTodayClasses = async () => {
   }
 }
 
+const COACH_CLASS_STATUS_CLASSES: Record<string, string> = {
+  BOOKED: 'status-booked',
+  COMPLETED: 'status-completed',
+  MEMBER_CANCELLED: 'status-cancelled',
+  COACH_CANCELLED: 'status-cancelled',
+  NO_SHOW: 'status-no-show',
+}
+
+const COACH_CLASS_STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '已預約',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
+
 const formatTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return timeFormatter.format(d)
 }
 
 const getStatusClass = (status: string) => {
-  const classes: Record<string, string> = {
-    BOOKED: 'status-booked',
-    COMPLETED: 'status-completed',
-    MEMBER_CANCELLED: 'status-cancelled',
-    COACH_CANCELLED: 'status-cancelled',
-    NO_SHOW: 'status-no-show',
-  }
-  return classes[status] || 'status-default'
+  return COACH_CLASS_STATUS_CLASSES[status] || 'status-default'
 }
 
 const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    BOOKED: '已預約',
-    COMPLETED: '已完成',
-    MEMBER_CANCELLED: '學員取消',
-    COACH_CANCELLED: '教練取消',
-    NO_SHOW: '未到',
-  }
-  return texts[status] || status
+  return COACH_CLASS_STATUS_TEXTS[status] || status
 }
 
 const goToClass = (id: string) => {

@@ -233,6 +233,9 @@ export interface CoachPerformanceReport {
   data: CoachPerformanceData[]
 }
 
+// In-flight deduplication map for reports
+const inFlightReports = new Map<string, Promise<any>>()
+
 export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
@@ -260,22 +263,33 @@ export const useReports = () => {
     endDate?: string,
     branchId?: string
   ): Promise<RevenueReport | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (startDate) params.append('start_date', startDate)
-      if (endDate) params.append('end_date', endDate)
-      if (branchId) params.append('branch_id', branchId)
+    const key = `revenue:${startDate || ''}:${endDate || ''}:${branchId || ''}`
+    const existing = inFlightReports.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/reports/revenue?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.getRevenueReport',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (startDate) params.append('start_date', startDate)
+        if (endDate) params.append('end_date', endDate)
+        if (branchId) params.append('branch_id', branchId)
+
+        const response = await authFetch(`${baseURL}/api/reports/revenue?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      } catch (error) {
+        handleError(error, {
+          context: 'useReports.getRevenueReport',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightReports.delete(key)
+      }
+    })()
+
+    inFlightReports.set(key, promise)
+    return promise
   }
 
   /**
@@ -286,22 +300,33 @@ export const useReports = () => {
     endDate?: string,
     branchId?: string
   ): Promise<MemberGrowthReport | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (startDate) params.append('start_date', startDate)
-      if (endDate) params.append('end_date', endDate)
-      if (branchId) params.append('branch_id', branchId)
+    const key = `memberGrowth:${startDate || ''}:${endDate || ''}:${branchId || ''}`
+    const existing = inFlightReports.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/reports/member-growth?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.getMemberGrowthReport',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (startDate) params.append('start_date', startDate)
+        if (endDate) params.append('end_date', endDate)
+        if (branchId) params.append('branch_id', branchId)
+
+        const response = await authFetch(`${baseURL}/api/reports/member-growth?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      } catch (error) {
+        handleError(error, {
+          context: 'useReports.getMemberGrowthReport',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightReports.delete(key)
+      }
+    })()
+
+    inFlightReports.set(key, promise)
+    return promise
   }
 
   /**
@@ -312,22 +337,33 @@ export const useReports = () => {
     branchId?: string,
     limit: number = 100
   ): Promise<ContractExpiryReport | null> => {
-    try {
-      const params = new URLSearchParams()
-      params.append('days_ahead', daysAhead.toString())
-      if (branchId) params.append('branch_id', branchId)
-      params.append('limit', limit.toString())
+    const key = `contractExpiry:${daysAhead}:${branchId || ''}:${limit}`
+    const existing = inFlightReports.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/reports/contract-expiry?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.getContractExpiryReport',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        params.append('days_ahead', daysAhead.toString())
+        if (branchId) params.append('branch_id', branchId)
+        params.append('limit', limit.toString())
+
+        const response = await authFetch(`${baseURL}/api/reports/contract-expiry?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      } catch (error) {
+        handleError(error, {
+          context: 'useReports.getContractExpiryReport',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightReports.delete(key)
+      }
+    })()
+
+    inFlightReports.set(key, promise)
+    return promise
   }
 
   /**
@@ -338,22 +374,33 @@ export const useReports = () => {
     endDate?: string,
     branchId?: string
   ): Promise<MemberActivityReport | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (startDate) params.append('start_date', startDate)
-      if (endDate) params.append('end_date', endDate)
-      if (branchId) params.append('branch_id', branchId)
+    const key = `memberActivity:${startDate || ''}:${endDate || ''}:${branchId || ''}`
+    const existing = inFlightReports.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/reports/member-activity?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.getMemberActivityReport',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (startDate) params.append('start_date', startDate)
+        if (endDate) params.append('end_date', endDate)
+        if (branchId) params.append('branch_id', branchId)
+
+        const response = await authFetch(`${baseURL}/api/reports/member-activity?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      } catch (error) {
+        handleError(error, {
+          context: 'useReports.getMemberActivityReport',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightReports.delete(key)
+      }
+    })()
+
+    inFlightReports.set(key, promise)
+    return promise
   }
 
   /**
@@ -383,22 +430,33 @@ export const useReports = () => {
     branchId?: string,
     compareWithPrevious: boolean = true
   ): Promise<BranchPerformanceReport | null> => {
-    try {
-      const params = new URLSearchParams()
-      params.append('period', period)
-      if (branchId) params.append('branch_id', branchId)
-      params.append('compareWithPrevious', String(compareWithPrevious))
+    const key = `branchPerformance:${period}:${branchId || ''}:${compareWithPrevious}`
+    const existing = inFlightReports.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/reports/branch-performance?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.getBranchPerformanceReport',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        params.append('period', period)
+        if (branchId) params.append('branch_id', branchId)
+        params.append('compareWithPrevious', String(compareWithPrevious))
+
+        const response = await authFetch(`${baseURL}/api/reports/branch-performance?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      } catch (error) {
+        handleError(error, {
+          context: 'useReports.getBranchPerformanceReport',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightReports.delete(key)
+      }
+    })()
+
+    inFlightReports.set(key, promise)
+    return promise
   }
 
   /**
@@ -409,22 +467,33 @@ export const useReports = () => {
     coachId?: string,
     branchId?: string
   ): Promise<CoachPerformanceReport | null> => {
-    try {
-      const params = new URLSearchParams()
-      params.append('period', period)
-      if (coachId) params.append('coach_id', coachId)
-      if (branchId) params.append('branch_id', branchId)
+    const key = `coachPerformance:${period}:${coachId || ''}:${branchId || ''}`
+    const existing = inFlightReports.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/reports/coach-performance?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.getCoachPerformanceReport',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        params.append('period', period)
+        if (coachId) params.append('coach_id', coachId)
+        if (branchId) params.append('branch_id', branchId)
+
+        const response = await authFetch(`${baseURL}/api/reports/coach-performance?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json()
+      } catch (error) {
+        handleError(error, {
+          context: 'useReports.getCoachPerformanceReport',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightReports.delete(key)
+      }
+    })()
+
+    inFlightReports.set(key, promise)
+    return promise
   }
 
   return {

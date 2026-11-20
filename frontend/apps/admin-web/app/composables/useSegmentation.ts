@@ -50,6 +50,11 @@ export interface SegmentInfo {
   member_count: number
 }
 
+const inFlightRFMScoresMap = new Map<string, Promise<void>>()
+const inFlightMemberRFMMap = new Map<string, Promise<RFMScore | null>>()
+const inFlightSegmentsMap = new Map<string, Promise<void>>()
+const inFlightSegmentMembersMap = new Map<string, Promise<any>>()
+
 export const useSegmentation = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -70,56 +75,78 @@ export const useSegmentation = () => {
     segment?: RFMSegment
     page?: number
     limit?: number
-  }) => {
-    isLoading.value = true
-    const { branchId, segment, page = 1, limit = 50 } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      if (branchId) params.append('branch_id', branchId)
-      if (segment) params.append('segment', segment)
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: RFMScore[]
-        meta: { total: number }
-      }>(`${apiUrl}/segmentation/rfm?${params}`)
-
-      if (response.success) {
-        rfmScores.value = response.data
-        totalCount.value = response.meta.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'useSegmentation.fetchRFMScores',
-        customMessage: '取得 RFM 分數失敗'
-      })
-      rfmScores.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightRFMScoresMap.has(key)) {
+      return inFlightRFMScoresMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { branchId, segment, page = 1, limit = 50 } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        if (branchId) params.append('branch_id', branchId)
+        if (segment) params.append('segment', segment)
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: RFMScore[]
+          meta: { total: number }
+        }>(`${apiUrl}/segmentation/rfm?${params}`)
+
+        if (response.success) {
+          rfmScores.value = response.data
+          totalCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useSegmentation.fetchRFMScores',
+          customMessage: '取得 RFM 分數失敗'
+        })
+        rfmScores.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightRFMScoresMap.delete(key)
+      }
+    })()
+
+    inFlightRFMScoresMap.set(key, promise)
+    return promise
   }
 
   /**
    * Get single member RFM score
    */
-  const getMemberRFM = async (memberId: string): Promise<RFMScore | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: RFMScore }>(
-        `${apiUrl}/segmentation/rfm/${memberId}`
-      )
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useSegmentation.getMemberRFM',
-        customMessage: '取得會員 RFM 分數失敗',
-        showToast: false
-      })
-      return null
+  const getMemberRFM = async (memberId: string, force = false): Promise<RFMScore | null> => {
+    if (!force && inFlightMemberRFMMap.has(memberId)) {
+      return inFlightMemberRFMMap.get(memberId)!
     }
+
+    const promise = (async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: RFMScore }>(
+          `${apiUrl}/segmentation/rfm/${memberId}`
+        )
+        return response.success ? response.data : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useSegmentation.getMemberRFM',
+          customMessage: '取得會員 RFM 分數失敗',
+          showToast: false
+        })
+        return null
+      } finally {
+        inFlightMemberRFMMap.delete(memberId)
+      }
+    })()
+
+    inFlightMemberRFMMap.set(memberId, promise)
+    return promise
   }
 
   /**
@@ -147,24 +174,36 @@ export const useSegmentation = () => {
   /**
    * Fetch segment definitions with counts
    */
-  const fetchSegments = async (branchId?: string) => {
-    try {
-      const params = branchId ? `?branch_id=${branchId}` : ''
-      const response = await $fetch<{
-        success: boolean
-        data: { segments: SegmentInfo[]; total_members: number }
-      }>(`${apiUrl}/segmentation/segments${params}`)
-
-      if (response.success) {
-        segments.value = response.data.segments
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'useSegmentation.fetchSegments',
-        customMessage: '取得分群資料失敗'
-      })
-      segments.value = []
+  const fetchSegments = async (branchId?: string, force = false) => {
+    const key = branchId || 'all'
+    if (!force && inFlightSegmentsMap.has(key)) {
+      return inFlightSegmentsMap.get(key)
     }
+
+    const promise = (async () => {
+      try {
+        const params = branchId ? `?branch_id=${branchId}` : ''
+        const response = await $fetch<{
+          success: boolean
+          data: { segments: SegmentInfo[]; total_members: number }
+        }>(`${apiUrl}/segmentation/segments${params}`)
+
+        if (response.success) {
+          segments.value = response.data.segments
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useSegmentation.fetchSegments',
+          customMessage: '取得分群資料失敗'
+        })
+        segments.value = []
+      } finally {
+        inFlightSegmentsMap.delete(key)
+      }
+    })()
+
+    inFlightSegmentsMap.set(key, promise)
+    return promise
   }
 
   /**
@@ -176,45 +215,57 @@ export const useSegmentation = () => {
       branchId?: string
       page?: number
       limit?: number
-    }
+    },
+    force = false
   ) => {
-    isLoading.value = true
-    const { branchId, page = 1, limit = 50 } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      if (branchId) params.append('branch_id', branchId)
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: {
-          segment: RFMSegment
-          segment_label: string
-          segment_description: string
-          members: RFMScore[]
-        }
-        meta: { total: number }
-      }>(`${apiUrl}/segmentation/segments/${segment}/members?${params}`)
-
-      if (response.success) {
-        rfmScores.value = response.data.members
-        totalCount.value = response.meta.total
-        return response.data
-      }
-      return null
-    } catch (error) {
-      handleError(error, {
-        context: 'useSegmentation.fetchSegmentMembers',
-        customMessage: '取得分群會員失敗'
-      })
-      rfmScores.value = []
-      totalCount.value = 0
-      return null
-    } finally {
-      isLoading.value = false
+    const key = `${segment}:${JSON.stringify(options || {})}`
+    if (!force && inFlightSegmentMembersMap.has(key)) {
+      return inFlightSegmentMembersMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { branchId, page = 1, limit = 50 } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        if (branchId) params.append('branch_id', branchId)
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: {
+            segment: RFMSegment
+            segment_label: string
+            segment_description: string
+            members: RFMScore[]
+          }
+          meta: { total: number }
+        }>(`${apiUrl}/segmentation/segments/${segment}/members?${params}`)
+
+        if (response.success) {
+          rfmScores.value = response.data.members
+          totalCount.value = response.meta.total
+          return response.data
+        }
+        return null
+      } catch (error) {
+        handleError(error, {
+          context: 'useSegmentation.fetchSegmentMembers',
+          customMessage: '取得分群會員失敗'
+        })
+        rfmScores.value = []
+        totalCount.value = 0
+        return null
+      } finally {
+        isLoading.value = false
+        inFlightSegmentMembersMap.delete(key)
+      }
+    })()
+
+    inFlightSegmentMembersMap.set(key, promise)
+    return promise
   }
 
   /**

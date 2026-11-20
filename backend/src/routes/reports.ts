@@ -3,6 +3,7 @@ import { db, members, contracts, payments, branches, checkIns, classSessions, em
 import { eq, and, sql, gte, lte, count, inArray, avg, or, isNotNull } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranches, getTenantBranchIds } from '../utils/tenant-cache.js';
 import {
   generateExcel,
   generateCsv,
@@ -17,6 +18,116 @@ import {
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const REPORT_EXPIRING_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+  memberId: contracts.memberId,
+  planId: contracts.planId,
+  branchId: contracts.branchId,
+  salesPersonId: contracts.salesPersonId,
+  status: contracts.status,
+  signDate: contracts.signDate,
+  startDate: contracts.startDate,
+  originalEndDate: contracts.originalEndDate,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  totalAmount: contracts.totalAmount,
+  paidAmount: contracts.paidAmount,
+  paymentStatus: contracts.paymentStatus,
+  notes: contracts.notes,
+  createdBy: contracts.createdBy,
+  createdAt: contracts.createdAt,
+  updatedAt: contracts.updatedAt,
+  tenantId: contracts.tenantId,
+};
+
+const REPORT_EXPIRING_MEMBER_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+  memberCode: members.memberCode,
+  phone: members.phone,
+};
+
+const REPORT_EXPIRING_BRANCH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+};
+
+const REPORT_EXPIRING_EXPORT_CONTRACT_SELECT = {
+  contractNo: contracts.contractNo,
+  endDate: contracts.endDate,
+  status: contracts.status,
+};
+
+const REPORT_REVENUE_BY_BRANCH_SELECT = {
+  branchId: payments.branchId,
+  branchName: branches.name,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_REVENUE_BY_DAY_SELECT = {
+  date: sql<string>`DATE(${payments.paymentDate})`,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_BRANCH_REVENUE_SELECT = {
+  branchId: payments.branchId,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_BRANCH_MEMBERS_COUNT_SELECT = {
+  branchId: members.branchId,
+  count: count(),
+};
+
+const REPORT_BRANCH_CHECKINS_COUNT_SELECT = {
+  branchId: checkIns.branchId,
+  count: count(),
+};
+
+const REPORT_BRANCH_CONTRACTS_COUNT_SELECT = {
+  branchId: contracts.branchId,
+  count: count(),
+};
+
+const REPORT_COACH_COMPLETED_SESSIONS_SELECT = {
+  instructorId: classSessions.instructorId,
+  count: count(),
+};
+
+const REPORT_COACH_STUDENTS_COUNT_SELECT = {
+  coachId: coachMemberAssignments.coachId,
+  count: sql<number>`COUNT(DISTINCT ${coachMemberAssignments.memberId})`,
+};
+
+const REPORT_COACH_REVIEWS_SELECT = {
+  instructorId: classReviews.coachId,
+  avgRating: avg(classReviews.rating),
+  reviewCount: count(),
+};
+
+const REPORT_COACH_BOOKING_STATS_SELECT = {
+  instructorId: classSessions.instructorId,
+  attended: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'ATTENDED')`,
+  noShow: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'NO_SHOW')`,
+};
+
+const REPORT_COACH_NOTES_COUNT_SELECT = {
+  coachId: coachNotes.coachId,
+  count: count(),
+};
+
+const REPORT_COACH_LESSON_PLANS_COUNT_SELECT = {
+  coachId: lessonPlans.coachId,
+  count: count(),
+};
+
+const REPORT_COACH_CLASSES_BY_CATEGORY_SELECT = {
+  instructorId: classSessions.instructorId,
+  category: classes.category,
+  count: count(),
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -30,63 +141,51 @@ app.get('/revenue', async (c) => {
   })();
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { total: 0, byBranch: [], byDay: [] } });
   }
 
-  let conditions = [
-    inArray(payments.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(payments.branchId, branchId)
+    : inArray(payments.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.type, 'INCOME'),
   ];
 
-  if (branchId) {
-    conditions.push(eq(payments.branchId, branchId));
-  }
+  const [byBranch, byDay] = await Promise.all([
+    db
+      .select(REPORT_REVENUE_BY_BRANCH_SELECT)
+      .from(payments)
+      .innerJoin(branches, eq(payments.branchId, branches.id))
+      .where(and(...conditions))
+      .groupBy(payments.branchId, branches.name),
+    db
+      .select(REPORT_REVENUE_BY_DAY_SELECT)
+      .from(payments)
+      .where(and(...conditions))
+      .groupBy(sql`DATE(${payments.paymentDate})`)
+      .orderBy(sql`DATE(${payments.paymentDate})`),
+  ]);
 
-  const [totalResult] = await db
-    .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)` })
-    .from(payments)
-    .where(and(...conditions));
-
-  const byBranch = await db
-    .select({
-      branchId: payments.branchId,
-      branchName: branches.name,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
-    .from(payments)
-    .innerJoin(branches, eq(payments.branchId, branches.id))
-    .where(and(...conditions))
-    .groupBy(payments.branchId, branches.name);
-
-  const byDay = await db
-    .select({
-      date: sql<string>`DATE(${payments.paymentDate})`,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
-    .from(payments)
-    .where(and(...conditions))
-    .groupBy(sql`DATE(${payments.paymentDate})`)
-    .orderBy(sql`DATE(${payments.paymentDate})`);
+  const mappedByBranch = byBranch.map(b => ({
+    branchId: b.branchId,
+    branchName: b.branchName,
+    total: Number(b.total),
+  }));
+  const total = mappedByBranch.reduce((sum, b) => sum + b.total, 0);
 
   return c.json({
     success: true,
     data: {
-      total: Number(totalResult?.total || 0),
-      byBranch: byBranch.map(b => ({
-        branchId: b.branchId,
-        branchName: b.branchName,
-        total: Number(b.total),
-      })),
+      total,
+      byBranch: mappedByBranch,
       byDay: byDay.map(d => ({
         date: d.date,
         total: Number(d.total),
@@ -100,40 +199,36 @@ app.get('/member-growth', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const months = Number(c.req.query('months')) || 6;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  const branchIds = tenantBranches.map(b => b.id);
-
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { total: 0, byMonth: [] } });
   }
 
-  let conditions = [inArray(members.branchId, branchIds)];
+  const branchCondition = branchId
+    ? eq(members.branchId, branchId)
+    : inArray(members.branchId, branchIds);
 
-  if (branchId) {
-    conditions.push(eq(members.branchId, branchId));
-  }
-
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(members)
-    .where(and(...conditions, eq(members.status, 'ACTIVE')));
+  const conditions = [branchCondition];
 
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
 
-  const byMonth = await db
-    .select({
-      month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
-      count: count(),
-    })
-    .from(members)
-    .where(and(...conditions, gte(members.createdAt, startDate)))
-    .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
-    .orderBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`);
+  const [[totalResult], byMonth] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(members)
+      .where(and(...conditions, eq(members.status, 'ACTIVE'))),
+    db
+      .select({
+        month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
+        count: count(),
+      })
+      .from(members)
+      .where(and(...conditions, gte(members.createdAt, startDate)))
+      .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
+      .orderBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`),
+  ]);
 
   return c.json({
     success: true,
@@ -152,14 +247,9 @@ app.get('/contract-expiry', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days') || c.req.query('days_ahead')) || 30;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  const branchIds = tenantBranches.map(b => b.id);
-
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: [] });
   }
 
@@ -167,30 +257,22 @@ app.get('/contract-expiry', async (c) => {
   const futureDate = new Date();
   futureDate.setDate(today.getDate() + days);
 
-  let conditions = [
-    inArray(contracts.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(contracts.branchId, branchId)
+    : inArray(contracts.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     eq(contracts.status, 'ACTIVE'),
     gte(contracts.endDate, today.toISOString().split('T')[0]),
     lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
   ];
 
-  if (branchId) {
-    conditions.push(eq(contracts.branchId, branchId));
-  }
-
   const expiringContracts = await db
     .select({
-      contract: contracts,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
+      contract: REPORT_EXPIRING_CONTRACT_SELECT,
+      member: REPORT_EXPIRING_MEMBER_SELECT,
+      branch: REPORT_EXPIRING_BRANCH_SELECT,
     })
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
@@ -216,66 +298,61 @@ app.get('/member-activity', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days')) || 30;
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { totalCheckIns: 0, byBranch: [], byDay: [] } });
   }
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  let conditions = [
-    inArray(checkIns.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(checkIns.branchId, branchId)
+    : inArray(checkIns.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(checkIns.checkInTime, startDate),
   ];
 
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
-  }
+  const [byBranch, byDay] = await Promise.all([
+    db
+      .select({
+        branchId: checkIns.branchId,
+        branchName: branches.name,
+        count: count(),
+        uniqueMembers: sql<number>`COUNT(DISTINCT ${checkIns.memberId})`,
+      })
+      .from(checkIns)
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(and(...conditions))
+      .groupBy(checkIns.branchId, branches.name),
+    db
+      .select({
+        date: sql<string>`DATE(${checkIns.checkInTime})`,
+        count: count(),
+      })
+      .from(checkIns)
+      .where(and(...conditions))
+      .groupBy(sql`DATE(${checkIns.checkInTime})`)
+      .orderBy(sql`DATE(${checkIns.checkInTime})`),
+  ]);
 
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(and(...conditions));
-
-  const byBranch = await db
-    .select({
-      branchId: checkIns.branchId,
-      branchName: branches.name,
-      count: count(),
-      uniqueMembers: sql<number>`COUNT(DISTINCT ${checkIns.memberId})`,
-    })
-    .from(checkIns)
-    .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(and(...conditions))
-    .groupBy(checkIns.branchId, branches.name);
-
-  const byDay = await db
-    .select({
-      date: sql<string>`DATE(${checkIns.checkInTime})`,
-      count: count(),
-    })
-    .from(checkIns)
-    .where(and(...conditions))
-    .groupBy(sql`DATE(${checkIns.checkInTime})`)
-    .orderBy(sql`DATE(${checkIns.checkInTime})`);
+  const mappedByBranch = byBranch.map(b => ({
+    branchId: b.branchId,
+    branchName: b.branchName,
+    checkInCount: Number(b.count),
+    uniqueMembers: Number(b.uniqueMembers),
+  }));
+  const totalCheckIns = mappedByBranch.reduce((sum, b) => sum + b.checkInCount, 0);
 
   return c.json({
     success: true,
     data: {
-      totalCheckIns: Number(totalResult?.count || 0),
-      byBranch: byBranch.map(b => ({
-        branchId: b.branchId,
-        branchName: b.branchName,
-        checkInCount: Number(b.count),
-        uniqueMembers: Number(b.uniqueMembers),
-      })),
+      totalCheckIns,
+      byBranch: mappedByBranch,
       byDay: byDay.map(d => ({
         date: d.date,
         count: Number(d.count),
@@ -299,14 +376,10 @@ app.get('/revenue/export', async (c) => {
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(revenueColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -316,16 +389,16 @@ app.get('/revenue/export', async (c) => {
     });
   }
 
-  let conditions = [
-    inArray(payments.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(payments.branchId, branchId)
+    : inArray(payments.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.type, 'INCOME'),
   ];
-
-  if (branchId) {
-    conditions.push(eq(payments.branchId, branchId));
-  }
 
   const byDay = await db
     .select({
@@ -383,14 +456,9 @@ app.get('/member-growth/export', async (c) => {
   const months = Number(c.req.query('months')) || 6;
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  const branchIds = tenantBranches.map(b => b.id);
-
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(memberGrowthColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -400,11 +468,11 @@ app.get('/member-growth/export', async (c) => {
     });
   }
 
-  let conditions = [inArray(members.branchId, branchIds)];
+  const branchCondition = branchId
+    ? eq(members.branchId, branchId)
+    : inArray(members.branchId, branchIds);
 
-  if (branchId) {
-    conditions.push(eq(members.branchId, branchId));
-  }
+  const conditions = [branchCondition];
 
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
@@ -461,14 +529,9 @@ app.get('/contract-expiry/export', async (c) => {
   const days = Number(c.req.query('days') || c.req.query('days_ahead')) || 30;
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  const branchIds = tenantBranches.map(b => b.id);
-
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(contractExpiryColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -482,30 +545,22 @@ app.get('/contract-expiry/export', async (c) => {
   const futureDate = new Date();
   futureDate.setDate(today.getDate() + days);
 
-  let conditions = [
-    inArray(contracts.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(contracts.branchId, branchId)
+    : inArray(contracts.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     eq(contracts.status, 'ACTIVE'),
     gte(contracts.endDate, today.toISOString().split('T')[0]),
     lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
   ];
 
-  if (branchId) {
-    conditions.push(eq(contracts.branchId, branchId));
-  }
-
   const expiringContracts = await db
     .select({
-      contract: contracts,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
+      contract: REPORT_EXPIRING_EXPORT_CONTRACT_SELECT,
+      member: REPORT_EXPIRING_MEMBER_SELECT,
+      branch: REPORT_EXPIRING_BRANCH_SELECT,
     })
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
@@ -563,14 +618,10 @@ app.get('/member-activity/export', async (c) => {
   const days = Number(c.req.query('days')) || 30;
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(memberActivityColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -583,14 +634,14 @@ app.get('/member-activity/export', async (c) => {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  let conditions = [
-    inArray(checkIns.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(checkIns.branchId, branchId)
+    : inArray(checkIns.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(checkIns.checkInTime, startDate),
   ];
-
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
-  }
 
   const byDay = await db
     .select({
@@ -683,11 +734,7 @@ app.get('/branch-performance', async (c) => {
   }
 
   // Get tenant branches
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
 
   if (branchId) {
@@ -713,13 +760,18 @@ app.get('/branch-performance', async (c) => {
     });
   }
 
-  // Fetch current period data for all branches
-  const [currentRevenue, currentMembers, currentCheckIns, currentContracts] = await Promise.all([
+  // Fetch current period data and optional previous period data concurrently
+  const [
+    currentRevenue,
+    currentMembers,
+    currentCheckIns,
+    currentContracts,
+    previousRevenue,
+    previousMembers,
+    previousCheckIns,
+  ] = await Promise.all([
     // Revenue by branch
-    db.select({
-      branchId: payments.branchId,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
       inArray(payments.branchId, branchIds),
@@ -730,10 +782,7 @@ app.get('/branch-performance', async (c) => {
     .groupBy(payments.branchId),
 
     // New members by branch
-    db.select({
-      branchId: members.branchId,
-      count: count(),
-    })
+    db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
     .from(members)
     .where(and(
       inArray(members.branchId, branchIds),
@@ -743,10 +792,7 @@ app.get('/branch-performance', async (c) => {
     .groupBy(members.branchId),
 
     // Check-ins by branch
-    db.select({
-      branchId: checkIns.branchId,
-      count: count(),
-    })
+    db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
     .from(checkIns)
     .where(and(
       inArray(checkIns.branchId, branchIds),
@@ -756,63 +802,51 @@ app.get('/branch-performance', async (c) => {
     .groupBy(checkIns.branchId),
 
     // Active contracts by branch
-    db.select({
-      branchId: contracts.branchId,
-      count: count(),
-    })
+    db.select(REPORT_BRANCH_CONTRACTS_COUNT_SELECT)
     .from(contracts)
     .where(and(
       inArray(contracts.branchId, branchIds),
       eq(contracts.status, 'ACTIVE')
     ))
     .groupBy(contracts.branchId),
+
+    // Previous period revenue
+    compareWithPrevious
+      ? db.select(REPORT_BRANCH_REVENUE_SELECT)
+        .from(payments)
+        .where(and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, previousStart),
+          lte(payments.paymentDate, previousEnd)
+        ))
+        .groupBy(payments.branchId)
+      : Promise.resolve([]),
+
+    // Previous period new members
+    compareWithPrevious
+      ? db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
+        .from(members)
+        .where(and(
+          inArray(members.branchId, branchIds),
+          gte(members.createdAt, previousStart),
+          lte(members.createdAt, previousEnd)
+        ))
+        .groupBy(members.branchId)
+      : Promise.resolve([]),
+
+    // Previous period check-ins
+    compareWithPrevious
+      ? db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
+        .from(checkIns)
+        .where(and(
+          inArray(checkIns.branchId, branchIds),
+          gte(checkIns.checkInTime, previousStart),
+          lte(checkIns.checkInTime, previousEnd)
+        ))
+        .groupBy(checkIns.branchId)
+      : Promise.resolve([]),
   ]);
-
-  // Fetch previous period data if needed
-  let previousRevenue: typeof currentRevenue = [];
-  let previousMembers: typeof currentMembers = [];
-  let previousCheckIns: typeof currentCheckIns = [];
-
-  if (compareWithPrevious) {
-    [previousRevenue, previousMembers, previousCheckIns] = await Promise.all([
-      db.select({
-        branchId: payments.branchId,
-        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-      })
-      .from(payments)
-      .where(and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, previousStart),
-        lte(payments.paymentDate, previousEnd)
-      ))
-      .groupBy(payments.branchId),
-
-      db.select({
-        branchId: members.branchId,
-        count: count(),
-      })
-      .from(members)
-      .where(and(
-        inArray(members.branchId, branchIds),
-        gte(members.createdAt, previousStart),
-        lte(members.createdAt, previousEnd)
-      ))
-      .groupBy(members.branchId),
-
-      db.select({
-        branchId: checkIns.branchId,
-        count: count(),
-      })
-      .from(checkIns)
-      .where(and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, previousStart),
-        lte(checkIns.checkInTime, previousEnd)
-      ))
-      .groupBy(checkIns.branchId),
-    ]);
-  }
 
   // Build branch data map
   const branchMap = new Map<string, {
@@ -985,11 +1019,7 @@ app.get('/branch-performance/export', async (c) => {
       break;
   }
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
   if (branchId) {
     branchIds = branchIds.filter(id => id === branchId);
@@ -1007,10 +1037,7 @@ app.get('/branch-performance/export', async (c) => {
 
   // Fetch data
   const [currentRevenue, currentMembers, currentCheckIns, currentContracts, previousRevenue] = await Promise.all([
-    db.select({
-      branchId: payments.branchId,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
       inArray(payments.branchId, branchIds),
@@ -1020,25 +1047,22 @@ app.get('/branch-performance/export', async (c) => {
     ))
     .groupBy(payments.branchId),
 
-    db.select({ branchId: members.branchId, count: count() })
+    db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
     .from(members)
     .where(and(inArray(members.branchId, branchIds), gte(members.createdAt, currentStart), lte(members.createdAt, currentEnd)))
     .groupBy(members.branchId),
 
-    db.select({ branchId: checkIns.branchId, count: count() })
+    db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
     .from(checkIns)
     .where(and(inArray(checkIns.branchId, branchIds), gte(checkIns.checkInTime, currentStart), lte(checkIns.checkInTime, currentEnd)))
     .groupBy(checkIns.branchId),
 
-    db.select({ branchId: contracts.branchId, count: count() })
+    db.select(REPORT_BRANCH_CONTRACTS_COUNT_SELECT)
     .from(contracts)
     .where(and(inArray(contracts.branchId, branchIds), eq(contracts.status, 'ACTIVE')))
     .groupBy(contracts.branchId),
 
-    db.select({
-      branchId: payments.branchId,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
       inArray(payments.branchId, branchIds),
@@ -1134,11 +1158,7 @@ app.get('/coach-performance', async (c) => {
   }
 
   // Get all branches for tenant
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
   if (branchId) {
     branchIds = branchIds.filter(id => id === branchId);
@@ -1210,10 +1230,7 @@ app.get('/coach-performance', async (c) => {
     classesByCategory,
   ] = await Promise.all([
     // Classes taught (completed sessions)
-    db.select({
-      instructorId: classSessions.instructorId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_COMPLETED_SESSIONS_SELECT)
     .from(classSessions)
     .where(and(
       isNotNull(classSessions.instructorId),
@@ -1225,10 +1242,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classSessions.instructorId),
 
     // Students count (distinct members assigned to coach)
-    db.select({
-      coachId: coachMemberAssignments.coachId,
-      count: sql<number>`COUNT(DISTINCT ${coachMemberAssignments.memberId})`,
-    })
+    db.select(REPORT_COACH_STUDENTS_COUNT_SELECT)
     .from(coachMemberAssignments)
     .where(and(
       inArray(coachMemberAssignments.coachId, coachIdList),
@@ -1241,11 +1255,7 @@ app.get('/coach-performance', async (c) => {
 
     // Reviews (average rating and count)
     // Use coachId column directly - more reliable than joining through classes
-    db.select({
-      instructorId: classReviews.coachId,
-      avgRating: avg(classReviews.rating),
-      reviewCount: count(),
-    })
+    db.select(REPORT_COACH_REVIEWS_SELECT)
     .from(classReviews)
     .where(and(
       isNotNull(classReviews.coachId),
@@ -1256,11 +1266,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classReviews.coachId),
 
     // Booking stats (attendance rate)
-    db.select({
-      instructorId: classSessions.instructorId,
-      attended: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'ATTENDED')`,
-      noShow: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'NO_SHOW')`,
-    })
+    db.select(REPORT_COACH_BOOKING_STATS_SELECT)
     .from(bookings)
     .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
     .where(and(
@@ -1272,10 +1278,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classSessions.instructorId),
 
     // Notes created
-    db.select({
-      coachId: coachNotes.coachId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_NOTES_COUNT_SELECT)
     .from(coachNotes)
     .where(and(
       inArray(coachNotes.coachId, coachIdList),
@@ -1285,10 +1288,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(coachNotes.coachId),
 
     // Lesson plans created
-    db.select({
-      coachId: lessonPlans.coachId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_LESSON_PLANS_COUNT_SELECT)
     .from(lessonPlans)
     .where(and(
       inArray(lessonPlans.coachId, coachIdList),
@@ -1298,11 +1298,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(lessonPlans.coachId),
 
     // Classes by category
-    db.select({
-      instructorId: classSessions.instructorId,
-      category: classes.category,
-      count: count(),
-    })
+    db.select(REPORT_COACH_CLASSES_BY_CATEGORY_SELECT)
     .from(classSessions)
     .innerJoin(classes, eq(classSessions.classId, classes.id))
     .where(and(
@@ -1421,11 +1417,7 @@ app.get('/coach-performance/export', async (c) => {
       break;
   }
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
   if (branchId) {
     branchIds = branchIds.filter(id => id === branchId);
@@ -1493,10 +1485,7 @@ app.get('/coach-performance/export', async (c) => {
 
   // Fetch metrics
   const [classesCount, studentsCount, reviewsData, bookingStats] = await Promise.all([
-    db.select({
-      instructorId: classSessions.instructorId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_COMPLETED_SESSIONS_SELECT)
     .from(classSessions)
     .where(and(
       isNotNull(classSessions.instructorId),
@@ -1507,10 +1496,7 @@ app.get('/coach-performance/export', async (c) => {
     ))
     .groupBy(classSessions.instructorId),
 
-    db.select({
-      coachId: coachMemberAssignments.coachId,
-      count: sql<number>`COUNT(DISTINCT ${coachMemberAssignments.memberId})`,
-    })
+    db.select(REPORT_COACH_STUDENTS_COUNT_SELECT)
     .from(coachMemberAssignments)
     .where(and(
       inArray(coachMemberAssignments.coachId, coachIdList),
@@ -1522,11 +1508,7 @@ app.get('/coach-performance/export', async (c) => {
     .groupBy(coachMemberAssignments.coachId),
 
     // Use coachId column directly - more reliable than joining through classes
-    db.select({
-      instructorId: classReviews.coachId,
-      avgRating: avg(classReviews.rating),
-      reviewCount: count(),
-    })
+    db.select(REPORT_COACH_REVIEWS_SELECT)
     .from(classReviews)
     .where(and(
       isNotNull(classReviews.coachId),
@@ -1536,11 +1518,7 @@ app.get('/coach-performance/export', async (c) => {
     ))
     .groupBy(classReviews.coachId),
 
-    db.select({
-      instructorId: classSessions.instructorId,
-      attended: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'ATTENDED')`,
-      noShow: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'NO_SHOW')`,
-    })
+    db.select(REPORT_COACH_BOOKING_STATS_SELECT)
     .from(bookings)
     .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
     .where(and(

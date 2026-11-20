@@ -90,6 +90,10 @@ export interface ROISummary {
   worst_performing: ROIReport | null
 }
 
+const inFlightCampaignsMap = new Map<string, Promise<void>>()
+const inFlightSingleCampaignMap = new Map<string, Promise<Campaign | null>>()
+const inFlightROIReportMap = new Map<string, Promise<{ summary: ROISummary; data: ROIReport[] } | null>>()
+
 export const useCampaigns = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -112,56 +116,78 @@ export const useCampaigns = () => {
     search?: string
     page?: number
     limit?: number
-  }) => {
-    isLoading.value = true
-    const { type, status, search, page = 1, limit = 20 } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      if (type) params.append('type', type)
-      if (status) params.append('status', status)
-      if (search) params.append('search', search)
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: Campaign[]
-        meta: { total: number }
-      }>(`${apiUrl}/campaigns?${params}`)
-
-      if (response.success) {
-        campaigns.value = response.data
-        totalCount.value = response.meta.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.fetchCampaigns',
-        customMessage: '取得活動列表失敗'
-      })
-      campaigns.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightCampaignsMap.has(key)) {
+      return inFlightCampaignsMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { type, status, search, page = 1, limit = 20 } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        if (type) params.append('type', type)
+        if (status) params.append('status', status)
+        if (search) params.append('search', search)
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: Campaign[]
+          meta: { total: number }
+        }>(`${apiUrl}/campaigns?${params}`)
+
+        if (response.success) {
+          campaigns.value = response.data
+          totalCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useCampaigns.fetchCampaigns',
+          customMessage: '取得活動列表失敗'
+        })
+        campaigns.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightCampaignsMap.delete(key)
+      }
+    })()
+
+    inFlightCampaignsMap.set(key, promise)
+    return promise
   }
 
   /**
    * Get single campaign
    */
-  const getCampaign = async (id: string): Promise<Campaign | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: Campaign }>(
-        `${apiUrl}/campaigns/${id}`
-      )
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.getCampaign',
-        customMessage: '取得活動詳情失敗'
-      })
-      return null
+  const getCampaign = async (id: string, force = false): Promise<Campaign | null> => {
+    if (!force && inFlightSingleCampaignMap.has(id)) {
+      return inFlightSingleCampaignMap.get(id)!
     }
+
+    const promise = (async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Campaign }>(
+          `${apiUrl}/campaigns/${id}`
+        )
+        return response.success ? response.data : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useCampaigns.getCampaign',
+          customMessage: '取得活動詳情失敗'
+        })
+        return null
+      } finally {
+        inFlightSingleCampaignMap.delete(id)
+      }
+    })()
+
+    inFlightSingleCampaignMap.set(id, promise)
+    return promise
   }
 
   /**
@@ -343,28 +369,40 @@ export const useCampaigns = () => {
     startDate?: string
     endDate?: string
     type?: string
-  }): Promise<{ summary: ROISummary; data: ROIReport[] } | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (options?.startDate) params.append('start_date', options.startDate)
-      if (options?.endDate) params.append('end_date', options.endDate)
-      if (options?.type) params.append('type', options.type)
-
-      const response = await $fetch<{
-        success: boolean
-        period: { start_date: string; end_date: string }
-        summary: ROISummary
-        data: ROIReport[]
-      }>(`${apiUrl}/campaigns/roi-report?${params}`)
-
-      return response.success ? { summary: response.summary, data: response.data } : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.getROIReport',
-        customMessage: '取得 ROI 報表失敗'
-      })
-      return null
+  }, force = false): Promise<{ summary: ROISummary; data: ROIReport[] } | null> => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightROIReportMap.has(key)) {
+      return inFlightROIReportMap.get(key)!
     }
+
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (options?.startDate) params.append('start_date', options.startDate)
+        if (options?.endDate) params.append('end_date', options.endDate)
+        if (options?.type) params.append('type', options.type)
+
+        const response = await $fetch<{
+          success: boolean
+          period: { start_date: string; end_date: string }
+          summary: ROISummary
+          data: ROIReport[]
+        }>(`${apiUrl}/campaigns/roi-report?${params}`)
+
+        return response.success ? { summary: response.summary, data: response.data } : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useCampaigns.getROIReport',
+          customMessage: '取得 ROI 報表失敗'
+        })
+        return null
+      } finally {
+        inFlightROIReportMap.delete(key)
+      }
+    })()
+
+    inFlightROIReportMap.set(key, promise)
+    return promise
   }
 
   /**

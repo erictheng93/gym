@@ -72,20 +72,28 @@ app.get(
       conditions.push(lte(workoutLogs.date, endDate));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(workoutLogs.id) })
-      .from(workoutLogs)
-      .where(and(...conditions));
-
-    // Get workouts
-    const workouts = await db
-      .select()
-      .from(workoutLogs)
-      .where(and(...conditions))
-      .orderBy(desc(workoutLogs.date))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and workouts
+    const [[{ total }], workouts] = await Promise.all([
+      db
+        .select({ total: count(workoutLogs.id) })
+        .from(workoutLogs)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: workoutLogs.id,
+          date: workoutLogs.date,
+          duration: workoutLogs.duration,
+          calories: workoutLogs.calories,
+          exercises: workoutLogs.exercises,
+          notes: workoutLogs.notes,
+          createdAt: workoutLogs.createdAt,
+        })
+        .from(workoutLogs)
+        .where(and(...conditions))
+        .orderBy(desc(workoutLogs.date))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,
@@ -128,21 +136,32 @@ app.post(
       calories: data.calories,
       exercises: data.exercises,
       notes: data.notes,
-    }).returning();
+    }).returning({
+      id: workoutLogs.id,
+      date: workoutLogs.date,
+      duration: workoutLogs.duration,
+      calories: workoutLogs.calories,
+      exercises: workoutLogs.exercises,
+      notes: workoutLogs.notes,
+      createdAt: workoutLogs.createdAt,
+    });
+
+    const workoutData = {
+      id: workout.id,
+      date: workout.date,
+      duration: workout.duration,
+      calories: workout.calories,
+      exercises: workout.exercises,
+      notes: workout.notes,
+      createdAt: workout.createdAt,
+    };
 
     return c.json({
       success: true,
       message: '運動紀錄已建立',
       data: {
-        workout: {
-          id: workout.id,
-          date: workout.date,
-          duration: workout.duration,
-          calories: workout.calories,
-          exercises: workout.exercises,
-          notes: workout.notes,
-          createdAt: workout.createdAt,
-        },
+        ...workoutData,
+        workout: workoutData,
       },
     }, 201);
   }
@@ -157,7 +176,15 @@ app.get('/:id', async (c) => {
   const workoutId = c.req.param('id');
 
   const [workout] = await db
-    .select()
+    .select({
+      id: workoutLogs.id,
+      date: workoutLogs.date,
+      duration: workoutLogs.duration,
+      calories: workoutLogs.calories,
+      exercises: workoutLogs.exercises,
+      notes: workoutLogs.notes,
+      createdAt: workoutLogs.createdAt,
+    })
     .from(workoutLogs)
     .where(and(
       eq(workoutLogs.id, workoutId),
@@ -173,18 +200,21 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
+  const workoutData = {
+    id: workout.id,
+    date: workout.date,
+    duration: workout.duration,
+    calories: workout.calories,
+    exercises: workout.exercises,
+    notes: workout.notes,
+    createdAt: workout.createdAt,
+  };
+
   return c.json({
     success: true,
     data: {
-      workout: {
-        id: workout.id,
-        date: workout.date,
-        duration: workout.duration,
-        calories: workout.calories,
-        exercises: workout.exercises,
-        notes: workout.notes,
-        createdAt: workout.createdAt,
-      },
+      ...workoutData,
+      workout: workoutData,
     },
   });
 });
@@ -201,17 +231,24 @@ app.put(
     const workoutId = c.req.param('id');
     const updates = c.req.valid('json');
 
-    // Verify ownership
-    const [existing] = await db
-      .select({ id: workoutLogs.id })
-      .from(workoutLogs)
+    // Atomic update with ownership check in a single round trip
+    const [workout] = await db
+      .update(workoutLogs)
+      .set(updates)
       .where(and(
         eq(workoutLogs.id, workoutId),
         eq(workoutLogs.memberId, memberInfo.id),
       ))
-      .limit(1);
+      .returning({
+        id: workoutLogs.id,
+        date: workoutLogs.date,
+        duration: workoutLogs.duration,
+        calories: workoutLogs.calories,
+        exercises: workoutLogs.exercises,
+        notes: workoutLogs.notes,
+      });
 
-    if (!existing) {
+    if (!workout) {
       return c.json({
         success: false,
         error: '運動紀錄不存在',
@@ -219,24 +256,21 @@ app.put(
       }, 404);
     }
 
-    const [workout] = await db
-      .update(workoutLogs)
-      .set(updates)
-      .where(eq(workoutLogs.id, workoutId))
-      .returning();
+    const workoutData = {
+      id: workout.id,
+      date: workout.date,
+      duration: workout.duration,
+      calories: workout.calories,
+      exercises: workout.exercises,
+      notes: workout.notes,
+    };
 
     return c.json({
       success: true,
       message: '運動紀錄已更新',
       data: {
-        workout: {
-          id: workout.id,
-          date: workout.date,
-          duration: workout.duration,
-          calories: workout.calories,
-          exercises: workout.exercises,
-          notes: workout.notes,
-        },
+        ...workoutData,
+        workout: workoutData,
       },
     });
   }
@@ -250,25 +284,22 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const workoutId = c.req.param('id');
 
-  // Verify ownership
-  const [existing] = await db
-    .select({ id: workoutLogs.id })
-    .from(workoutLogs)
+  // Atomic delete with ownership check in a single round trip
+  const [deleted] = await db
+    .delete(workoutLogs)
     .where(and(
       eq(workoutLogs.id, workoutId),
       eq(workoutLogs.memberId, memberInfo.id),
     ))
-    .limit(1);
+    .returning({ id: workoutLogs.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({
       success: false,
       error: '運動紀錄不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  await db.delete(workoutLogs).where(eq(workoutLogs.id, workoutId));
 
   return c.json({
     success: true,
@@ -288,27 +319,27 @@ app.get('/stats/summary', async (c) => {
   startDate.setDate(startDate.getDate() - parseInt(period));
   const startDateStr = startDate.toISOString().split('T')[0];
 
-  // Get stats for period
-  const [stats] = await db
-    .select({
-      totalWorkouts: count(workoutLogs.id),
-      totalDuration: sum(workoutLogs.duration),
-      totalCalories: sum(workoutLogs.calories),
-      avgDuration: avg(workoutLogs.duration),
-    })
-    .from(workoutLogs)
-    .where(and(
-      eq(workoutLogs.memberId, memberInfo.id),
-      gte(workoutLogs.date, startDateStr),
-    ));
-
-  // Calculate streak
-  const recentWorkouts = await db
-    .select({ date: workoutLogs.date })
-    .from(workoutLogs)
-    .where(eq(workoutLogs.memberId, memberInfo.id))
-    .orderBy(desc(workoutLogs.date))
-    .limit(60);
+  // Concurrently get stats for period and recent workouts for streak
+  const [[stats], recentWorkouts] = await Promise.all([
+    db
+      .select({
+        totalWorkouts: count(workoutLogs.id),
+        totalDuration: sum(workoutLogs.duration),
+        totalCalories: sum(workoutLogs.calories),
+        avgDuration: avg(workoutLogs.duration),
+      })
+      .from(workoutLogs)
+      .where(and(
+        eq(workoutLogs.memberId, memberInfo.id),
+        gte(workoutLogs.date, startDateStr),
+      )),
+    db
+      .select({ date: workoutLogs.date })
+      .from(workoutLogs)
+      .where(eq(workoutLogs.memberId, memberInfo.id))
+      .orderBy(desc(workoutLogs.date))
+      .limit(60),
+  ]);
 
   let currentStreak = 0;
   let maxStreak = 0;

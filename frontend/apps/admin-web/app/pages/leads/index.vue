@@ -106,9 +106,12 @@ watch(currentPage, () => {
   loadLeads()
 })
 
-// Initial load
 onMounted(async () => {
   await Promise.all([loadLeads(), fetchBranches(), fetchEmployees()])
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
 })
 
 // Row click handler
@@ -165,8 +168,11 @@ const handleBatchDelete = async () => {
   }
 }
 
+const leadDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
 const handleExportSelected = () => {
-  const selectedLeads = leads.value.filter(l => selectedIds.value.includes(l.id))
+  const selectedSet = new Set(selectedIds.value)
+  const selectedLeads = leads.value.filter(l => selectedSet.has(l.id))
   const headers = ['姓名', '電話', 'Email', '來源', '狀態', '建立日期']
   const rows = selectedLeads.map(l => [
     l.name,
@@ -174,7 +180,7 @@ const handleExportSelected = () => {
     l.email || '',
     getSourceLabel(l.source),
     getStatusLabel(l.status),
-    l.date_created ? new Date(l.date_created).toLocaleDateString('zh-TW') : ''
+    l.date_created ? leadDateFormatter.format(new Date(l.date_created)) : ''
   ])
 
   const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
@@ -195,7 +201,7 @@ watch(currentPage, () => {
 // Format date helper
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  return leadDateFormatter.format(new Date(dateStr))
 }
 
 // Assignee select modal

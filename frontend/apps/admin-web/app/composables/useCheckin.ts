@@ -86,6 +86,11 @@ interface ContractApiResponse {
   }
 }
 
+const inFlightTodayCheckinsMap = new Map<string, Promise<void>>()
+const inFlightMemberContractMap = new Map<string, Promise<Contract | null>>()
+const inFlightMemberHistoryMap = new Map<string, Promise<any>>()
+const inFlightHasCheckedInMap = new Map<string, Promise<boolean>>()
+
 export const useCheckin = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl || 'http://localhost:8056'
@@ -106,51 +111,62 @@ export const useCheckin = () => {
   }
 
   // Fetch today's check-in records
-  const fetchTodayCheckins = async (branchId?: string) => {
-    isLoading.value = true
-    const { start, end } = getTodayRange()
+  const fetchTodayCheckins = async (branchId?: string, force = false) => {
+    const key = branchId || '__all__'
+    if (!force && inFlightTodayCheckinsMap.has(key)) {
+      return inFlightTodayCheckinsMap.get(key)
+    }
 
-    try {
-      // Build query params for the check-ins API
-      const params = new URLSearchParams()
-      params.append('startDate', start)
-      params.append('endDate', end)
-      params.append('limit', '50')
-      if (branchId) {
-        params.append('branchId', branchId)
-      }
+    const promise = (async () => {
+      isLoading.value = true
+      const { start, end } = getTodayRange()
 
-      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-        credentials: 'include'
-      })
+      try {
+        // Build query params for the check-ins API
+        const params = new URLSearchParams()
+        params.append('startDate', start)
+        params.append('endDate', end)
+        params.append('limit', '50')
+        if (branchId) {
+          params.append('branchId', branchId)
+        }
 
-      if (response.success && response.data) {
-        // Map API response to CheckinRecord format
-        todayCheckins.value = response.data.map(checkin => ({
-          id: checkin.id,
-          member: {
-            id: checkin.member.id,
-            full_name: checkin.member.fullName,
-            member_code: checkin.member.memberCode
-          } as Member,
-          time: checkin.checkInTime,
-          branch_id: checkin.branchId
-        }))
-        todayCount.value = response.pagination?.total || response.data.length
-      } else {
+        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+          credentials: 'include'
+        })
+
+        if (response.success && response.data) {
+          // Map API response to CheckinRecord format
+          todayCheckins.value = response.data.map(checkin => ({
+            id: checkin.id,
+            member: {
+              id: checkin.member.id,
+              full_name: checkin.member.fullName,
+              member_code: checkin.member.memberCode
+            } as Member,
+            time: checkin.checkInTime,
+            branch_id: checkin.branchId
+          }))
+          todayCount.value = response.pagination?.total || response.data.length
+        } else {
+          todayCheckins.value = []
+          todayCount.value = 0
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useCheckin.fetchTodayCheckins',
+          customMessage: '載入今日入場紀錄失敗'
+        })
         todayCheckins.value = []
         todayCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightTodayCheckinsMap.delete(key)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'useCheckin.fetchTodayCheckins',
-        customMessage: '載入今日入場紀錄失敗'
-      })
-      todayCheckins.value = []
-      todayCount.value = 0
-    } finally {
-      isLoading.value = false
-    }
+    })()
+
+    inFlightTodayCheckinsMap.set(key, promise)
+    return promise
   }
 
   // Perform member check-in
@@ -248,123 +264,155 @@ export const useCheckin = () => {
 
   // Get member's active contract for check-in
   const getMemberActiveContract = async (memberId: string): Promise<Contract | null> => {
-    try {
-      const today = new Date().toISOString().split('T')[0] || ''
-      const params = new URLSearchParams()
-      params.append('memberId', memberId)
-      params.append('status', 'ACTIVE')
-      params.append('limit', '1')
+    const existing = inFlightMemberContractMap.get(memberId)
+    if (existing) return existing
 
-      const response = await $fetch<ContractApiResponse>(`${apiUrl}/api/contracts?${params.toString()}`, {
-        credentials: 'include'
-      })
+    const promise = (async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0] || ''
+        const params = new URLSearchParams()
+        params.append('memberId', memberId)
+        params.append('status', 'ACTIVE')
+        params.append('limit', '1')
 
-      if (!response.success || !response.data?.length) {
+        const response = await $fetch<ContractApiResponse>(`${apiUrl}/api/contracts?${params.toString()}`, {
+          credentials: 'include'
+        })
+
+        if (!response.success || !response.data?.length) {
+          return null
+        }
+
+        const contractData = response.data[0]
+        if (!contractData) {
+          return null
+        }
+
+        // Check date validity
+        if (contractData.startDate > today || contractData.endDate < today) {
+          return null
+        }
+
+        // For COUNT_BASED contracts, also check if there are remaining counts
+        if (contractData.plan?.planType === 'COUNT_BASED' &&
+            contractData.remainingCounts !== null &&
+            contractData.remainingCounts !== undefined &&
+            contractData.remainingCounts <= 0) {
+          // No remaining counts - treat as no active contract for check-in
+          return null
+        }
+
+        // Map to Contract format expected by the UI
+        return {
+          id: contractData.id,
+          contract_no: contractData.contractNo,
+          contract_status: contractData.status,
+          start_date: contractData.startDate,
+          end_date: contractData.endDate,
+          remaining_counts: contractData.remainingCounts ?? null,
+          plan: contractData.plan ? {
+            id: contractData.plan.id,
+            name: contractData.plan.name,
+            plan_type: contractData.plan.planType
+          } : undefined
+        } as Contract
+      } catch (error) {
+        handleError(error, {
+          context: 'useCheckin.getMemberActiveContract',
+          showToast: false
+        })
         return null
+      } finally {
+        inFlightMemberContractMap.delete(memberId)
       }
+    })()
 
-      const contractData = response.data[0]
-      if (!contractData) {
-        return null
-      }
-
-      // Check date validity
-      if (contractData.startDate > today || contractData.endDate < today) {
-        return null
-      }
-
-      // For COUNT_BASED contracts, also check if there are remaining counts
-      if (contractData.plan?.planType === 'COUNT_BASED' &&
-          contractData.remainingCounts !== null &&
-          contractData.remainingCounts !== undefined &&
-          contractData.remainingCounts <= 0) {
-        // No remaining counts - treat as no active contract for check-in
-        return null
-      }
-
-      // Map to Contract format expected by the UI
-      return {
-        id: contractData.id,
-        contract_no: contractData.contractNo,
-        contract_status: contractData.status,
-        start_date: contractData.startDate,
-        end_date: contractData.endDate,
-        remaining_counts: contractData.remainingCounts ?? null,
-        plan: contractData.plan ? {
-          id: contractData.plan.id,
-          name: contractData.plan.name,
-          plan_type: contractData.plan.planType
-        } : undefined
-      } as Contract
-    } catch (error) {
-      handleError(error, {
-        context: 'useCheckin.getMemberActiveContract',
-        showToast: false
-      })
-      return null
-    }
+    inFlightMemberContractMap.set(memberId, promise)
+    return promise
   }
 
   // Fetch check-in history for a specific member
   const fetchMemberCheckinHistory = async (memberId: string, limit = 20) => {
-    try {
-      const params = new URLSearchParams()
-      params.append('memberId', memberId)
-      params.append('limit', String(limit))
+    const flightKey = `${memberId}_${limit}`
+    const existing = inFlightMemberHistoryMap.get(flightKey)
+    if (existing) return existing
 
-      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-        credentials: 'include'
-      })
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        params.append('memberId', memberId)
+        params.append('limit', String(limit))
 
-      if (response.success && response.data) {
-        return response.data.map(checkin => ({
-          id: checkin.id,
-          member_id: checkin.memberId,
-          branch_id: checkin.branchId,
-          check_time: checkin.checkInTime,
-          member: {
-            id: checkin.member.id,
-            full_name: checkin.member.fullName,
-            member_code: checkin.member.memberCode
-          }
-        }))
+        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+          credentials: 'include'
+        })
+
+        if (response.success && response.data) {
+          return response.data.map(checkin => ({
+            id: checkin.id,
+            member_id: checkin.memberId,
+            branch_id: checkin.branchId,
+            check_time: checkin.checkInTime,
+            member: {
+              id: checkin.member.id,
+              full_name: checkin.member.fullName,
+              member_code: checkin.member.memberCode
+            }
+          }))
+        }
+        return []
+      } catch (error) {
+        handleError(error, {
+          context: 'useCheckin.fetchMemberCheckinHistory',
+          showToast: false
+        })
+        return []
+      } finally {
+        inFlightMemberHistoryMap.delete(flightKey)
       }
-      return []
-    } catch (error) {
-      handleError(error, {
-        context: 'useCheckin.fetchMemberCheckinHistory',
-        showToast: false
-      })
-      return []
-    }
+    })()
+
+    inFlightMemberHistoryMap.set(flightKey, promise)
+    return promise
   }
 
   // Check if member has already checked in today
   const hasCheckedInToday = async (memberId: string, branchId?: string): Promise<boolean> => {
-    const { start, end } = getTodayRange()
+    const flightKey = `${memberId}_${branchId || ''}`
+    const existing = inFlightHasCheckedInMap.get(flightKey)
+    if (existing) return existing
 
-    try {
-      const params = new URLSearchParams()
-      params.append('memberId', memberId)
-      params.append('startDate', start)
-      params.append('endDate', end)
-      params.append('limit', '1')
-      if (branchId) {
-        params.append('branchId', branchId)
+    const promise = (async () => {
+      const { start, end } = getTodayRange()
+
+      try {
+        const params = new URLSearchParams()
+        params.append('memberId', memberId)
+        params.append('startDate', start)
+        params.append('endDate', end)
+        params.append('limit', '1')
+        if (branchId) {
+          params.append('branchId', branchId)
+        }
+
+        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+          credentials: 'include'
+        })
+
+        return response.success && response.pagination ? response.pagination.total > 0 : false
+      } catch (error) {
+        handleError(error, {
+          context: 'useCheckin.hasCheckedInToday',
+          showToast: false
+        })
+        return false
+      } finally {
+        inFlightHasCheckedInMap.delete(flightKey)
       }
+    })()
 
-      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-        credentials: 'include'
-      })
-
-      return response.success && response.pagination ? response.pagination.total > 0 : false
-    } catch (error) {
-      handleError(error, {
-        context: 'useCheckin.hasCheckedInToday',
-        showToast: false
-      })
-      return false
-    }
+    inFlightHasCheckedInMap.set(flightKey, promise)
+    return promise
   }
 
   /**

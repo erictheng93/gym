@@ -68,20 +68,31 @@ app.get(
       conditions.push(eq(memberGoals.status, status));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(memberGoals.id) })
-      .from(memberGoals)
-      .where(and(...conditions));
-
-    // Get goals
-    const goals = await db
-      .select()
-      .from(memberGoals)
-      .where(and(...conditions))
-      .orderBy(desc(memberGoals.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and goals
+    const [[{ total }], goals] = await Promise.all([
+      db
+        .select({ total: count(memberGoals.id) })
+        .from(memberGoals)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: memberGoals.id,
+          goalType: memberGoals.goalType,
+          targetValue: memberGoals.targetValue,
+          currentValue: memberGoals.currentValue,
+          startDate: memberGoals.startDate,
+          targetDate: memberGoals.targetDate,
+          status: memberGoals.status,
+          notes: memberGoals.notes,
+          createdAt: memberGoals.createdAt,
+          updatedAt: memberGoals.updatedAt,
+        })
+        .from(memberGoals)
+        .where(and(...conditions))
+        .orderBy(desc(memberGoals.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,
@@ -129,7 +140,17 @@ app.post(
       targetDate: data.targetDate,
       notes: data.notes,
       status: 'IN_PROGRESS',
-    }).returning();
+    }).returning({
+      id: memberGoals.id,
+      goalType: memberGoals.goalType,
+      targetValue: memberGoals.targetValue,
+      currentValue: memberGoals.currentValue,
+      startDate: memberGoals.startDate,
+      targetDate: memberGoals.targetDate,
+      status: memberGoals.status,
+      notes: memberGoals.notes,
+      createdAt: memberGoals.createdAt,
+    });
 
     return c.json({
       success: true,
@@ -160,7 +181,18 @@ app.get('/:id', async (c) => {
   const goalId = c.req.param('id');
 
   const [goal] = await db
-    .select()
+    .select({
+      id: memberGoals.id,
+      goalType: memberGoals.goalType,
+      targetValue: memberGoals.targetValue,
+      currentValue: memberGoals.currentValue,
+      startDate: memberGoals.startDate,
+      targetDate: memberGoals.targetDate,
+      status: memberGoals.status,
+      notes: memberGoals.notes,
+      createdAt: memberGoals.createdAt,
+      updatedAt: memberGoals.updatedAt,
+    })
     .from(memberGoals)
     .where(and(
       eq(memberGoals.id, goalId),
@@ -207,32 +239,36 @@ app.put(
     const goalId = c.req.param('id');
     const updates = c.req.valid('json');
 
-    // Verify ownership
-    const [existing] = await db
-      .select({ id: memberGoals.id })
-      .from(memberGoals)
-      .where(and(
-        eq(memberGoals.id, goalId),
-        eq(memberGoals.memberId, memberInfo.id),
-      ))
-      .limit(1);
-
-    if (!existing) {
-      return c.json({
-        success: false,
-        error: '目標不存在',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
+    // Atomic update with ownership check
     const [goal] = await db
       .update(memberGoals)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(memberGoals.id, goalId))
-      .returning();
+      .where(and(
+        eq(memberGoals.id, goalId),
+        eq(memberGoals.memberId, memberInfo.id),
+      ))
+      .returning({
+        id: memberGoals.id,
+        goalType: memberGoals.goalType,
+        targetValue: memberGoals.targetValue,
+        currentValue: memberGoals.currentValue,
+        startDate: memberGoals.startDate,
+        targetDate: memberGoals.targetDate,
+        status: memberGoals.status,
+        notes: memberGoals.notes,
+        updatedAt: memberGoals.updatedAt,
+      });
+
+    if (!goal) {
+      return c.json({
+        success: false,
+        error: '目標不存在',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,
@@ -262,25 +298,22 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const goalId = c.req.param('id');
 
-  // Verify ownership
-  const [existing] = await db
-    .select({ id: memberGoals.id })
-    .from(memberGoals)
+  // Atomic delete with ownership check
+  const [deleted] = await db
+    .delete(memberGoals)
     .where(and(
       eq(memberGoals.id, goalId),
       eq(memberGoals.memberId, memberInfo.id),
     ))
-    .limit(1);
+    .returning({ id: memberGoals.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({
       success: false,
       error: '目標不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  await db.delete(memberGoals).where(eq(memberGoals.id, goalId));
 
   return c.json({
     success: true,

@@ -1,3 +1,28 @@
+<script lang="ts">
+const roleOptions = [
+  { value: 'staff', label: '員工', description: '基本存取權限' },
+  { value: 'coach', label: '教練', description: '教練專屬功能' },
+  { value: 'manager', label: '經理', description: '分店管理權限' },
+  { value: 'admin', label: '管理員', description: '完整系統權限' },
+]
+
+const roleLabels: Record<string, string> = {
+  admin: '管理員',
+  manager: '經理',
+  coach: '教練',
+  staff: '員工',
+  super_admin: '超級管理員',
+}
+
+const userDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+</script>
+
 <script setup lang="ts">
 /**
  * Admin User Management - Edit Page
@@ -37,22 +62,7 @@ const newPassword = ref('')
 const confirmNewPassword = ref('')
 const passwordErrors = ref<Record<string, string>>({})
 
-// Role options
-const roleOptions = [
-  { value: 'staff', label: '員工', description: '基本存取權限' },
-  { value: 'coach', label: '教練', description: '教練專屬功能' },
-  { value: 'manager', label: '經理', description: '分店管理權限' },
-  { value: 'admin', label: '管理員', description: '完整系統權限' }
-]
 
-// Role labels
-const roleLabels: Record<string, string> = {
-  admin: '管理員',
-  manager: '經理',
-  coach: '教練',
-  staff: '員工',
-  super_admin: '超級管理員'
-}
 
 // Load user data
 const loadUser = async () => {
@@ -168,16 +178,11 @@ const handleResetPassword = async () => {
   }
 }
 
-// Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return userDateFormatter.format(d)
 }
 
 onMounted(async () => {

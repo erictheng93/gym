@@ -5,6 +5,7 @@ import { db, members, contracts, branches, membershipPlans } from '../db/index.j
 import { eq, and, or, ilike, sql, desc, asc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, membersColumns, translateStatus, translateGender } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
@@ -46,22 +47,17 @@ app.get('/', zValidator('query', querySchema), async (c) => {
   const { page, limit, search, branchId, status, sortBy, sortOrder } = c.req.valid('query');
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
 
-  let baseCondition = inArray(members.branchId, branchIds);
-
-  if (branchId) {
-    baseCondition = and(baseCondition, eq(members.branchId, branchId))!;
+  if (branchId && !branchIds.includes(branchId)) {
+    return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
+
+  let baseCondition = branchId ? eq(members.branchId, branchId) : inArray(members.branchId, branchIds);
 
   if (status) {
     // Case-insensitive status comparison
@@ -89,20 +85,21 @@ app.get('/', zValidator('query', querySchema), async (c) => {
 
   const orderBy = sortOrder === 'asc' ? asc(sortColumn) : desc(sortColumn);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(baseCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(baseCondition),
+    db
+      .select()
+      .from(members)
+      .where(baseCondition)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select()
-    .from(members)
-    .where(baseCondition)
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -132,7 +129,7 @@ app.get('/export', async (c) => {
   const branchIds = tenantBranches.map(b => b.id);
   const branchMap = new Map(tenantBranches.map(b => [b.id, b.name]));
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(membersColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -142,18 +139,23 @@ app.get('/export', async (c) => {
     });
   }
 
-  let baseCondition = inArray(members.branchId, branchIds);
-
-  if (branchId) {
-    baseCondition = and(baseCondition, eq(members.branchId, branchId))!;
-  }
+  let baseCondition = branchId ? eq(members.branchId, branchId) : inArray(members.branchId, branchIds);
 
   if (status) {
     baseCondition = and(baseCondition, eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'))!;
   }
 
   const result = await db
-    .select()
+    .select({
+      memberCode: members.memberCode,
+      fullName: members.fullName,
+      phone: members.phone,
+      email: members.email,
+      gender: members.gender,
+      status: members.status,
+      joinDate: members.joinDate,
+      branchId: members.branchId,
+    })
     .from(members)
     .where(baseCondition)
     .orderBy(desc(members.createdAt));
@@ -200,31 +202,27 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
+  const [[member], branchIds, memberContracts] = await Promise.all([
+    db
+      .select()
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(contracts)
+      .where(eq(contracts.memberId, id))
+      .orderBy(desc(contracts.createdAt)),
+  ]);
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, member.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(member.branchId!)) {
     return c.json({ success: false, error: '無權限存取此會員' }, 403);
   }
-
-  const memberContracts = await db
-    .select()
-    .from(contracts)
-    .where(eq(contracts.memberId, id))
-    .orderBy(desc(contracts.createdAt));
 
   return c.json({
     success: true,
@@ -235,25 +233,44 @@ app.get('/:id', async (c) => {
   });
 });
 
+const MEMBER_RETURNING = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  idNumber: members.idNumber,
+  address: members.address,
+  emergencyContact: members.emergencyContact,
+  emergencyPhone: members.emergencyPhone,
+  branchId: members.branchId,
+  salesPersonId: members.salesPersonId,
+  status: members.status,
+  joinDate: members.joinDate,
+  tags: members.tags,
+  notes: members.notes,
+  avatar: members.avatar,
+  height: members.height,
+  createdAt: members.createdAt,
+  updatedAt: members.updatedAt,
+  tenantId: members.tenantId,
+};
+
 app.post('/', zValidator('json', createMemberSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   const [countResult] = await db
     .select({ count: sql<number>`count(*)` })
     .from(members)
-    .innerJoin(branches, eq(members.branchId, branches.id))
-    .where(eq(branches.tenantId, tenantId));
+    .where(inArray(members.branchId, branchIds));
 
   const memberCount = Number(countResult?.count || 0);
 
@@ -264,7 +281,7 @@ app.post('/', zValidator('json', createMemberSchema), async (c) => {
     memberCode,
     joinDate: data.joinDate || new Date().toISOString().split('T')[0],
     tenantId,
-  }).returning();
+  }).returning(MEMBER_RETURNING);
 
   return c.json({ success: true, data: newMember }, 201);
 });
@@ -274,36 +291,13 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
-
-  if (!member) {
-    return c.json({ success: false, error: '會員不存在' }, 404);
-  }
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, member.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '無權限修改此會員' }, 403);
   }
 
-  if (data.branchId) {
-    const [newBranch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-      .limit(1);
-
-    if (!newBranch) {
-      return c.json({ success: false, error: '無效的分店' }, 400);
-    }
+  if (data.branchId && !branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   const [updatedMember] = await db
@@ -312,8 +306,21 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
       ...data,
       updatedAt: new Date(),
     })
-    .where(eq(members.id, id))
-    .returning();
+    .where(and(eq(members.id, id), inArray(members.branchId, branchIds)))
+    .returning(MEMBER_RETURNING);
+
+  if (!updatedMember) {
+    const [existingMember] = await db
+      .select({ id: members.id })
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1);
+
+    if (!existingMember) {
+      return c.json({ success: false, error: '會員不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限修改此會員' }, 403);
+  }
 
   return c.json({ success: true, data: updatedMember });
 });
@@ -322,30 +329,29 @@ app.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
-
-  if (!member) {
-    return c.json({ success: false, error: '會員不存在' }, 404);
-  }
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, member.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '無權限刪除此會員' }, 403);
   }
 
-  await db
+  const [updatedMember] = await db
     .update(members)
     .set({ status: 'SUSPENDED', updatedAt: new Date() })
-    .where(eq(members.id, id));
+    .where(and(eq(members.id, id), inArray(members.branchId, branchIds)))
+    .returning({ id: members.id });
+
+  if (!updatedMember) {
+    const [existingMember] = await db
+      .select({ id: members.id })
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1);
+
+    if (!existingMember) {
+      return c.json({ success: false, error: '會員不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限刪除此會員' }, 403);
+  }
 
   return c.json({ success: true, message: '會員已封存' });
 });
@@ -355,39 +361,35 @@ app.get('/:id/contracts', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
+  const [[member], branchIds, result] = await Promise.all([
+    db
+      .select({ id: members.id, branchId: members.branchId })
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+    db
+      .select({
+        contract: contracts,
+        plan: {
+          id: membershipPlans.id,
+          name: membershipPlans.name,
+          planType: membershipPlans.planType,
+        },
+      })
+      .from(contracts)
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(eq(contracts.memberId, id))
+      .orderBy(desc(contracts.createdAt)),
+  ]);
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, member.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(member.branchId!)) {
     return c.json({ success: false, error: '無權限存取此會員' }, 403);
   }
-
-  const result = await db
-    .select({
-      contract: contracts,
-      plan: {
-        id: membershipPlans.id,
-        name: membershipPlans.name,
-        planType: membershipPlans.planType,
-      },
-    })
-    .from(contracts)
-    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(eq(contracts.memberId, id))
-    .orderBy(desc(contracts.createdAt));
 
   return c.json({
     success: true,

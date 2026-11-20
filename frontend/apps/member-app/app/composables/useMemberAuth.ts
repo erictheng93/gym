@@ -20,6 +20,8 @@
  * console.log(member.value?.full_name)
  */
 
+let checkAuthPromise: Promise<boolean> | null = null
+
 export const useMemberAuth = () => {
   // Get instances of specialized composables
   const tokens = useAuthTokens()
@@ -42,41 +44,49 @@ export const useMemberAuth = () => {
       return true
     }
 
-    // Set auth checking state to show loading UI
-    session.setAuthChecking(true)
+    if (checkAuthPromise) {
+      return checkAuthPromise
+    }
 
-    try {
+    checkAuthPromise = (async () => {
+      // Set auth checking state to show loading UI
+      session.setAuthChecking(true)
 
-      // Try with access token
-      if (tokens.hasAccessToken.value) {
-        const success = await session.fetchMember()
-        if (success) return true
-      }
-
-      // Try refreshing token
-      if (tokens.hasRefreshToken.value) {
-        const refreshed = await tokens.refreshAccessToken()
-        if (refreshed) {
+      try {
+        // Try with access token
+        if (tokens.hasAccessToken.value) {
           const success = await session.fetchMember()
           if (success) return true
         }
-      }
 
-      // Try OAuth session (cookie-based auth)
-      try {
-        const oauthResult = await methods.loginWithOAuth()
-        if (oauthResult.success) {
-          return true
+        // Try refreshing token
+        if (tokens.hasRefreshToken.value) {
+          const refreshed = await tokens.refreshAccessToken()
+          if (refreshed) {
+            const success = await session.fetchMember()
+            if (success) return true
+          }
         }
-      } catch {
-        // OAuth session invalid, continue
-      }
 
-      return false
-    } finally {
-      // Always clear auth checking state when done
-      session.setAuthChecking(false)
-    }
+        // Try OAuth session (cookie-based auth)
+        try {
+          const oauthResult = await methods.loginWithOAuth()
+          if (oauthResult.success) {
+            return true
+          }
+        } catch {
+          // OAuth session invalid, continue
+        }
+
+        return false
+      } finally {
+        // Always clear auth checking state when done
+        session.setAuthChecking(false)
+        checkAuthPromise = null
+      }
+    })()
+
+    return checkAuthPromise
   }
 
   return {

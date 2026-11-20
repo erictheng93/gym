@@ -67,15 +67,28 @@ const handleRowClick = (campaign: typeof campaigns.value[0]) => {
   navigateTo(`/marketing/campaigns/${campaign.id}`)
 }
 
+const campaignDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric'
+})
+
+const campaignCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : campaignDateFormatter.format(d)
 }
 
 // Format currency
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount)
+  return campaignCurrencyFormatter.format(amount)
 }
 
 // Table columns

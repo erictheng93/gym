@@ -1,3 +1,36 @@
+<script lang="ts">
+const checkinDetailDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long'
+})
+
+const checkinDetailTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+})
+
+const verificationLabels: Record<string, string> = {
+  BARCODE: '條碼掃描',
+  QR_CODE: 'QR Code 掃描',
+  MANUAL: '人工驗證',
+  FACE_ID: '人臉辨識',
+  FINGERPRINT: '指紋辨識',
+  BATCH: '批次簽到'
+}
+
+const verificationIcons: Record<string, string> = {
+  BARCODE: 'barcode',
+  QR_CODE: 'qr',
+  MANUAL: 'user',
+  FACE_ID: 'face',
+  FINGERPRINT: 'fingerprint',
+  BATCH: 'users'
+}
+</script>
+
 <script setup lang="ts">
 import { useFetch } from '~/composables/core/useFetch'
 
@@ -80,36 +113,9 @@ onMounted(() => {
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr)
   return {
-    date: date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long'
-    }),
-    time: date.toLocaleTimeString('zh-TW', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
+    date: checkinDetailDateFormatter.format(date),
+    time: checkinDetailTimeFormatter.format(date)
   }
-}
-
-const verificationLabels: Record<string, string> = {
-  BARCODE: '條碼掃描',
-  QR_CODE: 'QR Code 掃描',
-  MANUAL: '人工驗證',
-  FACE_ID: '人臉辨識',
-  FINGERPRINT: '指紋辨識',
-  BATCH: '批次簽到'
-}
-
-const verificationIcons: Record<string, string> = {
-  BARCODE: 'barcode',
-  QR_CODE: 'qr',
-  MANUAL: 'user',
-  FACE_ID: 'face',
-  FINGERPRINT: 'fingerprint',
-  BATCH: 'users'
 }
 
 const goBack = () => {

@@ -127,6 +127,10 @@ onMounted(async () => {
   await loadBookings()
 })
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 // Cancel booking handler
 const handleCancelBooking = async (booking: Booking) => {
   const confirmed = await confirm({

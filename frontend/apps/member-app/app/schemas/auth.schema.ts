@@ -5,21 +5,23 @@
 
 import { z } from 'zod'
 
-// Phone number regex for Taiwan mobile numbers (09xxxxxxxx)
-const PHONE_REGEX = /^09\d{8}$/
+// Helper to validate Taiwan mobile numbers (with or without dashes)
+const isValidTaiwanPhone = (val: string) => {
+  const digits = val.replace(/\D/g, '')
+  return digits.startsWith('09') && digits.length === 10
+}
 
 // Password requirements
 const PASSWORD_MIN_LENGTH = 8
 const PASSWORD_REGEX = /^(?=.*[a-zA-Z])(?=.*\d).+$/
 
 /**
- * Email/Password login schema
+ * Account/Password login schema (accepts Email or Phone)
  */
 export const loginSchema = z.object({
   email: z
     .string()
-    .min(1, '請輸入電子郵件')
-    .email('請輸入有效的電子郵件格式'),
+    .min(1, '請輸入電子郵件或手機號碼'),
   password: z
     .string()
     .min(1, '請輸入密碼'),
@@ -34,7 +36,7 @@ export const otpRequestSchema = z.object({
   phone: z
     .string()
     .min(1, '請輸入手機號碼')
-    .regex(PHONE_REGEX, '請輸入有效的手機號碼（09開頭，共10碼）'),
+    .refine(isValidTaiwanPhone, '請輸入有效的手機號碼（09開頭，共10碼）'),
 })
 
 export type OtpRequestFormData = z.infer<typeof otpRequestSchema>
@@ -46,7 +48,7 @@ export const otpVerifySchema = z.object({
   phone: z
     .string()
     .min(1, '請輸入手機號碼')
-    .regex(PHONE_REGEX, '請輸入有效的手機號碼'),
+    .refine(isValidTaiwanPhone, '請輸入有效的手機號碼'),
   code: z
     .string()
     .length(6, '驗證碼為 6 位數字')

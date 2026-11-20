@@ -60,9 +60,9 @@ pub struct CreateEmployeeRequest {
     resign_date: Option<NaiveDate>,
     #[serde(rename = "resignDate")]
     resign_date_camel: Option<NaiveDate>,
-    basic_salary: Option<f64>,
-    #[serde(rename = "basicSalary")]
-    basic_salary_camel: Option<f64>,
+    #[serde(rename = "basic_salary")]
+    #[serde(alias = "basicSalary")]
+    base_compensation: Option<f64>,
     custom_permissions: Option<Value>,
     #[serde(rename = "customPermissions")]
     custom_permissions_camel: Option<Value>,
@@ -96,9 +96,9 @@ pub struct UpdateEmployeeRequest {
     resign_date: Option<NaiveDate>,
     #[serde(rename = "resignDate")]
     resign_date_camel: Option<NaiveDate>,
-    basic_salary: Option<f64>,
-    #[serde(rename = "basicSalary")]
-    basic_salary_camel: Option<f64>,
+    #[serde(rename = "basic_salary")]
+    #[serde(alias = "basicSalary")]
+    base_compensation: Option<f64>,
     custom_permissions: Option<Value>,
     #[serde(rename = "customPermissions")]
     custom_permissions_camel: Option<Value>,
@@ -119,7 +119,7 @@ pub struct Employee {
     employment_type: String,
     hire_date: NaiveDate,
     resign_date: Option<NaiveDate>,
-    basic_salary: Option<f64>,
+    base_compensation: Option<f64>,
     custom_permissions: Option<Value>,
     tenant_id: Option<Uuid>,
 }
@@ -152,8 +152,8 @@ impl Serialize for Employee {
         map.serialize_entry("hireDate", &self.hire_date)?;
         map.serialize_entry("resign_date", &self.resign_date)?;
         map.serialize_entry("resignDate", &self.resign_date)?;
-        map.serialize_entry("basic_salary", &self.basic_salary)?;
-        map.serialize_entry("basicSalary", &self.basic_salary)?;
+        map.serialize_entry("basic_salary", &self.base_compensation)?;
+        map.serialize_entry("basicSalary", &self.base_compensation)?;
         map.serialize_entry("custom_permissions", &self.custom_permissions)?;
         map.serialize_entry("customPermissions", &self.custom_permissions)?;
         map.serialize_entry("tenant_id", &self.tenant_id)?;
@@ -277,7 +277,7 @@ pub async fn create_employee(
     let status = payload.employment_status.or(payload.status).unwrap_or_else(|| "ACTIVE".into());
     let hire_date = payload.hire_date.or(payload.hire_date_camel).unwrap_or_else(|| chrono::Utc::now().date_naive());
     let resign_date = payload.resign_date.or(payload.resign_date_camel);
-    let basic_salary = payload.basic_salary.or(payload.basic_salary_camel);
+    let compensation = payload.base_compensation;
     let custom_permissions = payload.custom_permissions.or(payload.custom_permissions_camel);
     ensure_branch_scope(&state, tenant_id, branch_id).await?;
     ensure_job_title_scope(&state, tenant_id, job_title_id).await?;
@@ -311,7 +311,7 @@ pub async fn create_employee(
     .bind(employment_type.trim())
     .bind(hire_date)
     .bind(resign_date)
-    .bind(basic_salary)
+    .bind(compensation)
     .bind(custom_permissions)
     .bind(tenant_id)
     .fetch_one(&state.db)
@@ -371,7 +371,7 @@ pub async fn update_employee(
     .bind(payload.employment_type.or(payload.employment_type_camel))
     .bind(payload.hire_date.or(payload.hire_date_camel))
     .bind(payload.resign_date.or(payload.resign_date_camel))
-    .bind(payload.basic_salary.or(payload.basic_salary_camel))
+    .bind(payload.base_compensation)
     .bind(payload.custom_permissions.or(payload.custom_permissions_camel))
     .fetch_optional(&state.db)
     .await?
@@ -578,7 +578,7 @@ fn employee_returning_fields() -> &'static str {
             employees.id, employees.user_id, employees.branch_id, employees.job_title_id,
             employees.employee_code, employees.full_name, employees.phone, employees.email,
             employees.status as employment_status, employees.status, employees.employment_type,
-            employees.hire_date, employees.resign_date, employees.basic_salary::float8 as basic_salary,
+            employees.hire_date, employees.resign_date, employees.basic_salary::float8 as base_compensation,
             employees.custom_permissions, employees.tenant_id
     "#
 }

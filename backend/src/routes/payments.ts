@@ -3,11 +3,31 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, payments, contracts, members, branches } from '../db/index.js';
 import { eq, and, sql, desc, sum, inArray, gte, lte } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, paymentsColumns, translatePaymentMethod, translatePaymentType } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
+
+const PAYMENT_RETURNING = {
+  id: payments.id,
+  contractId: payments.contractId,
+  memberId: payments.memberId,
+  branchId: payments.branchId,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  paymentDate: payments.paymentDate,
+  type: payments.type,
+  receiptNo: payments.receiptNo,
+  notes: payments.notes,
+  createdBy: payments.createdBy,
+  createdAt: payments.createdAt,
+  tenantId: payments.tenantId,
+};
+
+const PAYMENT_SELECT = PAYMENT_RETURNING;
 
 app.use('*', requireAuth);
 app.use('*', requireTenant);
@@ -31,21 +51,21 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
   }
 
-  let conditions = [inArray(payments.branchId, branchIds)];
+  let conditions: SQL[] = [];
 
   if (branchId) {
+    if (!branchIds.includes(branchId)) {
+      return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
+    }
     conditions.push(eq(payments.branchId, branchId));
+  } else {
+    conditions.push(inArray(payments.branchId, branchIds));
   }
 
   if (memberId) {
@@ -58,33 +78,34 @@ app.get('/', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(payments)
-    .where(whereCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(payments)
+      .where(whereCondition),
+    db
+      .select({
+        payment: PAYMENT_SELECT,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+        contract: {
+          id: contracts.id,
+          contractNo: contracts.contractNo,
+        },
+      })
+      .from(payments)
+      .leftJoin(members, eq(payments.memberId, members.id))
+      .leftJoin(contracts, eq(payments.contractId, contracts.id))
+      .where(whereCondition)
+      .orderBy(desc(payments.createdAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      payment: payments,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-    })
-    .from(payments)
-    .leftJoin(members, eq(payments.memberId, members.id))
-    .leftJoin(contracts, eq(payments.contractId, contracts.id))
-    .where(whereCondition)
-    .orderBy(desc(payments.createdAt))
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -103,12 +124,7 @@ app.get('/summary', async (c) => {
   const startDate = c.req.query('startDate');
   const endDate = c.req.query('endDate');
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({
@@ -117,10 +133,18 @@ app.get('/summary', async (c) => {
     });
   }
 
-  let conditions = [inArray(payments.branchId, branchIds)];
+  let conditions: SQL[] = [];
 
   if (branchId) {
+    if (!branchIds.includes(branchId)) {
+      return c.json({
+        success: true,
+        data: { totalIncome: 0, totalRefund: 0, netIncome: 0, paymentCount: 0 },
+      });
+    }
     conditions.push(eq(payments.branchId, branchId));
+  } else {
+    conditions.push(inArray(payments.branchId, branchIds));
   }
 
   if (startDate) {
@@ -133,23 +157,17 @@ app.get('/summary', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [incomeResult] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(and(whereCondition, eq(payments.type, 'INCOME')));
-
-  const [refundResult] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(and(whereCondition, eq(payments.type, 'REFUND')));
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
+  const [summaryResult] = await db
+    .select({
+      totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'INCOME' THEN ${payments.amount} ELSE 0 END), 0)`,
+      totalRefund: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'REFUND' THEN ${payments.amount} ELSE 0 END), 0)`,
+      count: sql<number>`count(*)`,
+    })
     .from(payments)
     .where(whereCondition);
 
-  const totalIncome = Number(incomeResult?.total || 0);
-  const totalRefund = Number(refundResult?.total || 0);
+  const totalIncome = Number(summaryResult?.totalIncome || 0);
+  const totalRefund = Number(summaryResult?.totalRefund || 0);
 
   return c.json({
     success: true,
@@ -157,7 +175,7 @@ app.get('/summary', async (c) => {
       totalIncome,
       totalRefund,
       netIncome: totalIncome - totalRefund,
-      paymentCount: Number(countResult?.count || 0),
+      paymentCount: Number(summaryResult?.count || 0),
     },
   });
 });
@@ -170,14 +188,9 @@ app.get('/export', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { branchId, startDate, endDate, format = 'csv' } = c.req.query();
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  const branchIds = tenantBranches.map(b => b.id);
-
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(paymentsColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -187,10 +200,12 @@ app.get('/export', async (c) => {
     });
   }
 
-  let conditions = [inArray(payments.branchId, branchIds)];
+  let conditions: SQL[] = [];
 
   if (branchId) {
     conditions.push(eq(payments.branchId, branchId));
+  } else {
+    conditions.push(inArray(payments.branchId, branchIds));
   }
 
   if (startDate) {
@@ -203,9 +218,14 @@ app.get('/export', async (c) => {
 
   const result = await db
     .select({
-      payment: payments,
+      payment: {
+        receiptNo: payments.receiptNo,
+        amount: payments.amount,
+        paymentMethod: payments.paymentMethod,
+        paymentDate: payments.paymentDate,
+        type: payments.type,
+      },
       member: {
-        id: members.id,
         fullName: members.fullName,
         memberCode: members.memberCode,
       },
@@ -258,9 +278,23 @@ app.get('/:id', async (c) => {
 
   const [payment] = await db
     .select({
-      payment: payments,
-      member: members,
-      contract: contracts,
+      payment: PAYMENT_SELECT,
+      member: {
+        id: members.id,
+        fullName: members.fullName,
+        memberCode: members.memberCode,
+        phone: members.phone,
+        email: members.email,
+      },
+      contract: {
+        id: contracts.id,
+        contractNo: contracts.contractNo,
+        status: contracts.status,
+        startDate: contracts.startDate,
+        endDate: contracts.endDate,
+        totalAmount: contracts.totalAmount,
+        remainingCounts: contracts.remainingCounts,
+      },
     })
     .from(payments)
     .leftJoin(members, eq(payments.memberId, members.id))
@@ -273,7 +307,7 @@ app.get('/:id', async (c) => {
   }
 
   const [branch] = await db
-    .select()
+    .select({ id: branches.id })
     .from(branches)
     .where(and(eq(branches.id, payment.payment.branchId!), eq(branches.tenantId, tenantId)))
     .limit(1);
@@ -298,7 +332,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   const data = c.req.valid('json');
 
   const [branch] = await db
-    .select()
+    .select({ id: branches.id })
     .from(branches)
     .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
     .limit(1);
@@ -308,7 +342,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   }
 
   const [member] = await db
-    .select()
+    .select({ id: members.id })
     .from(members)
     .where(eq(members.id, data.memberId))
     .limit(1);
@@ -333,26 +367,30 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
     notes: data.notes,
     createdBy: user.employeeId,
     tenantId,
-  }).returning();
+  }).returning(PAYMENT_RETURNING);
 
   if (data.contractId) {
-    const existingPayments = await db
-      .select({ total: sum(payments.amount) })
-      .from(payments)
-      .where(
-        and(
-          eq(payments.contractId, data.contractId),
-          eq(payments.type, 'INCOME')
-        )
-      );
+    const [existingPayments, [contract]] = await Promise.all([
+      db
+        .select({ total: sum(payments.amount) })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.contractId, data.contractId),
+            eq(payments.type, 'INCOME')
+          )
+        ),
+      db
+        .select({
+          id: contracts.id,
+          totalAmount: contracts.totalAmount,
+        })
+        .from(contracts)
+        .where(eq(contracts.id, data.contractId))
+        .limit(1),
+    ]);
 
     const totalPaid = Number(existingPayments[0]?.total || 0);
-
-    const [contract] = await db
-      .select()
-      .from(contracts)
-      .where(eq(contracts.id, data.contractId))
-      .limit(1);
 
     if (contract) {
       const totalAmount = Number(contract.totalAmount || 0);

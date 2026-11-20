@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { performanceReviews, kpiTemplates, employees, jobTitles, branches } from '../db/schema.js';
 import { authMiddleware, requireAuth } from '../middleware/index.js';
@@ -14,6 +14,113 @@ const app = new Hono<{ Variables: AuthVariables }>();
 
 // Apply auth middleware
 app.use('*', authMiddleware, requireAuth);
+
+const REVIEW_RETURNING = {
+  id: performanceReviews.id,
+  employeeId: performanceReviews.employeeId,
+  reviewerId: performanceReviews.reviewerId,
+  reviewPeriod: performanceReviews.reviewPeriod,
+  reviewType: performanceReviews.reviewType,
+  status: performanceReviews.status,
+  overallScore: performanceReviews.overallScore,
+  reviewerComments: performanceReviews.reviewerComments,
+  improvementPlan: performanceReviews.improvementPlan,
+  approvedBy: performanceReviews.approvedBy,
+  approvedAt: performanceReviews.approvedAt,
+  submittedAt: performanceReviews.submittedAt,
+  reviewedAt: performanceReviews.reviewedAt,
+  kpiData: performanceReviews.kpiData,
+  createdAt: performanceReviews.createdAt,
+  updatedAt: performanceReviews.updatedAt,
+};
+
+const KPI_TEMPLATE_RETURNING = {
+  id: kpiTemplates.id,
+  name: kpiTemplates.name,
+  description: kpiTemplates.description,
+  jobTitleId: kpiTemplates.jobTitleId,
+  reviewType: kpiTemplates.reviewType,
+  kpis: kpiTemplates.kpis,
+  isDefault: kpiTemplates.isDefault,
+  isActive: kpiTemplates.isActive,
+  createdBy: kpiTemplates.createdBy,
+  createdAt: kpiTemplates.createdAt,
+  updatedAt: kpiTemplates.updatedAt,
+};
+
+const PERFORMANCE_REVIEW_SELECT = {
+  id: performanceReviews.id,
+  employee_id: performanceReviews.employeeId,
+  reviewer_id: performanceReviews.reviewerId,
+  review_period: performanceReviews.reviewPeriod,
+  review_type: performanceReviews.reviewType,
+  kpi_data: performanceReviews.kpiData,
+  score: performanceReviews.overallScore,
+  comments: performanceReviews.reviewerComments,
+  improvement_plan: performanceReviews.improvementPlan,
+  status: performanceReviews.status,
+  reviewed_at: performanceReviews.reviewedAt,
+  date_created: performanceReviews.createdAt,
+};
+
+const REVIEW_EMPLOYEE_SELECT = {
+  id: employees.id,
+  full_name: employees.fullName,
+  employee_code: employees.employeeCode,
+  job_title_id: employees.jobTitleId,
+  branch_id: employees.branchId,
+  job_title_name: jobTitles.name,
+  branch_name: branches.name,
+};
+
+const KPI_TEMPLATE_SELECT = {
+  id: kpiTemplates.id,
+  name: kpiTemplates.name,
+  description: kpiTemplates.description,
+  job_title_id: kpiTemplates.jobTitleId,
+  review_type: kpiTemplates.reviewType,
+  kpis: kpiTemplates.kpis,
+  is_default: kpiTemplates.isDefault,
+  is_active: kpiTemplates.isActive,
+  date_created: kpiTemplates.createdAt,
+};
+
+const PERFORMANCE_COUNT_SELECT = { count: sql<number>`count(*)` };
+
+const PERFORMANCE_TEMPLATE_KPIS_SELECT = { kpis: kpiTemplates.kpis };
+
+const PERFORMANCE_ID_SELECT = { id: performanceReviews.id };
+
+const PERFORMANCE_STATUS_SELECT = {
+  id: performanceReviews.id,
+  status: performanceReviews.status,
+};
+
+const EMPLOYEE_ID_SELECT = { id: employees.id };
+
+const PERFORMANCE_REJECT_SELECT = {
+  id: performanceReviews.id,
+  status: performanceReviews.status,
+  reviewerComments: performanceReviews.reviewerComments,
+};
+
+const PERFORMANCE_STATS_STATUS_SELECT = {
+  status: performanceReviews.status,
+  count: sql<number>`count(*)`,
+};
+
+const PERFORMANCE_STATS_SCORE_SELECT = {
+  avg: sql<string>`avg(${performanceReviews.overallScore})`,
+  excellent: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 90)`,
+  good: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 70 and ${performanceReviews.overallScore} < 90)`,
+  poor: sql<number>`count(*) filter (where ${performanceReviews.overallScore} < 70)`,
+};
+
+const PERFORMANCE_STATS_TOP_PERFORMERS_SELECT = {
+  id: performanceReviews.employeeId,
+  full_name: employees.fullName,
+  score: performanceReviews.overallScore,
+};
 
 // -----------------------------------------------------------------------------
 // GET /reviews - List performance reviews with filters
@@ -55,71 +162,39 @@ app.get('/reviews', async (c) => {
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [reviews, countResult] = await Promise.all([
-    db.select({
-      id: performanceReviews.id,
-      employee_id: performanceReviews.employeeId,
-      reviewer_id: performanceReviews.reviewerId,
-      review_period: performanceReviews.reviewPeriod,
-      review_type: performanceReviews.reviewType,
-      kpi_data: performanceReviews.kpiData,
-      score: performanceReviews.overallScore,
-      comments: performanceReviews.reviewerComments,
-      improvement_plan: performanceReviews.improvementPlan,
-      status: performanceReviews.status,
-      reviewed_at: performanceReviews.reviewedAt,
-      date_created: performanceReviews.createdAt,
-    })
+    db.select(PERFORMANCE_REVIEW_SELECT)
       .from(performanceReviews)
       .where(whereClause)
       .orderBy(desc(performanceReviews.createdAt))
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
-    db.select({ count: sql<number>`count(*)` })
+    db.select(PERFORMANCE_COUNT_SELECT)
       .from(performanceReviews)
       .where(whereClause),
   ]);
 
-  // Fetch employee and reviewer details
+  // Fetch employee and reviewer details with joined job title and branch
   const employeeIds = [...new Set([
     ...reviews.map(r => r.employee_id),
     ...reviews.filter(r => r.reviewer_id).map(r => r.reviewer_id as string),
   ])];
 
   const employeeDetails = employeeIds.length > 0
-    ? await db.select({
-        id: employees.id,
-        full_name: employees.fullName,
-        employee_code: employees.employeeCode,
-        job_title_id: employees.jobTitleId,
-        branch_id: employees.branchId,
-      })
+    ? await db.select(REVIEW_EMPLOYEE_SELECT)
         .from(employees)
-        .where(sql`${employees.id} IN ${employeeIds}`)
+        .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+        .leftJoin(branches, eq(employees.branchId, branches.id))
+        .where(inArray(employees.id, employeeIds))
     : [];
 
-  // Fetch job titles and branches
-  const jobTitleIds = [...new Set(employeeDetails.filter(e => e.job_title_id).map(e => e.job_title_id as string))];
-  const branchIds = [...new Set(employeeDetails.filter(e => e.branch_id).map(e => e.branch_id as string))];
-
-  const [jobTitlesList, branchesList] = await Promise.all([
-    jobTitleIds.length > 0
-      ? db.select({ id: jobTitles.id, name: jobTitles.name })
-          .from(jobTitles)
-          .where(sql`${jobTitles.id} IN ${jobTitleIds}`)
-      : [],
-    branchIds.length > 0
-      ? db.select({ id: branches.id, name: branches.name })
-          .from(branches)
-          .where(sql`${branches.id} IN ${branchIds}`)
-      : [],
-  ]);
-
-  const jobTitleMap = new Map(jobTitlesList.map(jt => [jt.id, jt]));
-  const branchMap = new Map(branchesList.map(b => [b.id, b]));
   const employeeMap = new Map(employeeDetails.map(e => [e.id, {
-    ...e,
-    job_title: e.job_title_id ? jobTitleMap.get(e.job_title_id) : undefined,
-    branch: e.branch_id ? branchMap.get(e.branch_id) : undefined,
+    id: e.id,
+    full_name: e.full_name,
+    employee_code: e.employee_code,
+    job_title_id: e.job_title_id,
+    branch_id: e.branch_id,
+    job_title: e.job_title_id && e.job_title_name ? { id: e.job_title_id, name: e.job_title_name } : undefined,
+    branch: e.branch_id && e.branch_name ? { id: e.branch_id, name: e.branch_name } : undefined,
   }]));
 
   const enrichedReviews = reviews.map(r => ({
@@ -142,20 +217,7 @@ app.get('/reviews', async (c) => {
 app.get('/reviews/:id', async (c) => {
   const id = c.req.param('id');
 
-  const review = await db.select({
-    id: performanceReviews.id,
-    employee_id: performanceReviews.employeeId,
-    reviewer_id: performanceReviews.reviewerId,
-    review_period: performanceReviews.reviewPeriod,
-    review_type: performanceReviews.reviewType,
-    kpi_data: performanceReviews.kpiData,
-    score: performanceReviews.overallScore,
-    comments: performanceReviews.reviewerComments,
-    improvement_plan: performanceReviews.improvementPlan,
-    status: performanceReviews.status,
-    reviewed_at: performanceReviews.reviewedAt,
-    date_created: performanceReviews.createdAt,
-  })
+  const review = await db.select(PERFORMANCE_REVIEW_SELECT)
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -164,42 +226,24 @@ app.get('/reviews/:id', async (c) => {
     return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
   }
 
-  // Fetch employee details
+  // Fetch employee details with joined job title and branch
   const employeeIds = [review[0].employee_id];
   if (review[0].reviewer_id) employeeIds.push(review[0].reviewer_id);
 
-  const employeeDetails = await db.select({
-    id: employees.id,
-    full_name: employees.fullName,
-    employee_code: employees.employeeCode,
-    job_title_id: employees.jobTitleId,
-    branch_id: employees.branchId,
-  })
+  const employeeDetails = await db.select(REVIEW_EMPLOYEE_SELECT)
     .from(employees)
-    .where(sql`${employees.id} IN ${employeeIds}`);
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .where(inArray(employees.id, employeeIds));
 
-  const jobTitleIds = [...new Set(employeeDetails.filter(e => e.job_title_id).map(e => e.job_title_id as string))];
-  const branchIds = [...new Set(employeeDetails.filter(e => e.branch_id).map(e => e.branch_id as string))];
-
-  const [jobTitlesList, branchesList] = await Promise.all([
-    jobTitleIds.length > 0
-      ? db.select({ id: jobTitles.id, name: jobTitles.name })
-          .from(jobTitles)
-          .where(sql`${jobTitles.id} IN ${jobTitleIds}`)
-      : [],
-    branchIds.length > 0
-      ? db.select({ id: branches.id, name: branches.name })
-          .from(branches)
-          .where(sql`${branches.id} IN ${branchIds}`)
-      : [],
-  ]);
-
-  const jobTitleMap = new Map(jobTitlesList.map(jt => [jt.id, jt]));
-  const branchMap = new Map(branchesList.map(b => [b.id, b]));
   const employeeMap = new Map(employeeDetails.map(e => [e.id, {
-    ...e,
-    job_title: e.job_title_id ? jobTitleMap.get(e.job_title_id) : undefined,
-    branch: e.branch_id ? branchMap.get(e.branch_id) : undefined,
+    id: e.id,
+    full_name: e.full_name,
+    employee_code: e.employee_code,
+    job_title_id: e.job_title_id,
+    branch_id: e.branch_id,
+    job_title: e.job_title_id && e.job_title_name ? { id: e.job_title_id, name: e.job_title_name } : undefined,
+    branch: e.branch_id && e.branch_name ? { id: e.branch_id, name: e.branch_name } : undefined,
   }]));
 
   const enrichedReview = {
@@ -229,7 +273,7 @@ app.post('/reviews', async (c) => {
   // If template_id is provided, fetch KPIs from template
   let kpiData: unknown[] = [];
   if (template_id) {
-    const template = await db.select()
+    const template = await db.select(PERFORMANCE_TEMPLATE_KPIS_SELECT)
       .from(kpiTemplates)
       .where(eq(kpiTemplates.id, template_id))
       .limit(1);
@@ -249,7 +293,7 @@ app.post('/reviews', async (c) => {
       reviewerComments: comments,
       status: 'DRAFT',
     })
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   return c.json({ success: true, data: created }, 201);
 });
@@ -261,15 +305,6 @@ app.post('/reviews', async (c) => {
 app.patch('/reviews/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
-
-  const existing = await db.select()
-    .from(performanceReviews)
-    .where(eq(performanceReviews.id, id))
-    .limit(1);
-
-  if (existing.length === 0) {
-    return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
-  }
 
   const updateData: Record<string, unknown> = {
     updatedAt: new Date(),
@@ -284,7 +319,11 @@ app.patch('/reviews/:id', async (c) => {
   const [updated] = await db.update(performanceReviews)
     .set(updateData)
     .where(eq(performanceReviews.id, id))
-    .returning();
+    .returning(REVIEW_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
+  }
 
   return c.json({ success: true, data: updated });
 });
@@ -296,7 +335,25 @@ app.patch('/reviews/:id', async (c) => {
 app.post('/reviews/:id/submit', async (c) => {
   const id = c.req.param('id');
 
-  const existing = await db.select()
+  // Fast-path atomic update if in DRAFT status
+  const [updated] = await db.update(performanceReviews)
+    .set({
+      status: 'SUBMITTED',
+      submittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(performanceReviews.id, id),
+      eq(performanceReviews.status, 'DRAFT')
+    ))
+    .returning(REVIEW_RETURNING);
+
+  if (updated) {
+    return c.json({ success: true, data: updated });
+  }
+
+  // Discriminate between 404 and 400
+  const existing = await db.select(PERFORMANCE_ID_SELECT)
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -305,20 +362,7 @@ app.post('/reviews/:id/submit', async (c) => {
     return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
   }
 
-  if (existing[0].status !== 'DRAFT') {
-    return c.json({ success: false, error: '只有草稿狀態才能提交' }, 400);
-  }
-
-  const [updated] = await db.update(performanceReviews)
-    .set({
-      status: 'SUBMITTED',
-      submittedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(performanceReviews.id, id))
-    .returning();
-
-  return c.json({ success: true, data: updated });
+  return c.json({ success: false, error: '只有草稿狀態才能提交' }, 400);
 });
 
 // -----------------------------------------------------------------------------
@@ -329,31 +373,29 @@ app.post('/reviews/:id/approve', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
 
-  const existing = await db.select()
-    .from(performanceReviews)
-    .where(eq(performanceReviews.id, id))
-    .limit(1);
+  // Concurrently fetch existing review and approver's employee record
+  const [existingList, approverEmployeeList] = await Promise.all([
+    db.select(PERFORMANCE_STATUS_SELECT)
+      .from(performanceReviews)
+      .where(eq(performanceReviews.id, id))
+      .limit(1),
+    user?.id
+      ? db.select(EMPLOYEE_ID_SELECT)
+          .from(employees)
+          .where(eq(employees.userId, user.id))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
 
-  if (existing.length === 0) {
+  if (existingList.length === 0) {
     return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
   }
 
-  if (existing[0].status !== 'SUBMITTED') {
+  if (existingList[0].status !== 'SUBMITTED') {
     return c.json({ success: false, error: '只有已提交狀態才能核准' }, 400);
   }
 
-  // Find approver's employee record
-  let approverId: string | null = null;
-  if (user?.id) {
-    const approverEmployee = await db.select({ id: employees.id })
-      .from(employees)
-      .where(eq(employees.userId, user.id))
-      .limit(1);
-
-    if (approverEmployee.length > 0) {
-      approverId = approverEmployee[0].id;
-    }
-  }
+  const approverId = approverEmployeeList.length > 0 ? approverEmployeeList[0].id : null;
 
   const [updated] = await db.update(performanceReviews)
     .set({
@@ -364,7 +406,7 @@ app.post('/reviews/:id/approve', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(performanceReviews.id, id))
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   return c.json({ success: true, data: updated });
 });
@@ -378,7 +420,7 @@ app.post('/reviews/:id/reject', async (c) => {
   const body = await c.req.json();
   const { reason } = body;
 
-  const existing = await db.select()
+  const existing = await db.select(PERFORMANCE_REJECT_SELECT)
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -398,7 +440,7 @@ app.post('/reviews/:id/reject', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(performanceReviews.id, id))
-    .returning();
+    .returning(REVIEW_RETURNING);
 
   return c.json({ success: true, data: updated });
 });
@@ -408,17 +450,7 @@ app.post('/reviews/:id/reject', async (c) => {
 // -----------------------------------------------------------------------------
 
 app.get('/kpi-templates', async (c) => {
-  const templates = await db.select({
-    id: kpiTemplates.id,
-    name: kpiTemplates.name,
-    description: kpiTemplates.description,
-    job_title_id: kpiTemplates.jobTitleId,
-    review_type: kpiTemplates.reviewType,
-    kpis: kpiTemplates.kpis,
-    is_default: kpiTemplates.isDefault,
-    is_active: kpiTemplates.isActive,
-    date_created: kpiTemplates.createdAt,
-  })
+  const templates = await db.select(KPI_TEMPLATE_SELECT)
     .from(kpiTemplates)
     .where(eq(kpiTemplates.isActive, true))
     .orderBy(desc(kpiTemplates.createdAt));
@@ -442,7 +474,7 @@ app.post('/kpi-templates', async (c) => {
   // Find creator's employee record
   let createdBy: string | null = null;
   if (user?.id) {
-    const creatorEmployee = await db.select({ id: employees.id })
+    const creatorEmployee = await db.select(EMPLOYEE_ID_SELECT)
       .from(employees)
       .where(eq(employees.userId, user.id))
       .limit(1);
@@ -462,7 +494,7 @@ app.post('/kpi-templates', async (c) => {
       isDefault: is_default || false,
       createdBy,
     })
-    .returning();
+    .returning(KPI_TEMPLATE_RETURNING);
 
   return c.json({ success: true, data: created }, 201);
 });
@@ -474,21 +506,17 @@ app.post('/kpi-templates', async (c) => {
 app.delete('/kpi-templates/:id', async (c) => {
   const id = c.req.param('id');
 
-  const existing = await db.select()
-    .from(kpiTemplates)
-    .where(eq(kpiTemplates.id, id))
-    .limit(1);
-
-  if (existing.length === 0) {
-    return c.json({ success: false, error: '找不到 KPI 範本' }, 404);
-  }
-
-  await db.update(kpiTemplates)
+  const [updated] = await db.update(kpiTemplates)
     .set({
       isActive: false,
       updatedAt: new Date(),
     })
-    .where(eq(kpiTemplates.id, id));
+    .where(eq(kpiTemplates.id, id))
+    .returning({ id: kpiTemplates.id });
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到 KPI 範本' }, 404);
+  }
 
   return c.json({ success: true });
 });
@@ -508,72 +536,34 @@ app.get('/team-dashboard', async (c) => {
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const approvedWhere = and(
+    eq(performanceReviews.status, 'APPROVED'),
+    whereClause || sql`true`,
+  );
 
-  // Get counts by status
-  const stats = await db.select({
-    status: performanceReviews.status,
-    count: sql<number>`count(*)`,
-  })
-    .from(performanceReviews)
-    .where(whereClause)
-    .groupBy(performanceReviews.status);
+  // Parallelize:
+  // 1. status counts
+  // 2. average score & score distribution in a single combined query
+  // 3. top performers with left-joined employee names (no separate query)
+  const [stats, [scoreStats], topPerformers] = await Promise.all([
+    db.select(PERFORMANCE_STATS_STATUS_SELECT)
+      .from(performanceReviews)
+      .where(whereClause)
+      .groupBy(performanceReviews.status),
+
+    db.select(PERFORMANCE_STATS_SCORE_SELECT)
+      .from(performanceReviews)
+      .where(approvedWhere),
+
+    db.select(PERFORMANCE_STATS_TOP_PERFORMERS_SELECT)
+      .from(performanceReviews)
+      .leftJoin(employees, eq(performanceReviews.employeeId, employees.id))
+      .where(approvedWhere)
+      .orderBy(desc(performanceReviews.overallScore))
+      .limit(5),
+  ]);
 
   const statusMap = new Map(stats.map(s => [s.status, Number(s.count)]));
-
-  // Get average score of approved reviews
-  const avgScore = await db.select({
-    avg: sql<string>`avg(${performanceReviews.overallScore})`,
-  })
-    .from(performanceReviews)
-    .where(and(
-      eq(performanceReviews.status, 'APPROVED'),
-      whereClause || sql`true`,
-    ));
-
-  // Get score distribution (excellent: >=90, good: 70-89, poor: <70)
-  const scoreDistribution = await db.select({
-    excellent: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 90)`,
-    good: sql<number>`count(*) filter (where ${performanceReviews.overallScore} >= 70 and ${performanceReviews.overallScore} < 90)`,
-    poor: sql<number>`count(*) filter (where ${performanceReviews.overallScore} < 70)`,
-  })
-    .from(performanceReviews)
-    .where(and(
-      eq(performanceReviews.status, 'APPROVED'),
-      whereClause || sql`true`,
-    ));
-
-  // Get top performers
-  const topPerformers = await db.select({
-    employeeId: performanceReviews.employeeId,
-    score: performanceReviews.overallScore,
-  })
-    .from(performanceReviews)
-    .where(and(
-      eq(performanceReviews.status, 'APPROVED'),
-      whereClause || sql`true`,
-    ))
-    .orderBy(desc(performanceReviews.overallScore))
-    .limit(5);
-
-  // Fetch employee names for top performers
-  const topPerformerIds = topPerformers.map(t => t.employeeId);
-  const topEmployees = topPerformerIds.length > 0
-    ? await db.select({
-        id: employees.id,
-        full_name: employees.fullName,
-      })
-        .from(employees)
-        .where(sql`${employees.id} IN ${topPerformerIds}`)
-    : [];
-
-  const employeeMap = new Map(topEmployees.map(e => [e.id, e.full_name]));
-
-  const topPerformersWithNames = topPerformers.map(t => ({
-    id: t.employeeId,
-    full_name: employeeMap.get(t.employeeId) || 'Unknown',
-    score: Number(t.score) || 0,
-  }));
-
   const totalReviews = Array.from(statusMap.values()).reduce((sum, count) => sum + count, 0);
 
   return c.json({
@@ -582,13 +572,17 @@ app.get('/team-dashboard', async (c) => {
       total_reviews: totalReviews,
       pending_reviews: (statusMap.get('DRAFT') || 0) + (statusMap.get('SUBMITTED') || 0),
       completed_reviews: statusMap.get('APPROVED') || 0,
-      average_score: avgScore[0]?.avg ? parseFloat(avgScore[0].avg) : null,
+      average_score: scoreStats?.avg ? parseFloat(scoreStats.avg) : null,
       score_distribution: {
-        excellent: Number(scoreDistribution[0]?.excellent) || 0,
-        good: Number(scoreDistribution[0]?.good) || 0,
-        poor: Number(scoreDistribution[0]?.poor) || 0,
+        excellent: Number(scoreStats?.excellent) || 0,
+        good: Number(scoreStats?.good) || 0,
+        poor: Number(scoreStats?.poor) || 0,
       },
-      top_performers: topPerformersWithNames,
+      top_performers: topPerformers.map(t => ({
+        id: t.id,
+        full_name: t.full_name || 'Unknown',
+        score: Number(t.score) || 0,
+      })),
     },
   });
 });

@@ -34,6 +34,16 @@ type CheckInRecord = {
   createdAt?: Date | null;
 };
 
+const CHECK_IN_RETURNING = {
+  id: memberCheckIns.id,
+  memberId: memberCheckIns.memberId,
+  branchId: memberCheckIns.branchId,
+  checkInTime: memberCheckIns.checkInTime,
+  checkInType: memberCheckIns.checkInType,
+  contractId: memberCheckIns.contractId,
+  notes: memberCheckIns.notes,
+};
+
 interface CheckInValidationResult {
   valid: boolean;
   error?: string;
@@ -331,7 +341,7 @@ export async function processCheckIn(data: CheckInData): Promise<{
     checkInType: (data.checkInType as 'ENTRY' | 'CLASS') || 'ENTRY',
     contractId: validation.contract?.id,
     notes: validation.isCrossBranch ? 'Cross-branch entry' : undefined,
-  }).returning();
+  }).returning(CHECK_IN_RETURNING);
 
   // Deduct session for COUNT_BASED contracts
   let sessionDeducted = false;

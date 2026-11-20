@@ -318,6 +318,10 @@ pub struct UpdateBookingRequest {
     #[serde(rename = "bookingStatus")]
     #[serde(alias = "booking_status")]
     booking_status: Option<String>,
+    #[serde(rename = "waitlistPosition")]
+    #[serde(alias = "waitlist_position")]
+    #[serde(default)]
+    waitlist_position: Option<Option<i32>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -926,16 +930,11 @@ pub async fn update_booking(
     auth: AuthContext,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(raw_payload): Json<Value>,
+    Json(payload): Json<UpdateBookingRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let tenant_id = require_tenant(&auth)?;
-    let waitlist_position_present =
-        raw_payload.get("waitlistPosition").is_some() || raw_payload.get("waitlist_position").is_some();
-    let waitlist_position_value =
-        raw_payload.get("waitlistPosition").or_else(|| raw_payload.get("waitlist_position"));
-    let waitlist_position = parse_optional_i32("waitlistPosition", waitlist_position_value)?;
-    let payload: UpdateBookingRequest = serde_json::from_value(raw_payload)
-        .map_err(|error| AppError::Validation(error.to_string()))?;
+    let waitlist_position_present = payload.waitlist_position.is_some();
+    let waitlist_position = payload.waitlist_position.flatten();
     let existing = fetch_booking(&state.db, tenant_id, id).await?;
     let session_id = payload.session_id.unwrap_or(existing.session_id);
     let member_id = payload.member_id.unwrap_or(existing.member_id);
@@ -1512,17 +1511,6 @@ fn parse_status_filter(status: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_optional_i32(field: &str, value: Option<&Value>) -> Result<Option<i32>, AppError> {
-    match value {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::Number(number)) => number
-            .as_i64()
-            .and_then(|value| i32::try_from(value).ok())
-            .map(Some)
-            .ok_or_else(|| AppError::Validation(format!("{field} must be an integer"))),
-        _ => Err(AppError::Validation(format!("{field} must be an integer"))),
-    }
-}
 
 async fn ensure_schedule_scope(pool: &PgPool, tenant_id: Uuid, schedule_id: Uuid) -> Result<(), AppError> {
     let exists = sqlx::query_scalar::<_, bool>(

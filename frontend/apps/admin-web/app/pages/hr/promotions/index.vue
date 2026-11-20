@@ -50,24 +50,28 @@ watch(currentPage, loadPromotions)
 
 onMounted(loadPromotions)
 
+const promotionDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const TYPE_BADGE_CLASS_MAP: Record<string, string> = {
+  PROMOTION: 'type-promotion',
+  TRANSFER: 'type-transfer',
+  DEMOTION: 'type-demotion'
+}
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : promotionDateFormatter.format(d)
 }
 
 // Get type badge color
 const getTypeBadgeClass = (type: string) => {
-  const map: Record<string, string> = {
-    PROMOTION: 'type-promotion',
-    TRANSFER: 'type-transfer',
-    DEMOTION: 'type-demotion'
-  }
-  return map[type] || ''
+  return TYPE_BADGE_CLASS_MAP[type] || ''
 }
 
 // Table columns

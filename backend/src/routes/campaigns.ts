@@ -5,6 +5,7 @@ import { db, campaigns, branches, employees, CAMPAIGN_TYPE } from '../db/index.j
 import { eq, and, sql, desc, gte, lte } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -27,6 +28,29 @@ const createCampaignSchema = z.object({
 });
 
 const updateCampaignSchema = createCampaignSchema.partial();
+
+const CAMPAIGN_SELECT = {
+  id: campaigns.id,
+  status: campaigns.status,
+  createdAt: campaigns.createdAt,
+  updatedAt: campaigns.updatedAt,
+  tenantId: campaigns.tenantId,
+  branchId: campaigns.branchId,
+  name: campaigns.name,
+  description: campaigns.description,
+  campaignType: campaigns.campaignType,
+  startDate: campaigns.startDate,
+  endDate: campaigns.endDate,
+  targetAudience: campaigns.targetAudience,
+  budget: campaigns.budget,
+  discountType: campaigns.discountType,
+  discountValue: campaigns.discountValue,
+  isActive: campaigns.isActive,
+  terms: campaigns.terms,
+  createdById: campaigns.createdById,
+};
+
+const CAMPAIGN_RETURNING = CAMPAIGN_SELECT;
 
 // List campaigns
 app.get('/', async (c) => {
@@ -55,30 +79,31 @@ app.get('/', async (c) => {
     conditions.push(eq(campaigns.campaignType, campaignType as typeof CAMPAIGN_TYPE[number]));
   }
 
-  const result = await db
-    .select({
-      campaign: campaigns,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(campaigns)
-    .leftJoin(branches, eq(campaigns.branchId, branches.id))
-    .leftJoin(employees, eq(campaigns.createdById, employees.id))
-    .where(and(...conditions))
-    .orderBy(desc(campaigns.startDate))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(campaigns)
-    .where(and(...conditions));
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select({
+        campaign: CAMPAIGN_SELECT,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+        createdBy: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(campaigns)
+      .leftJoin(branches, eq(campaigns.branchId, branches.id))
+      .leftJoin(employees, eq(campaigns.createdById, employees.id))
+      .where(and(...conditions))
+      .orderBy(desc(campaigns.startDate))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(campaigns)
+      .where(and(...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 
@@ -105,7 +130,7 @@ app.get('/:id', async (c) => {
 
   const [result] = await db
     .select({
-      campaign: campaigns,
+      campaign: CAMPAIGN_SELECT,
       branch: {
         id: branches.id,
         name: branches.name,
@@ -148,13 +173,8 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCampaign
 
   // Validate branch if provided
   if (data.branchId) {
-    const [branch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-      .limit(1);
-
-    if (!branch) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
       return c.json({ success: false, error: '無效的分店' }, 400);
     }
   }
@@ -165,7 +185,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCampaign
     discountValue: data.discountValue ? String(data.discountValue) : null,
     tenantId,
     createdById: user.employeeId,
-  }).returning();
+  }).returning(CAMPAIGN_RETURNING);
 
   return c.json({
     success: true,
@@ -179,14 +199,12 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCamp
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(campaigns)
-    .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '活動不存在' }, 404);
+  // Validate branch if updated
+  if (data.branchId) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
+      return c.json({ success: false, error: '無效的分店' }, 400);
+    }
   }
 
   const updateData: Record<string, unknown> = {
@@ -202,7 +220,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCamp
     updateData.discountValue = data.discountValue ? String(data.discountValue) : null;
   }
 
-  const [updated] = await db.update(campaigns).set(updateData).where(eq(campaigns.id, id)).returning();
+  const [updated] = await db
+    .update(campaigns)
+    .set(updateData)
+    .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
+    .returning(CAMPAIGN_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '活動不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -215,17 +241,14 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(campaigns)
+  const [deleted] = await db
+    .delete(campaigns)
     .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
-    .limit(1);
+    .returning({ id: campaigns.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '活動不存在' }, 404);
   }
-
-  await db.delete(campaigns).where(eq(campaigns.id, id));
 
   return c.json({ success: true, message: '活動已刪除' });
 });

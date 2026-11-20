@@ -16,14 +16,16 @@ vi.mock('chart.js', () => {
   const mockUpdate = vi.fn()
   const mockDestroy = vi.fn()
 
-  const MockChart = vi.fn().mockImplementation(() => ({
-    data: {
-      labels: [] as string[],
-      datasets: [] as any[]
-    },
-    update: mockUpdate,
-    destroy: mockDestroy
-  })) as any
+  const MockChart = vi.fn().mockImplementation(function () {
+    return {
+      data: {
+        labels: [] as string[],
+        datasets: [] as any[]
+      },
+      update: mockUpdate,
+      destroy: mockDestroy
+    }
+  }) as any
 
   // Add static methods
   MockChart.register = vi.fn()
@@ -289,7 +291,7 @@ describe('useCharts', () => {
 
     it('應該處理創建錯誤', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      MockChart.mockImplementationOnce(() => {
+      MockChart.mockImplementationOnce(function () {
         throw new Error('Chart creation failed')
       })
 
@@ -405,7 +407,7 @@ describe('useCharts', () => {
 
     it('應該處理創建錯誤', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      MockChart.mockImplementationOnce(() => {
+      MockChart.mockImplementationOnce(function () {
         throw new Error('Chart creation failed')
       })
 
@@ -525,7 +527,7 @@ describe('useCharts', () => {
 
     it('應該處理創建錯誤', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      MockChart.mockImplementationOnce(() => {
+      MockChart.mockImplementationOnce(function () {
         throw new Error('Chart creation failed')
       })
 

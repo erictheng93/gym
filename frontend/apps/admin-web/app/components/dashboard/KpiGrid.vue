@@ -1,3 +1,11 @@
+<script lang="ts">
+const kpiGridCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+</script>
+
 <script setup lang="ts">
 /**
  * KPI Grid Component
@@ -18,11 +26,7 @@ withDefaults(defineProps<Props>(), {
 })
 
 const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    maximumFractionDigits: 0
-  }).format(value)
+  return kpiGridCurrencyFormatter.format(value)
 }
 
 const formatPercent = (value: number) => {

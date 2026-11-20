@@ -3,10 +3,11 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { hash, verify } from '@node-rs/argon2';
 import { db, members, branches, memberCredentials } from '../db/index.js';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, or, sql } from 'drizzle-orm';
 import { rateLimiter, memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
-import { memberJwtService, getTokenHash } from '../services/member-jwt.js';
+import crypto from 'crypto';
+import { memberJwtService, getRecoveryTokenHash } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
 
 // =============================================================================
@@ -63,8 +64,33 @@ const passwordResetRateLimiter = rateLimiter({
 // -----------------------------------------------------------------------------
 
 const loginSchema = z.object({
-  email: z.string().email('請輸入有效的 Email'),
+  email: z.string().optional(),
+  account: z.string().optional(),
+  phone: z.string().optional(),
   password: z.string().min(8, '密碼至少 8 個字元'),
+}).superRefine((data, ctx) => {
+  const identifier = (data.account || data.phone || data.email || '').trim();
+  if (!identifier) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: '請輸入電子郵件或手機號碼',
+      path: ['email'],
+    });
+    return;
+  }
+  // If email was provided alone (e.g. from existing API clients or tests),
+  // reject if it's neither a valid email nor a valid phone number.
+  if (data.email && !data.account && !data.phone) {
+    const isPhone = /^09[-\d]{8,10}$/.test(data.email) || /^09\d{8}$/.test(data.email.replace(/\D/g, ''));
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email);
+    if (!isEmail && !isPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '請輸入有效的 Email 或手機號碼',
+        path: ['email'],
+      });
+    }
+  }
 });
 
 const setPasswordSchema = z.object({
@@ -121,30 +147,65 @@ app.post(
   loginRateLimiter,
   zValidator('json', loginSchema),
   async (c) => {
-    const { email, password } = c.req.valid('json');
+    const { email, account, phone, password } = c.req.valid('json');
+    const identifier = (account || phone || email || '').trim();
 
-    // Find member by email
-    const [member] = await db
+    const isEmail = identifier.includes('@');
+    const cleanDigits = identifier.replace(/\D/g, '');
+    const isPhone = cleanDigits.startsWith('09') && cleanDigits.length === 10;
+    const dashedPhone = isPhone ? `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}` : identifier;
+
+    let memberCondition;
+    if (isEmail) {
+      memberCondition = eq(members.email, identifier);
+    } else if (isPhone) {
+      memberCondition = or(
+        eq(members.phone, identifier),
+        eq(members.phone, dashedPhone),
+        eq(sql`replace(${members.phone}, '-', '')`, cleanDigits)
+      );
+    } else {
+      memberCondition = or(
+        eq(members.memberCode, identifier),
+        eq(members.email, identifier),
+        eq(members.phone, identifier)
+      );
+    }
+
+    // Find member, credentials, and branch info in a single joined query
+    const [result] = await db
       .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        email: members.email,
-        fullName: members.fullName,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-        status: members.status,
+        member: {
+          id: members.id,
+          memberCode: members.memberCode,
+          email: members.email,
+          fullName: members.fullName,
+          branchId: members.branchId,
+          tenantId: members.tenantId,
+          status: members.status,
+        },
+        credentials: memberCredentials,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+          tenantId: branches.tenantId,
+        },
       })
       .from(members)
-      .where(eq(members.email, email))
+      .leftJoin(memberCredentials, eq(members.id, memberCredentials.memberId))
+      .leftJoin(branches, eq(members.branchId, branches.id))
+      .where(memberCondition)
       .limit(1);
 
-    if (!member) {
+    if (!result || !result.member) {
       return c.json({
         success: false,
-        error: 'Email 或密碼錯誤',
+        error: '帳號或密碼錯誤',
         code: 'INVALID_CREDENTIALS',
       }, 401);
     }
+
+    const { member, credentials, branch } = result;
 
     if (member.status === 'BANNED') {
       return c.json({
@@ -153,13 +214,6 @@ app.post(
         code: 'MEMBER_BANNED',
       }, 403);
     }
-
-    // Get credentials
-    const [credentials] = await db
-      .select()
-      .from(memberCredentials)
-      .where(eq(memberCredentials.memberId, member.id))
-      .limit(1);
 
     if (!credentials) {
       return c.json({
@@ -230,17 +284,6 @@ app.post(
         updatedAt: new Date(),
       })
       .where(eq(memberCredentials.id, credentials.id));
-
-    // Get branch info
-    const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
-      .from(branches)
-      .where(eq(branches.id, member.branchId))
-      .limit(1);
 
     // Generate tokens
     const tokens = memberJwtService.generateTokens({
@@ -424,8 +467,8 @@ app.post(
 
     // Only send if member exists and not banned
     if (member && member.status !== 'BANNED') {
-      // Generate reset token
-      const { token, hash: tokenHash } = memberJwtService.generatePasswordResetToken(member.id);
+      // Generate recovery token
+      const { token, hash: tokenHash } = memberJwtService.generateRecoveryToken(member.id);
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       // Save token hash to database
@@ -495,7 +538,7 @@ app.post(
     const { token, password } = c.req.valid('json');
 
     // Verify token
-    const tokenData = memberJwtService.verifyPasswordResetToken(token);
+    const tokenData = memberJwtService.verifyRecoveryToken(token);
 
     if (!tokenData) {
       return c.json({
@@ -523,9 +566,13 @@ app.post(
       }, 400);
     }
 
-    // Verify token hash matches
-    const expectedHash = getTokenHash(tokenData.jti);
-    if (credentials.passwordResetTokenHash !== expectedHash) {
+    // Verify token hash matches using constant-time comparison
+    const expectedHash = getRecoveryTokenHash(tokenData.jti);
+    const storedHash = credentials.passwordResetTokenHash || '';
+    const hashMatches = storedHash.length === expectedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(expectedHash));
+
+    if (!hashMatches) {
       return c.json({
         success: false,
         error: '重設連結無效或已過期',

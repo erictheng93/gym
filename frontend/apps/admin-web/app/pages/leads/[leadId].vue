@@ -77,24 +77,28 @@ onMounted(async () => {
   await Promise.all([loadLead(), fetchEmployees()])
 })
 
+const leadDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const leadDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 const formatDate = (dateStr: string | null | undefined) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  return leadDateFormatter.format(new Date(dateStr))
 }
 
 const formatDateTime = (dateStr: string | null | undefined) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return leadDateTimeFormatter.format(new Date(dateStr))
 }
 
 // Activity type options
@@ -104,21 +108,30 @@ const activityTypeOptions = [
   { value: 'EMAIL', label: 'Email', icon: 'mail' },
   { value: 'VISIT', label: '到訪', icon: 'map-pin' },
   { value: 'TRIAL', label: '體驗', icon: 'calendar' }
-]
+] as const
+
+const ACTIVITY_TYPE_LABEL_MAP: Record<string, string> = {
+  CALL: '電話',
+  SMS: '簡訊',
+  EMAIL: 'Email',
+  VISIT: '到訪',
+  TRIAL: '體驗'
+}
+
+const ACTIVITY_TYPE_COLOR_MAP: Record<string, string> = {
+  CALL: '#007aff',
+  SMS: '#34c759',
+  EMAIL: '#5856d6',
+  VISIT: '#ff9500',
+  TRIAL: '#af52de'
+}
 
 const getActivityTypeLabel = (type: string) => {
-  return activityTypeOptions.find(o => o.value === type)?.label || type
+  return ACTIVITY_TYPE_LABEL_MAP[type] || type
 }
 
 const getActivityTypeColor = (type: string) => {
-  const colors: Record<string, string> = {
-    CALL: '#007aff',
-    SMS: '#34c759',
-    EMAIL: '#5856d6',
-    VISIT: '#ff9500',
-    TRIAL: '#af52de'
-  }
-  return colors[type] || '#8e8e93'
+  return ACTIVITY_TYPE_COLOR_MAP[type] || '#8e8e93'
 }
 
 // Status options
@@ -129,7 +142,7 @@ const statusOptions = [
   { value: 'VISITED', label: '已到訪' },
   { value: 'CONVERTED', label: '已轉換' },
   { value: 'LOST', label: '已流失' }
-]
+] as const
 
 // Add activity
 const handleAddActivity = async () => {

@@ -293,6 +293,10 @@ const handleDelete = async (id: string) => {
 onMounted(() => {
   loadPlans()
 })
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
 </script>
 
 <style scoped>

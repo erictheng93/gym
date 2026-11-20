@@ -1,52 +1,52 @@
 import { db, users, employees, branches, tenants, members, contracts, membershipPlans, sessions, jobTitles, checkIns, classes, classSessions, bookings, classReviews, classRecords, contractLogs, coachMemberAssignments, teachingMaterials, lessonPlans, coachNotes } from '../src/db/index.js';
 import { hash } from '@node-rs/argon2';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import app from '../src/app.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { generateCoachTokens } from '../src/services/coach-jwt.js';
 
 // Test tenant and branch IDs
-export const TEST_TENANT_ID = '00000000-0000-0000-0000-000000000001';
-export const TEST_BRANCH_ID = '00000000-0000-0000-0000-000000000002';
-export const TEST_USER_ID = '00000000-0000-0000-0000-000000000003';
-export const TEST_EMPLOYEE_ID = '00000000-0000-0000-0000-000000000004';
-export const TEST_MEMBER_ID = '00000000-0000-0000-0000-000000000005';
-export const TEST_PLAN_ID = '00000000-0000-0000-0000-000000000006';
-export const TEST_CONTRACT_ID = '00000000-0000-0000-0000-000000000007';
-export const TEST_JOB_TITLE_ID = '00000000-0000-0000-0000-000000000008';
+export const TEST_TENANT_ID = '00000000-0000-4000-8000-000000000001';
+export const TEST_BRANCH_ID = '00000000-0000-4000-8000-000000000002';
+export const TEST_USER_ID = '00000000-0000-4000-8000-000000000003';
+export const TEST_EMPLOYEE_ID = '00000000-0000-4000-8000-000000000004';
+export const TEST_MEMBER_ID = '00000000-0000-4000-8000-000000000005';
+export const TEST_PLAN_ID = '00000000-0000-4000-8000-000000000006';
+export const TEST_CONTRACT_ID = '00000000-0000-4000-8000-000000000007';
+export const TEST_JOB_TITLE_ID = '00000000-0000-4000-8000-000000000008';
 
 // Additional IDs for users tests
-export const TEST_STAFF_USER_ID = '00000000-0000-0000-0000-000000000009';
-export const TEST_STAFF_EMPLOYEE_ID = '00000000-0000-0000-0000-00000000000a';
-export const TEST_UNLINKED_EMPLOYEE_ID = '00000000-0000-0000-0000-00000000000b';
+export const TEST_STAFF_USER_ID = '00000000-0000-4000-8000-000000000009';
+export const TEST_STAFF_EMPLOYEE_ID = '00000000-0000-4000-8000-00000000000a';
+export const TEST_UNLINKED_EMPLOYEE_ID = '00000000-0000-4000-8000-00000000000b';
 
 // Additional plan IDs
-export const TEST_COUNT_PLAN_ID = '00000000-0000-0000-0000-00000000000c';
+export const TEST_COUNT_PLAN_ID = '00000000-0000-4000-8000-00000000000c';
 
 // Tenant B IDs (for cross-tenant isolation tests)
-export const TEST_TENANT_B_ID = '00000000-0000-0000-0000-0000000000b0';
-export const TEST_BRANCH_B_ID = '00000000-0000-0000-0000-0000000000b1';
-export const TEST_JOB_TITLE_B_ID = '00000000-0000-0000-0000-0000000000b2';
-export const TEST_EMPLOYEE_B_ID = '00000000-0000-0000-0000-0000000000b3';
-export const TEST_MEMBER_B_ID = '00000000-0000-0000-0000-0000000000b4';
-export const TEST_PLAN_B_ID = '00000000-0000-0000-0000-0000000000b5';
-export const TEST_CONTRACT_B_ID = '00000000-0000-0000-0000-0000000000b6';
+export const TEST_TENANT_B_ID = '00000000-0000-4000-8000-0000000000b0';
+export const TEST_BRANCH_B_ID = '00000000-0000-4000-8000-0000000000b1';
+export const TEST_JOB_TITLE_B_ID = '00000000-0000-4000-8000-0000000000b2';
+export const TEST_EMPLOYEE_B_ID = '00000000-0000-4000-8000-0000000000b3';
+export const TEST_MEMBER_B_ID = '00000000-0000-4000-8000-0000000000b4';
+export const TEST_PLAN_B_ID = '00000000-0000-4000-8000-0000000000b5';
+export const TEST_CONTRACT_B_ID = '00000000-0000-4000-8000-0000000000b6';
 
 // Class/session IDs
-export const TEST_CLASS_ID = '00000000-0000-0000-0000-000000000010';
-export const TEST_SCHEDULE_ID = '00000000-0000-0000-0000-000000000011';
-export const TEST_SESSION_ID = '00000000-0000-0000-0000-000000000012';
+export const TEST_CLASS_ID = '00000000-0000-4000-8000-000000000010';
+export const TEST_SCHEDULE_ID = '00000000-0000-4000-8000-000000000011';
+export const TEST_SESSION_ID = '00000000-0000-4000-8000-000000000012';
 
 // Coach-specific IDs
-export const TEST_COACH_USER_ID = '00000000-0000-0000-0000-000000000020';
-export const TEST_COACH_EMPLOYEE_ID = '00000000-0000-0000-0000-000000000021';
-export const TEST_COACH_JOB_TITLE_ID = '00000000-0000-0000-0000-000000000022';
-export const TEST_COACH_CLASS_ID = '00000000-0000-0000-0000-000000000023';
-export const TEST_COACH_SESSION_ID = '00000000-0000-0000-0000-000000000024';
-export const TEST_BOOKING_ID = '00000000-0000-0000-0000-000000000025';
-export const TEST_ASSIGNMENT_ID = '00000000-0000-0000-0000-000000000026';
-export const TEST_MATERIAL_ID = '00000000-0000-0000-0000-000000000027';
-export const TEST_LESSON_PLAN_ID = '00000000-0000-0000-0000-000000000028';
+export const TEST_COACH_USER_ID = '00000000-0000-4000-8000-000000000020';
+export const TEST_COACH_EMPLOYEE_ID = '00000000-0000-4000-8000-000000000021';
+export const TEST_COACH_JOB_TITLE_ID = '00000000-0000-4000-8000-000000000022';
+export const TEST_COACH_CLASS_ID = '00000000-0000-4000-8000-000000000023';
+export const TEST_COACH_SESSION_ID = '00000000-0000-4000-8000-000000000024';
+export const TEST_BOOKING_ID = '00000000-0000-4000-8000-000000000025';
+export const TEST_ASSIGNMENT_ID = '00000000-0000-4000-8000-000000000026';
+export const TEST_MATERIAL_ID = '00000000-0000-4000-8000-000000000027';
+export const TEST_LESSON_PLAN_ID = '00000000-0000-4000-8000-000000000028';
 export const TEST_COACH_EMAIL = 'coach@gym-nexus.test';
 export const TEST_COACH_PASSWORD = 'CoachPass123!';
 
@@ -103,7 +103,9 @@ export async function createTestFixtures() {
   }).onConflictDoNothing();
 
   // Create employee linked to user (with all required fields)
-  // First delete any existing employee with this id or employeeCode to ensure clean state
+  // First delete any existing class sessions and classes referencing this employee
+  await db.delete(classSessions).where(eq(classSessions.instructorId, TEST_EMPLOYEE_ID));
+  await db.delete(classes).where(eq(classes.instructorId, TEST_EMPLOYEE_ID));
   await db.delete(employees).where(eq(employees.id, TEST_EMPLOYEE_ID));
   await db.delete(employees).where(eq(employees.employeeCode, 'EMP001'));
 
@@ -327,8 +329,18 @@ export async function cleanupTestFixtures() {
   await db.delete(contractLogs).where(eq(contractLogs.tenantId, TEST_TENANT_ID));
   // Delete all check-ins for the test branch (including ones created during tests)
   await db.delete(checkIns).where(eq(checkIns.branchId, TEST_BRANCH_ID));
-  // Delete bookings, class records, sessions, schedules, classes (cascades handle most)
-  await db.delete(classes).where(eq(classes.branchId, TEST_BRANCH_ID));
+  // Delete class sessions and classes before employees to satisfy FK constraint
+  await db.delete(classSessions).where(or(
+    eq(classSessions.branchId, TEST_BRANCH_ID),
+    eq(classSessions.branchId, TEST_BRANCH_B_ID),
+    eq(classSessions.instructorId, TEST_EMPLOYEE_ID),
+    eq(classSessions.instructorId, TEST_EMPLOYEE_B_ID),
+    eq(classSessions.instructorId, TEST_STAFF_EMPLOYEE_ID)
+  ));
+  await db.delete(classes).where(or(
+    eq(classes.branchId, TEST_BRANCH_ID),
+    eq(classes.branchId, TEST_BRANCH_B_ID)
+  ));
   // Delete all contracts for the test tenant (including ones created during tests)
   await db.delete(contracts).where(eq(contracts.tenantId, TEST_TENANT_ID));
   // Delete all members for the test tenant

@@ -83,6 +83,26 @@ const CACHE_KEY_SCHEDULE = 'member:class-schedule'
 const CACHE_KEY_SESSIONS = 'member:class-sessions'
 const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
+const CATEGORY_LABELS: Record<string, string> = {
+  'YOGA': '瑜珈',
+  'PILATES': '皮拉提斯',
+  'SPINNING': '飛輪',
+  'AEROBICS': '有氧',
+  'DANCE': '舞蹈',
+  'STRENGTH': '重訓',
+  'HIIT': 'HIIT',
+  'BOXING': '拳擊',
+  'SWIMMING': '游泳',
+  'OTHER': '其他',
+}
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  'BEGINNER': '初級',
+  'INTERMEDIATE': '中級',
+  'ADVANCED': '高級',
+  'ALL_LEVELS': '不限程度',
+}
+
 export const useClasses = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
@@ -204,14 +224,42 @@ export const useClasses = () => {
     endDate?: string
     limit?: number
   }) => {
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `member:upcomingSessions:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    const cacheKey = `${CACHE_KEY_SESSIONS}:${JSON.stringify(options || {})}`
+      const cacheKey = `${CACHE_KEY_SESSIONS}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<ClassSession[]>(cacheKey)
+          if (cached) {
+            upcomingSessions.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.branchId) params.append('branch_id', options.branchId)
+        if (options?.startDate) params.append('start_date', options.startDate)
+        if (options?.endDate) params.append('end_date', options.endDate)
+        if (options?.limit) params.append('limit', String(options.limit))
+
+        const response = await $fetch<SessionsResponse>(`${apiUrl}/api/member/classes/sessions?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          upcomingSessions.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Network error fallback to cache
         const cached = await getCache<ClassSession[]>(cacheKey)
         if (cached) {
           upcomingSessions.value = cached
@@ -219,72 +267,78 @@ export const useClasses = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.branchId) params.append('branch_id', options.branchId)
-      if (options?.startDate) params.append('start_date', options.startDate)
-      if (options?.endDate) params.append('end_date', options.endDate)
-      if (options?.limit) params.append('limit', String(options.limit))
-
-      const response = await $fetch<SessionsResponse>(`${apiUrl}/api/member/classes/sessions?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        upcomingSessions.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Network error fallback to cache
-      const cached = await getCache<ClassSession[]>(cacheKey)
-      if (cached) {
-        upcomingSessions.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
    * Get a single session by ID
    */
   const getSession = async (sessionId: string): Promise<ClassSession | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: ClassSession }>(
-        `${apiUrl}/api/member/classes/sessions/${sessionId}`,
-        { headers: getAuthHeader() }
-      )
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+    return deduplicateRequest(`member:session:${sessionId}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: ClassSession }>(
+          `${apiUrl}/api/member/classes/sessions/${sessionId}`,
+          { headers: getAuthHeader() }
+        )
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
+  const schedulesByDayMap = computed(() => {
+    const map = new Map<number, ClassSchedule[]>()
+    for (const s of schedules.value) {
+      if (!s.is_active) continue
+      let list = map.get(s.day_of_week)
+      if (!list) {
+        list = []
+        map.set(s.day_of_week, list)
+      }
+      list.push(s)
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.start_time.localeCompare(b.start_time))
+    }
+    return map
+  })
+
   /**
-   * Get schedules for a specific day of week
+   * Get schedules for a specific day of week (O(1) memoized lookup)
    */
   const getSchedulesByDay = (dayOfWeek: number) => {
-    return schedules.value
-      .filter(s => s.day_of_week === dayOfWeek && s.is_active)
-      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+    return schedulesByDayMap.value.get(dayOfWeek) || []
   }
 
-  /**
-   * Get sessions for a specific date
-   */
-  const getSessionsByDate = (date: string) => {
-    return upcomingSessions.value
-      .filter(s => s.session_date === date)
-      .sort((a, b) => {
+  const sessionsByDateMap = computed(() => {
+    const map = new Map<string, ClassSession[]>()
+    for (const s of upcomingSessions.value) {
+      let list = map.get(s.session_date)
+      if (!list) {
+        list = []
+        map.set(s.session_date, list)
+      }
+      list.push(s)
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
         const timeA = a.schedule?.start_time || ''
         const timeB = b.schedule?.start_time || ''
         return timeA.localeCompare(timeB)
       })
+    }
+    return map
+  })
+
+  /**
+   * Get sessions for a specific date (O(1) memoized lookup)
+   */
+  const getSessionsByDate = (date: string) => {
+    return sessionsByDateMap.value.get(date) || []
   }
 
   /**
@@ -314,32 +368,14 @@ export const useClasses = () => {
    * Get category label
    */
   const getCategoryLabel = (category?: string): string => {
-    const labels: Record<string, string> = {
-      'YOGA': '瑜珈',
-      'PILATES': '皮拉提斯',
-      'SPINNING': '飛輪',
-      'AEROBICS': '有氧',
-      'DANCE': '舞蹈',
-      'STRENGTH': '重訓',
-      'HIIT': 'HIIT',
-      'BOXING': '拳擊',
-      'SWIMMING': '游泳',
-      'OTHER': '其他',
-    }
-    return labels[category || ''] || category || '其他'
+    return CATEGORY_LABELS[category || ''] || category || '其他'
   }
 
   /**
    * Get difficulty label
    */
   const getDifficultyLabel = (level?: string): string => {
-    const labels: Record<string, string> = {
-      'BEGINNER': '初級',
-      'INTERMEDIATE': '中級',
-      'ADVANCED': '高級',
-      'ALL_LEVELS': '不限程度',
-    }
-    return labels[level || ''] || level || '不限'
+    return DIFFICULTY_LABELS[level || ''] || level || '不限'
   }
 
   return {

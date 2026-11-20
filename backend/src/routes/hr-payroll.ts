@@ -13,6 +13,22 @@ import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const PROMOTION_RECORD_RETURNING = {
+  id: promotionRecords.id,
+  employeeId: promotionRecords.employeeId,
+  type: promotionRecords.type,
+  fromJobTitleId: promotionRecords.fromJobTitleId,
+  toJobTitleId: promotionRecords.toJobTitleId,
+  fromBranchId: promotionRecords.fromBranchId,
+  toBranchId: promotionRecords.toBranchId,
+  effectiveDate: promotionRecords.effectiveDate,
+  newBaseSalary: promotionRecords.newBaseSalary,
+  reason: promotionRecords.reason,
+  createdBy: promotionRecords.createdBy,
+  createdAt: promotionRecords.createdAt,
+  tenantId: promotionRecords.tenantId,
+};
+
 app.use('*', authMiddleware, requireAuth);
 
 // -----------------------------------------------------------------------------
@@ -266,7 +282,16 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 
   // Get current record
   const [record] = await db
-    .select()
+    .select({
+      id: salaryRecords.id,
+      status: salaryRecords.status,
+      baseSalary: salaryRecords.baseSalary,
+      overtimeHours: salaryRecords.overtimeHours,
+      hourlyRate: salaryRecords.hourlyRate,
+      commission: salaryRecords.commission,
+      bonus: salaryRecords.bonus,
+      deductions: salaryRecords.deductions,
+    })
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -313,8 +338,30 @@ app.post('/salary-records/:id/approve', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
 
+  // Fast-path atomic update if in PENDING status
+  const [approved] = await db
+    .update(salaryRecords)
+    .set({
+      status: 'APPROVED',
+      approvedBy: user?.employeeId || null,
+      approvedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(salaryRecords.id, id),
+        eq(salaryRecords.status, 'PENDING')
+      )
+    )
+    .returning({ id: salaryRecords.id });
+
+  if (approved) {
+    return c.json({ success: true, message: '薪資已核准' });
+  }
+
+  // Fallback to distinguish between 404 and 400
   const [record] = await db
-    .select()
+    .select({ id: salaryRecords.id })
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -323,21 +370,7 @@ app.post('/salary-records/:id/approve', async (c) => {
     return c.json({ success: false, error: '找不到薪資記錄' }, 404);
   }
 
-  if (record.status !== 'PENDING') {
-    return c.json({ success: false, error: '此記錄無法核准' }, 400);
-  }
-
-  await db
-    .update(salaryRecords)
-    .set({
-      status: 'APPROVED',
-      approvedBy: user?.employeeId || null,
-      approvedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(salaryRecords.id, id));
-
-  return c.json({ success: true, message: '薪資已核准' });
+  return c.json({ success: false, error: '此記錄無法核准' }, 400);
 });
 
 // -----------------------------------------------------------------------------
@@ -380,8 +413,29 @@ app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => 
 app.post('/salary-records/:id/pay', async (c) => {
   const id = c.req.param('id');
 
+  // Fast-path atomic update if in APPROVED status
+  const [paid] = await db
+    .update(salaryRecords)
+    .set({
+      status: 'PAID',
+      paidAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(salaryRecords.id, id),
+        eq(salaryRecords.status, 'APPROVED')
+      )
+    )
+    .returning({ id: salaryRecords.id });
+
+  if (paid) {
+    return c.json({ success: true, message: '已標記為已發放' });
+  }
+
+  // Fallback to distinguish between 404 and 400
   const [record] = await db
-    .select()
+    .select({ id: salaryRecords.id })
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -390,20 +444,7 @@ app.post('/salary-records/:id/pay', async (c) => {
     return c.json({ success: false, error: '找不到薪資記錄' }, 404);
   }
 
-  if (record.status !== 'APPROVED') {
-    return c.json({ success: false, error: '只能標記已核准的記錄為已發放' }, 400);
-  }
-
-  await db
-    .update(salaryRecords)
-    .set({
-      status: 'PAID',
-      paidAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(salaryRecords.id, id));
-
-  return c.json({ success: true, message: '已標記為已發放' });
+  return c.json({ success: false, error: '只能標記已核准的記錄為已發放' }, 400);
 });
 
 // -----------------------------------------------------------------------------
@@ -499,33 +540,34 @@ app.get('/promotions', async (c) => {
   if (employee_id) conditions.push(eq(promotionRecords.employeeId, employee_id));
   if (type) conditions.push(eq(promotionRecords.type, type as 'PROMOTION' | 'TRANSFER' | 'DEMOTION'));
 
-  const records = await db
-    .select({
-      id: promotionRecords.id,
-      employeeId: promotionRecords.employeeId,
-      type: promotionRecords.type,
-      fromJobTitleId: promotionRecords.fromJobTitleId,
-      toJobTitleId: promotionRecords.toJobTitleId,
-      fromBranchId: promotionRecords.fromBranchId,
-      toBranchId: promotionRecords.toBranchId,
-      effectiveDate: promotionRecords.effectiveDate,
-      newBaseSalary: promotionRecords.newBaseSalary,
-      reason: promotionRecords.reason,
-      createdAt: promotionRecords.createdAt,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-    })
-    .from(promotionRecords)
-    .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(promotionRecords.effectiveDate))
-    .limit(parseInt(limit))
-    .offset(parseInt(offset));
-
-  const countResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(promotionRecords)
-    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  const [records, countResult] = await Promise.all([
+    db
+      .select({
+        id: promotionRecords.id,
+        employeeId: promotionRecords.employeeId,
+        type: promotionRecords.type,
+        fromJobTitleId: promotionRecords.fromJobTitleId,
+        toJobTitleId: promotionRecords.toJobTitleId,
+        fromBranchId: promotionRecords.fromBranchId,
+        toBranchId: promotionRecords.toBranchId,
+        effectiveDate: promotionRecords.effectiveDate,
+        newBaseSalary: promotionRecords.newBaseSalary,
+        reason: promotionRecords.reason,
+        createdAt: promotionRecords.createdAt,
+        employeeName: employees.fullName,
+        employeeCode: employees.employeeCode,
+      })
+      .from(promotionRecords)
+      .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(promotionRecords.effectiveDate))
+      .limit(parseInt(limit))
+      .offset(parseInt(offset)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(promotionRecords)
+      .where(conditions.length > 0 ? and(...conditions) : undefined),
+  ]);
 
   return c.json({
     success: true,
@@ -598,7 +640,7 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
       reason: data.reason,
       createdBy: user?.employeeId,
     })
-    .returning();
+    .returning(PROMOTION_RECORD_RETURNING);
 
   // Update employee if changes are effective today or earlier
   const today = new Date().toISOString().split('T')[0];

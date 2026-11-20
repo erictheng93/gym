@@ -30,6 +30,25 @@ const bookingToCancel = ref<Booking | null>(null)
 const isProcessing = ref(false)
 const error = ref('')
 const successMessage = ref('')
+let successTimer: ReturnType<typeof setTimeout> | null = null
+
+const setSuccessMessage = (msg: string) => {
+  if (successTimer) {
+    clearTimeout(successTimer)
+  }
+  successMessage.value = msg
+  successTimer = setTimeout(() => {
+    successMessage.value = ''
+    successTimer = null
+  }, 3000)
+}
+
+onBeforeUnmount(() => {
+  if (successTimer) {
+    clearTimeout(successTimer)
+    successTimer = null
+  }
+})
 
 // Review state
 const showReviewModal = ref(false)
@@ -69,14 +88,11 @@ const handleBook = async () => {
 
   if (result.success) {
     showSessionModal.value = false
-    successMessage.value = result.booking?.booking_status === 'WAITLISTED'
-      ? `已加入候補名單 (第 ${result.waitlist_position} 順位)`
-      : '預約成功！'
-
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
+    setSuccessMessage(
+      result.booking?.booking_status === 'WAITLISTED'
+        ? `已加入候補名單 (第 ${result.waitlist_position} 順位)`
+        : '預約成功！'
+    )
 
     // Refresh sessions to update counts
     await fetchUpcomingSessions({
@@ -108,11 +124,7 @@ const confirmCancel = async () => {
   if (result.success) {
     showCancelConfirm.value = false
     bookingToCancel.value = null
-    successMessage.value = '預約已取消'
-
-    setTimeout(() => {
-      successMessage.value = ''
-    }, 3000)
+    setSuccessMessage('預約已取消')
 
     // Refresh data
     await Promise.all([
@@ -184,6 +196,8 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   const dateStr = booking.session_date || booking.session?.session_date || ''
   return formatDateLocal(dateStr)
 }
+
+const displayedPastBookings = computed(() => pastBookings.value.slice(0, 10))
 </script>
 
 <template>
@@ -273,7 +287,7 @@ const getReviewSessionDate = (booking: Booking | null): string => {
         <h2 class="section-title">歷史紀錄</h2>
         <div class="booking-list">
           <BookingCard
-            v-for="booking in pastBookings.slice(0, 10)"
+            v-for="booking in displayedPastBookings"
             :key="booking.id"
             :booking="booking"
             @review="handleReview(booking)"

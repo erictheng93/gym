@@ -1,3 +1,28 @@
+<script lang="ts">
+import { PAGES } from '~/constants'
+
+const leaveDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
+const leaveDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const LEAVE_STATUS_BADGE_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
+  PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
+  APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
+  REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
+  CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' },
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 休假管理頁面
@@ -128,43 +153,40 @@ const getBalance = (type: string) => {
   }
 }
 
-// 取得假別標籤
-const getLeaveTypeLabel = (type: string) => {
-  return leaveTypeOptions.find(o => o.value === type)?.label || type
+const LEAVE_TYPE_LABEL_MAP: Record<string, string> = {
+  ANNUAL: PAGES.HR.LEAVES.ANNUAL,
+  SICK: PAGES.HR.LEAVES.SICK,
+  PERSONAL: PAGES.HR.LEAVES.PERSONAL,
+  MATERNITY: PAGES.HR.LEAVES.MATERNITY,
+  BEREAVEMENT: PAGES.HR.LEAVES.BEREAVEMENT,
+  OTHER: PAGES.HR.LEAVES.OTHER,
 }
 
-const getLeaveTypeColor = (type: string) => {
-  return leaveTypeOptions.find(o => o.value === type)?.color || '#8e8e93'
+const LEAVE_TYPE_COLOR_MAP: Record<string, string> = {
+  ANNUAL: '#007aff',
+  SICK: '#ff3b30',
+  PERSONAL: '#ff9500',
+  MATERNITY: '#af52de',
+  BEREAVEMENT: '#8e8e93',
+  OTHER: '#5856d6',
 }
 
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } => {
-  const map: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
-    PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
-    APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
-    REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
-    CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' }
-  }
-  return map[status] || { label: status, variant: 'default' }
+  return LEAVE_STATUS_BADGE_MAP[status] || { label: status, variant: 'default' }
 }
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : leaveDateFormatter.format(d)
 }
 
 const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : leaveDateTimeFormatter.format(d)
 }
 
 // 提交申請

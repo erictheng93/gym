@@ -1,3 +1,19 @@
+<script lang="ts">
+const LEAVE_TYPE_LABEL_MAP: Record<string, string> = {
+  ANNUAL: '特休',
+  SICK: '病假',
+  PERSONAL: '事假',
+  MATERNITY: '產假',
+  BEREAVEMENT: '喪假',
+  OTHER: '其他'
+}
+
+const hrDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric'
+})
+</script>
+
 <script setup lang="ts">
 import { PAGES } from '~/constants'
 import { useAttendance, useLeaveRequests } from '~/composables/hr'
@@ -35,6 +51,8 @@ const loadDashboardData = async () => {
 watch(selectedBranch, () => {
   loadDashboardData()
 })
+
+const displayedPendingApprovals = computed(() => pendingApprovals.value.slice(0, 3))
 
 const hrModules = [
   {
@@ -98,23 +116,15 @@ const attendanceRate = computed(() => {
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
+  return hrDateFormatter.format(d)
 }
 
 // 取得假別標籤
 const getLeaveTypeLabel = (type: string) => {
-  const map: Record<string, string> = {
-    ANNUAL: '特休',
-    SICK: '病假',
-    PERSONAL: '事假',
-    MATERNITY: '產假',
-    BEREAVEMENT: '喪假',
-    OTHER: '其他'
-  }
-  return map[type] || type
+  return LEAVE_TYPE_LABEL_MAP[type] || type
 }
 </script>
 
@@ -259,7 +269,7 @@ const getLeaveTypeLabel = (type: string) => {
 
       <div class="approvals-list">
         <div
-          v-for="(leave, index) in pendingApprovals.slice(0, 3)"
+          v-for="(leave, index) in displayedPendingApprovals"
           :key="leave.id"
           class="approval-card"
           :style="{ animationDelay: `${index * 0.1}s` }"

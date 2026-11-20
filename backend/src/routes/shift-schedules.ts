@@ -8,6 +8,36 @@ import type { AuthVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const SHIFT_SCHEDULE_RETURNING = {
+  id: shiftSchedules.id,
+  status: shiftSchedules.status,
+  createdAt: shiftSchedules.createdAt,
+  updatedAt: shiftSchedules.updatedAt,
+  branchId: shiftSchedules.branchId,
+  name: shiftSchedules.name,
+  startTime: shiftSchedules.startTime,
+  endTime: shiftSchedules.endTime,
+  breakStart: shiftSchedules.breakStart,
+  breakEnd: shiftSchedules.breakEnd,
+  gracePeriodMinutes: shiftSchedules.gracePeriodMinutes,
+  earlyLeaveMinutes: shiftSchedules.earlyLeaveMinutes,
+  overtimeStartAfter: shiftSchedules.overtimeStartAfter,
+  isDefault: shiftSchedules.isDefault,
+  applicableDays: shiftSchedules.applicableDays,
+  tenantId: shiftSchedules.tenantId,
+};
+
+const EMPLOYEE_SHIFT_RETURNING = {
+  id: employeeShifts.id,
+  createdAt: employeeShifts.createdAt,
+  updatedAt: employeeShifts.updatedAt,
+  employeeId: employeeShifts.employeeId,
+  shiftScheduleId: employeeShifts.shiftScheduleId,
+  effectiveDate: employeeShifts.effectiveDate,
+  endDate: employeeShifts.endDate,
+  tenantId: employeeShifts.tenantId,
+};
+
 app.use('*', authMiddleware, requireAuth);
 
 // =============================================================================
@@ -209,7 +239,7 @@ app.post('/', zValidator('json', createShiftSchema), async (c) => {
         applicableDays: data.applicable_days ?? ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
         status: data.status ?? 'published',
       })
-      .returning();
+      .returning(SHIFT_SCHEDULE_RETURNING);
 
     return c.json({
       success: true,
@@ -256,16 +286,6 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(shiftSchedules)
-    .where(eq(shiftSchedules.id, id))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
-  }
-
   const updates: Record<string, unknown> = {
     updatedAt: new Date(),
   };
@@ -287,7 +307,11 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
     .update(shiftSchedules)
     .set(updates)
     .where(eq(shiftSchedules.id, id))
-    .returning();
+    .returning(SHIFT_SCHEDULE_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到班表' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -315,21 +339,16 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select()
-    .from(shiftSchedules)
-    .where(eq(shiftSchedules.id, id))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
-  }
-
-  // Soft delete by setting status to archived
-  await db
+  // Atomic soft delete by setting status to archived
+  const [updated] = await db
     .update(shiftSchedules)
     .set({ status: 'archived', updatedAt: new Date() })
-    .where(eq(shiftSchedules.id, id));
+    .where(eq(shiftSchedules.id, id))
+    .returning({ id: shiftSchedules.id });
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到班表' }, 404);
+  }
 
   return c.json({ success: true, message: '班表已刪除' });
 });
@@ -371,28 +390,37 @@ app.get('/employee_shifts', async (c) => {
 
     const orderFn = sortOrder === 'asc' ? asc : desc;
 
-    const records = await db
-      .select({
-        id: employeeShifts.id,
-        createdAt: employeeShifts.createdAt,
-        employeeId: employeeShifts.employeeId,
-        shiftScheduleId: employeeShifts.shiftScheduleId,
-        effectiveDate: employeeShifts.effectiveDate,
-        endDate: employeeShifts.endDate,
-        employeeFullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        employeeBranchId: employees.branchId,
-        shiftName: shiftSchedules.name,
-        shiftStartTime: shiftSchedules.startTime,
-        shiftEndTime: shiftSchedules.endTime,
-      })
-      .from(employeeShifts)
-      .leftJoin(employees, eq(employeeShifts.employeeId, employees.id))
-      .leftJoin(shiftSchedules, eq(employeeShifts.shiftScheduleId, shiftSchedules.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(orderFn(sortColumn))
-      .limit(parseInt(limit))
-      .offset(parseInt(offset));
+    const limitNum = parseInt(limit);
+    const offsetNum = parseInt(offset);
+
+    const [records, countResult] = await Promise.all([
+      db
+        .select({
+          id: employeeShifts.id,
+          createdAt: employeeShifts.createdAt,
+          employeeId: employeeShifts.employeeId,
+          shiftScheduleId: employeeShifts.shiftScheduleId,
+          effectiveDate: employeeShifts.effectiveDate,
+          endDate: employeeShifts.endDate,
+          employeeFullName: employees.fullName,
+          employeeCode: employees.employeeCode,
+          employeeBranchId: employees.branchId,
+          shiftName: shiftSchedules.name,
+          shiftStartTime: shiftSchedules.startTime,
+          shiftEndTime: shiftSchedules.endTime,
+        })
+        .from(employeeShifts)
+        .leftJoin(employees, eq(employeeShifts.employeeId, employees.id))
+        .leftJoin(shiftSchedules, eq(employeeShifts.shiftScheduleId, shiftSchedules.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(orderFn(sortColumn))
+        .limit(limitNum)
+        .offset(offsetNum),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(employeeShifts)
+        .where(conditions.length > 0 ? and(...conditions) : undefined),
+    ]);
 
     const formattedRecords = records.map(r => ({
       id: r.id,
@@ -415,13 +443,16 @@ app.get('/employee_shifts', async (c) => {
       } : null,
     }));
 
+    const total = Number(countResult[0]?.count || 0);
+
     return c.json({
       success: true,
       data: formattedRecords,
       pagination: {
-        total: formattedRecords.length,
-        page: 1,
-        limit: parseInt(limit),
+        total,
+        page: Math.floor(offsetNum / limitNum) + 1,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   } catch (error) {
@@ -450,7 +481,7 @@ app.post('/employee_shifts', zValidator('json', createEmployeeShiftSchema), asyn
         effectiveDate: data.effective_date,
         endDate: data.end_date || null,
       })
-      .returning();
+      .returning(EMPLOYEE_SHIFT_RETURNING);
 
     return c.json({
       success: true,
@@ -479,16 +510,6 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
   const id = c.req.param('id');
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(employeeShifts)
-    .where(eq(employeeShifts.id, id))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '找不到班表指派' }, 404);
-  }
-
   const updates: Record<string, unknown> = {
     updatedAt: new Date(),
   };
@@ -500,7 +521,11 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
     .update(employeeShifts)
     .set(updates)
     .where(eq(employeeShifts.id, id))
-    .returning();
+    .returning(EMPLOYEE_SHIFT_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到班表指派' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -519,17 +544,14 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
 app.delete('/employee_shifts/:id', async (c) => {
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select()
-    .from(employeeShifts)
+  const [deleted] = await db
+    .delete(employeeShifts)
     .where(eq(employeeShifts.id, id))
-    .limit(1);
+    .returning({ id: employeeShifts.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '找不到班表指派' }, 404);
   }
-
-  await db.delete(employeeShifts).where(eq(employeeShifts.id, id));
 
   return c.json({ success: true, message: '班表指派已刪除' });
 });

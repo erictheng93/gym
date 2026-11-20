@@ -1,12 +1,30 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, bookings, classSessions, classes, members, contracts, branches, BOOKING_STATUS } from '../db/index.js';
+import { db, bookings, classSessions, classes, members, contracts, BOOKING_STATUS } from '../db/index.js';
 import { eq, and, sql, desc, or, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
+
+const BOOKING_SELECT = {
+  id: bookings.id,
+  status: bookings.status,
+  createdAt: bookings.createdAt,
+  updatedAt: bookings.updatedAt,
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  contractId: bookings.contractId,
+  bookingStatus: bookings.bookingStatus,
+  waitlistPosition: bookings.waitlistPosition,
+  bookedAt: bookings.bookedAt,
+  cancelledAt: bookings.cancelledAt,
+  cancelReason: bookings.cancelReason,
+  attendedAt: bookings.attendedAt,
+  countDeducted: bookings.countDeducted,
+};
 
 app.use('*', requireAuth);
 app.use('*', requireTenant);
@@ -30,12 +48,7 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
@@ -57,43 +70,44 @@ app.get('/', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .where(whereCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .where(whereCondition),
+    db
+      .select({
+        booking: BOOKING_SELECT,
+        session: {
+          id: classSessions.id,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          endTime: classSessions.endTime,
+          sessionStatus: classSessions.sessionStatus,
+        },
+        class: {
+          id: classes.id,
+          name: classes.name,
+          category: classes.category,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(whereCondition)
+      .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      booking: bookings,
-      session: {
-        id: classSessions.id,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-        endTime: classSessions.endTime,
-        sessionStatus: classSessions.sessionStatus,
-      },
-      class: {
-        id: classes.id,
-        name: classes.name,
-        category: classes.category,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(whereCondition)
-    .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -111,31 +125,53 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [booking] = await db
-    .select({
-      booking: bookings,
-      session: classSessions,
-      class: classes,
-      member: members,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(eq(bookings.id, id))
-    .limit(1);
+  const [[booking], branchIds] = await Promise.all([
+    db
+      .select({
+        booking: BOOKING_SELECT,
+        session: {
+          id: classSessions.id,
+          branchId: classSessions.branchId,
+          classId: classSessions.classId,
+          instructorId: classSessions.instructorId,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          endTime: classSessions.endTime,
+          sessionStatus: classSessions.sessionStatus,
+          maxCapacity: classSessions.maxCapacity,
+          currentCount: classSessions.currentCount,
+          waitlistCount: classSessions.waitlistCount,
+        },
+        class: {
+          id: classes.id,
+          name: classes.name,
+          category: classes.category,
+          description: classes.description,
+          durationMinutes: classes.durationMinutes,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+          phone: members.phone,
+          email: members.email,
+          status: members.status,
+        },
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(eq(bookings.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!booking) {
     return c.json({ success: false, error: '預約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, booking.session.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '無權限存取此預約' }, 403);
   }
 
@@ -154,23 +190,47 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [session] = await db
-    .select()
-    .from(classSessions)
-    .where(eq(classSessions.id, data.sessionId))
-    .limit(1);
+  const [[session], branchIds, [member], [existingBooking]] = await Promise.all([
+    db
+      .select({
+        id: classSessions.id,
+        branchId: classSessions.branchId,
+        sessionStatus: classSessions.sessionStatus,
+        sessionDate: classSessions.sessionDate,
+        maxCapacity: classSessions.maxCapacity,
+        currentCount: classSessions.currentCount,
+        waitlistCount: classSessions.waitlistCount,
+      })
+      .from(classSessions)
+      .where(eq(classSessions.id, data.sessionId))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+    db
+      .select({ id: members.id, status: members.status })
+      .from(members)
+      .where(eq(members.id, data.memberId))
+      .limit(1),
+    db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.sessionId, data.sessionId),
+          eq(bookings.memberId, data.memberId),
+          or(
+            eq(bookings.bookingStatus, 'CONFIRMED'),
+            eq(bookings.bookingStatus, 'WAITLIST')
+          )
+        )
+      )
+      .limit(1),
+  ]);
 
   if (!session) {
     return c.json({ success: false, error: '課程場次不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, session.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(session.branchId)) {
     return c.json({ success: false, error: '無權限預約此課程' }, 403);
   }
 
@@ -183,30 +243,9 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
     return c.json({ success: false, error: '無法預約過去的課程' }, 400);
   }
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, data.memberId))
-    .limit(1);
-
   if (!member || member.status !== 'ACTIVE') {
     return c.json({ success: false, error: '會員不存在或狀態無效' }, 400);
   }
-
-  const [existingBooking] = await db
-    .select()
-    .from(bookings)
-    .where(
-      and(
-        eq(bookings.sessionId, data.sessionId),
-        eq(bookings.memberId, data.memberId),
-        or(
-          eq(bookings.bookingStatus, 'CONFIRMED'),
-          eq(bookings.bookingStatus, 'WAITLIST')
-        )
-      )
-    )
-    .limit(1);
 
   if (existingBooking) {
     return c.json({ success: false, error: '您已預約此課程' }, 400);
@@ -223,25 +262,32 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
     waitlistPosition = waitlistCount + 1;
   }
 
-  const [newBooking] = await db.insert(bookings).values({
-    sessionId: data.sessionId,
-    memberId: data.memberId,
-    contractId: data.contractId,
-    bookingStatus,
-    waitlistPosition,
-  }).returning();
-
-  if (bookingStatus === 'CONFIRMED') {
-    await db.update(classSessions).set({
-      currentCount: currentCount + 1,
-      updatedAt: new Date(),
-    }).where(eq(classSessions.id, data.sessionId));
-  } else {
-    await db.update(classSessions).set({
-      waitlistCount: waitlistCount + 1,
-      updatedAt: new Date(),
-    }).where(eq(classSessions.id, data.sessionId));
-  }
+  const [[newBooking]] = await Promise.all([
+    db.insert(bookings).values({
+      sessionId: data.sessionId,
+      memberId: data.memberId,
+      contractId: data.contractId,
+      bookingStatus,
+      waitlistPosition,
+    }).returning({
+      id: bookings.id,
+      sessionId: bookings.sessionId,
+      memberId: bookings.memberId,
+      contractId: bookings.contractId,
+      bookingStatus: bookings.bookingStatus,
+      waitlistPosition: bookings.waitlistPosition,
+      createdAt: bookings.createdAt,
+    }),
+    bookingStatus === 'CONFIRMED'
+      ? db.update(classSessions).set({
+          currentCount: currentCount + 1,
+          updatedAt: new Date(),
+        }).where(eq(classSessions.id, data.sessionId))
+      : db.update(classSessions).set({
+          waitlistCount: waitlistCount + 1,
+          updatedAt: new Date(),
+        }).where(eq(classSessions.id, data.sessionId)),
+  ]);
 
   return c.json({
     success: true,
@@ -257,31 +303,34 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [booking] = await db
-    .select({
-      booking: bookings,
-      session: classSessions,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .where(eq(bookings.id, id))
-    .limit(1);
+  const [[booking], branchIds] = await Promise.all([
+    db
+      .select({
+        booking: {
+          id: bookings.id,
+          bookingStatus: bookings.bookingStatus,
+        },
+        session: {
+          id: classSessions.id,
+          branchId: classSessions.branchId,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          currentCount: classSessions.currentCount,
+          waitlistCount: classSessions.waitlistCount,
+        },
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .where(eq(bookings.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!booking) {
     return c.json({ success: false, error: '預約不存在' }, 404);
   }
 
-  if (!booking.session.branchId) {
-    return c.json({ success: false, error: '課程分店資訊遺失' }, 400);
-  }
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, booking.session.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!booking.session.branchId || !branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '無權限取消此預約' }, 403);
   }
 
@@ -299,49 +348,59 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
   const sessionCurrentCount = booking.session.currentCount ?? 0;
   const sessionWaitlistCount = booking.session.waitlistCount ?? 0;
 
-  await db.update(bookings).set({
-    bookingStatus: 'CANCELLED',
-    cancelledAt: new Date(),
-    cancelReason: data.reason,
-    updatedAt: new Date(),
-  }).where(eq(bookings.id, id));
-
   if (booking.booking.bookingStatus === 'CONFIRMED') {
-    await db.update(classSessions).set({
-      currentCount: Math.max(0, sessionCurrentCount - 1),
-      updatedAt: new Date(),
-    }).where(eq(classSessions.id, booking.session.id));
-
-    const [nextWaitlist] = await db
-      .select()
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.sessionId, booking.session.id),
-          eq(bookings.bookingStatus, 'WAITLIST')
+    const [, [nextWaitlist]] = await Promise.all([
+      db.update(bookings).set({
+        bookingStatus: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelReason: data.reason,
+        updatedAt: new Date(),
+      }).where(eq(bookings.id, id)),
+      db
+        .select({ id: bookings.id })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.sessionId, booking.session.id),
+            eq(bookings.bookingStatus, 'WAITLIST')
+          )
         )
-      )
-      .orderBy(bookings.waitlistPosition)
-      .limit(1);
+        .orderBy(bookings.waitlistPosition)
+        .limit(1),
+    ]);
 
     if (nextWaitlist) {
-      await db.update(bookings).set({
-        bookingStatus: 'CONFIRMED',
-        waitlistPosition: null,
-        updatedAt: new Date(),
-      }).where(eq(bookings.id, nextWaitlist.id));
-
+      await Promise.all([
+        db.update(bookings).set({
+          bookingStatus: 'CONFIRMED',
+          waitlistPosition: null,
+          updatedAt: new Date(),
+        }).where(eq(bookings.id, nextWaitlist.id)),
+        db.update(classSessions).set({
+          currentCount: sessionCurrentCount,
+          waitlistCount: Math.max(0, sessionWaitlistCount - 1),
+          updatedAt: new Date(),
+        }).where(eq(classSessions.id, booking.session.id)),
+      ]);
+    } else {
       await db.update(classSessions).set({
-        currentCount: sessionCurrentCount,
-        waitlistCount: Math.max(0, sessionWaitlistCount - 1),
+        currentCount: Math.max(0, sessionCurrentCount - 1),
         updatedAt: new Date(),
       }).where(eq(classSessions.id, booking.session.id));
     }
   } else {
-    await db.update(classSessions).set({
-      waitlistCount: Math.max(0, sessionWaitlistCount - 1),
-      updatedAt: new Date(),
-    }).where(eq(classSessions.id, booking.session.id));
+    await Promise.all([
+      db.update(bookings).set({
+        bookingStatus: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancelReason: data.reason,
+        updatedAt: new Date(),
+      }).where(eq(bookings.id, id)),
+      db.update(classSessions).set({
+        waitlistCount: Math.max(0, sessionWaitlistCount - 1),
+        updatedAt: new Date(),
+      }).where(eq(classSessions.id, booking.session.id)),
+    ]);
   }
 
   return c.json({ success: true, message: '取消成功' });
@@ -351,29 +410,40 @@ app.post('/:id/attend', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [booking] = await db
-    .select({
-      booking: bookings,
-      session: classSessions,
-      class: classes,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(eq(bookings.id, id))
-    .limit(1);
+  const [[booking], branchIds] = await Promise.all([
+    db
+      .select({
+        booking: {
+          id: bookings.id,
+          bookingStatus: bookings.bookingStatus,
+          contractId: bookings.contractId,
+        },
+        session: {
+          branchId: classSessions.branchId,
+          sessionDate: classSessions.sessionDate,
+        },
+        class: {
+          requiresCount: classes.requiresCount,
+          countDeduction: classes.countDeduction,
+        },
+        contract: {
+          remainingCounts: contracts.remainingCounts,
+        },
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .leftJoin(contracts, eq(bookings.contractId, contracts.id))
+      .where(eq(bookings.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!booking) {
     return c.json({ success: false, error: '預約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, booking.session.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!booking.session.branchId || !branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '無權限操作此預約' }, 403);
   }
 
@@ -389,22 +459,33 @@ app.post('/:id/attend', async (c) => {
   let remainingCounts = null;
 
   if (booking.class.requiresCount && booking.booking.contractId) {
-    const [contract] = await db
-      .select()
-      .from(contracts)
-      .where(eq(contracts.id, booking.booking.contractId))
-      .limit(1);
+    const contract = booking.contract;
+    const countDeduction = booking.class.countDeduction || 1;
 
-    if (contract?.remainingCounts !== null && contract.remainingCounts < (booking.class.countDeduction || 1)) {
+    if (contract && contract.remainingCounts !== null && contract.remainingCounts < countDeduction) {
       return c.json({ success: false, error: '剩餘次數不足' }, 400);
     }
 
-    if (contract?.remainingCounts !== null) {
-      remainingCounts = contract.remainingCounts - (booking.class.countDeduction || 1);
-      await db.update(contracts).set({
-        remainingCounts,
-        updatedAt: new Date(),
-      }).where(eq(contracts.id, booking.booking.contractId));
+    if (contract && contract.remainingCounts !== null) {
+      remainingCounts = contract.remainingCounts - countDeduction;
+      await Promise.all([
+        db.update(contracts).set({
+          remainingCounts,
+          updatedAt: new Date(),
+        }).where(eq(contracts.id, booking.booking.contractId)),
+        db.update(bookings).set({
+          bookingStatus: 'ATTENDED',
+          attendedAt: new Date(),
+          countDeducted: booking.class.requiresCount,
+          updatedAt: new Date(),
+        }).where(eq(bookings.id, id)),
+      ]);
+
+      return c.json({
+        success: true,
+        data: { remainingCounts },
+        message: '簽到成功！',
+      });
     }
   }
 

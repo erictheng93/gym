@@ -6,11 +6,30 @@
 
 import type { ClassSession } from './useClasses'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 import { formatDateWithDay } from '@gym-nexus/shared'
 
 // Cache keys
 const CACHE_KEY_MY_BOOKINGS = 'member:bookings'
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+const ACTIVE_BOOKING_STATUSES = new Set(['CONFIRMED', 'WAITLISTED'])
+
+const BOOKING_STATUS_LABELS: Record<string, string> = {
+  'CONFIRMED': '已確認',
+  'WAITLISTED': '候補中',
+  'CANCELLED': '已取消',
+  'NO_SHOW': '未出席',
+  'ATTENDED': '已出席',
+}
+
+const BOOKING_STATUS_COLORS: Record<string, string> = {
+  'CONFIRMED': 'success',
+  'WAITLISTED': 'warning',
+  'CANCELLED': 'muted',
+  'NO_SHOW': 'error',
+  'ATTENDED': 'primary',
+}
 
 export interface Booking {
   id: string
@@ -65,22 +84,31 @@ export const useBookings = () => {
   const isOfflineData = useState('bookings_is_offline', () => false)
 
   /**
-   * Split bookings into upcoming and past
+   * Split bookings into upcoming and past (single-pass partition)
    */
   const splitBookings = (bookings: Booking[]) => {
-    const now = new Date()
-    upcomingBookings.value = bookings.filter(b => {
-      const sessionDate = new Date(b.session_date || b.session?.session_date || '')
-      return sessionDate >= now && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
-    })
-    pastBookings.value = bookings.filter(b => {
-      const sessionDate = new Date(b.session_date || b.session?.session_date || '')
-      return sessionDate < now || ['CANCELLED', 'NO_SHOW', 'ATTENDED'].includes(b.booking_status)
-    })
+    const nowMs = Date.now()
+    const upcoming: Booking[] = []
+    const past: Booking[] = []
+
+    for (const b of bookings) {
+      const dateStr = b.session_date || b.session?.session_date
+      const sessionTime = dateStr ? new Date(dateStr).getTime() : 0
+      const isUpcomingStatus = b.booking_status === 'CONFIRMED' || b.booking_status === 'WAITLISTED'
+
+      if (sessionTime >= nowMs && isUpcomingStatus) {
+        upcoming.push(b)
+      } else {
+        past.push(b)
+      }
+    }
+
+    upcomingBookings.value = upcoming
+    pastBookings.value = past
   }
 
   /**
-   * Fetch member's bookings with offline support
+   * Fetch member's bookings with offline support (with request deduplication)
    */
   const fetchMyBookings = async (options?: {
     status?: string
@@ -89,15 +117,47 @@ export const useBookings = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `bookings:${member.value.id}:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    // Build cache key based on options
-    const cacheKey = `${CACHE_KEY_MY_BOOKINGS}:${member.value.id}:${JSON.stringify(options || {})}`
+      // Build cache key based on options
+      const cacheKey = `${CACHE_KEY_MY_BOOKINGS}:${member.value!.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try to use cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try to use cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Booking[]>(cacheKey)
+          if (cached) {
+            myBookings.value = cached
+            splitBookings(cached)
+            isOfflineData.value = true
+            return cached
+          }
+          // No cached data available
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.status) params.append('status', options.status)
+        if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
+        if (options?.limit) params.append('limit', String(options.limit))
+
+        const response = await $fetch<BookingsResponse>(`${apiUrl}/api/member/bookings?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          myBookings.value = response.data
+          splitBookings(response.data)
+
+          // Cache the response for offline use
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // On network error, try to use cached data
         const cached = await getCache<Booking[]>(cacheKey)
         if (cached) {
           myBookings.value = cached
@@ -105,40 +165,11 @@ export const useBookings = () => {
           isOfflineData.value = true
           return cached
         }
-        // No cached data available
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.status) params.append('status', options.status)
-      if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
-      if (options?.limit) params.append('limit', String(options.limit))
-
-      const response = await $fetch<BookingsResponse>(`${apiUrl}/api/member/bookings?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        myBookings.value = response.data
-        splitBookings(response.data)
-
-        // Cache the response for offline use
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // On network error, try to use cached data
-      const cached = await getCache<Booking[]>(cacheKey)
-      if (cached) {
-        myBookings.value = cached
-        splitBookings(cached)
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -243,7 +274,7 @@ export const useBookings = () => {
    */
   const hasBookedSession = (sessionId: string): boolean => {
     return myBookings.value.some(
-      b => b.session_id === sessionId && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
+      b => b.session_id === sessionId && ACTIVE_BOOKING_STATUSES.has(b.booking_status)
     )
   }
 
@@ -252,7 +283,7 @@ export const useBookings = () => {
    */
   const getBookingForSession = (sessionId: string): Booking | undefined => {
     return myBookings.value.find(
-      b => b.session_id === sessionId && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
+      b => b.session_id === sessionId && ACTIVE_BOOKING_STATUSES.has(b.booking_status)
     )
   }
 
@@ -260,28 +291,14 @@ export const useBookings = () => {
    * Get booking status label
    */
   const getStatusLabel = (status: string): string => {
-    const labels: Record<string, string> = {
-      'CONFIRMED': '已確認',
-      'WAITLISTED': '候補中',
-      'CANCELLED': '已取消',
-      'NO_SHOW': '未出席',
-      'ATTENDED': '已出席',
-    }
-    return labels[status] || status
+    return BOOKING_STATUS_LABELS[status] || status
   }
 
   /**
    * Get booking status color class
    */
   const getStatusColor = (status: string): string => {
-    const colors: Record<string, string> = {
-      'CONFIRMED': 'success',
-      'WAITLISTED': 'warning',
-      'CANCELLED': 'muted',
-      'NO_SHOW': 'error',
-      'ATTENDED': 'primary',
-    }
-    return colors[status] || 'muted'
+    return BOOKING_STATUS_COLORS[status] || 'muted'
   }
 
   /**
@@ -289,7 +306,7 @@ export const useBookings = () => {
    * Usually can cancel up to X hours before the session
    */
   const canCancel = (booking: Booking, hoursBeforeSession = 2): boolean => {
-    if (!['CONFIRMED', 'WAITLISTED'].includes(booking.booking_status)) {
+    if (!ACTIVE_BOOKING_STATUSES.has(booking.booking_status)) {
       return false
     }
 

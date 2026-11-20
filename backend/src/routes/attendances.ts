@@ -8,6 +8,42 @@ import type { AuthVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const ATTENDANCE_LIST_SELECT = {
+  id: attendances.id,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  checkOut: attendances.checkOut,
+  workHours: attendances.workHours,
+  branchId: attendances.branchId,
+  locationIp: attendances.locationIp,
+  locationGps: attendances.locationGps,
+  employeeFullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const ATTENDANCE_DETAIL_SELECT = {
+  id: attendances.id,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  checkOut: attendances.checkOut,
+  workHours: attendances.workHours,
+  branchId: attendances.branchId,
+  locationIp: attendances.locationIp,
+  locationGps: attendances.locationGps,
+  employeeFullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+};
+
+const ATTENDANCE_PATCH_SELECT = {
+  id: attendances.id,
+  checkIn: attendances.checkIn,
+};
+
+const ATTENDANCE_COUNT_SELECT = { count: sql<number>`count(*)` };
+
 app.use('*', authMiddleware, requireAuth);
 
 // -----------------------------------------------------------------------------
@@ -66,20 +102,7 @@ app.get('/', async (c) => {
 
   const [records, countResult] = await Promise.all([
     db
-      .select({
-        id: attendances.id,
-        employeeId: attendances.employeeId,
-        checkIn: attendances.checkIn,
-        checkOut: attendances.checkOut,
-        workHours: attendances.workHours,
-        branchId: attendances.branchId,
-        locationIp: attendances.locationIp,
-        locationGps: attendances.locationGps,
-        employeeFullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        branchName: branches.name,
-        jobTitleName: jobTitles.name,
-      })
+      .select(ATTENDANCE_LIST_SELECT)
       .from(attendances)
       .innerJoin(employees, eq(attendances.employeeId, employees.id))
       .leftJoin(branches, eq(attendances.branchId, branches.id))
@@ -89,7 +112,7 @@ app.get('/', async (c) => {
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(ATTENDANCE_COUNT_SELECT)
       .from(attendances)
       .where(conditions.length > 0 ? and(...conditions) : undefined),
   ]);
@@ -126,8 +149,8 @@ app.get('/', async (c) => {
 
     // Get attendance date from check_in
     const attendanceDateStr = checkInDate
-      ? checkInDate.toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0];
+      ? checkInDate.toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
 
     return {
       id: r.id,
@@ -180,19 +203,7 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [record] = await db
-    .select({
-      id: attendances.id,
-      employeeId: attendances.employeeId,
-      checkIn: attendances.checkIn,
-      checkOut: attendances.checkOut,
-      workHours: attendances.workHours,
-      branchId: attendances.branchId,
-      locationIp: attendances.locationIp,
-      locationGps: attendances.locationGps,
-      employeeFullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchName: branches.name,
-    })
+    .select(ATTENDANCE_DETAIL_SELECT)
     .from(attendances)
     .innerJoin(employees, eq(attendances.employeeId, employees.id))
     .leftJoin(branches, eq(attendances.branchId, branches.id))
@@ -275,7 +286,12 @@ app.post('/', zValidator('json', createSchema), async (c) => {
       branchId: data.branch_id,
       checkIn: checkInTime,
     })
-    .returning();
+    .returning({
+      id: attendances.id,
+      employeeId: attendances.employeeId,
+      checkIn: attendances.checkIn,
+      branchId: attendances.branchId,
+    });
 
   return c.json({
     success: true,
@@ -303,7 +319,7 @@ app.patch('/:id', zValidator('json', updateSchema), async (c) => {
   const data = c.req.valid('json');
 
   const [existing] = await db
-    .select()
+    .select(ATTENDANCE_PATCH_SELECT)
     .from(attendances)
     .where(eq(attendances.id, id))
     .limit(1);
@@ -348,17 +364,14 @@ app.patch('/:id', zValidator('json', updateSchema), async (c) => {
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select()
-    .from(attendances)
+  const [deleted] = await db
+    .delete(attendances)
     .where(eq(attendances.id, id))
-    .limit(1);
+    .returning({ id: attendances.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '找不到考勤記錄' }, 404);
   }
-
-  await db.delete(attendances).where(eq(attendances.id, id));
 
   return c.json({ success: true, message: '考勤記錄已刪除' });
 });

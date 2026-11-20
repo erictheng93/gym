@@ -1,3 +1,13 @@
+<script lang="ts">
+const branchDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
 import type { Branch, Employee } from '~/types/schema'
@@ -40,13 +50,9 @@ onMounted(loadBranch)
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
+  return branchDateFormatter.format(d)
 }
 
 const branchTypeLabel = (type: string) => {

@@ -71,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useGoogleSheets } from '~/utils/googleSheets'
 
 interface Props {
@@ -87,6 +87,14 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const exportResult = ref<any>(null)
 const showAuthModal = ref(false)
+let autoHideTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (autoHideTimer) {
+    clearTimeout(autoHideTimer)
+    autoHideTimer = null
+  }
+})
 
 const handleExport = async () => {
   if (!props.data || props.data.length === 0) {
@@ -144,8 +152,10 @@ const performExport = async () => {
     exportResult.value = result
 
     // Auto-hide success message after 10 seconds
-    setTimeout(() => {
+    if (autoHideTimer) clearTimeout(autoHideTimer)
+    autoHideTimer = setTimeout(() => {
       exportResult.value = null
+      autoHideTimer = null
     }, 10000)
   } catch (err: any) {
     error.value = err.message || '匯出失敗'

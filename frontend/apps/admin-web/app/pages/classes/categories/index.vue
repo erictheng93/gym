@@ -116,6 +116,10 @@ const handleSearch = (value: string) => {
 onMounted(() => {
   loadData()
 })
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
 </script>
 
 <template>

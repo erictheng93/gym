@@ -65,32 +65,32 @@ app.get(
       conditions.push(eq(issueReports.status, status));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(issueReports.id) })
-      .from(issueReports)
-      .where(and(...conditions));
-
-    // Get issues
-    const issues = await db
-      .select({
-        id: issueReports.id,
-        type: issueReports.type,
-        title: issueReports.title,
-        content: issueReports.content,
-        status: issueReports.status,
-        resolution: issueReports.resolution,
-        resolvedAt: issueReports.resolvedAt,
-        createdAt: issueReports.createdAt,
-        branchId: issueReports.branchId,
-        branchName: branches.name,
-      })
-      .from(issueReports)
-      .leftJoin(branches, eq(issueReports.branchId, branches.id))
-      .where(and(...conditions))
-      .orderBy(desc(issueReports.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and issues
+    const [[{ total }], issues] = await Promise.all([
+      db
+        .select({ total: count(issueReports.id) })
+        .from(issueReports)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: issueReports.id,
+          type: issueReports.type,
+          title: issueReports.title,
+          content: issueReports.content,
+          status: issueReports.status,
+          resolution: issueReports.resolution,
+          resolvedAt: issueReports.resolvedAt,
+          createdAt: issueReports.createdAt,
+          branchId: issueReports.branchId,
+          branchName: branches.name,
+        })
+        .from(issueReports)
+        .leftJoin(branches, eq(issueReports.branchId, branches.id))
+        .where(and(...conditions))
+        .orderBy(desc(issueReports.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,
@@ -163,7 +163,13 @@ app.post(
       content: data.content,
       attachments: data.attachments || [],
       status: 'SUBMITTED',
-    }).returning();
+    }).returning({
+      id: issueReports.id,
+      type: issueReports.type,
+      title: issueReports.title,
+      status: issueReports.status,
+      createdAt: issueReports.createdAt,
+    });
 
     return c.json({
       success: true,
@@ -263,43 +269,53 @@ app.put(
     const issueId = c.req.param('id');
     const updates = c.req.valid('json');
 
-    // Verify ownership and status
-    const [existing] = await db
-      .select({
-        id: issueReports.id,
-        status: issueReports.status,
-      })
-      .from(issueReports)
-      .where(and(
-        eq(issueReports.id, issueId),
-        eq(issueReports.memberId, memberInfo.id),
-      ))
-      .limit(1);
-
-    if (!existing) {
-      return c.json({
-        success: false,
-        error: '問題回報不存在',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
-    if (existing.status !== 'SUBMITTED') {
-      return c.json({
-        success: false,
-        error: '問題已在處理中，無法修改',
-        code: 'CANNOT_EDIT',
-      }, 400);
-    }
-
+    // Fast-path atomic update (ownership and status = SUBMITTED)
     const [issue] = await db
       .update(issueReports)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(issueReports.id, issueId))
-      .returning();
+      .where(and(
+        eq(issueReports.id, issueId),
+        eq(issueReports.memberId, memberInfo.id),
+        eq(issueReports.status, 'SUBMITTED'),
+      ))
+      .returning({
+        id: issueReports.id,
+        type: issueReports.type,
+        title: issueReports.title,
+        status: issueReports.status,
+      });
+
+    if (!issue) {
+      // Discriminate between 404 (not found) and 400 (cannot edit)
+      const [existing] = await db
+        .select({
+          id: issueReports.id,
+          status: issueReports.status,
+        })
+        .from(issueReports)
+        .where(and(
+          eq(issueReports.id, issueId),
+          eq(issueReports.memberId, memberInfo.id),
+        ))
+        .limit(1);
+
+      if (!existing) {
+        return c.json({
+          success: false,
+          error: '問題回報不存在',
+          code: 'NOT_FOUND',
+        }, 404);
+      }
+
+      return c.json({
+        success: false,
+        error: '問題已在處理中，無法修改',
+        code: 'CANNOT_EDIT',
+      }, 400);
+    }
 
     return c.json({
       success: true,

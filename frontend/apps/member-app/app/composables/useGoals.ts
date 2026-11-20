@@ -5,6 +5,7 @@
 
 import type { GoalType, GoalStatus } from '../schemas/goal.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 
 // Cache settings
 const CACHE_KEY_GOALS = 'member:goals'
@@ -46,7 +47,7 @@ export const useGoals = () => {
   const isOfflineData = useState('goals_is_offline', () => false)
 
   /**
-   * Fetch member's goals with optional filters
+   * Fetch member's goals with optional filters (with request deduplication)
    */
   const fetchGoals = async (options?: {
     status?: GoalStatus
@@ -55,14 +56,41 @@ export const useGoals = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `goals:${member.value.id}:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    const cacheKey = `${CACHE_KEY_GOALS}:${member.value.id}:${JSON.stringify(options || {})}`
+      const cacheKey = `${CACHE_KEY_GOALS}:${member.value!.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Goal[]>(cacheKey)
+          if (cached) {
+            goals.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.status) params.append('status', options.status)
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
+
+        const response = await $fetch<GoalsResponse>(`${apiUrl}/api/member/goals?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          goals.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Try cached data on network error
         const cached = await getCache<Goal[]>(cacheKey)
         if (cached) {
           goals.value = cached
@@ -70,34 +98,10 @@ export const useGoals = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.status) params.append('status', options.status)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
-
-      const response = await $fetch<GoalsResponse>(`${apiUrl}/api/member/goals?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        goals.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Try cached data on network error
-      const cached = await getCache<Goal[]>(cacheKey)
-      if (cached) {
-        goals.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -106,15 +110,17 @@ export const useGoals = () => {
   const getGoal = async (id: string): Promise<Goal | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Goal }>(`${apiUrl}/api/member/goals/${id}`, {
-        headers: getAuthHeader(),
-      })
+    return deduplicateRequest(`member:goal:${id}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Goal }>(`${apiUrl}/api/member/goals/${id}`, {
+          headers: getAuthHeader(),
+        })
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**
@@ -245,11 +251,27 @@ export const useGoals = () => {
   }
 
   /**
-   * Get goals by status
+   * Group goals by status in a single pass
    */
-  const activeGoals = computed(() => goals.value.filter(g => g.status === 'IN_PROGRESS'))
-  const achievedGoals = computed(() => goals.value.filter(g => g.status === 'ACHIEVED'))
-  const abandonedGoals = computed(() => goals.value.filter(g => g.status === 'ABANDONED'))
+  const groupedGoals = computed(() => {
+    const active: Goal[] = []
+    const achieved: Goal[] = []
+    const abandoned: Goal[] = []
+    for (const g of goals.value) {
+      if (g.status === 'IN_PROGRESS') {
+        active.push(g)
+      } else if (g.status === 'ACHIEVED') {
+        achieved.push(g)
+      } else if (g.status === 'ABANDONED') {
+        abandoned.push(g)
+      }
+    }
+    return { active, achieved, abandoned }
+  })
+
+  const activeGoals = computed(() => groupedGoals.value.active)
+  const achievedGoals = computed(() => groupedGoals.value.achieved)
+  const abandonedGoals = computed(() => groupedGoals.value.abandoned)
 
   return {
     goals,

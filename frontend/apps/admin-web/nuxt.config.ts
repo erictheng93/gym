@@ -86,7 +86,7 @@ export default defineNuxtConfig({
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: blob: https:",
-          "connect-src 'self' http://localhost:* https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com ws://localhost:* wss://localhost:* http://127.0.0.1:*",
+          "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* https://*.sentry.io https://accounts.google.com https://www.googleapis.com https://sheets.googleapis.com" + (process.env.API_BASE_URL ? ` ${process.env.API_BASE_URL} ${process.env.API_BASE_URL.replace(/^http/, 'ws')}` : ''),
           "frame-src 'self' https://accounts.google.com",
           "object-src 'none'",
           "base-uri 'self'",
@@ -209,8 +209,8 @@ export default defineNuxtConfig({
       // 執行時快取策略
       runtimeCaching: [
         {
-          // API 請求快取策略 - Network First
-          urlPattern: /^https:\/\/.*\/items\/.*/i,
+          // API 請求快取策略 - Network First with timeout for offline/slow network support
+          urlPattern: /\/api\/.*/i,
           handler: 'NetworkFirst',
           options: {
             cacheName: 'api-cache',
@@ -220,7 +220,8 @@ export default defineNuxtConfig({
             },
             cacheableResponse: {
               statuses: [0, 200]
-            }
+            },
+            networkTimeoutSeconds: 5,
           }
         },
         {

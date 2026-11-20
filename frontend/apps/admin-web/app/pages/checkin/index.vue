@@ -1,3 +1,43 @@
+<script lang="ts">
+import { STATUS } from '~/constants'
+
+const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+
+const MEMBER_STATUS_CLASS_MAP: Record<string, string> = {
+  ACTIVE: 'active',
+  active: 'active',
+  EXPIRED: 'expired',
+  SUSPENDED: 'suspended',
+  PAUSED: 'paused'
+}
+
+const MEMBER_STATUS_LABEL_MAP: Record<string, string> = {
+  ACTIVE: STATUS.MEMBER.ACTIVE,
+  active: STATUS.MEMBER.ACTIVE,
+  EXPIRED: STATUS.MEMBER.EXPIRED,
+  SUSPENDED: STATUS.MEMBER.SUSPENDED,
+  PAUSED: STATUS.MEMBER.PAUSED
+}
+
+const ATTENDANCE_STATUS_CLASS_MAP: Record<string, string> = {
+  PRESENT: 'present',
+  LATE: 'late',
+  EARLY_LEAVE: 'early-leave',
+  ABSENT: 'absent',
+  LEAVE: 'leave',
+  HOLIDAY: 'holiday'
+}
+
+const ATTENDANCE_STATUS_LABEL_MAP: Record<string, string> = {
+  PRESENT: '正常',
+  LATE: '遲到',
+  EARLY_LEAVE: '早退',
+  ABSENT: '缺勤',
+  LEAVE: '請假',
+  HOLIDAY: '休假'
+}
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS } from '~/constants'
 import type { VerificationMethod } from '~/components/VerificationMethodSelector.vue'
@@ -69,6 +109,40 @@ let scanInterval: NodeJS.Timeout | null = null
 const showQrScanner = ref(false)
 const qrCheckinResult = ref<{ success: boolean; message: string; member?: any; contract?: any } | null>(null)
 
+let checkinSuccessTimer: ReturnType<typeof setTimeout> | null = null
+let attendanceSuccessTimer: ReturnType<typeof setTimeout> | null = null
+
+const resetCheckinSuccess = () => {
+  if (checkinSuccessTimer) {
+    clearTimeout(checkinSuccessTimer)
+  }
+  isCheckinSuccess.value = true
+  checkinSuccessTimer = setTimeout(() => {
+    isCheckinSuccess.value = false
+    selectedMember.value = null
+    selectedContract.value = null
+    memberBranch.value = null
+    isCrossBranch.value = false
+    alreadyCheckedIn.value = false
+    qrCheckinResult.value = null
+    lastCheckinResult.value = {}
+    checkinSuccessTimer = null
+  }, 3000)
+}
+
+const resetAttendanceSuccess = () => {
+  if (attendanceSuccessTimer) {
+    clearTimeout(attendanceSuccessTimer)
+  }
+  isAttendanceSuccess.value = true
+  attendanceSuccessTimer = setTimeout(() => {
+    isAttendanceSuccess.value = false
+    selectedEmployee.value = null
+    todayAttendance.value = null
+    attendanceSuccessTimer = null
+  }, 3000)
+}
+
 onMounted(async () => {
   await Promise.all([
     fetchMembers(),
@@ -85,6 +159,14 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopScanner()
+  if (checkinSuccessTimer) {
+    clearTimeout(checkinSuccessTimer)
+    checkinSuccessTimer = null
+  }
+  if (attendanceSuccessTimer) {
+    clearTimeout(attendanceSuccessTimer)
+    attendanceSuccessTimer = null
+  }
 })
 
 // ============================================
@@ -94,11 +176,18 @@ onUnmounted(() => {
 const filteredMembers = computed(() => {
   if (!searchQuery.value) return []
   const query = searchQuery.value.toLowerCase()
-  return members.value.filter(m =>
-    m.full_name?.toLowerCase().includes(query) ||
-    m.member_code?.toLowerCase().includes(query) ||
-    m.phone?.includes(query)
-  ).slice(0, 5)
+  const results: any[] = []
+  for (const m of members.value) {
+    if (
+      m.full_name?.toLowerCase().includes(query) ||
+      m.member_code?.toLowerCase().includes(query) ||
+      m.phone?.includes(query)
+    ) {
+      results.push(m)
+      if (results.length >= 5) break
+    }
+  }
+  return results
 })
 
 const selectMember = async (member: any) => {
@@ -152,17 +241,8 @@ const performMemberCheckin = async () => {
       remainingCounts: result?.remainingCounts
     }
 
-    isCheckinSuccess.value = true
     useToast().success(MESSAGES.SUCCESS.CHECKIN)
-    setTimeout(() => {
-      isCheckinSuccess.value = false
-      selectedMember.value = null
-      selectedContract.value = null
-      memberBranch.value = null
-      isCrossBranch.value = false
-      alreadyCheckedIn.value = false
-      lastCheckinResult.value = {}
-    }, 3000)
+    resetCheckinSuccess()
   } catch (error) {
     errorMessage.value = MESSAGES.ERRORS.CHECKIN
     console.error('Checkin failed:', error)
@@ -179,11 +259,18 @@ const performMemberCheckin = async () => {
 const filteredEmployees = computed(() => {
   if (!employeeSearchQuery.value) return []
   const query = employeeSearchQuery.value.toLowerCase()
-  return employees.value.filter(e =>
-    e.full_name?.toLowerCase().includes(query) ||
-    e.employee_code?.toLowerCase().includes(query) ||
-    e.phone?.includes(query)
-  ).slice(0, 5)
+  const results: any[] = []
+  for (const e of employees.value) {
+    if (
+      e.full_name?.toLowerCase().includes(query) ||
+      e.employee_code?.toLowerCase().includes(query) ||
+      e.phone?.includes(query)
+    ) {
+      results.push(e)
+      if (results.length >= 5) break
+    }
+  }
+  return results
 })
 
 const selectEmployee = async (employee: any) => {
@@ -211,14 +298,8 @@ const performStaffCheckIn = async () => {
     })
 
     todayAttendance.value = result
-    isAttendanceSuccess.value = true
     useToast().success('上班打卡成功')
-
-    setTimeout(() => {
-      isAttendanceSuccess.value = false
-      selectedEmployee.value = null
-      todayAttendance.value = null
-    }, 3000)
+    resetAttendanceSuccess()
   } catch (error) {
     attendanceErrorMessage.value = '打卡失敗，請重試'
     console.error('Check-in failed:', error)
@@ -237,14 +318,8 @@ const performStaffCheckOut = async () => {
   try {
     const result = await performCheckOut(todayAttendance.value.id)
     todayAttendance.value = result
-    isAttendanceSuccess.value = true
     useToast().success('下班打卡成功')
-
-    setTimeout(() => {
-      isAttendanceSuccess.value = false
-      selectedEmployee.value = null
-      todayAttendance.value = null
-    }, 3000)
+    resetAttendanceSuccess()
   } catch (error) {
     attendanceErrorMessage.value = '打卡失敗，請重試'
     console.error('Check-out failed:', error)
@@ -379,14 +454,7 @@ const handleQrScan = async (payload: string) => {
         remainingCounts: result.contract?.remaining_counts
       }
       selectedMember.value = result.member
-      isCheckinSuccess.value = true
-
-      setTimeout(() => {
-        isCheckinSuccess.value = false
-        selectedMember.value = null
-        qrCheckinResult.value = null
-        lastCheckinResult.value = {}
-      }, 3000)
+      resetCheckinSuccess()
     } else {
       errorMessage.value = result.message
     }
@@ -419,53 +487,26 @@ const isCountBasedContract = computed(() => {
 })
 
 const formatTime = (iso: string) => {
-  return new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return checkinTimeFormatter.format(date)
 }
 
 const getMemberStatusClass = (status: string) => {
-  const map: Record<string, string> = {
-    'ACTIVE': 'active',
-    'active': 'active',
-    'EXPIRED': 'expired',
-    'SUSPENDED': 'suspended',
-    'PAUSED': 'paused'
-  }
-  return map[status] || 'default'
+  return MEMBER_STATUS_CLASS_MAP[status] || 'default'
 }
 
 const getMemberStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    'ACTIVE': STATUS.MEMBER.ACTIVE,
-    'active': STATUS.MEMBER.ACTIVE,
-    'EXPIRED': STATUS.MEMBER.EXPIRED,
-    'SUSPENDED': STATUS.MEMBER.SUSPENDED,
-    'PAUSED': STATUS.MEMBER.PAUSED
-  }
-  return map[status] || status
+  return MEMBER_STATUS_LABEL_MAP[status] || status
 }
 
 const getAttendanceStatusClass = (status: string) => {
-  const map: Record<string, string> = {
-    'PRESENT': 'present',
-    'LATE': 'late',
-    'EARLY_LEAVE': 'early-leave',
-    'ABSENT': 'absent',
-    'LEAVE': 'leave',
-    'HOLIDAY': 'holiday'
-  }
-  return map[status] || 'default'
+  return ATTENDANCE_STATUS_CLASS_MAP[status] || 'default'
 }
 
 const getAttendanceStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    'PRESENT': '正常',
-    'LATE': '遲到',
-    'EARLY_LEAVE': '早退',
-    'ABSENT': '缺勤',
-    'LEAVE': '請假',
-    'HOLIDAY': '休假'
-  }
-  return map[status] || status
+  return ATTENDANCE_STATUS_LABEL_MAP[status] || status
 }
 
 const canMemberCheckin = computed(() => {

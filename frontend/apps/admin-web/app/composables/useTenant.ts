@@ -36,6 +36,9 @@ export interface TenantQuota {
   storage: QuotaItem
 }
 
+let inFlightTenantInfoPromise: Promise<void> | null = null
+let inFlightTenantQuotaPromise: Promise<void> | null = null
+
 export const useTenant = () => {
   const config = useRuntimeConfig()
   const apiBaseUrl = config.public.apiBaseUrl || 'http://localhost:8056'
@@ -48,59 +51,77 @@ export const useTenant = () => {
   /**
    * Fetch tenant information from backend-v2
    */
-  const fetchTenantInfo = async () => {
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const response = await $fetch<{ success: boolean; data: TenantInfo; error?: string }>(
-        `${apiBaseUrl}/api/tenant`,
-        {
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-
-      if (response.success && response.data) {
-        tenantInfo.value = response.data
-      } else {
-        error.value = response.error || '無法載入租戶資訊'
-      }
-    } catch (e: any) {
-      console.error('[useTenant] Failed to fetch tenant info:', e)
-      error.value = e.message || '無法載入租戶資訊'
-    } finally {
-      isLoading.value = false
+  const fetchTenantInfo = async (force = false) => {
+    if (!force && inFlightTenantInfoPromise) {
+      return inFlightTenantInfoPromise
     }
+
+    inFlightTenantInfoPromise = (async () => {
+      isLoading.value = true
+      error.value = null
+
+      try {
+        const response = await $fetch<{ success: boolean; data: TenantInfo; error?: string }>(
+          `${apiBaseUrl}/api/tenant`,
+          {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+
+        if (response.success && response.data) {
+          tenantInfo.value = response.data
+        } else {
+          error.value = response.error || '無法載入租戶資訊'
+        }
+      } catch (e: any) {
+        console.error('[useTenant] Failed to fetch tenant info:', e)
+        error.value = e.message || '無法載入租戶資訊'
+      } finally {
+        isLoading.value = false
+        inFlightTenantInfoPromise = null
+      }
+    })()
+
+    return inFlightTenantInfoPromise
   }
 
   /**
    * Fetch tenant quota usage from backend-v2
    */
-  const fetchTenantQuota = async () => {
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const response = await $fetch<{ success: boolean; data: TenantQuota; error?: string }>(
-        `${apiBaseUrl}/api/tenant/quota`,
-        {
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-
-      if (response.success && response.data) {
-        tenantQuota.value = response.data
-      } else {
-        error.value = response.error || '無法載入配額資訊'
-      }
-    } catch (e: any) {
-      console.error('[useTenant] Failed to fetch tenant quota:', e)
-      error.value = e.message || '無法載入配額資訊'
-    } finally {
-      isLoading.value = false
+  const fetchTenantQuota = async (force = false) => {
+    if (!force && inFlightTenantQuotaPromise) {
+      return inFlightTenantQuotaPromise
     }
+
+    inFlightTenantQuotaPromise = (async () => {
+      isLoading.value = true
+      error.value = null
+
+      try {
+        const response = await $fetch<{ success: boolean; data: TenantQuota; error?: string }>(
+          `${apiBaseUrl}/api/tenant/quota`,
+          {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+
+        if (response.success && response.data) {
+          tenantQuota.value = response.data
+        } else {
+          error.value = response.error || '無法載入配額資訊'
+        }
+      } catch (e: any) {
+        console.error('[useTenant] Failed to fetch tenant quota:', e)
+        error.value = e.message || '無法載入配額資訊'
+      } finally {
+        isLoading.value = false
+        inFlightTenantQuotaPromise = null
+      }
+    })()
+
+    return inFlightTenantQuotaPromise
   }
 
   /**

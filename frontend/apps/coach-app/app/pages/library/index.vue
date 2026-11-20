@@ -107,7 +107,7 @@
 
         <!-- Muscle Groups -->
         <button
-          v-for="muscle in muscleGroups.slice(0, 5)"
+          v-for="muscle in displayedMuscleGroups"
           :key="muscle"
           class="filter-pill"
           :class="{ active: selectedMuscle === muscle }"
@@ -198,6 +198,32 @@
   </div>
 </template>
 
+<script lang="ts">
+const TYPE_BADGE_CLASSES: Record<string, string> = {
+  EXERCISE: 'badge-blue',
+  VIDEO: 'badge-red',
+  DOCUMENT: 'badge-gray',
+}
+
+const TYPE_TEXTS: Record<string, string> = {
+  EXERCISE: '動作',
+  VIDEO: '影片',
+  DOCUMENT: '文件',
+}
+
+const DIFFICULTY_CLASSES: Record<string, string> = {
+  BEGINNER: 'difficulty-green',
+  INTERMEDIATE: 'difficulty-orange',
+  ADVANCED: 'difficulty-red',
+}
+
+const DIFFICULTY_TEXTS: Record<string, string> = {
+  BEGINNER: '初階',
+  INTERMEDIATE: '中階',
+  ADVANCED: '進階',
+}
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth',
@@ -220,6 +246,8 @@ const selectedDifficulty = ref('')
 const selectedType = ref('')
 const offset = ref(0)
 const limit = 20
+
+const displayedMuscleGroups = computed(() => muscleGroups.value.slice(0, 5))
 
 let searchTimeout: ReturnType<typeof setTimeout>
 const debouncedSearch = () => {
@@ -291,41 +319,14 @@ const goToMaterial = (id: string) => {
   router.push(`/library/${id}`)
 }
 
-const getTypeBadgeClass = (type: string) => {
-  const classes: Record<string, string> = {
-    EXERCISE: 'badge-blue',
-    VIDEO: 'badge-red',
-    DOCUMENT: 'badge-gray',
-  }
-  return classes[type] || 'badge-gray'
-}
+const getTypeBadgeClass = (type: string) => TYPE_BADGE_CLASSES[type] || 'badge-gray'
+const getTypeText = (type: string) => TYPE_TEXTS[type] || type
+const getDifficultyClass = (difficulty: string) => DIFFICULTY_CLASSES[difficulty] || 'difficulty-gray'
+const getDifficultyText = (difficulty: string) => DIFFICULTY_TEXTS[difficulty] || difficulty
 
-const getTypeText = (type: string) => {
-  const texts: Record<string, string> = {
-    EXERCISE: '動作',
-    VIDEO: '影片',
-    DOCUMENT: '文件',
-  }
-  return texts[type] || type
-}
-
-const getDifficultyClass = (difficulty: string) => {
-  const classes: Record<string, string> = {
-    BEGINNER: 'difficulty-green',
-    INTERMEDIATE: 'difficulty-orange',
-    ADVANCED: 'difficulty-red',
-  }
-  return classes[difficulty] || 'difficulty-gray'
-}
-
-const getDifficultyText = (difficulty: string) => {
-  const texts: Record<string, string> = {
-    BEGINNER: '初階',
-    INTERMEDIATE: '中階',
-    ADVANCED: '進階',
-  }
-  return texts[difficulty] || difficulty
-}
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
 
 onMounted(async () => {
   await Promise.all([

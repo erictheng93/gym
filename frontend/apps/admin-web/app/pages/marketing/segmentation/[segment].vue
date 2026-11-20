@@ -83,29 +83,34 @@ const handleRowClick = (member: typeof segmentMembers.value[0]) => {
   router.push(`/members/${member.member_id}`)
 }
 
+const segmentDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const segmentCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  minimumFractionDigits: 0
+})
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
+  return segmentDateFormatter.format(d)
 }
 
 // Format currency
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    minimumFractionDigits: 0
-  }).format(amount)
+  return segmentCurrencyFormatter.format(amount)
 }
 
 // Table columns
-const columns = [
+const columns = Object.freeze([
   { key: 'member', label: '會員', slot: 'member' },
   { key: 'rfm', label: 'RFM 分數', slot: 'rfm' },
   { key: 'last_payment_date', label: '最後消費', format: (v: string) => formatDate(v) },
   { key: 'total_amount', label: '消費金額', slot: 'amount' },
   { key: 'visit_count', label: '打卡次數' }
-]
+])
 </script>
 
 <template>

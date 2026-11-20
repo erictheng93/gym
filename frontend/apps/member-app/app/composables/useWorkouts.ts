@@ -5,6 +5,7 @@
 
 import type { Exercise, WorkoutStatsPeriod } from '../schemas/workout.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 import { formatDateWithDay } from '@gym-nexus/shared'
 
 // Cache settings
@@ -73,7 +74,7 @@ export const useWorkouts = () => {
   const isOfflineData = useState('workouts_is_offline', () => false)
 
   /**
-   * Fetch member's workout logs with pagination
+   * Fetch member's workout logs with pagination (with request deduplication)
    */
   const fetchWorkouts = async (options?: {
     start_date?: string
@@ -83,14 +84,43 @@ export const useWorkouts = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `workouts:${member.value.id}:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    const cacheKey = `${CACHE_KEY_WORKOUTS}:${member.value.id}:${JSON.stringify(options || {})}`
+      const cacheKey = `${CACHE_KEY_WORKOUTS}:${member.value!.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Workout[]>(cacheKey)
+          if (cached) {
+            workouts.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.start_date) params.append('start_date', options.start_date)
+        if (options?.end_date) params.append('end_date', options.end_date)
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
+
+        const response = await $fetch<WorkoutsResponse>(`${apiUrl}/api/member/workouts?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          workouts.value = response.data
+          totalWorkouts.value = response.total
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Try cached data on network error
         const cached = await getCache<Workout[]>(cacheKey)
         if (cached) {
           workouts.value = cached
@@ -98,76 +128,56 @@ export const useWorkouts = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.start_date) params.append('start_date', options.start_date)
-      if (options?.end_date) params.append('end_date', options.end_date)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
-
-      const response = await $fetch<WorkoutsResponse>(`${apiUrl}/api/member/workouts?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        workouts.value = response.data
-        totalWorkouts.value = response.total
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Try cached data on network error
-      const cached = await getCache<Workout[]>(cacheKey)
-      if (cached) {
-        workouts.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
-   * Get a single workout by ID
+   * Get a single workout by ID (with request deduplication)
    */
   const getWorkout = async (id: string): Promise<Workout | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Workout }>(
-        `${apiUrl}/api/member/workouts/${id}`,
-        { headers: getAuthHeader() }
-      )
+    const dedupKey = `workout:${member.value.id}:${id}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Workout }>(
+          `${apiUrl}/api/member/workouts/${id}`,
+          { headers: getAuthHeader() }
+        )
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**
-   * Get workout statistics
+   * Get workout statistics (with request deduplication)
    */
   const fetchStats = async (period: WorkoutStatsPeriod = 'week'): Promise<WorkoutStats | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<StatsResponse>(
-        `${apiUrl}/api/member/workouts/stats?period=${period}`,
-        { headers: getAuthHeader() }
-      )
+    const dedupKey = `workout-stats:${member.value.id}:${period}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<StatsResponse>(
+          `${apiUrl}/api/member/workouts/stats?period=${period}`,
+          { headers: getAuthHeader() }
+        )
 
-      if (response.success) {
-        stats.value = response.data.stats
-        dailyData.value = response.data.daily
+        if (response.success) {
+          stats.value = response.data.stats
+          dailyData.value = response.data.daily
+        }
+        return response.data.stats
+      } catch {
+        return null
       }
-      return response.data.stats
-    } catch {
-      return null
-    }
+    })
   }
 
   /**
@@ -386,7 +396,8 @@ export const useWorkouts = () => {
   const recentWorkouts = computed(() => {
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
-    return workouts.value.filter(w => new Date(w.date) >= weekAgo)
+    const weekAgoMs = weekAgo.getTime()
+    return workouts.value.filter(w => new Date(w.date).getTime() >= weekAgoMs)
   })
 
   /**

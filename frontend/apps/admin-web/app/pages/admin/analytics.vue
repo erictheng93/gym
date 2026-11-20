@@ -1,3 +1,7 @@
+<script lang="ts">
+const analyticsNumberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { useAuth } from '~/composables/useAuth'
 
@@ -92,7 +96,7 @@ const rateLimitHitRate = computed(() => {
 
 // 格式化數字
 const formatNumber = (num: number) => {
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return analyticsNumberFormatter.format(num)
 }
 </script>
 

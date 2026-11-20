@@ -66,6 +66,10 @@ watch(currentPage, loadCoupons)
 
 onMounted(loadCoupons)
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 // Row click
 const handleRowClick = (coupon: typeof coupons.value[0]) => {
   navigateTo(`/marketing/coupons/${coupon.id}`)
@@ -92,10 +96,14 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
   }
 }
 
+// 格式化器快取
+const couponDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const couponNumberFormatter = new Intl.NumberFormat('zh-TW')
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  return couponDateFormatter.format(new Date(dateStr))
 }
 
 // Format discount value
@@ -103,7 +111,7 @@ const formatDiscount = (coupon: typeof coupons.value[0]) => {
   if (coupon.discount_type === 'PERCENTAGE') {
     return `${coupon.discount_value}% 折扣`
   }
-  return `折 NT$ ${coupon.discount_value.toLocaleString()}`
+  return `折 NT$ ${couponNumberFormatter.format(coupon.discount_value)}`
 }
 
 // Table columns

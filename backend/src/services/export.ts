@@ -126,11 +126,13 @@ export function generateCsv(
 // Helper Functions
 // -----------------------------------------------------------------------------
 
+const CSV_SPECIAL_CHARS = /[",\r\n]/;
+
 /**
  * Escape CSV field value
  */
 function escapeCSVField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+  if (CSV_SPECIAL_CHARS.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -144,7 +146,7 @@ function formatCellValue(value: unknown): string | number | null {
     return '';
   }
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    return value.toISOString().slice(0, 10);
   }
   if (typeof value === 'object') {
     return JSON.stringify(value);
@@ -290,64 +292,68 @@ export const paymentsColumns: ExportColumn[] = [
 // Translation Helpers
 // -----------------------------------------------------------------------------
 
+const STATUS_MAP: Record<string, string> = {
+  ACTIVE: '有效',
+  EXPIRED: '已過期',
+  SUSPENDED: '已停權',
+  BANNED: '已封鎖',
+  DRAFT: '草稿',
+  PAUSED: '暫停中',
+  CANCELLED: '已取消',
+  TRANSFERRED: '已轉讓',
+  PENDING: '待審核',
+  APPROVED: '已核准',
+  PAID: '已發放',
+  UNPAID: '未付款',
+  PARTIAL: '部分付款',
+};
+
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  CASH: '現金',
+  CREDIT_CARD: '信用卡',
+  DEBIT_CARD: '金融卡',
+  BANK_TRANSFER: '銀行轉帳',
+  LINE_PAY: 'LINE Pay',
+  OTHER: '其他',
+};
+
+const PAYMENT_TYPE_MAP: Record<string, string> = {
+  INCOME: '收入',
+  REFUND: '退款',
+};
+
+const GENDER_MAP: Record<string, string> = {
+  MALE: '男',
+  FEMALE: '女',
+  OTHER: '其他',
+};
+
 /**
  * Translate status to Chinese
  */
 export function translateStatus(status: string | null): string {
-  const statusMap: Record<string, string> = {
-    ACTIVE: '有效',
-    EXPIRED: '已過期',
-    SUSPENDED: '已停權',
-    BANNED: '已封鎖',
-    DRAFT: '草稿',
-    PAUSED: '暫停中',
-    CANCELLED: '已取消',
-    TRANSFERRED: '已轉讓',
-    PENDING: '待審核',
-    APPROVED: '已核准',
-    PAID: '已發放',
-    UNPAID: '未付款',
-    PARTIAL: '部分付款',
-  };
-  return statusMap[status || ''] || status || '';
+  return STATUS_MAP[status || ''] || status || '';
 }
 
 /**
  * Translate payment method to Chinese
  */
 export function translatePaymentMethod(method: string | null): string {
-  const methodMap: Record<string, string> = {
-    CASH: '現金',
-    CREDIT_CARD: '信用卡',
-    DEBIT_CARD: '金融卡',
-    BANK_TRANSFER: '銀行轉帳',
-    LINE_PAY: 'LINE Pay',
-    OTHER: '其他',
-  };
-  return methodMap[method || ''] || method || '';
+  return PAYMENT_METHOD_MAP[method || ''] || method || '';
 }
 
 /**
  * Translate payment type to Chinese
  */
 export function translatePaymentType(type: string | null): string {
-  const typeMap: Record<string, string> = {
-    INCOME: '收入',
-    REFUND: '退款',
-  };
-  return typeMap[type || ''] || type || '';
+  return PAYMENT_TYPE_MAP[type || ''] || type || '';
 }
 
 /**
  * Translate gender to Chinese
  */
 export function translateGender(gender: string | null): string {
-  const genderMap: Record<string, string> = {
-    MALE: '男',
-    FEMALE: '女',
-    OTHER: '其他',
-  };
-  return genderMap[gender || ''] || gender || '';
+  return GENDER_MAP[gender || ''] || gender || '';
 }
 
 // -----------------------------------------------------------------------------
