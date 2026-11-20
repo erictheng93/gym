@@ -222,11 +222,7 @@ app.get('/member-activity', async (c) => {
     conditions.push(eq(checkIns.branchId, branchId));
   }
 
-  const [[totalResult], byBranch, byDay] = await Promise.all([
-    db
-      .select({ count: count() })
-      .from(checkIns)
-      .where(and(...conditions)),
+  const [byBranch, byDay] = await Promise.all([
     db
       .select({
         branchId: checkIns.branchId,
@@ -249,16 +245,19 @@ app.get('/member-activity', async (c) => {
       .orderBy(sql`DATE(${checkIns.checkInTime})`),
   ]);
 
+  const mappedByBranch = byBranch.map(b => ({
+    branchId: b.branchId,
+    branchName: b.branchName,
+    checkInCount: Number(b.count),
+    uniqueMembers: Number(b.uniqueMembers),
+  }));
+  const totalCheckIns = mappedByBranch.reduce((sum, b) => sum + b.checkInCount, 0);
+
   return c.json({
     success: true,
     data: {
-      totalCheckIns: Number(totalResult?.count || 0),
-      byBranch: byBranch.map(b => ({
-        branchId: b.branchId,
-        branchName: b.branchName,
-        checkInCount: Number(b.count),
-        uniqueMembers: Number(b.uniqueMembers),
-      })),
+      totalCheckIns,
+      byBranch: mappedByBranch,
       byDay: byDay.map(d => ({
         date: d.date,
         count: Number(d.count),
@@ -674,8 +673,16 @@ app.get('/branch-performance', async (c) => {
     });
   }
 
-  // Fetch current period data for all branches
-  const [currentRevenue, currentMembers, currentCheckIns, currentContracts] = await Promise.all([
+  // Fetch current period data and optional previous period data concurrently
+  const [
+    currentRevenue,
+    currentMembers,
+    currentCheckIns,
+    currentContracts,
+    previousRevenue,
+    previousMembers,
+    previousCheckIns,
+  ] = await Promise.all([
     // Revenue by branch
     db.select({
       branchId: payments.branchId,
@@ -727,53 +734,53 @@ app.get('/branch-performance', async (c) => {
       eq(contracts.status, 'ACTIVE')
     ))
     .groupBy(contracts.branchId),
+
+    // Previous period revenue
+    compareWithPrevious
+      ? db.select({
+          branchId: payments.branchId,
+          total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+        })
+        .from(payments)
+        .where(and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, previousStart),
+          lte(payments.paymentDate, previousEnd)
+        ))
+        .groupBy(payments.branchId)
+      : Promise.resolve([]),
+
+    // Previous period new members
+    compareWithPrevious
+      ? db.select({
+          branchId: members.branchId,
+          count: count(),
+        })
+        .from(members)
+        .where(and(
+          inArray(members.branchId, branchIds),
+          gte(members.createdAt, previousStart),
+          lte(members.createdAt, previousEnd)
+        ))
+        .groupBy(members.branchId)
+      : Promise.resolve([]),
+
+    // Previous period check-ins
+    compareWithPrevious
+      ? db.select({
+          branchId: checkIns.branchId,
+          count: count(),
+        })
+        .from(checkIns)
+        .where(and(
+          inArray(checkIns.branchId, branchIds),
+          gte(checkIns.checkInTime, previousStart),
+          lte(checkIns.checkInTime, previousEnd)
+        ))
+        .groupBy(checkIns.branchId)
+      : Promise.resolve([]),
   ]);
-
-  // Fetch previous period data if needed
-  let previousRevenue: typeof currentRevenue = [];
-  let previousMembers: typeof currentMembers = [];
-  let previousCheckIns: typeof currentCheckIns = [];
-
-  if (compareWithPrevious) {
-    [previousRevenue, previousMembers, previousCheckIns] = await Promise.all([
-      db.select({
-        branchId: payments.branchId,
-        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-      })
-      .from(payments)
-      .where(and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, previousStart),
-        lte(payments.paymentDate, previousEnd)
-      ))
-      .groupBy(payments.branchId),
-
-      db.select({
-        branchId: members.branchId,
-        count: count(),
-      })
-      .from(members)
-      .where(and(
-        inArray(members.branchId, branchIds),
-        gte(members.createdAt, previousStart),
-        lte(members.createdAt, previousEnd)
-      ))
-      .groupBy(members.branchId),
-
-      db.select({
-        branchId: checkIns.branchId,
-        count: count(),
-      })
-      .from(checkIns)
-      .where(and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, previousStart),
-        lte(checkIns.checkInTime, previousEnd)
-      ))
-      .groupBy(checkIns.branchId),
-    ]);
-  }
 
   // Build branch data map
   const branchMap = new Map<string, {

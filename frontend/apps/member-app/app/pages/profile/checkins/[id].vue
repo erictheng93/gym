@@ -77,20 +77,25 @@ onMounted(() => {
   fetchCheckin()
 })
 
+// Cached Intl formatters
+const checkinDetailDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long'
+})
+
+const checkinDetailTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+})
+
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr)
   return {
-    date: date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long'
-    }),
-    time: date.toLocaleTimeString('zh-TW', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
+    date: checkinDetailDateFormatter.format(date),
+    time: checkinDetailTimeFormatter.format(date)
   }
 }
 

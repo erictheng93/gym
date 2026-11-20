@@ -51,11 +51,15 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  let condition = and(inArray(classes.branchId, branchIds), eq(classes.status, 'active'));
-
-  if (branchId) {
-    condition = and(condition, eq(classes.branchId, branchId))!;
+  if (branchId && !branchIds.includes(branchId)) {
+    return c.json({ success: true, data: [] });
   }
+
+  const branchCondition = branchId
+    ? eq(classes.branchId, branchId)
+    : inArray(classes.branchId, branchIds);
+
+  const condition = and(branchCondition, eq(classes.status, 'active'));
 
   const result = await db
     .select({
@@ -185,16 +189,13 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
 app.get('/:id/sessions', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
-  const startDate = c.req.query('startDate') || new Date().toISOString().split('T')[0];
-  const endDate = c.req.query('endDate') || (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
-  })();
+  const now = new Date();
+  const startDate = c.req.query('startDate') || now.toISOString().split('T')[0];
+  const endDate = c.req.query('endDate') || new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   const [[classItem], branchIds, sessions] = await Promise.all([
     db
-      .select()
+      .select({ id: classes.id, branchId: classes.branchId })
       .from(classes)
       .where(eq(classes.id, id))
       .limit(1),

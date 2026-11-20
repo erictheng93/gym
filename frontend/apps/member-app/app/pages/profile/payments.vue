@@ -74,23 +74,27 @@ onMounted(() => {
   fetchPayments()
 })
 
+// Cached Intl formatters
+const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+})
+
+const currencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0
+})
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  return paymentDateFormatter.format(new Date(dateStr))
 }
 
 const formatAmount = (amount: number, type: 'INCOME' | 'REFUND') => {
-  const formatted = new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-
+  const formatted = currencyFormatter.format(amount)
   return type === 'REFUND' ? `-${formatted}` : formatted
 }
 

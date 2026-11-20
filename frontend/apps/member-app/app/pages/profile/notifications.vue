@@ -227,15 +227,17 @@ watch(activeTab, async (tab) => {
   }
 })
 
+// Cached Intl formatter
+const notificationDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 // Format date for display
 const formatDate = (dateStr: string) => {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return notificationDateFormatter.format(new Date(dateStr))
 }
 
 // Get status badge class
