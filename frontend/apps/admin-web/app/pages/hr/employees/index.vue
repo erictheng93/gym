@@ -1,3 +1,12 @@
+<script lang="ts">
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'ACTIVE', label: '在職' },
+  { value: 'RESIGNED', label: '離職' },
+  { value: 'LEAVE', label: '留停' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 員工管理頁面
@@ -28,14 +37,6 @@ const showModal = ref(false)
 const selectedEmployee = ref<typeof employees.value[0] | null>(null)
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-// Status options
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'ACTIVE', label: '在職' },
-  { value: 'RESIGNED', label: '離職' },
-  { value: 'LEAVE', label: '留停' }
-]
 
 // Load employees
 const loadEmployees = async () => {

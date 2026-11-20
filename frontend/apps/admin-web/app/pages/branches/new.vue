@@ -1,10 +1,24 @@
+<script lang="ts">
+import { LABELS, STATUS } from '~/constants'
+
+const branchTypeOptions = [
+  { value: 'HEADQUARTER', label: LABELS.BRANCH_TYPE.HEADQUARTER },
+  { value: 'BRANCH', label: LABELS.BRANCH_TYPE.BRANCH }
+]
+
+const statusOptions = [
+  { value: 'active', label: STATUS.OPERATING },
+  { value: 'archived', label: STATUS.DISABLED }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增分店頁面
  *
  * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
-import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import { createBranchSchema, type CreateBranchInput } from '~/schemas/branch.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
@@ -36,17 +50,6 @@ const {
 
 // Form submission helper
 const { isSubmitting, submit } = useFormSubmit()
-
-// Options
-const branchTypeOptions = [
-  { value: 'HEADQUARTER', label: LABELS.BRANCH_TYPE.HEADQUARTER },
-  { value: 'BRANCH', label: LABELS.BRANCH_TYPE.BRANCH }
-]
-
-const statusOptions = [
-  { value: 'active', label: STATUS.OPERATING },
-  { value: 'archived', label: STATUS.DISABLED }
-]
 
 // Form submission
 const handleSubmit = async () => {

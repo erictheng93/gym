@@ -1,3 +1,14 @@
+<script lang="ts">
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const roleOptions = [
+  { value: 'staff', label: '員工', description: '基本存取權限' },
+  { value: 'coach', label: '教練', description: '教練專屬功能' },
+  { value: 'manager', label: '經理', description: '分店管理權限' },
+  { value: 'admin', label: '管理員', description: '完整系統權限' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * Admin User Management - Create Page
@@ -24,21 +35,13 @@ const errors = ref<Record<string, string>>({})
 const availableEmployees = ref<Array<{ id: string; fullName: string; employeeCode: string; email: string | null }>>([])
 const isLoadingEmployees = ref(false)
 
-// Role options
-const roleOptions = [
-  { value: 'staff', label: '員工', description: '基本存取權限' },
-  { value: 'coach', label: '教練', description: '教練專屬功能' },
-  { value: 'manager', label: '經理', description: '分店管理權限' },
-  { value: 'admin', label: '管理員', description: '完整系統權限' }
-]
-
 // Validation
 const validate = () => {
   errors.value = {}
 
   if (!formData.value.email) {
     errors.value.email = '請輸入電子郵件'
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.email)) {
+  } else if (!EMAIL_REGEX.test(formData.value.email)) {
     errors.value.email = '請輸入有效的電子郵件格式'
   }
 

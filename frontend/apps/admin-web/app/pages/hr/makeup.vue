@@ -34,6 +34,20 @@ const makeupDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
   hour: '2-digit',
   minute: '2-digit',
 })
+
+const makeupTypeOptions = [
+  { value: 'CHECK_IN', label: PAGES.HR.MAKEUP.CHECK_IN, color: '#34c759' },
+  { value: 'CHECK_OUT', label: PAGES.HR.MAKEUP.CHECK_OUT, color: '#ff9500' },
+  { value: 'BOTH', label: PAGES.HR.MAKEUP.BOTH, color: '#007aff' }
+]
+
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'PENDING', label: PAGES.HR.MAKEUP.PENDING_APPROVAL },
+  { value: 'APPROVED', label: PAGES.HR.MAKEUP.APPROVED },
+  { value: 'REJECTED', label: PAGES.HR.MAKEUP.REJECTED },
+  { value: 'CANCELLED', label: PAGES.HR.MAKEUP.CANCELLED }
+]
 </script>
 
 <script setup lang="ts">
@@ -84,21 +98,6 @@ const selectedHistory = ref<MakeupApprovalLog[]>([])
 const reviewData = ref<{ requestId: string; action: 'APPROVE' | 'REJECT'; employeeName: string } | null>(null)
 const reviewNotes = ref('')
 const isReviewing = ref(false)
-
-// 補打卡類型選項
-const makeupTypeOptions = [
-  { value: 'CHECK_IN', label: PAGES.HR.MAKEUP.CHECK_IN, color: '#34c759' },
-  { value: 'CHECK_OUT', label: PAGES.HR.MAKEUP.CHECK_OUT, color: '#ff9500' },
-  { value: 'BOTH', label: PAGES.HR.MAKEUP.BOTH, color: '#007aff' }
-]
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: PAGES.HR.MAKEUP.PENDING_APPROVAL },
-  { value: 'APPROVED', label: PAGES.HR.MAKEUP.APPROVED },
-  { value: 'REJECTED', label: PAGES.HR.MAKEUP.REJECTED },
-  { value: 'CANCELLED', label: PAGES.HR.MAKEUP.CANCELLED }
-]
 
 onMounted(async () => {
   await checkAuth()

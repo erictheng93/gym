@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, payments, contracts, members, branches } from '../db/index.js';
+import { db, payments, contracts, members } from '../db/index.js';
 import { eq, and, sql, desc, sum, inArray, gte, lte } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
@@ -30,8 +30,6 @@ const PAYMENT_RETURNING = {
 const PAYMENT_SELECT = PAYMENT_RETURNING;
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
-
-const BRANCH_ID_SELECT = { id: branches.id };
 
 const MEMBER_ID_SELECT = { id: members.id };
 
@@ -131,7 +129,9 @@ app.get('/', async (c) => {
     }
     conditions.push(eq(payments.branchId, branchId));
   } else {
-    conditions.push(inArray(payments.branchId, branchIds));
+    conditions.push(
+      branchIds.length === 1 ? eq(payments.branchId, branchIds[0]) : inArray(payments.branchId, branchIds)
+    );
   }
 
   if (memberId) {
@@ -162,13 +162,19 @@ app.get('/', async (c) => {
 
   const total = Number(countResult?.count || 0);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i]!;
+    data[i] = {
       ...r.payment,
       member: r.member,
       contract: r.contract,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
   });
 });
@@ -199,7 +205,9 @@ app.get('/summary', async (c) => {
     }
     conditions.push(eq(payments.branchId, branchId));
   } else {
-    conditions.push(inArray(payments.branchId, branchIds));
+    conditions.push(
+      branchIds.length === 1 ? eq(payments.branchId, branchIds[0]) : inArray(payments.branchId, branchIds)
+    );
   }
 
   if (startDate) {
@@ -256,7 +264,9 @@ app.get('/export', async (c) => {
   if (branchId) {
     conditions.push(eq(payments.branchId, branchId));
   } else {
-    conditions.push(inArray(payments.branchId, branchIds));
+    conditions.push(
+      branchIds.length === 1 ? eq(payments.branchId, branchIds[0]) : inArray(payments.branchId, branchIds)
+    );
   }
 
   if (startDate) {
@@ -274,15 +284,19 @@ app.get('/export', async (c) => {
     .where(and(...conditions))
     .orderBy(desc(payments.createdAt));
 
-  const exportData = result.map(r => ({
-    receiptNo: r.payment.receiptNo || '',
-    memberName: r.member?.fullName || '',
-    memberCode: r.member?.memberCode || '',
-    amount: parseFloat(r.payment.amount || '0'),
-    paymentMethod: translatePaymentMethod(r.payment.paymentMethod),
-    paymentDate: r.payment.paymentDate?.toISOString().slice(0, 10) || '',
-    type: translatePaymentType(r.payment.type),
-  }));
+  const exportData = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i]!;
+    exportData[i] = {
+      receiptNo: r.payment.receiptNo || '',
+      memberName: r.member?.fullName || '',
+      memberCode: r.member?.memberCode || '',
+      amount: parseFloat(r.payment.amount || '0'),
+      paymentMethod: translatePaymentMethod(r.payment.paymentMethod),
+      paymentDate: r.payment.paymentDate?.toISOString().slice(0, 10) || '',
+      type: translatePaymentType(r.payment.type),
+    };
+  }
 
   const filename = `付款記錄_${new Date().toISOString().slice(0, 10)}`;
 
@@ -327,13 +341,8 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '付款紀錄不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select(BRANCH_ID_SELECT)
-    .from(branches)
-    .where(and(eq(branches.id, payment.payment.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!payment.payment.branchId || !branchIds.includes(payment.payment.branchId)) {
     return c.json({ success: false, error: '無權限存取此付款紀錄' }, 403);
   }
 
@@ -352,13 +361,8 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   const user = c.get('user')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select(BRANCH_ID_SELECT)
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
