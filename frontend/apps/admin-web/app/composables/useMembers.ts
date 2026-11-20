@@ -4,6 +4,8 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 import { useFetch } from '~/composables/core/useFetch'
 
+let currentRequestId = 0
+
 export const useMembers = () => {
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
@@ -21,6 +23,7 @@ export const useMembers = () => {
     status?: string
   }) => {
     isLoading.value = true
+    const requestId = ++currentRequestId
     const { page = 1, limit = 20, search, branchId, status } = options || {}
 
     try {
@@ -36,15 +39,22 @@ export const useMembers = () => {
         sortOrder: 'desc'
       })
 
-      members.value = result.data
-      totalCount.value = result.total
+      // Only apply data if this is still the latest request
+      if (requestId === currentRequestId) {
+        members.value = result.data
+        totalCount.value = result.total
+      }
     } catch (error) {
-      handleError(error, {
-        context: 'useMembers.fetchMembers',
-        customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
-      })
+      if (requestId === currentRequestId) {
+        handleError(error, {
+          context: 'useMembers.fetchMembers',
+          customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
+        })
+      }
     } finally {
-      isLoading.value = false
+      if (requestId === currentRequestId) {
+        isLoading.value = false
+      }
     }
   }
 

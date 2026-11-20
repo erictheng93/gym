@@ -57,43 +57,44 @@ app.get('/', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .where(whereCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .where(whereCondition),
+    db
+      .select({
+        booking: bookings,
+        session: {
+          id: classSessions.id,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          endTime: classSessions.endTime,
+          sessionStatus: classSessions.sessionStatus,
+        },
+        class: {
+          id: classes.id,
+          name: classes.name,
+          category: classes.category,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(whereCondition)
+      .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      booking: bookings,
-      session: {
-        id: classSessions.id,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-        endTime: classSessions.endTime,
-        sessionStatus: classSessions.sessionStatus,
-      },
-      class: {
-        id: classes.id,
-        name: classes.name,
-        category: classes.category,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(whereCondition)
-    .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,

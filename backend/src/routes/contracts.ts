@@ -55,37 +55,38 @@ app.get('/', async (c) => {
     conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
   }
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(contracts)
-    .where(and(...conditions));
-
-  const total = Number(countResult?.count || 0);
-
   // Determine sort order
   const orderFn = sortOrder === 'asc' ? asc(contracts.createdAt) : desc(contracts.createdAt);
 
-  const result = await db
-    .select({
-      contract: contracts,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      plan: {
-        id: membershipPlans.id,
-        name: membershipPlans.name,
-        planType: membershipPlans.planType,
-      },
-    })
-    .from(contracts)
-    .leftJoin(members, eq(contracts.memberId, members.id))
-    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(and(...conditions))
-    .orderBy(orderFn)
-    .limit(limit)
-    .offset(offset);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(contracts)
+      .where(and(...conditions)),
+    db
+      .select({
+        contract: contracts,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+        plan: {
+          id: membershipPlans.id,
+          name: membershipPlans.name,
+          planType: membershipPlans.planType,
+        },
+      })
+      .from(contracts)
+      .leftJoin(members, eq(contracts.memberId, members.id))
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(and(...conditions))
+      .orderBy(orderFn)
+      .limit(limit)
+      .offset(offset),
+  ]);
+
+  const total = Number(countResult?.count || 0);
 
   return c.json({
     success: true,

@@ -5,21 +5,46 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
+export const MAX_STORE_SIZE = 10000;
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 const CLEANUP_INTERVAL = 60 * 1000;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
+function pruneExpired(now: number) {
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (entry.resetAt <= now) {
+      rateLimitStore.delete(key);
+    }
+  }
+}
+
+function ensureCapacity(now: number) {
+  if (rateLimitStore.size < MAX_STORE_SIZE) return;
+
+  // First pass: purge all expired entries
+  pruneExpired(now);
+
+  // Second pass: if still at or over capacity, evict oldest 20% entries (FIFO)
+  if (rateLimitStore.size >= MAX_STORE_SIZE) {
+    const toEvict = Math.ceil(MAX_STORE_SIZE * 0.2);
+    let evicted = 0;
+    for (const key of rateLimitStore.keys()) {
+      rateLimitStore.delete(key);
+      evicted++;
+      if (evicted >= toEvict) break;
+    }
+  }
+}
+
 function startCleanup() {
   if (cleanupTimer) return;
   cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (entry.resetAt <= now) {
-        rateLimitStore.delete(key);
-      }
-    }
+    pruneExpired(Date.now());
   }, CLEANUP_INTERVAL);
+  if (cleanupTimer.unref) {
+    cleanupTimer.unref();
+  }
 }
 
 export interface RateLimitOptions {
@@ -51,6 +76,9 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
     let entry = rateLimitStore.get(key);
 
     if (!entry || entry.resetAt <= now) {
+      if (!entry) {
+        ensureCapacity(now);
+      }
       entry = { count: 0, resetAt: now + windowMs };
       rateLimitStore.set(key, entry);
     }
@@ -82,3 +110,19 @@ export const authRateLimiter = rateLimiter({
   max: process.env.NODE_ENV === 'test' ? 100 : 5,
   message: '登入嘗試過多，請 15 分鐘後再試',
 });
+
+export function _getStoreSize(): number {
+  return rateLimitStore.size;
+}
+
+export function _clearStore(): void {
+  rateLimitStore.clear();
+}
+
+export function _stopCleanup(): void {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
+}
+

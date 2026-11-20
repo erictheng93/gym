@@ -89,20 +89,21 @@ app.get('/', zValidator('query', querySchema), async (c) => {
 
   const orderBy = sortOrder === 'asc' ? asc(sortColumn) : desc(sortColumn);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(baseCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(baseCondition),
+    db
+      .select()
+      .from(members)
+      .where(baseCondition)
+      .orderBy(orderBy)
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select()
-    .from(members)
-    .where(baseCondition)
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,

@@ -210,7 +210,7 @@ export default defineNuxtConfig({
       runtimeCaching: [
         {
           // API 請求快取策略 - Network First
-          urlPattern: /^https:\/\/.*\/items\/.*/i,
+          urlPattern: /\/api\/.*/i,
           handler: 'NetworkFirst',
           options: {
             cacheName: 'api-cache',
@@ -220,7 +220,8 @@ export default defineNuxtConfig({
             },
             cacheableResponse: {
               statuses: [0, 200]
-            }
+            },
+            networkTimeoutSeconds: 5
           }
         },
         {

@@ -91,6 +91,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
 
       updateOnlineStatus()
       loadPendingCount()
+      pruneExpiredCache().catch(() => {})
     }
 
     const loadPendingCount = async () => {
@@ -388,6 +389,37 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       }
     }
 
+    const pruneExpiredCache = async (): Promise<number> => {
+      try {
+        const db = await initDB(dbName)
+        const now = Date.now()
+        return new Promise((resolve) => {
+          const tx = db.transaction(STORES.cache, 'readwrite')
+          const store = tx.objectStore(STORES.cache)
+          const request = store.openCursor()
+          let prunedCount = 0
+
+          request.onsuccess = () => {
+            const cursor = request.result
+            if (cursor) {
+              const entry = cursor.value as CacheEntry<unknown>
+              if (entry && entry.expiresAt && entry.expiresAt <= now) {
+                cursor.delete()
+                prunedCount++
+              }
+              cursor.continue()
+            } else {
+              resolve(prunedCount)
+            }
+          }
+
+          request.onerror = () => resolve(prunedCount)
+        })
+      } catch {
+        return 0
+      }
+    }
+
     // ---- Computed ----
 
     const hasPendingRequests = computed(() => pendingCount.value > 0)
@@ -416,6 +448,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       setCache,
       deleteCache,
       clearCache,
+      pruneExpiredCache,
     }
   }
 }
