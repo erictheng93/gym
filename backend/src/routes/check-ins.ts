@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, checkIns, members, contracts, branches, employees, membershipPlans } from '../db/index.js';
-import { eq, and, sql, desc, gte, lte, gt } from 'drizzle-orm';
+import { eq, and, sql, desc, gte, lte, gt, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -32,11 +32,28 @@ app.get('/', async (c) => {
   const offset = (page - 1) * limit;
 
   try {
-    const conditions = [eq(branches.tenantId, tenantId)];
-
-    if (branchId) {
-      conditions.push(eq(checkIns.branchId, branchId));
+    const tenantBranchIds = await getTenantBranchIds(tenantId);
+    if (tenantBranchIds.length === 0) {
+      return c.json({
+        success: true,
+        data: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
     }
+
+    if (branchId && !tenantBranchIds.includes(branchId)) {
+      return c.json({
+        success: true,
+        data: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
+    }
+
+    const branchCondition = branchId
+      ? eq(checkIns.branchId, branchId)
+      : inArray(checkIns.branchId, tenantBranchIds);
+
+    const conditions = [branchCondition];
 
     if (memberId) {
       conditions.push(eq(checkIns.memberId, memberId));
@@ -49,6 +66,8 @@ app.get('/', async (c) => {
     if (endDate) {
       conditions.push(lte(checkIns.checkInTime, new Date(endDate)));
     }
+
+    const whereCondition = and(...conditions);
 
     const [result, [countResult]] = await Promise.all([
       db
@@ -82,15 +101,14 @@ app.get('/', async (c) => {
         .innerJoin(members, eq(checkIns.memberId, members.id))
         .innerJoin(branches, eq(checkIns.branchId, branches.id))
         .leftJoin(employees, eq(checkIns.processedById, employees.id))
-        .where(and(...conditions))
+        .where(whereCondition)
         .orderBy(desc(checkIns.checkInTime))
         .limit(limit)
         .offset(offset),
       db
         .select({ count: sql<number>`count(*)` })
         .from(checkIns)
-        .innerJoin(branches, eq(checkIns.branchId, branches.id))
-        .where(and(...conditions)),
+        .where(whereCondition),
     ]);
 
     const total = Number(countResult?.count || 0);
@@ -139,8 +157,13 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       .limit(1),
     db
       .select({
-        contract: contracts,
-        plan: membershipPlans,
+        contract: {
+          id: contracts.id,
+          remainingCounts: contracts.remainingCounts,
+        },
+        plan: {
+          planType: membershipPlans.planType,
+        },
       })
       .from(contracts)
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
@@ -280,17 +303,40 @@ app.get('/stats/today', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
 
+  const tenantBranchIds = await getTenantBranchIds(tenantId);
+  if (tenantBranchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: {
+        total: 0,
+        uniqueMembers: 0,
+        hourlyBreakdown: [],
+      },
+    });
+  }
+
+  if (branchId && !tenantBranchIds.includes(branchId)) {
+    return c.json({
+      success: true,
+      data: {
+        total: 0,
+        uniqueMembers: 0,
+        hourlyBreakdown: [],
+      },
+    });
+  }
+
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const conditions = [
-    eq(branches.tenantId, tenantId),
-    gte(checkIns.checkInTime, todayStart),
-  ];
+  const branchCondition = branchId
+    ? eq(checkIns.branchId, branchId)
+    : inArray(checkIns.branchId, tenantBranchIds);
 
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
-  }
+  const whereCondition = and(
+    branchCondition,
+    gte(checkIns.checkInTime, todayStart)
+  );
 
   const [[stats], hourlyStats] = await Promise.all([
     db
@@ -299,8 +345,7 @@ app.get('/stats/today', async (c) => {
         uniqueMembers: sql<number>`count(distinct ${checkIns.memberId})`,
       })
       .from(checkIns)
-      .innerJoin(branches, eq(checkIns.branchId, branches.id))
-      .where(and(...conditions)),
+      .where(whereCondition),
 
     // Hourly breakdown
     db
@@ -309,8 +354,7 @@ app.get('/stats/today', async (c) => {
         count: sql<number>`count(*)`,
       })
       .from(checkIns)
-      .innerJoin(branches, eq(checkIns.branchId, branches.id))
-      .where(and(...conditions))
+      .where(whereCondition)
       .groupBy(sql`extract(hour from ${checkIns.checkInTime})`)
       .orderBy(sql`extract(hour from ${checkIns.checkInTime})`),
   ]);

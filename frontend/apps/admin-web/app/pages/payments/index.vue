@@ -75,13 +75,17 @@ onMounted(async () => {
   await Promise.all([loadPayments(), loadStats(), fetchBranches()])
 })
 
+const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+})
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '—'
+  return paymentDateFormatter.format(date)
 }
 
 const getPaymentMethodLabel = (method: string | null) => {

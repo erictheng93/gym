@@ -150,7 +150,15 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
 
   const [[session], branchIds, [member], [existingBooking]] = await Promise.all([
     db
-      .select()
+      .select({
+        id: classSessions.id,
+        branchId: classSessions.branchId,
+        sessionStatus: classSessions.sessionStatus,
+        sessionDate: classSessions.sessionDate,
+        maxCapacity: classSessions.maxCapacity,
+        currentCount: classSessions.currentCount,
+        waitlistCount: classSessions.waitlistCount,
+      })
       .from(classSessions)
       .where(eq(classSessions.id, data.sessionId))
       .limit(1),
@@ -248,8 +256,18 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
   const [[booking], branchIds] = await Promise.all([
     db
       .select({
-        booking: bookings,
-        session: classSessions,
+        booking: {
+          id: bookings.id,
+          bookingStatus: bookings.bookingStatus,
+        },
+        session: {
+          id: classSessions.id,
+          branchId: classSessions.branchId,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          currentCount: classSessions.currentCount,
+          waitlistCount: classSessions.waitlistCount,
+        },
       })
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
@@ -345,10 +363,22 @@ app.post('/:id/attend', async (c) => {
   const [[booking], branchIds] = await Promise.all([
     db
       .select({
-        booking: bookings,
-        session: classSessions,
-        class: classes,
-        contract: contracts,
+        booking: {
+          id: bookings.id,
+          bookingStatus: bookings.bookingStatus,
+          contractId: bookings.contractId,
+        },
+        session: {
+          branchId: classSessions.branchId,
+          sessionDate: classSessions.sessionDate,
+        },
+        class: {
+          requiresCount: classes.requiresCount,
+          countDeduction: classes.countDeduction,
+        },
+        contract: {
+          remainingCounts: contracts.remainingCounts,
+        },
       })
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))

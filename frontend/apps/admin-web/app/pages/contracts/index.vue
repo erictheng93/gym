@@ -124,7 +124,8 @@ const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'PAUSED' | 'TERMINATED
 
 const handleExportSelected = () => {
   // Export selected contracts to CSV
-  const selectedContracts = contracts.value.filter(c => selectedIds.value.includes(c.id))
+  const selectedSet = new Set(selectedIds.value)
+  const selectedContracts = contracts.value.filter(c => selectedSet.has(c.id))
   const headers = ['合約編號', '會員', '方案', '開始日期', '結束日期', '金額', '付款狀態', '合約狀態']
   const rows = selectedContracts.map(c => [
     c.contract_no,

@@ -244,7 +244,10 @@ app.post('/schedules', zValidator('json', createScheduleSchema), async (c) => {
   const [tenantBranchIds, [classItem]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: classes.id,
+        branchId: classes.branchId,
+      })
       .from(classes)
       .where(eq(classes.id, data.classId))
       .limit(1),
