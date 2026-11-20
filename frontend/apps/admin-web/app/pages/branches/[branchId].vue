@@ -36,8 +36,12 @@ const branchId = computed(() => route.params.branchId as string)
 const loadBranch = async () => {
   isLoading.value = true
   try {
-    branch.value = await fetchBranch(branchId.value)
-    employees.value = await fetchBranchEmployees(branchId.value)
+    const [branchData, employeesData] = await Promise.all([
+      fetchBranch(branchId.value),
+      fetchBranchEmployees(branchId.value),
+    ])
+    branch.value = branchData
+    employees.value = employeesData
   } catch (error) {
     console.error('Failed to load branch:', error)
     useToast().error(MESSAGES.ERRORS.BRANCH_LOAD_FAILED)

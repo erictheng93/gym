@@ -494,7 +494,7 @@ app.delete('/:id', async (c) => {
         eq(lessonPlans.coachId, coach.id)
       )
     )
-    .returning({ id: lessonPlans.id });
+    .returning(ID_RETURNING_SELECT);
 
   if (!deletedPlan) {
     return c.json({

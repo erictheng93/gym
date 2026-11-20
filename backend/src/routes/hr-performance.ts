@@ -48,6 +48,10 @@ const KPI_TEMPLATE_RETURNING = {
   updatedAt: kpiTemplates.updatedAt,
 };
 
+const KPI_TEMPLATE_ID_RETURNING = {
+  id: kpiTemplates.id,
+};
+
 const PERFORMANCE_REVIEW_SELECT = {
   id: performanceReviews.id,
   employee_id: performanceReviews.employeeId,
@@ -512,7 +516,7 @@ app.delete('/kpi-templates/:id', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(kpiTemplates.id, id))
-    .returning({ id: kpiTemplates.id });
+    .returning(KPI_TEMPLATE_ID_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '找不到 KPI 範本' }, 404);

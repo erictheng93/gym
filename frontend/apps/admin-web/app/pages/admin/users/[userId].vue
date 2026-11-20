@@ -186,8 +186,15 @@ const formatDate = (dateStr: string | null) => {
 }
 
 onMounted(async () => {
-  await loadUser()
-  await loadAvailableEmployees()
+  await Promise.all([loadUser(), loadAvailableEmployees()])
+  if (user.value?.employee && !availableEmployees.value.find((e: any) => e.id === user.value.employeeId)) {
+    availableEmployees.value.unshift({
+      id: user.value.employeeId,
+      fullName: user.value.employee.fullName,
+      employeeCode: user.value.employee.employeeCode,
+      email: null
+    })
+  }
 })
 </script>
 

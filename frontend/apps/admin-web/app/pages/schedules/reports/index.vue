@@ -318,6 +318,14 @@ const filterEmployee = ref('')
 const filterStatus = ref('')
 const rankingType = ref<'late' | 'earlyLeave' | 'overtime'>('late')
 
+const employeeMap = computed(() => {
+  const map = new Map<string, Employee>()
+  for (const emp of employees.value) {
+    map.set(emp.id, emp)
+  }
+  return map
+})
+
 const stats = computed(() => {
   const list = attendances.value
   let lateCount = 0
@@ -401,7 +409,7 @@ const employeeRankings = computed(() => {
 
   attendances.value.forEach(attendance => {
     const empId = attendance.employee_id
-    const employee = employees.value.find(e => e.id === empId)
+    const employee = employeeMap.value.get(empId)
     if (!employee) return
 
     if (!rankingsMap.has(empId)) {
@@ -464,7 +472,7 @@ function formatTime(timeStr: string): string {
 }
 
 function getEmployeeName(employeeId: string): string {
-  const employee = employees.value.find(e => e.id === employeeId)
+  const employee = employeeMap.value.get(employeeId)
   return employee?.name || '未知'
 }
 
@@ -520,8 +528,7 @@ async function fetchReports() {
 }
 
 onMounted(() => {
-  fetchEmployees()
-  fetchReports()
+  Promise.all([fetchEmployees(), fetchReports()])
 })
 </script>
 

@@ -608,7 +608,7 @@ const getActionLabel = (action: string) => {
             <div class="table-cell">{{ getBalance(option.value).total }} 天</div>
             <div class="table-cell">{{ getBalance(option.value).used }} 天</div>
             <div class="table-cell">
-              {{ leaveBalances.find(b => b.leave_type === option.value)?.pending_days || 0 }} 天
+              {{ leaveBalancesMap.get(option.value)?.pending_days || 0 }} 天
             </div>
             <div class="table-cell">
               <strong :style="{ color: getBalance(option.value).remaining < 1 ? '#ff3b30' : 'inherit' }">

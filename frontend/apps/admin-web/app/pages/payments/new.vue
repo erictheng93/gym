@@ -71,19 +71,23 @@ watch(() => form.contract_id, () => {
 
 onMounted(async () => {
   isLoading.value = true
-  await Promise.all([
+  const initialPromises: Promise<unknown>[] = [
     fetchMembers({ limit: 100 }),
-    fetchBranches()
-  ])
+    fetchBranches(),
+  ]
+  if (form.member_id) {
+    initialPromises.push(fetchContracts({ memberId: form.member_id }))
+  }
+
+  await Promise.all(initialPromises)
 
   // 預設選擇第一個分店
   if (branches.value.length > 0 && !form.branch_id) {
     form.branch_id = branches.value[0]!.id
   }
 
-  // 如果有預設會員 ID，載入合約
+  // 如果有預設會員 ID，更新合約列表
   if (form.member_id) {
-    await fetchContracts({ memberId: form.member_id })
     memberContracts.value = contracts.value
   }
 
