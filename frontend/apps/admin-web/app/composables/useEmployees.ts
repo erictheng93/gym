@@ -5,6 +5,7 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 const inFlightEmployeesMap = new Map<string, Promise<void>>()
 const inFlightSingleEmployeeMap = new Map<string, Promise<Employee | null>>()
+let inFlightAllEmployeesPromise: Promise<Employee[]> | null = null
 
 export const useEmployees = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
@@ -130,24 +131,34 @@ export const useEmployees = () => {
 
   // 取得所有員工（用於下拉選單）
   const fetchAllEmployees = async () => {
-    try {
-      const { data } = await readItems<Employee>('employees', {
-        limit: 1000, // Large limit to get all
-        filter: {
-          employment_status: 'ACTIVE'
-        },
-        sort: 'full_name',
-        sortOrder: 'asc'
-      })
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useEmployees.fetchAllEmployees',
-        customMessage: MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED,
-        showToast: false
-      })
-      return []
+    if (inFlightAllEmployeesPromise) {
+      return inFlightAllEmployeesPromise
     }
+
+    inFlightAllEmployeesPromise = (async () => {
+      try {
+        const { data } = await readItems<Employee>('employees', {
+          limit: 1000, // Large limit to get all
+          filter: {
+            employment_status: 'ACTIVE'
+          },
+          sort: 'full_name',
+          sortOrder: 'asc'
+        })
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useEmployees.fetchAllEmployees',
+          customMessage: MESSAGES.ERRORS.EMPLOYEE_FETCH_FAILED,
+          showToast: false
+        })
+        return []
+      } finally {
+        inFlightAllEmployeesPromise = null
+      }
+    })()
+
+    return inFlightAllEmployeesPromise
   }
 
   return {

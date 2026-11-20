@@ -9,6 +9,7 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
 const inFlightClassesMap = new Map<string, Promise<void>>()
 const inFlightSingleClassMap = new Map<string, Promise<Class | null>>()
+const inFlightClassStatsMap = new Map<string, Promise<{ total: number; active: number }>>()
 
 export const useClasses = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
@@ -168,26 +169,37 @@ export const useClasses = () => {
    * 獲取課程統計
    */
   const getClassStats = async (branchId?: string) => {
-    try {
-      const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = branchId
+    const key = branchId || ''
+    const existing = inFlightClassStatsMap.get(key)
+    if (existing) return existing
 
-      const [totalResult, activeResult] = await Promise.all([
-        readItems<Class>('classes', { filter, limit: 1 }),
-        readItems<Class>('classes', { filter: { ...filter, is_active: true }, limit: 1 })
-      ])
+    const promise = (async () => {
+      try {
+        const filter: Record<string, unknown> = {}
+        if (branchId) filter.branch_id = branchId
 
-      return {
-        total: totalResult.total,
-        active: activeResult.total
+        const [totalResult, activeResult] = await Promise.all([
+          readItems<Class>('classes', { filter, limit: 1 }),
+          readItems<Class>('classes', { filter: { ...filter, is_active: true }, limit: 1 })
+        ])
+
+        return {
+          total: totalResult.total,
+          active: activeResult.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useClasses.getClassStats',
+          showToast: false
+        })
+        return { total: 0, active: 0 }
+      } finally {
+        inFlightClassStatsMap.delete(key)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'useClasses.getClassStats',
-        showToast: false
-      })
-      return { total: 0, active: 0 }
-    }
+    })()
+
+    inFlightClassStatsMap.set(key, promise)
+    return promise
   }
 
   return {

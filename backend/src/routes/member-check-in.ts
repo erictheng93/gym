@@ -217,27 +217,31 @@ app.post(
       });
     }
 
-    // Create check-in
-    const [newCheckIn] = await db.insert(checkIns).values({
-      memberId: member.id,
-      branchId,
-      contractId: activeContract.id,
-      checkInType: 'ENTRY',
-      checkInMethod: 'QR_CODE',
-      checkInTime: new Date(),
-    }).returning();
-
-    // Deduct session for COUNT_BASED contracts
+    // Calculate new remaining counts for COUNT_BASED contracts
     let newRemainingCounts: number | null = null;
-    if (activePlan?.planType === 'COUNT_BASED') {
+    const isCountBased = activePlan?.planType === 'COUNT_BASED';
+    if (isCountBased) {
       const remainingCounts = activeContract.remainingCounts ?? 0;
-      newRemainingCounts = remainingCounts - 1;
-
-      await db.update(contracts).set({
-        remainingCounts: newRemainingCounts,
-        updatedAt: new Date(),
-      }).where(eq(contracts.id, activeContract.id));
+      newRemainingCounts = Math.max(0, remainingCounts - 1);
     }
+
+    // Concurrently create check-in and deduct count if applicable
+    const [[newCheckIn]] = await Promise.all([
+      db.insert(checkIns).values({
+        memberId: member.id,
+        branchId,
+        contractId: activeContract.id,
+        checkInType: 'ENTRY',
+        checkInMethod: 'QR_CODE',
+        checkInTime: new Date(),
+      }).returning(),
+      isCountBased
+        ? db.update(contracts).set({
+            remainingCounts: newRemainingCounts,
+            updatedAt: new Date(),
+          }).where(eq(contracts.id, activeContract.id))
+        : Promise.resolve([]),
+    ]);
 
     return c.json({
       success: true,

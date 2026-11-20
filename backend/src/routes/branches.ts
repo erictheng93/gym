@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, branches, employees, members } from '../db/index.js';
-import { eq, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { invalidateTenantBranchesCache } from '../utils/tenant-cache.js';
@@ -116,28 +116,27 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(eq(branches.id, id))
-    .limit(1);
-
-  if (!branch) {
-    return c.json({ success: false, error: '分店不存在' }, 404);
-  }
-
-  if (branch.tenantId !== tenantId) {
-    return c.json({ success: false, error: '無權限修改此分店' }, 403);
-  }
-
   const [updatedBranch] = await db
     .update(branches)
     .set({
       ...data,
       updatedAt: new Date(),
     })
-    .where(eq(branches.id, id))
+    .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)))
     .returning();
+
+  if (!updatedBranch) {
+    const [existing] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(eq(branches.id, id))
+      .limit(1);
+
+    if (!existing) {
+      return c.json({ success: false, error: '分店不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限修改此分店' }, 403);
+  }
 
   invalidateTenantBranchesCache(tenantId);
 

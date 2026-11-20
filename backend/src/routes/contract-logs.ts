@@ -155,11 +155,15 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
   const data = c.req.valid('json');
 
   // Verify contract belongs to tenant
+  const tenantBranchIds = await getTenantBranchIds(tenantId);
+  if (tenantBranchIds.length === 0) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
+
   const [contract] = await db
-    .select()
+    .select({ id: contracts.id })
     .from(contracts)
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(and(eq(contracts.id, data.contractId), eq(branches.tenantId, tenantId)))
+    .where(and(eq(contracts.id, data.contractId), inArray(contracts.branchId, tenantBranchIds)))
     .limit(1);
 
   if (!contract) {
