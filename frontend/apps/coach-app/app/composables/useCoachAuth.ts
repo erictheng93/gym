@@ -19,6 +19,8 @@
  * console.log(coach.value?.full_name)
  */
 
+let checkAuthPromise: Promise<boolean> | null = null
+
 export const useCoachAuth = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
@@ -77,6 +79,7 @@ export const useCoachAuth = () => {
    * Logout - clear tokens and session
    */
   const logout = () => {
+    checkAuthPromise = null
     tokens.clearTokens()
     session.clearSession()
   }
@@ -91,31 +94,39 @@ export const useCoachAuth = () => {
       return true
     }
 
-    // Set auth checking state to show loading UI
-    session.setAuthChecking(true)
+    if (checkAuthPromise) {
+      return checkAuthPromise
+    }
 
-    try {
+    checkAuthPromise = (async () => {
+      // Set auth checking state to show loading UI
+      session.setAuthChecking(true)
 
-      // Try with access token
-      if (tokens.hasAccessToken.value) {
-        const success = await session.fetchCoach()
-        if (success) return true
-      }
-
-      // Try refreshing token
-      if (tokens.hasRefreshToken.value) {
-        const refreshed = await tokens.refreshAccessToken()
-        if (refreshed) {
+      try {
+        // Try with access token
+        if (tokens.hasAccessToken.value) {
           const success = await session.fetchCoach()
           if (success) return true
         }
-      }
 
-      return false
-    } finally {
-      // Always clear auth checking state when done
-      session.setAuthChecking(false)
-    }
+        // Try refreshing token
+        if (tokens.hasRefreshToken.value) {
+          const refreshed = await tokens.refreshAccessToken()
+          if (refreshed) {
+            const success = await session.fetchCoach()
+            if (success) return true
+          }
+        }
+
+        return false
+      } finally {
+        // Always clear auth checking state when done
+        session.setAuthChecking(false)
+        checkAuthPromise = null
+      }
+    })()
+
+    return checkAuthPromise
   }
 
   /**

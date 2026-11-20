@@ -247,6 +247,8 @@ export const contracts = pgTable('contracts', {
   index('idx_contracts_branch').on(table.branchId),
   index('idx_contracts_status').on(table.status),
   index('idx_contracts_tenant').on(table.tenantId),
+  index('idx_contracts_branch_status').on(table.branchId, table.status),
+  index('idx_contracts_end_date').on(table.endDate),
 ]);
 
 export const contractLogs = pgTable('contract_logs', {
@@ -286,6 +288,8 @@ export const payments = pgTable('payments', {
   index('idx_payments_contract').on(table.contractId),
   index('idx_payments_branch').on(table.branchId),
   index('idx_payments_member').on(table.memberId),
+  index('idx_payments_branch_date').on(table.branchId, table.paymentDate),
+  index('idx_payments_date_type').on(table.paymentDate, table.type),
 ]);
 
 // =============================================================================
@@ -440,6 +444,7 @@ export const checkIns = pgTable('check_ins', {
   index('idx_check_ins_member_id').on(table.memberId),
   index('idx_check_ins_branch_id').on(table.branchId),
   index('idx_check_ins_time').on(table.checkInTime),
+  index('idx_check_ins_branch_time').on(table.branchId, table.checkInTime),
 ]);
 
 // =============================================================================

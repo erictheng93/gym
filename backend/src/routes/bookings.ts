@@ -5,6 +5,7 @@ import { db, bookings, classSessions, classes, members, contracts, branches, BOO
 import { eq, and, sql, desc, or, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -30,12 +31,7 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
