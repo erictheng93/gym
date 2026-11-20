@@ -216,8 +216,35 @@ function formatWeekLabel(start: Date) {
   return `${start.getMonth() + 1}/${start.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`
 }
 
+const STATUS_BAR_CLASSES: Record<string, string> = {
+  BOOKED: 'bar-blue',
+  COMPLETED: 'bar-green',
+  MEMBER_CANCELLED: 'bar-gray',
+  COACH_CANCELLED: 'bar-gray',
+  NO_SHOW: 'bar-red',
+}
+
+const STATUS_CLASSES: Record<string, string> = {
+  BOOKED: 'status-blue',
+  COMPLETED: 'status-green',
+  MEMBER_CANCELLED: 'status-gray',
+  COACH_CANCELLED: 'status-gray',
+  NO_SHOW: 'status-red',
+}
+
+const STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '待上課',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
+
 function formatDayHeader(dateStr: string) {
-  return dayHeaderFormatter.format(new Date(dateStr))
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return dayHeaderFormatter.format(d)
 }
 
 function isToday(dateStr: string) {
@@ -233,40 +260,22 @@ function getClassCount(dateStr: string) {
 }
 
 function formatTime(dateStr: string) {
-  return timeFormatter.format(new Date(dateStr))
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return timeFormatter.format(d)
 }
 
 function getStatusBarClass(status: string) {
-  const classes: Record<string, string> = {
-    BOOKED: 'bar-blue',
-    COMPLETED: 'bar-green',
-    MEMBER_CANCELLED: 'bar-gray',
-    COACH_CANCELLED: 'bar-gray',
-    NO_SHOW: 'bar-red',
-  }
-  return classes[status] || 'bar-gray'
+  return STATUS_BAR_CLASSES[status] || 'bar-gray'
 }
 
 function getStatusClass(status: string) {
-  const classes: Record<string, string> = {
-    BOOKED: 'status-blue',
-    COMPLETED: 'status-green',
-    MEMBER_CANCELLED: 'status-gray',
-    COACH_CANCELLED: 'status-gray',
-    NO_SHOW: 'status-red',
-  }
-  return classes[status] || 'status-gray'
+  return STATUS_CLASSES[status] || 'status-gray'
 }
 
 function getStatusText(status: string) {
-  const texts: Record<string, string> = {
-    BOOKED: '待上課',
-    COMPLETED: '已完成',
-    MEMBER_CANCELLED: '學員取消',
-    COACH_CANCELLED: '教練取消',
-    NO_SHOW: '未到',
-  }
-  return texts[status] || status
+  return STATUS_TEXTS[status] || status
 }
 
 function goToClass(id: string) {
