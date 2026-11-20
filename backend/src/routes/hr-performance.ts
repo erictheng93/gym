@@ -208,7 +208,7 @@ app.post('/reviews', async (c) => {
   // If template_id is provided, fetch KPIs from template
   let kpiData: unknown[] = [];
   if (template_id) {
-    const template = await db.select()
+    const template = await db.select({ kpis: kpiTemplates.kpis })
       .from(kpiTemplates)
       .where(eq(kpiTemplates.id, template_id))
       .limit(1);
@@ -241,15 +241,6 @@ app.patch('/reviews/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
 
-  const existing = await db.select()
-    .from(performanceReviews)
-    .where(eq(performanceReviews.id, id))
-    .limit(1);
-
-  if (existing.length === 0) {
-    return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
-  }
-
   const updateData: Record<string, unknown> = {
     updatedAt: new Date(),
   };
@@ -264,6 +255,10 @@ app.patch('/reviews/:id', async (c) => {
     .set(updateData)
     .where(eq(performanceReviews.id, id))
     .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
+  }
 
   return c.json({ success: true, data: updated });
 });

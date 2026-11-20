@@ -196,7 +196,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCouponSc
 
   // Check for duplicate code
   const [existing] = await db
-    .select()
+    .select({ id: coupons.id })
     .from(coupons)
     .where(and(eq(coupons.code, data.code.toUpperCase()), eq(coupons.tenantId, tenantId)))
     .limit(1);
@@ -232,7 +232,7 @@ app.post('/:id/use', async (c) => {
   const { memberId, contractId, discountAmount } = await c.req.json();
 
   const [coupon] = await db
-    .select()
+    .select({ id: coupons.id })
     .from(coupons)
     .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
     .limit(1);

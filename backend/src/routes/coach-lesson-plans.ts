@@ -167,28 +167,42 @@ app.get('/templates', async (c) => {
     conditions.push(eq(lessonPlans.difficulty, difficulty));
   }
 
-  // Get templates
-  const templatesData = await db
-    .select()
-    .from(lessonPlans)
-    .where(and(...conditions))
-    .orderBy(lessonPlans.templateCategory, lessonPlans.title)
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get unique categories
-  const categoriesResult = await db
-    .selectDistinct({ category: lessonPlans.templateCategory })
-    .from(lessonPlans)
-    .where(
-      and(
-        eq(lessonPlans.isTemplate, true),
-        or(
-          eq(lessonPlans.coachId, coach.id),
-          eq(lessonPlans.tenantId, coach.tenantId)
-        )!
-      )
-    );
+  // Get templates and unique categories in parallel
+  const [templatesData, categoriesResult] = await Promise.all([
+    db
+      .select({
+        id: lessonPlans.id,
+        title: lessonPlans.title,
+        objectives: lessonPlans.objectives,
+        warmupExercises: lessonPlans.warmupExercises,
+        mainExercises: lessonPlans.mainExercises,
+        cooldownExercises: lessonPlans.cooldownExercises,
+        notes: lessonPlans.notes,
+        isTemplate: lessonPlans.isTemplate,
+        templateCategory: lessonPlans.templateCategory,
+        difficulty: lessonPlans.difficulty,
+        durationMinutes: lessonPlans.durationMinutes,
+        coachId: lessonPlans.coachId,
+        createdAt: lessonPlans.createdAt,
+      })
+      .from(lessonPlans)
+      .where(and(...conditions))
+      .orderBy(lessonPlans.templateCategory, lessonPlans.title)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .selectDistinct({ category: lessonPlans.templateCategory })
+      .from(lessonPlans)
+      .where(
+        and(
+          eq(lessonPlans.isTemplate, true),
+          or(
+            eq(lessonPlans.coachId, coach.id),
+            eq(lessonPlans.tenantId, coach.tenantId)
+          )!
+        )
+      ),
+  ]);
 
   const categories = categoriesResult
     .map(r => r.category)
@@ -358,26 +372,6 @@ app.patch(
     const { id } = c.req.param();
     const data = c.req.valid('json');
 
-    // Verify ownership
-    const [existingPlan] = await db
-      .select()
-      .from(lessonPlans)
-      .where(
-        and(
-          eq(lessonPlans.id, id),
-          eq(lessonPlans.coachId, coach.id)
-        )
-      )
-      .limit(1);
-
-    if (!existingPlan) {
-      return c.json({
-        success: false,
-        error: '找不到教案或無權修改',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
     // If linking to session, verify ownership
     if (data.session_id) {
       const [session] = await db
@@ -412,11 +406,25 @@ app.patch(
     if (data.duration_minutes !== undefined) updateData.durationMinutes = data.duration_minutes;
     if (data.session_id !== undefined) updateData.sessionId = data.session_id;
 
-    // Update plan
-    await db
+    // Atomic update with coach ownership check
+    const [updatedPlan] = await db
       .update(lessonPlans)
       .set(updateData)
-      .where(eq(lessonPlans.id, id));
+      .where(
+        and(
+          eq(lessonPlans.id, id),
+          eq(lessonPlans.coachId, coach.id)
+        )
+      )
+      .returning({ id: lessonPlans.id });
+
+    if (!updatedPlan) {
+      return c.json({
+        success: false,
+        error: '找不到教案或無權修改',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,

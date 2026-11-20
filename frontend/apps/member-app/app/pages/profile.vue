@@ -179,25 +179,36 @@ const formatDate = (dateStr: string | null | undefined) => {
   return profileDateFormatter.format(new Date(dateStr))
 }
 
+const GENDER_MAP: Record<string, string> = {
+  MALE: '男',
+  FEMALE: '女',
+  OTHER: '其他',
+}
+
+const STATUS_INFO_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: '有效會員', class: 'status-active' },
+  EXPIRED: { label: '已到期', class: 'status-expired' },
+  SUSPENDED: { label: '已暫停', class: 'status-suspended' },
+  INACTIVE: { label: '未啟用', class: 'status-inactive' },
+}
+
+const ICON_COLOR_MAP: Record<string, string> = {
+  activity: 'pink',
+  history: 'blue',
+  payment: 'green',
+  bell: 'red',
+  alert: 'orange',
+  help: 'teal',
+}
+
 // 格式化性別
 const formatGender = (gender: string | null | undefined) => {
-  const genderMap: Record<string, string> = {
-    MALE: '男',
-    FEMALE: '女',
-    OTHER: '其他',
-  }
-  return gender ? genderMap[gender] || '-' : '-'
+  return gender ? GENDER_MAP[gender] || '-' : '-'
 }
 
 // 格式化會籍狀態
 const getStatusInfo = (status: string) => {
-  const statusMap: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: '有效會員', class: 'status-active' },
-    EXPIRED: { label: '已到期', class: 'status-expired' },
-    SUSPENDED: { label: '已暫停', class: 'status-suspended' },
-    INACTIVE: { label: '未啟用', class: 'status-inactive' },
-  }
-  return statusMap[status] || { label: status, class: '' }
+  return STATUS_INFO_MAP[status] || { label: status, class: '' }
 }
 
 // 計算會員年資
@@ -240,15 +251,7 @@ const handleThemeChange = (mode: ThemeModeType) => {
 
 // Icon color mapping for iOS style
 const getIconColor = (icon: string) => {
-  const colorMap: Record<string, string> = {
-    activity: 'pink',
-    history: 'blue',
-    payment: 'green',
-    bell: 'red',
-    alert: 'orange',
-    help: 'teal',
-  }
-  return colorMap[icon] || 'gray'
+  return ICON_COLOR_MAP[icon] || 'gray'
 }
 
 // Pull-to-refresh handlers

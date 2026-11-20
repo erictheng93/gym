@@ -285,7 +285,16 @@ app.get('/:id', async (c) => {
 
   if (bookingIds.length > 0) {
     const records = await db
-      .select()
+      .select({
+        id: classRecords.id,
+        bookingId: classRecords.bookingId,
+        warmupContent: classRecords.warmupContent,
+        mainContent: classRecords.mainContent,
+        cooldownContent: classRecords.cooldownContent,
+        memberCondition: classRecords.memberCondition,
+        coachNotes: classRecords.coachNotes,
+        nextPlan: classRecords.nextPlan,
+      })
       .from(classRecords)
       .where(inArray(classRecords.bookingId, bookingIds));
 

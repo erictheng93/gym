@@ -550,26 +550,6 @@ app.patch(
     const { id } = c.req.param();
     const data = c.req.valid('json');
 
-    // Verify material exists and belongs to tenant
-    const [existingMaterial] = await db
-      .select()
-      .from(teachingMaterials)
-      .where(
-        and(
-          eq(teachingMaterials.id, id),
-          eq(teachingMaterials.tenantId, coach.tenantId)
-        )
-      )
-      .limit(1);
-
-    if (!existingMaterial) {
-      return c.json({
-        success: false,
-        error: '找不到教學資源',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
     // Build update object
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -588,11 +568,25 @@ app.patch(
     if (data.common_mistakes !== undefined) updateData.commonMistakes = data.common_mistakes;
     if (data.is_active !== undefined) updateData.isActive = data.is_active;
 
-    // Update material
-    await db
+    // Atomic update with tenant check
+    const [updatedMaterial] = await db
       .update(teachingMaterials)
       .set(updateData)
-      .where(eq(teachingMaterials.id, id));
+      .where(
+        and(
+          eq(teachingMaterials.id, id),
+          eq(teachingMaterials.tenantId, coach.tenantId)
+        )
+      )
+      .returning({ id: teachingMaterials.id });
+
+    if (!updatedMaterial) {
+      return c.json({
+        success: false,
+        error: '找不到教學資源',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,

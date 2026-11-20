@@ -92,15 +92,16 @@ const formatDate = (dateStr: string | null) => {
   return paymentDateFormatter.format(date)
 }
 
+const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
+  CASH: LABELS.PAYMENT_METHOD.CASH,
+  CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
+  LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
+  TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
+}
+
 const getPaymentMethodLabel = (method: string | null) => {
   if (!method) return '—'
-  const map: Record<string, string> = {
-    CASH: LABELS.PAYMENT_METHOD.CASH,
-    CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
-    LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
-    TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
-  }
-  return map[method] || method
+  return PAYMENT_METHOD_LABEL_MAP[method] || method
 }
 
 // 設定日期快捷選項
