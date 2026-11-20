@@ -48,14 +48,6 @@ const loadBranch = async () => {
 
 onMounted(loadBranch)
 
-const branchDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-})
-
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
   const d = new Date(dateStr)

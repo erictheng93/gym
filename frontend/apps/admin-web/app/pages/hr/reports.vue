@@ -1,3 +1,8 @@
+<script lang="ts">
+const reportDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' })
+const reportTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+</script>
+
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
 import { useAttendance } from '~/composables/hr'
@@ -76,9 +81,6 @@ const viewDetail = async (employee: { employeeId: string; employeeName: string }
     isLoadingDetail.value = false
   }
 }
-
-const reportDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' })
-const reportTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
