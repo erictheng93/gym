@@ -312,15 +312,16 @@ onMounted(() => {
 
 .apple-search-bar input {
   width: 100%;
-  height: 40px;
-  padding: 0 40px 0 40px;
-  background: var(--fill-tertiary);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 16px;
+  height: 44px;
+  padding: 0 40px;
+  background: var(--bg-secondary, #1c1c1e);
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
+  border-radius: 9999px;
+  font-size: 15px;
   color: var(--text-primary);
   outline: none;
-  transition: all 0.2s var(--ease-apple);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .apple-search-bar input::placeholder {
@@ -328,12 +329,13 @@ onMounted(() => {
 }
 
 .apple-search-bar input:focus {
-  background: var(--fill-secondary);
+  border-color: var(--apple-blue, #0071e3);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .search-icon {
   position: absolute;
-  left: 12px;
+  left: 14px;
   width: 18px;
   height: 18px;
   color: var(--text-tertiary);
@@ -342,7 +344,7 @@ onMounted(() => {
 
 .search-clear {
   position: absolute;
-  right: 8px;
+  right: 12px;
   width: 20px;
   height: 20px;
   border: none;
@@ -382,25 +384,28 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  border-radius: var(--radius-pill);
-  font-size: 14px;
-  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
-  border: none;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   cursor: pointer;
-  background: var(--fill-tertiary);
+  background: var(--bg-secondary, #1c1c1e);
   color: var(--text-secondary);
-  transition: all 0.2s var(--ease-apple);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .filter-pill:active {
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 
 .filter-pill.active {
-  background: var(--apple-blue);
+  background: var(--apple-blue, #0071e3);
+  border-color: rgba(255, 255, 255, 0.2);
   color: white;
+  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .filter-dot {
@@ -481,31 +486,33 @@ onMounted(() => {
 }
 
 .list-card {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--separator);
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 20px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .student-item {
   display: flex;
   align-items: center;
-  padding: 14px 16px;
+  padding: 16px 18px;
   cursor: pointer;
-  transition: background-color 0.15s var(--ease-apple);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .student-item:not(:last-child) {
-  border-bottom: 0.5px solid var(--separator);
+  border-bottom: 1px solid var(--separator, rgba(255, 255, 255, 0.06));
 }
 
 .student-item:hover {
-  background: var(--fill-quaternary);
+  background: var(--fill-quaternary, rgba(255, 255, 255, 0.04));
+  transform: translateX(2px);
 }
 
 .student-item:active {
-  background: var(--fill-tertiary);
+  transform: scale(0.99);
 }
 
 /* Avatar */

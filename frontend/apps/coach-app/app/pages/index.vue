@@ -435,30 +435,41 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: var(--bg-secondary);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--separator);
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 20px;
+  padding: 22px 20px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12);
   position: relative;
   overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .stat-card:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .stat-card.primary {
-  background: linear-gradient(135deg, var(--apple-blue) 0%, var(--apple-teal) 100%);
+  background: linear-gradient(145deg, #0071e3 0%, #004b99 100%);
   color: white;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 28px rgba(0, 113, 227, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .stat-card.secondary {
-  background: linear-gradient(135deg, var(--apple-green) 0%, var(--apple-teal) 100%);
+  background: linear-gradient(145deg, #34c759 0%, #1e8236 100%);
   color: white;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 28px rgba(52, 199, 89, 0.25),
+              inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .stat-icon {
@@ -474,17 +485,19 @@ onMounted(() => {
 }
 
 .stat-number {
-  font-size: 32px;
-  font-weight: 700;
+  font-size: 36px;
+  font-weight: 800;
   line-height: 1;
-  margin-bottom: 4px;
-  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+  letter-spacing: -0.03em;
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
   font-size: 14px;
-  opacity: 0.8;
-  font-weight: 500;
+  opacity: 0.85;
+  font-weight: 600;
 }
 
 .stat-trend {
@@ -553,11 +566,12 @@ onMounted(() => {
 }
 
 .schedule-card {
-  background: var(--bg-secondary);
-  border-radius: 16px;
-  border: 1px solid var(--separator);
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 20px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .loading-state {
@@ -612,10 +626,10 @@ onMounted(() => {
 .class-item {
   display: flex;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--separator);
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--separator, rgba(255, 255, 255, 0.06));
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   animation: slideInUp 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
@@ -624,7 +638,8 @@ onMounted(() => {
 }
 
 .class-item:hover {
-  background: var(--fill-quaternary);
+  background: var(--fill-quaternary, rgba(255, 255, 255, 0.04));
+  transform: translateX(2px);
 }
 
 .class-item:active {
@@ -649,10 +664,12 @@ onMounted(() => {
 }
 
 .time-display {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
+  letter-spacing: -0.01em;
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  line-height: 1.2;
 }
 
 .duration {
@@ -767,17 +784,20 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 16px 20px;
-  background: var(--bg-secondary);
-  border-radius: 16px;
-  border: 1px solid var(--separator);
+  background: var(--bg-secondary, #1c1c1e);
+  border-radius: 18px;
+  border: 1px solid var(--separator, rgba(255, 255, 255, 0.08));
   text-decoration: none;
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .action-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .action-card:active {
@@ -785,34 +805,36 @@ onMounted(() => {
 }
 
 .action-card.students {
-  background: linear-gradient(135deg, rgba(0, 122, 255, 0.1) 0%, rgba(90, 200, 250, 0.1) 100%);
-  border-color: rgba(0, 122, 255, 0.2);
+  border-color: rgba(0, 122, 255, 0.25);
 }
 
 .action-card.lessons {
-  background: linear-gradient(135deg, rgba(52, 199, 89, 0.1) 0%, rgba(90, 200, 250, 0.1) 100%);
-  border-color: rgba(52, 199, 89, 0.2);
+  border-color: rgba(52, 199, 89, 0.25);
 }
 
 .action-card.schedule {
-  background: linear-gradient(135deg, rgba(175, 82, 222, 0.1) 0%, rgba(255, 45, 146, 0.1) 100%);
-  border-color: rgba(175, 82, 222, 0.2);
+  border-color: rgba(175, 82, 222, 0.25);
 }
 
 .action-card.library {
-  background: linear-gradient(135deg, rgba(255, 149, 0, 0.1) 0%, rgba(255, 59, 48, 0.1) 100%);
-  border-color: rgba(255, 149, 0, 0.2);
+  border-color: rgba(255, 149, 0, 0.25);
 }
 
 .action-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-right: 16px;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-card:hover .action-icon {
+  transform: scale(1.06);
 }
 
 .students .action-icon {
@@ -866,6 +888,12 @@ onMounted(() => {
   color: var(--text-tertiary);
   margin-left: 12px;
   flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+}
+
+.action-card:hover .action-arrow {
+  transform: translateX(4px);
+  color: var(--apple-blue);
 }
 
 .action-arrow svg {
