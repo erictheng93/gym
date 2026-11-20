@@ -58,7 +58,7 @@ const dateOptions = computed(() => {
   for (let i = 1; i <= 7; i++) {
     const date = new Date()
     date.setDate(date.getDate() + i)
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = date.toISOString().slice(0, 10)
     options.push({
       value: dateStr,
       label: formatDateLabel(date)
@@ -69,7 +69,7 @@ const dateOptions = computed(() => {
 })
 
 function getTodayDate() {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().slice(0, 10)
 }
 
 function formatDateLabel(date: Date) {

@@ -183,7 +183,7 @@ const handleExportSelected = () => {
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `members_export_${new Date().toISOString().split('T')[0]}.csv`
+  link.download = `members_export_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
 
   toast.success(`成功匯出 ${selectedMembers.length} 位會員資料`)

@@ -188,7 +188,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const data = c.req.valid('json');
 
   // Calculate today bounds
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date();

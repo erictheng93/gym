@@ -203,7 +203,7 @@ const toggleDay = (day: string) => {
 // Employee Assignment Functions
 const openAssignModal = async (schedule: ShiftSchedule) => {
   assigningSchedule.value = schedule
-  assignEffectiveDate.value = new Date().toISOString().split('T')[0]!
+  assignEffectiveDate.value = new Date().toISOString().slice(0, 10)!
   selectedEmployees.value = []
   isLoadingEmployees.value = true
   showAssignModal.value = true

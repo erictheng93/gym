@@ -94,13 +94,13 @@ const fetchDashboardData = async () => {
       readItems<any>('contracts', { limit: 5, sort: 'dateCreated', sortOrder: 'desc' }),
       // Fetch monthly revenue from reports API
       getRevenueReport(
-        startOfMonth.toISOString().split('T')[0],
-        now.toISOString().split('T')[0]
+        startOfMonth.toISOString().slice(0, 10),
+        now.toISOString().slice(0, 10)
       ).catch(() => ({ summary: { net_revenue: 0 } })),
       // Fetch today's revenue from reports API
       getRevenueReport(
-        startOfToday.toISOString().split('T')[0],
-        now.toISOString().split('T')[0]
+        startOfToday.toISOString().slice(0, 10),
+        now.toISOString().slice(0, 10)
       ).catch(() => ({ summary: { net_revenue: 0 } }))
     ])
 

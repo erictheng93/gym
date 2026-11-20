@@ -70,7 +70,7 @@ interface CheckInValidationResult {
  * - Determines if cross-branch entry
  */
 export async function validateCheckIn(data: CheckInData): Promise<CheckInValidationResult> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   // Get member info
   const [member] = await db

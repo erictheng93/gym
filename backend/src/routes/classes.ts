@@ -252,8 +252,8 @@ app.get('/:id/sessions', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
   const now = new Date();
-  const startDate = c.req.query('startDate') || now.toISOString().split('T')[0];
-  const endDate = c.req.query('endDate') || new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const startDate = c.req.query('startDate') || now.toISOString().slice(0, 10);
+  const endDate = c.req.query('endDate') || new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const [[classItem], branchIds, sessions] = await Promise.all([
     db

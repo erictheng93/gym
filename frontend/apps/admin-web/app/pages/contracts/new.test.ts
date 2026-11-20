@@ -216,7 +216,7 @@ describe('contracts/new.vue', () => {
         }
       })
 
-      const today = new Date().toISOString().split('T')[0]
+      const today = new Date().toISOString().slice(0, 10)
       expect(wrapper.vm.form.start_date).toBe(today)
     })
   })

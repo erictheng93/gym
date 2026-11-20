@@ -69,7 +69,7 @@ export const useAttendance = () => {
   // Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const now = new Date()
-    return now.toISOString().split('T')[0]
+    return now.toISOString().slice(0, 10)
   }
 
   // Fetch today's attendance records
@@ -345,7 +345,7 @@ export const useAttendance = () => {
       const result = await readItems<Attendance>('attendances', {
         filter: {
           employee_id: employeeId,
-          attendance_date_gte: startDate.toISOString().split('T')[0]
+          attendance_date_gte: startDate.toISOString().slice(0, 10)
         },
         sort: 'attendance_date',
         sortOrder: 'desc',
@@ -448,8 +448,8 @@ export const useAttendance = () => {
     if (existing) return existing
 
     const promise = (async () => {
-      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+      const startDate = new Date(year, month - 1, 1).toISOString().slice(0, 10)
+      const endDate = new Date(year, month, 0).toISOString().slice(0, 10)
 
       try {
         const filter: Record<string, unknown> = {
@@ -536,8 +536,8 @@ export const useAttendance = () => {
     if (existing) return existing
 
     const promise = (async () => {
-      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+      const startDate = new Date(year, month - 1, 1).toISOString().slice(0, 10)
+      const endDate = new Date(year, month, 0).toISOString().slice(0, 10)
 
       try {
         const result = await readItems<Attendance>('attendances', {

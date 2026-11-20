@@ -1,6 +1,23 @@
 import { db, tenants, branches, members, contracts, payments, usageRecords } from '../db/index.js';
 import { eq, and, sql, sum, count } from 'drizzle-orm';
 
+const ANALYTICS_TENANTS_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+};
+
+const ANALYTICS_BRANCHES_SELECT = {
+  id: branches.id,
+};
+
+const ANALYTICS_REVENUE_SELECT = {
+  total: sum(payments.amount),
+};
+
+const ANALYTICS_COUNT_SELECT = {
+  count: count(),
+};
+
 export async function runAnalyticsTasks() {
   console.log('[Analytics] Starting analytics tasks...');
 
@@ -15,17 +32,17 @@ export async function runAnalyticsTasks() {
 async function generateDailySnapshot() {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
   const allTenants = await db
-    .select({ id: tenants.id, name: tenants.name })
+    .select(ANALYTICS_TENANTS_SELECT)
     .from(tenants)
     .where(eq(tenants.status, 'active'));
 
   for (const tenant of allTenants) {
     try {
       const tenantBranches = await db
-        .select({ id: branches.id })
+        .select(ANALYTICS_BRANCHES_SELECT)
         .from(branches)
         .where(eq(branches.tenantId, tenant.id));
 
@@ -34,7 +51,7 @@ async function generateDailySnapshot() {
       if (branchIds.length === 0) continue;
 
       const [revenueResult] = await db
-        .select({ total: sum(payments.amount) })
+        .select(ANALYTICS_REVENUE_SELECT)
         .from(payments)
         .where(
           and(
@@ -47,12 +64,12 @@ async function generateDailySnapshot() {
       const dailyRevenue = Number(revenueResult?.total || 0);
 
       const [memberCount] = await db
-        .select({ count: count() })
+        .select(ANALYTICS_COUNT_SELECT)
         .from(members)
         .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
 
       const [contractCount] = await db
-        .select({ count: count() })
+        .select(ANALYTICS_COUNT_SELECT)
         .from(contracts)
         .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
 

@@ -257,7 +257,7 @@ const formatDate = (date: Date) => {
 const fetchTodayClasses = async () => {
   loading.value = true
   try {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().slice(0, 10)
     const response = await $fetch<{
       success: boolean
       data: ClassBooking[]

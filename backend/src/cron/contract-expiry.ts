@@ -2,6 +2,29 @@ import { db, contracts, members, branches, notifications } from '../db/index.js'
 import { eq, and } from 'drizzle-orm';
 import { emailService } from '../services/email.js';
 
+const CRON_EXPIRING_CONTRACT_JOIN_SELECT = {
+  contract: {
+    id: contracts.id,
+    contractNo: contracts.contractNo,
+    endDate: contracts.endDate,
+  },
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    email: members.email,
+    phone: members.phone,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+    tenantId: branches.tenantId,
+  },
+};
+
+const CRON_NOTIFICATION_ID_SELECT = {
+  id: notifications.id,
+};
+
 export async function runContractExpiryCheck() {
   console.log('[ContractExpiry] Starting contract expiry check...');
 
@@ -19,23 +42,10 @@ async function checkExpiringContracts(daysAhead: number) {
   const today = new Date();
   const targetDate = new Date();
   targetDate.setDate(today.getDate() + daysAhead);
-  const targetDateStr = targetDate.toISOString().split('T')[0];
+  const targetDateStr = targetDate.toISOString().slice(0, 10);
 
   const expiringContracts = await db
-    .select({
-      contract: contracts,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        email: members.email,
-        phone: members.phone,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      },
-    })
+    .select(CRON_EXPIRING_CONTRACT_JOIN_SELECT)
     .from(contracts)
     .innerJoin(members, eq(contracts.memberId, members.id))
     .innerJoin(branches, eq(contracts.branchId, branches.id))
@@ -51,7 +61,7 @@ async function checkExpiringContracts(daysAhead: number) {
   for (const { contract, member, branch } of expiringContracts) {
     try {
       const existingNotification = await db
-        .select({ id: notifications.id })
+        .select(CRON_NOTIFICATION_ID_SELECT)
         .from(notifications)
         .where(
           and(

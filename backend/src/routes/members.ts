@@ -171,7 +171,7 @@ app.get('/export', async (c) => {
     branchName: branchMap.get(m.branchId!) || '',
   }));
 
-  const filename = `會員列表_${new Date().toISOString().split('T')[0]}`;
+  const filename = `會員列表_${new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const exportResult = await generateExcel(membersColumns, exportData, '會員列表');
@@ -279,7 +279,7 @@ app.post('/', zValidator('json', createMemberSchema), async (c) => {
   const [newMember] = await db.insert(members).values({
     ...data,
     memberCode,
-    joinDate: data.joinDate || new Date().toISOString().split('T')[0],
+    joinDate: data.joinDate || new Date().toISOString().slice(0, 10),
     tenantId,
   }).returning(MEMBER_RETURNING);
 

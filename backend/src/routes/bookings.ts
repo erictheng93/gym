@@ -25,6 +25,124 @@ const BOOKING_SELECT = {
   attendedAt: bookings.attendedAt,
   countDeducted: bookings.countDeducted,
 };
+const BOOKING_COUNT_SELECT = { count: sql<number>`count(*)` };
+
+const BOOKING_LIST_JOIN_SELECT = {
+  booking: BOOKING_SELECT,
+  session: {
+    id: classSessions.id,
+    sessionDate: classSessions.sessionDate,
+    startTime: classSessions.startTime,
+    endTime: classSessions.endTime,
+    sessionStatus: classSessions.sessionStatus,
+  },
+  class: {
+    id: classes.id,
+    name: classes.name,
+    category: classes.category,
+  },
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+};
+
+const BOOKING_DETAIL_JOIN_SELECT = {
+  booking: BOOKING_SELECT,
+  session: {
+    id: classSessions.id,
+    branchId: classSessions.branchId,
+    classId: classSessions.classId,
+    instructorId: classSessions.instructorId,
+    sessionDate: classSessions.sessionDate,
+    startTime: classSessions.startTime,
+    endTime: classSessions.endTime,
+    sessionStatus: classSessions.sessionStatus,
+    maxCapacity: classSessions.maxCapacity,
+    currentCount: classSessions.currentCount,
+    waitlistCount: classSessions.waitlistCount,
+  },
+  class: {
+    id: classes.id,
+    name: classes.name,
+    category: classes.category,
+    description: classes.description,
+    durationMinutes: classes.durationMinutes,
+  },
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+    phone: members.phone,
+    email: members.email,
+    status: members.status,
+  },
+};
+
+const BOOKING_CREATE_SESSION_SELECT = {
+  id: classSessions.id,
+  branchId: classSessions.branchId,
+  sessionStatus: classSessions.sessionStatus,
+  sessionDate: classSessions.sessionDate,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+};
+
+const BOOKING_CREATE_MEMBER_SELECT = {
+  id: members.id,
+  status: members.status,
+};
+
+const BOOKING_ID_SELECT = {
+  id: bookings.id,
+};
+
+const BOOKING_CREATE_RETURNING = {
+  id: bookings.id,
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  contractId: bookings.contractId,
+  bookingStatus: bookings.bookingStatus,
+  waitlistPosition: bookings.waitlistPosition,
+  createdAt: bookings.createdAt,
+};
+
+const BOOKING_CANCEL_SELECT = {
+  booking: {
+    id: bookings.id,
+    bookingStatus: bookings.bookingStatus,
+  },
+  session: {
+    id: classSessions.id,
+    branchId: classSessions.branchId,
+    sessionDate: classSessions.sessionDate,
+    startTime: classSessions.startTime,
+    currentCount: classSessions.currentCount,
+    waitlistCount: classSessions.waitlistCount,
+  },
+};
+
+const BOOKING_ATTEND_SELECT = {
+  booking: {
+    id: bookings.id,
+    bookingStatus: bookings.bookingStatus,
+    contractId: bookings.contractId,
+  },
+  session: {
+    branchId: classSessions.branchId,
+    sessionDate: classSessions.sessionDate,
+  },
+  class: {
+    requiresCount: classes.requiresCount,
+    countDeduction: classes.countDeduction,
+  },
+  contract: {
+    remainingCounts: contracts.remainingCounts,
+  },
+};
+
 
 app.use('*', requireAuth);
 app.use('*', requireTenant);
@@ -72,31 +190,12 @@ app.get('/', async (c) => {
 
   const [[countResult], result] = await Promise.all([
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(BOOKING_COUNT_SELECT)
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
       .where(whereCondition),
     db
-      .select({
-        booking: BOOKING_SELECT,
-        session: {
-          id: classSessions.id,
-          sessionDate: classSessions.sessionDate,
-          startTime: classSessions.startTime,
-          endTime: classSessions.endTime,
-          sessionStatus: classSessions.sessionStatus,
-        },
-        class: {
-          id: classes.id,
-          name: classes.name,
-          category: classes.category,
-        },
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-        },
-      })
+      .select(BOOKING_LIST_JOIN_SELECT)
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
       .innerJoin(classes, eq(classSessions.classId, classes.id))
@@ -127,37 +226,7 @@ app.get('/:id', async (c) => {
 
   const [[booking], branchIds] = await Promise.all([
     db
-      .select({
-        booking: BOOKING_SELECT,
-        session: {
-          id: classSessions.id,
-          branchId: classSessions.branchId,
-          classId: classSessions.classId,
-          instructorId: classSessions.instructorId,
-          sessionDate: classSessions.sessionDate,
-          startTime: classSessions.startTime,
-          endTime: classSessions.endTime,
-          sessionStatus: classSessions.sessionStatus,
-          maxCapacity: classSessions.maxCapacity,
-          currentCount: classSessions.currentCount,
-          waitlistCount: classSessions.waitlistCount,
-        },
-        class: {
-          id: classes.id,
-          name: classes.name,
-          category: classes.category,
-          description: classes.description,
-          durationMinutes: classes.durationMinutes,
-        },
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-          phone: members.phone,
-          email: members.email,
-          status: members.status,
-        },
-      })
+      .select(BOOKING_DETAIL_JOIN_SELECT)
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
       .innerJoin(classes, eq(classSessions.classId, classes.id))
@@ -192,26 +261,18 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
 
   const [[session], branchIds, [member], [existingBooking]] = await Promise.all([
     db
-      .select({
-        id: classSessions.id,
-        branchId: classSessions.branchId,
-        sessionStatus: classSessions.sessionStatus,
-        sessionDate: classSessions.sessionDate,
-        maxCapacity: classSessions.maxCapacity,
-        currentCount: classSessions.currentCount,
-        waitlistCount: classSessions.waitlistCount,
-      })
+      .select(BOOKING_CREATE_SESSION_SELECT)
       .from(classSessions)
       .where(eq(classSessions.id, data.sessionId))
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select({ id: members.id, status: members.status })
+      .select(BOOKING_CREATE_MEMBER_SELECT)
       .from(members)
       .where(eq(members.id, data.memberId))
       .limit(1),
     db
-      .select({ id: bookings.id })
+      .select(BOOKING_ID_SELECT)
       .from(bookings)
       .where(
         and(
@@ -269,15 +330,7 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
       contractId: data.contractId,
       bookingStatus,
       waitlistPosition,
-    }).returning({
-      id: bookings.id,
-      sessionId: bookings.sessionId,
-      memberId: bookings.memberId,
-      contractId: bookings.contractId,
-      bookingStatus: bookings.bookingStatus,
-      waitlistPosition: bookings.waitlistPosition,
-      createdAt: bookings.createdAt,
-    }),
+    }).returning(BOOKING_CREATE_RETURNING),
     bookingStatus === 'CONFIRMED'
       ? db.update(classSessions).set({
           currentCount: currentCount + 1,
@@ -305,20 +358,7 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
 
   const [[booking], branchIds] = await Promise.all([
     db
-      .select({
-        booking: {
-          id: bookings.id,
-          bookingStatus: bookings.bookingStatus,
-        },
-        session: {
-          id: classSessions.id,
-          branchId: classSessions.branchId,
-          sessionDate: classSessions.sessionDate,
-          startTime: classSessions.startTime,
-          currentCount: classSessions.currentCount,
-          waitlistCount: classSessions.waitlistCount,
-        },
-      })
+      .select(BOOKING_CANCEL_SELECT)
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
       .where(eq(bookings.id, id))
@@ -357,7 +397,7 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
         updatedAt: new Date(),
       }).where(eq(bookings.id, id)),
       db
-        .select({ id: bookings.id })
+        .select(BOOKING_ID_SELECT)
         .from(bookings)
         .where(
           and(
@@ -412,24 +452,7 @@ app.post('/:id/attend', async (c) => {
 
   const [[booking], branchIds] = await Promise.all([
     db
-      .select({
-        booking: {
-          id: bookings.id,
-          bookingStatus: bookings.bookingStatus,
-          contractId: bookings.contractId,
-        },
-        session: {
-          branchId: classSessions.branchId,
-          sessionDate: classSessions.sessionDate,
-        },
-        class: {
-          requiresCount: classes.requiresCount,
-          countDeduction: classes.countDeduction,
-        },
-        contract: {
-          remainingCounts: contracts.remainingCounts,
-        },
-      })
+      .select(BOOKING_ATTEND_SELECT)
       .from(bookings)
       .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
       .innerJoin(classes, eq(classSessions.classId, classes.id))
@@ -451,7 +474,7 @@ app.post('/:id/attend', async (c) => {
     return c.json({ success: false, error: '只有已確認的預約才能簽到' }, 400);
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
   if (booking.session.sessionDate !== today) {
     return c.json({ success: false, error: '只能在課程當天簽到' }, 400);
   }

@@ -97,7 +97,7 @@ const transformToCamelCase = (data: typeof form) => {
     emergencyContact: data.emergency_contact || null,
     emergencyPhone: data.emergency_phone || null,
     tags: data.tags || [],
-    joinDate: new Date().toISOString().split('T')[0]
+    joinDate: new Date().toISOString().slice(0, 10)
   }
 }
 

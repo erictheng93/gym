@@ -362,7 +362,7 @@ const exportData = async (format: 'csv' | 'pdf' = 'csv') => {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `member-analytics-${new Date().toISOString().split('T')[0]}.${format}`
+      a.download = `member-analytics-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)

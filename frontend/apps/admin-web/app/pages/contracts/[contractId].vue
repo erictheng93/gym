@@ -65,7 +65,7 @@ const showRenewModal = ref(false)
 const isProcessing = ref(false)
 
 const pauseForm = reactive({
-  startDate: new Date().toISOString().split('T')[0],
+  startDate: new Date().toISOString().slice(0, 10),
   endDate: '',
   reason: ''
 })
@@ -251,7 +251,7 @@ const handlePause = async () => {
     // 更新合約狀態
     await updateContract(contract.value.id, {
       contract_status: 'PAUSED',
-      end_date: newEndDate.toISOString().split('T')[0]
+      end_date: newEndDate.toISOString().slice(0, 10)
     })
 
     showPauseModal.value = false
@@ -337,7 +337,7 @@ const extendedEndDate = computed(() => {
   if (!contract.value?.end_date || !extendForm.days) return ''
   const end = new Date(contract.value.end_date)
   end.setDate(end.getDate() + extendForm.days)
-  return end.toISOString().split('T')[0]
+  return end.toISOString().slice(0, 10)
 })
 
 // 轉讓合約
@@ -397,7 +397,7 @@ const handleTerminate = async () => {
         member_id: contract.value.member?.id,
         amount: terminateForm.refundAmount,
         payment_type: 'REFUND',
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: new Date().toISOString().slice(0, 10),
         branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null,
         received_by: currentEmployee.value?.id || null,
         notes: `合約終止退款 - ${terminateForm.reason}`
@@ -463,7 +463,7 @@ const handleRenew = async () => {
     const startDate = new Date(renewForm.startDate)
     const durationMonths = contract.value.plan?.duration_months || 0
     startDate.setMonth(startDate.getMonth() + durationMonths)
-    const newEndDate = startDate.toISOString().split('T')[0]
+    const newEndDate = startDate.toISOString().slice(0, 10)
 
     // 建立續約紀錄（在舊合約上）
     await createItem<ContractLog>('contract_logs', {
@@ -483,7 +483,7 @@ const handleRenew = async () => {
       start_date: renewForm.startDate,
       end_date: newEndDate,
       original_end_date: newEndDate,
-      sign_date: new Date().toISOString().split('T')[0],
+      sign_date: new Date().toISOString().slice(0, 10),
       total_amount: renewForm.amount || contract.value.plan?.price || 0,
       contract_status: 'ACTIVE',
       payment_status: 'UNPAID',
@@ -528,9 +528,9 @@ const openRenewModal = () => {
   if (contract.value?.end_date) {
     const nextDay = new Date(contract.value.end_date)
     nextDay.setDate(nextDay.getDate() + 1)
-    renewForm.startDate = nextDay.toISOString().split('T')[0]!
+    renewForm.startDate = nextDay.toISOString().slice(0, 10)!
   } else {
-    renewForm.startDate = new Date().toISOString().split('T')[0]!
+    renewForm.startDate = new Date().toISOString().slice(0, 10)!
   }
   renewForm.amount = contract.value?.plan?.price || 0
   showRenewModal.value = true

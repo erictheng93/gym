@@ -147,7 +147,7 @@ const weekDays = computed(() => {
     const date = new Date(start)
     date.setDate(start.getDate() + i)
     days.push({
-      date: date.toISOString().split('T')[0]!,
+      date: date.toISOString().slice(0, 10)!,
       dayOfWeek: date.getDay(),
     })
   }
@@ -169,7 +169,7 @@ const classesByDay = computed(() => {
   const map = new Map<string, ClassBooking[]>()
   if (!schedule.value?.classes) return map
   for (const c of schedule.value.classes) {
-    const classDate = new Date(c.scheduled_at).toISOString().split('T')[0]!
+    const classDate = new Date(c.scheduled_at).toISOString().slice(0, 10)!
     const list = map.get(classDate)
     if (list) {
       list.push(c)
@@ -250,7 +250,7 @@ function formatDayHeader(dateStr: string) {
 }
 
 function isToday(dateStr: string) {
-  return dateStr === new Date().toISOString().split('T')[0]!
+  return dateStr === new Date().toISOString().slice(0, 10)!
 }
 
 function getClassesForDay(dateStr: string): ClassBooking[] {
@@ -289,8 +289,8 @@ async function loadSchedule() {
   endDate.setDate(endDate.getDate() + 6)
 
   await getSchedule({
-    start_date: currentWeekStart.value.toISOString().split('T')[0],
-    end_date: endDate.toISOString().split('T')[0],
+    start_date: currentWeekStart.value.toISOString().slice(0, 10),
+    end_date: endDate.toISOString().slice(0, 10),
   })
 }
 

@@ -29,7 +29,7 @@ app.get('/', async (c) => {
   const coach = c.get('coach')!;
 
   // Date calculations for classes
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
   const dayOfWeek = now.getDay();
   const monday = new Date(now);
@@ -37,8 +37,8 @@ app.get('/', async (c) => {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
-  const mondayStr = monday.toISOString().split('T')[0];
-  const sundayStr = sunday.toISOString().split('T')[0];
+  const mondayStr = monday.toISOString().slice(0, 10);
+  const sundayStr = sunday.toISOString().slice(0, 10);
 
   // Fetch full employee info with joined branch/jobTitle and statistics concurrently in a single round trip
   const [

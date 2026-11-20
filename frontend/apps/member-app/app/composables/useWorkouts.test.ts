@@ -22,7 +22,7 @@ const mockMember = {
 const mockWorkout = {
   id: 'workout-1',
   member_id: 'member-1',
-  date: new Date().toISOString().split('T')[0],
+  date: new Date().toISOString().slice(0, 10),
   duration: 60,
   calories: 300,
   exercises: [{ name: '跑步機', sets: undefined, reps: undefined, duration: 30 }],
@@ -709,8 +709,8 @@ describe('useWorkouts', () => {
 
       stateStore.set('member_workouts', {
         value: [
-          { ...mockWorkout, date: recentDate.toISOString().split('T')[0] },
-          { ...mockWorkout2, date: oldDate.toISOString().split('T')[0] },
+          { ...mockWorkout, date: recentDate.toISOString().slice(0, 10) },
+          { ...mockWorkout2, date: oldDate.toISOString().slice(0, 10) },
         ],
       })
 
@@ -720,7 +720,7 @@ describe('useWorkouts', () => {
     })
 
     it('hasWorkoutToday should return true when workout exists today', () => {
-      const today = new Date().toISOString().split('T')[0]
+      const today = new Date().toISOString().slice(0, 10)
       stateStore.set('member_workouts', {
         value: [{ ...mockWorkout, date: today }],
       })

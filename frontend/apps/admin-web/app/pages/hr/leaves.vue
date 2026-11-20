@@ -725,14 +725,14 @@ const getActionLabel = (action: string) => {
                     v-model="applyForm.startDate"
                     type="date"
                     class="input"
-                    :min="new Date().toISOString().split('T')[0]"
+                    :min="new Date().toISOString().slice(0, 10)"
                   />
                   <span class="date-to">至</span>
                   <input
                     v-model="applyForm.endDate"
                     type="date"
                     class="input"
-                    :min="applyForm.startDate || new Date().toISOString().split('T')[0]"
+                    :min="applyForm.startDate || new Date().toISOString().slice(0, 10)"
                   />
                 </div>
               </div>

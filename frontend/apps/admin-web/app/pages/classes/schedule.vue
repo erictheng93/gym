@@ -53,7 +53,7 @@ const formatDateDisplay = (date: Date) => {
 
 // Format date for API
 const formatDateApi = (date: Date): string => {
-  return date.toISOString().split('T')[0]!
+  return date.toISOString().slice(0, 10)!
 }
 
 // Week label

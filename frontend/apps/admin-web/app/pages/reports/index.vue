@@ -160,7 +160,7 @@ const loadReports = async () => {
         break
     }
 
-    const formatDate = (d: Date) => d.toISOString().split('T')[0]
+    const formatDate = (d: Date) => d.toISOString().slice(0, 10)
     const branchId = selectedBranch.value || undefined
 
     // Fetch current and previous period reports in parallel
@@ -383,7 +383,7 @@ onMounted(async () => {
             v-if="revenueReport"
             :data="revenueReport.data"
             report-type="revenue"
-            :filename="`營收報表_${new Date().toISOString().split('T')[0]}`"
+            :filename="`營收報表_${new Date().toISOString().slice(0, 10)}`"
           />
           <p class="export-label">{{ PAGES.REPORTS.EXPORT_REVENUE }}</p>
         </div>
@@ -394,7 +394,7 @@ onMounted(async () => {
             v-if="memberGrowthReport"
             :data="memberGrowthReport.data"
             report-type="member-growth"
-            :filename="`會員成長報表_${new Date().toISOString().split('T')[0]}`"
+            :filename="`會員成長報表_${new Date().toISOString().slice(0, 10)}`"
           />
           <p class="export-label">{{ PAGES.REPORTS.EXPORT_MEMBERS }}</p>
         </div>
@@ -405,7 +405,7 @@ onMounted(async () => {
             v-if="contractExpiryReport"
             :data="contractExpiryReport.data"
             report-type="contract-expiry"
-            :filename="`合約到期提醒_${new Date().toISOString().split('T')[0]}`"
+            :filename="`合約到期提醒_${new Date().toISOString().slice(0, 10)}`"
           />
           <p class="export-label">{{ PAGES.REPORTS.EXPORT_CONTRACTS }}</p>
         </div>
@@ -416,7 +416,7 @@ onMounted(async () => {
             v-if="memberActivityReport"
             :data="memberActivityReport.data"
             report-type="member-activity"
-            :filename="`會員活躍度報表_${new Date().toISOString().split('T')[0]}`"
+            :filename="`會員活躍度報表_${new Date().toISOString().slice(0, 10)}`"
           />
           <p class="export-label">{{ PAGES.REPORTS.EXPORT_CHECKINS }}</p>
         </div>

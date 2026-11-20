@@ -192,7 +192,7 @@ export const useWorkouts = () => {
   }): Workout => ({
     id: `pending-${queueId}`,
     member_id: member.value!.id,
-    date: data.date || new Date().toISOString().split('T')[0]!,
+    date: data.date || new Date().toISOString().slice(0, 10)!,
     duration: data.duration ?? null,
     calories: data.calories ?? null,
     exercises: data.exercises ?? null,
@@ -404,7 +404,7 @@ export const useWorkouts = () => {
    * Check if member has workout today
    */
   const hasWorkoutToday = computed(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().slice(0, 10)
     return workouts.value.some(w => w.date === today)
   })
 

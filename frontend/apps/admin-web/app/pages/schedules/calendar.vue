@@ -322,7 +322,7 @@ const filteredEmployees = computed(() => {
 })
 
 function formatDateISO(date: Date): string {
-  return date.toISOString().split('T')[0]!
+  return date.toISOString().slice(0, 10)!
 }
 
 function formatDate(dateStr: string): string {
@@ -560,8 +560,8 @@ async function fetchEmployeeShifts() {
   try {
     const year = currentDate.value.getFullYear()
     const month = currentDate.value.getMonth()
-    const startDate = new Date(year, month, 1).toISOString().split('T')[0]
-    const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0]
+    const startDate = new Date(year, month, 1).toISOString().slice(0, 10)
+    const endDate = new Date(year, month + 1, 0).toISOString().slice(0, 10)
 
     const response = await fetch(
       `${apiBaseUrl}/api/hr/employee-shifts?startDate=${startDate}&endDate=${endDate}`,

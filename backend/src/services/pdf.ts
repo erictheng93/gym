@@ -420,7 +420,7 @@ export async function generateInvoicePdf(paymentId: string): Promise<PdfGenerati
       memberCode: member?.memberCode || '',
       amount: parseFloat(payment.amount),
       paymentMethod: formatPaymentMethod(payment.paymentMethod),
-      paymentDate: payment.paymentDate.toISOString().split('T')[0],
+      paymentDate: payment.paymentDate.toISOString().slice(0, 10),
       description: payment.notes || '健身房費用',
       branchName: branch?.name || 'Unknown Branch',
       branchAddress: branch?.address || undefined,

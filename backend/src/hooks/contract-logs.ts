@@ -44,13 +44,13 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
   // Calculate new end date
   const currentEndDate = new Date(contract.endDate);
   const newEndDate = addDays(currentEndDate, data.days);
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   // Update contract
   await db
     .update(contracts)
     .set({
-      endDate: newEndDate.toISOString().split('T')[0],
+      endDate: newEndDate.toISOString().slice(0, 10),
       status: 'PAUSED',
       updatedAt: new Date(),
     })
@@ -61,7 +61,7 @@ export async function handlePauseLog(data: ContractLogData): Promise<void> {
     contractId: data.contractId,
     logType: 'EXTEND',
     startDate: today,
-    endDate: newEndDate.toISOString().split('T')[0],
+    endDate: newEndDate.toISOString().slice(0, 10),
     daysAffected: data.days,
     reason: `因暫停自動展延 ${data.days} 天`,
     createdByEmployee: data.createdBy,
@@ -225,7 +225,7 @@ export async function handleExtendLog(data: ContractLogData): Promise<void> {
   await db
     .update(contracts)
     .set({
-      endDate: newEndDate.toISOString().split('T')[0],
+      endDate: newEndDate.toISOString().slice(0, 10),
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, data.contractId));

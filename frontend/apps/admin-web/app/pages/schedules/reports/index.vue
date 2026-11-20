@@ -308,8 +308,8 @@ const config = useRuntimeConfig()
 const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 const dateRange = ref({
-  start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  end: new Date().toISOString().split('T')[0],
+  start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  end: new Date().toISOString().slice(0, 10),
 })
 
 const attendances = ref<Attendance[]>([])
