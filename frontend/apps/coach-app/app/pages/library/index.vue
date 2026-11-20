@@ -198,6 +198,32 @@
   </div>
 </template>
 
+<script lang="ts">
+const TYPE_BADGE_CLASSES: Record<string, string> = {
+  EXERCISE: 'badge-blue',
+  VIDEO: 'badge-red',
+  DOCUMENT: 'badge-gray',
+}
+
+const TYPE_TEXTS: Record<string, string> = {
+  EXERCISE: '動作',
+  VIDEO: '影片',
+  DOCUMENT: '文件',
+}
+
+const DIFFICULTY_CLASSES: Record<string, string> = {
+  BEGINNER: 'difficulty-green',
+  INTERMEDIATE: 'difficulty-orange',
+  ADVANCED: 'difficulty-red',
+}
+
+const DIFFICULTY_TEXTS: Record<string, string> = {
+  BEGINNER: '初階',
+  INTERMEDIATE: '中階',
+  ADVANCED: '進階',
+}
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth',
@@ -291,30 +317,6 @@ const loadMore = async () => {
 
 const goToMaterial = (id: string) => {
   router.push(`/library/${id}`)
-}
-
-const TYPE_BADGE_CLASSES: Record<string, string> = {
-  EXERCISE: 'badge-blue',
-  VIDEO: 'badge-red',
-  DOCUMENT: 'badge-gray',
-}
-
-const TYPE_TEXTS: Record<string, string> = {
-  EXERCISE: '動作',
-  VIDEO: '影片',
-  DOCUMENT: '文件',
-}
-
-const DIFFICULTY_CLASSES: Record<string, string> = {
-  BEGINNER: 'difficulty-green',
-  INTERMEDIATE: 'difficulty-orange',
-  ADVANCED: 'difficulty-red',
-}
-
-const DIFFICULTY_TEXTS: Record<string, string> = {
-  BEGINNER: '初階',
-  INTERMEDIATE: '中階',
-  ADVANCED: '進階',
 }
 
 const getTypeBadgeClass = (type: string) => TYPE_BADGE_CLASSES[type] || 'badge-gray'

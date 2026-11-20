@@ -12,6 +12,8 @@ interface BrandingCacheEntry {
 const brandingCache = new Map<string, BrandingCacheEntry>();
 const inFlightBranding = new Map<string, Promise<TenantBranding | null>>();
 const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_CONTROL_PUBLIC = 'public, max-age=300, stale-while-revalidate=60';
+const CACHE_CONTROL_SHORT = 'public, max-age=60';
 
 /**
  * Invalidate branding cache for a specific tenant slug or all tenants
@@ -44,7 +46,7 @@ app.get('/', async (c) => {
 
   // If no slug provided, return default branding
   if (!slug) {
-    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    c.header('Cache-Control', CACHE_CONTROL_PUBLIC);
     return c.json({
       success: true,
       data: DEFAULT_BRANDING
@@ -54,7 +56,7 @@ app.get('/', async (c) => {
   // Check in-memory cache
   const cached = brandingCache.get(slug);
   if (cached && cached.expiresAt > Date.now()) {
-    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    c.header('Cache-Control', CACHE_CONTROL_PUBLIC);
     return c.json({
       success: true,
       data: cached.branding
@@ -106,7 +108,7 @@ app.get('/', async (c) => {
 
     // If tenant not found, return default branding
     if (!branding) {
-      c.header('Cache-Control', 'public, max-age=60');
+      c.header('Cache-Control', CACHE_CONTROL_SHORT);
       return c.json({
         success: true,
         data: DEFAULT_BRANDING
@@ -114,7 +116,7 @@ app.get('/', async (c) => {
     }
 
     // Return branding configuration
-    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    c.header('Cache-Control', CACHE_CONTROL_PUBLIC);
     return c.json({
       success: true,
       data: branding

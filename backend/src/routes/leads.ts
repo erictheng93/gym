@@ -28,6 +28,28 @@ const createLeadSchema = z.object({
 
 const updateLeadSchema = createLeadSchema.partial();
 
+const LEAD_SELECT = {
+  id: leads.id,
+  status: leads.status,
+  createdAt: leads.createdAt,
+  updatedAt: leads.updatedAt,
+  fullName: leads.fullName,
+  phone: leads.phone,
+  email: leads.email,
+  source: leads.source,
+  sourceDetail: leads.sourceDetail,
+  branchId: leads.branchId,
+  assignedToId: leads.assignedToId,
+  leadStatus: leads.leadStatus,
+  notes: leads.notes,
+  interests: leads.interests,
+  expectedBudget: leads.expectedBudget,
+  convertedMemberId: leads.convertedMemberId,
+  convertedAt: leads.convertedAt,
+};
+
+const LEAD_RETURNING = LEAD_SELECT;
+
 // List leads
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -81,7 +103,7 @@ app.get('/', async (c) => {
   const [result, [countResult]] = await Promise.all([
     db
       .select({
-        lead: leads,
+        lead: LEAD_SELECT,
         branch: {
           id: branches.id,
           name: branches.name,
@@ -134,7 +156,7 @@ app.get('/:id', async (c) => {
 
   const [result] = await db
     .select({
-      lead: leads,
+      lead: LEAD_SELECT,
       branch: {
         id: branches.id,
         name: branches.name,
@@ -170,26 +192,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const LEAD_RETURNING = {
-  id: leads.id,
-  status: leads.status,
-  createdAt: leads.createdAt,
-  updatedAt: leads.updatedAt,
-  fullName: leads.fullName,
-  phone: leads.phone,
-  email: leads.email,
-  source: leads.source,
-  sourceDetail: leads.sourceDetail,
-  branchId: leads.branchId,
-  assignedToId: leads.assignedToId,
-  leadStatus: leads.leadStatus,
-  notes: leads.notes,
-  interests: leads.interests,
-  expectedBudget: leads.expectedBudget,
-  convertedMemberId: leads.convertedMemberId,
-  convertedAt: leads.convertedAt,
-};
 
 // Create lead
 app.post('/', zValidator('json', createLeadSchema), async (c) => {

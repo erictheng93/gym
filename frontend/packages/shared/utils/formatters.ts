@@ -77,11 +77,14 @@ export function formatDate(
  * formatRelativeTime(new Date(Date.now() - 3600000)) // '1 小時前'
  */
 export function formatRelativeTime(
-  date: Date | string,
+  date: Date | string | null | undefined,
   locale = 'zh-TW'
 ): string {
+  if (!date) return ''
   const now = new Date()
   const target = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(target.getTime())) return ''
+
   const diffMs = now.getTime() - target.getTime()
   const diffSec = Math.floor(diffMs / 1000)
   const diffMin = Math.floor(diffSec / 60)
@@ -133,6 +136,9 @@ export function formatNumber(
   return getCachedNumberFormat(locale).format(num)
 }
 
+const TW_MOBILE_REGEX = /^09\d{8}$/
+const TW_LANDLINE_REGEX = /^0\d{8,9}$/
+
 /**
  * 格式化電話號碼
  *
@@ -143,12 +149,12 @@ export function formatPhone(phone: string | null | undefined): string {
   if (!phone) return '—'
 
   // 台灣手機格式
-  if (phone.match(/^09\d{8}$/)) {
+  if (TW_MOBILE_REGEX.test(phone)) {
     return `${phone.slice(0, 4)}-${phone.slice(4, 7)}-${phone.slice(7)}`
   }
 
   // 台灣市話格式
-  if (phone.match(/^0\d{8,9}$/)) {
+  if (TW_LANDLINE_REGEX.test(phone)) {
     const areaCode = phone.slice(0, 2)
     const rest = phone.slice(2)
     return `${areaCode}-${rest}`

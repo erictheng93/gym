@@ -28,6 +28,28 @@ const createPlanSchema = z.object({
 
 const updatePlanSchema = createPlanSchema.partial();
 
+const MEMBERSHIP_PLAN_SELECT = {
+  id: membershipPlans.id,
+  name: membershipPlans.name,
+  code: membershipPlans.code,
+  planType: membershipPlans.planType,
+  description: membershipPlans.description,
+  durationMonths: membershipPlans.durationMonths,
+  classCounts: membershipPlans.classCounts,
+  price: membershipPlans.price,
+  allowPause: membershipPlans.allowPause,
+  maxPauseDays: membershipPlans.maxPauseDays,
+  allowTransfer: membershipPlans.allowTransfer,
+  isActive: membershipPlans.isActive,
+  sort: membershipPlans.sort,
+  createdAt: membershipPlans.createdAt,
+  updatedAt: membershipPlans.updatedAt,
+  tenantId: membershipPlans.tenantId,
+  branchId: membershipPlans.branchId,
+};
+
+const MEMBERSHIP_PLAN_RETURNING = MEMBERSHIP_PLAN_SELECT;
+
 // List membership plans
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -51,7 +73,7 @@ app.get('/', async (c) => {
 
   const result = await db
     .select({
-      plan: membershipPlans,
+      plan: MEMBERSHIP_PLAN_SELECT,
       branch: {
         id: branches.id,
         name: branches.name,
@@ -78,7 +100,7 @@ app.get('/:id', async (c) => {
 
   const [result] = await db
     .select({
-      plan: membershipPlans,
+      plan: MEMBERSHIP_PLAN_SELECT,
       branch: {
         id: branches.id,
         name: branches.name,
@@ -101,26 +123,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const MEMBERSHIP_PLAN_RETURNING = {
-  id: membershipPlans.id,
-  name: membershipPlans.name,
-  code: membershipPlans.code,
-  planType: membershipPlans.planType,
-  description: membershipPlans.description,
-  durationMonths: membershipPlans.durationMonths,
-  classCounts: membershipPlans.classCounts,
-  price: membershipPlans.price,
-  allowPause: membershipPlans.allowPause,
-  maxPauseDays: membershipPlans.maxPauseDays,
-  allowTransfer: membershipPlans.allowTransfer,
-  isActive: membershipPlans.isActive,
-  sort: membershipPlans.sort,
-  createdAt: membershipPlans.createdAt,
-  updatedAt: membershipPlans.updatedAt,
-  tenantId: membershipPlans.tenantId,
-  branchId: membershipPlans.branchId,
-};
 
 // Create membership plan
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createPlanSchema), async (c) => {

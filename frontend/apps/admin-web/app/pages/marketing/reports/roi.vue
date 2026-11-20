@@ -1,3 +1,14 @@
+<script lang="ts">
+const periodOptions = [
+  { value: 'last_7_days', label: '過去 7 天' },
+  { value: 'last_30_days', label: '過去 30 天' },
+  { value: 'last_90_days', label: '過去 90 天' },
+  { value: 'this_year', label: '今年' }
+]
+
+const roiCurrencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
+</script>
+
 <script setup lang="ts">
 /**
  * ROI 報表頁面
@@ -11,13 +22,6 @@ const { fetchROIReport, isLoading } = useCampaigns()
 const selectedPeriod = ref('last_30_days')
 const roiData = ref<any>(null)
 
-const periodOptions = [
-  { value: 'last_7_days', label: '過去 7 天' },
-  { value: 'last_30_days', label: '過去 30 天' },
-  { value: 'last_90_days', label: '過去 90 天' },
-  { value: 'this_year', label: '今年' }
-]
-
 const loadReport = async () => {
   roiData.value = await fetchROIReport({ type: selectedPeriod.value })
 }
@@ -27,7 +31,7 @@ onMounted(loadReport)
 
 // Format currency
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount)
+  return roiCurrencyFormatter.format(amount)
 }
 
 // Calculate ROI percentage
