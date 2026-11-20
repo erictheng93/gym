@@ -15,71 +15,93 @@ app.use('*', requireAuth);
  */
 app.get('/', async (c) => {
   try {
-    // Get all tenants with their usage stats
-    const tenantList = await db
-      .select({
-        id: tenants.id,
-        name: tenants.name,
-        slug: tenants.slug,
-        email: tenants.email,
-        planType: tenants.planType,
-        tenantStatus: tenants.tenantStatus,
-        maxMembers: tenants.maxMembers,
-        maxEmployees: tenants.maxEmployees,
-        maxBranches: tenants.maxBranches,
-        trialEndsAt: tenants.trialEndsAt,
-        createdAt: tenants.createdAt,
-      })
-      .from(tenants)
-      .orderBy(asc(tenants.name));
+    // Fetch all tenants and aggregated usage counts in parallel to eliminate N+1 queries
+    const [tenantList, memberCounts, employeeCounts, branchCounts] = await Promise.all([
+      db
+        .select({
+          id: tenants.id,
+          name: tenants.name,
+          slug: tenants.slug,
+          email: tenants.email,
+          planType: tenants.planType,
+          tenantStatus: tenants.tenantStatus,
+          maxMembers: tenants.maxMembers,
+          maxEmployees: tenants.maxEmployees,
+          maxBranches: tenants.maxBranches,
+          trialEndsAt: tenants.trialEndsAt,
+          createdAt: tenants.createdAt,
+        })
+        .from(tenants)
+        .orderBy(asc(tenants.name)),
+      db
+        .select({
+          tenantId: members.tenantId,
+          count: count(),
+        })
+        .from(members)
+        .groupBy(members.tenantId),
+      db
+        .select({
+          tenantId: employees.tenantId,
+          count: count(),
+        })
+        .from(employees)
+        .groupBy(employees.tenantId),
+      db
+        .select({
+          tenantId: branches.tenantId,
+          count: count(),
+        })
+        .from(branches)
+        .groupBy(branches.tenantId),
+    ]);
 
-    // Get counts for each tenant
-    const tenantsWithStats = await Promise.all(
-      tenantList.map(async (tenant) => {
-        const [memberCount, employeeCount, branchCount] = await Promise.all([
-          db
-            .select({ count: count() })
-            .from(members)
-            .where(eq(members.tenantId, tenant.id))
-            .then(rows => Number(rows[0]?.count || 0)),
-          db
-            .select({ count: count() })
-            .from(employees)
-            .where(eq(employees.tenantId, tenant.id))
-            .then(rows => Number(rows[0]?.count || 0)),
-          db
-            .select({ count: count() })
-            .from(branches)
-            .where(eq(branches.tenantId, tenant.id))
-            .then(rows => Number(rows[0]?.count || 0)),
-        ]);
+    const memberMap = new Map<string, number>();
+    for (const row of memberCounts) {
+      if (row.tenantId) memberMap.set(row.tenantId, Number(row.count || 0));
+    }
 
-        const maxMembers = tenant.maxMembers || 100;
-        const maxEmployees = tenant.maxEmployees || 10;
-        const maxBranches = tenant.maxBranches || 1;
+    const employeeMap = new Map<string, number>();
+    for (const row of employeeCounts) {
+      if (row.tenantId) employeeMap.set(row.tenantId, Number(row.count || 0));
+    }
 
-        return {
-          id: tenant.id,
-          name: tenant.name,
-          slug: tenant.slug,
-          email: tenant.email || '',
-          plan_type: tenant.planType || 'starter',
-          tenant_status: tenant.tenantStatus || 'active',
-          max_members: maxMembers,
-          max_employees: maxEmployees,
-          max_branches: maxBranches,
-          current_members: memberCount,
-          current_employees: employeeCount,
-          current_branches: branchCount,
-          members_usage_percent: Math.round((memberCount / maxMembers) * 100),
-          employees_usage_percent: Math.round((employeeCount / maxEmployees) * 100),
-          branches_usage_percent: Math.round((branchCount / maxBranches) * 100),
-          active_contracts: 0, // TODO: Calculate active contracts
-          trial_ends_at: tenant.trialEndsAt?.toISOString() || null,
-          date_created: tenant.createdAt?.toISOString() || new Date().toISOString(),
-        };
-      })
-    );
+    const branchMap = new Map<string, number>();
+    for (const row of branchCounts) {
+      if (row.tenantId) branchMap.set(row.tenantId, Number(row.count || 0));
+    }
+
+    // Map stats in-memory
+    const tenantsWithStats = tenantList.map((tenant) => {
+      const memberCount = memberMap.get(tenant.id) || 0;
+      const employeeCount = employeeMap.get(tenant.id) || 0;
+      const branchCount = branchMap.get(tenant.id) || 0;
+
+      const maxMembers = tenant.maxMembers || 100;
+      const maxEmployees = tenant.maxEmployees || 10;
+      const maxBranches = tenant.maxBranches || 1;
+
+      return {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        email: tenant.email || '',
+        plan_type: tenant.planType || 'starter',
+        tenant_status: tenant.tenantStatus || 'active',
+        max_members: maxMembers,
+        max_employees: maxEmployees,
+        max_branches: maxBranches,
+        current_members: memberCount,
+        current_employees: employeeCount,
+        current_branches: branchCount,
+        members_usage_percent: Math.round((memberCount / maxMembers) * 100),
+        employees_usage_percent: Math.round((employeeCount / maxEmployees) * 100),
+        branches_usage_percent: Math.round((branchCount / maxBranches) * 100),
+        active_contracts: 0, // TODO: Calculate active contracts
+        trial_ends_at: tenant.trialEndsAt?.toISOString() || null,
+        date_created: tenant.createdAt?.toISOString() || new Date().toISOString(),
+      };
+    });
 
     // Calculate stats
     const totalTenants = tenantsWithStats.length;

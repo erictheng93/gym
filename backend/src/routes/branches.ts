@@ -66,16 +66,17 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '無權限存取此分店' }, 403);
   }
 
-  const branchEmployees = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.branchId, id))
-    .orderBy(employees.fullName);
-
-  const [memberCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(eq(members.branchId, id));
+  const [branchEmployees, [memberCount]] = await Promise.all([
+    db
+      .select()
+      .from(employees)
+      .where(eq(employees.branchId, id))
+      .orderBy(employees.fullName),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(eq(members.branchId, id)),
+  ]);
 
   return c.json({
     success: true,

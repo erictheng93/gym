@@ -62,31 +62,32 @@ app.get('/', async (c) => {
     );
   }
 
-  const result = await db
-    .select({
-      lead: leads,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      assignedTo: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
-    .leftJoin(employees, eq(leads.assignedToId, employees.id))
-    .where(and(...conditions))
-    .orderBy(desc(leads.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
-    .where(and(...conditions));
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select({
+        lead: leads,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+        assignedTo: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(leads)
+      .innerJoin(branches, eq(leads.branchId, branches.id))
+      .leftJoin(employees, eq(leads.assignedToId, employees.id))
+      .where(and(...conditions))
+      .orderBy(desc(leads.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(leads)
+      .innerJoin(branches, eq(leads.branchId, branches.id))
+      .where(and(...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 

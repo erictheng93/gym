@@ -51,37 +51,38 @@ app.get('/', async (c) => {
     conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
   }
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(contracts)
-    .where(and(...conditions));
-
-  const total = Number(countResult?.count || 0);
-
   // Determine sort order
   const orderFn = sortOrder === 'asc' ? asc(contracts.createdAt) : desc(contracts.createdAt);
 
-  const result = await db
-    .select({
-      contract: contracts,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      plan: {
-        id: membershipPlans.id,
-        name: membershipPlans.name,
-        planType: membershipPlans.planType,
-      },
-    })
-    .from(contracts)
-    .leftJoin(members, eq(contracts.memberId, members.id))
-    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(and(...conditions))
-    .orderBy(orderFn)
-    .limit(limit)
-    .offset(offset);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(contracts)
+      .where(and(...conditions)),
+    db
+      .select({
+        contract: contracts,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+        plan: {
+          id: membershipPlans.id,
+          name: membershipPlans.name,
+          planType: membershipPlans.planType,
+        },
+      })
+      .from(contracts)
+      .leftJoin(members, eq(contracts.memberId, members.id))
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(and(...conditions))
+      .orderBy(orderFn)
+      .limit(limit)
+      .offset(offset),
+  ]);
+
+  const total = Number(countResult?.count || 0);
 
   return c.json({
     success: true,
@@ -179,54 +180,52 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [contract] = await db
-    .select({
-      contract: contracts,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-        email: members.email,
-      },
-      plan: {
-        id: membershipPlans.id,
-        name: membershipPlans.name,
-        planType: membershipPlans.planType,
-        price: membershipPlans.price,
-      },
-    })
-    .from(contracts)
-    .leftJoin(members, eq(contracts.memberId, members.id))
-    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(eq(contracts.id, id))
-    .limit(1);
+  const [[contract], branchIds] = await Promise.all([
+    db
+      .select({
+        contract: contracts,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+          phone: members.phone,
+          email: members.email,
+        },
+        plan: {
+          id: membershipPlans.id,
+          name: membershipPlans.name,
+          planType: membershipPlans.planType,
+          price: membershipPlans.price,
+        },
+      })
+      .from(contracts)
+      .leftJoin(members, eq(contracts.memberId, members.id))
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(eq(contracts.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!contract) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, contract.contract.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(contract.contract.branchId!)) {
     return c.json({ success: false, error: '無權限存取此合約' }, 403);
   }
 
-  const logs = await db
-    .select()
-    .from(contractLogs)
-    .where(eq(contractLogs.contractId, id))
-    .orderBy(desc(contractLogs.dateCreated));
-
-  const contractPayments = await db
-    .select()
-    .from(payments)
-    .where(eq(payments.contractId, id))
-    .orderBy(desc(payments.createdAt));
+  const [logs, contractPayments] = await Promise.all([
+    db
+      .select()
+      .from(contractLogs)
+      .where(eq(contractLogs.contractId, id))
+      .orderBy(desc(contractLogs.dateCreated)),
+    db
+      .select()
+      .from(payments)
+      .where(eq(payments.contractId, id))
+      .orderBy(desc(payments.createdAt)),
+  ]);
 
   return c.json({
     success: true,
@@ -243,13 +242,8 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
   // User context available for future audit logging: c.get('user')
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 

@@ -49,48 +49,48 @@ app.get('/', async (c) => {
       conditions.push(lte(checkIns.checkInTime, new Date(endDate)));
     }
 
-    const result = await db
-      .select({
-        checkIn: {
-          id: checkIns.id,
-          memberId: checkIns.memberId,
-          branchId: checkIns.branchId,
-          contractId: checkIns.contractId,
-          checkInTime: checkIns.checkInTime,
-          checkInType: checkIns.checkInType,
-          checkInMethod: checkIns.checkInMethod,
-          processedById: checkIns.processedById,
-          notes: checkIns.notes,
-        },
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-        },
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-        processedBy: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-      })
-      .from(checkIns)
-      .innerJoin(members, eq(checkIns.memberId, members.id))
-      .innerJoin(branches, eq(checkIns.branchId, branches.id))
-      .leftJoin(employees, eq(checkIns.processedById, employees.id))
-      .where(and(...conditions))
-      .orderBy(desc(checkIns.checkInTime))
-      .limit(limit)
-      .offset(offset);
-
-    // Get total count
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(checkIns)
-      .innerJoin(branches, eq(checkIns.branchId, branches.id))
-      .where(and(...conditions));
+    const [result, [countResult]] = await Promise.all([
+      db
+        .select({
+          checkIn: {
+            id: checkIns.id,
+            memberId: checkIns.memberId,
+            branchId: checkIns.branchId,
+            contractId: checkIns.contractId,
+            checkInTime: checkIns.checkInTime,
+            checkInType: checkIns.checkInType,
+            checkInMethod: checkIns.checkInMethod,
+            processedById: checkIns.processedById,
+            notes: checkIns.notes,
+          },
+          member: {
+            id: members.id,
+            fullName: members.fullName,
+            memberCode: members.memberCode,
+          },
+          branch: {
+            id: branches.id,
+            name: branches.name,
+          },
+          processedBy: {
+            id: employees.id,
+            fullName: employees.fullName,
+          },
+        })
+        .from(checkIns)
+        .innerJoin(members, eq(checkIns.memberId, members.id))
+        .innerJoin(branches, eq(checkIns.branchId, branches.id))
+        .leftJoin(employees, eq(checkIns.processedById, employees.id))
+        .where(and(...conditions))
+        .orderBy(desc(checkIns.checkInTime))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(checkIns)
+        .innerJoin(branches, eq(checkIns.branchId, branches.id))
+        .where(and(...conditions)),
+    ]);
 
     const total = Number(countResult?.count || 0);
 

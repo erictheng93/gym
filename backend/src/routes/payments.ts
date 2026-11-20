@@ -54,33 +54,34 @@ app.get('/', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(payments)
-    .where(whereCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(payments)
+      .where(whereCondition),
+    db
+      .select({
+        payment: payments,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+        contract: {
+          id: contracts.id,
+          contractNo: contracts.contractNo,
+        },
+      })
+      .from(payments)
+      .leftJoin(members, eq(payments.memberId, members.id))
+      .leftJoin(contracts, eq(payments.contractId, contracts.id))
+      .where(whereCondition)
+      .orderBy(desc(payments.createdAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      payment: payments,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-    })
-    .from(payments)
-    .leftJoin(members, eq(payments.memberId, members.id))
-    .leftJoin(contracts, eq(payments.contractId, contracts.id))
-    .where(whereCondition)
-    .orderBy(desc(payments.createdAt))
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -124,20 +125,20 @@ app.get('/summary', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [incomeResult] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(and(whereCondition, eq(payments.type, 'INCOME')));
-
-  const [refundResult] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(and(whereCondition, eq(payments.type, 'REFUND')));
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(payments)
-    .where(whereCondition);
+  const [[incomeResult], [refundResult], [countResult]] = await Promise.all([
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(and(whereCondition, eq(payments.type, 'INCOME'))),
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(and(whereCondition, eq(payments.type, 'REFUND'))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(payments)
+      .where(whereCondition),
+  ]);
 
   const totalIncome = Number(incomeResult?.total || 0);
   const totalRefund = Number(refundResult?.total || 0);
