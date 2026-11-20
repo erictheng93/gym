@@ -75,6 +75,10 @@ onMounted(async () => {
   await Promise.all([loadPayments(), loadStats(), fetchBranches()])
 })
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
   year: 'numeric',
   month: 'short',

@@ -79,7 +79,15 @@ app.get(
         .from(workoutLogs)
         .where(and(...conditions)),
       db
-        .select()
+        .select({
+          id: workoutLogs.id,
+          date: workoutLogs.date,
+          duration: workoutLogs.duration,
+          calories: workoutLogs.calories,
+          exercises: workoutLogs.exercises,
+          notes: workoutLogs.notes,
+          createdAt: workoutLogs.createdAt,
+        })
         .from(workoutLogs)
         .where(and(...conditions))
         .orderBy(desc(workoutLogs.date))
@@ -160,7 +168,15 @@ app.get('/:id', async (c) => {
   const workoutId = c.req.param('id');
 
   const [workout] = await db
-    .select()
+    .select({
+      id: workoutLogs.id,
+      date: workoutLogs.date,
+      duration: workoutLogs.duration,
+      calories: workoutLogs.calories,
+      exercises: workoutLogs.exercises,
+      notes: workoutLogs.notes,
+      createdAt: workoutLogs.createdAt,
+    })
     .from(workoutLogs)
     .where(and(
       eq(workoutLogs.id, workoutId),

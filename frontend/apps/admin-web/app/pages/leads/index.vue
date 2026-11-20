@@ -106,9 +106,12 @@ watch(currentPage, () => {
   loadLeads()
 })
 
-// Initial load
 onMounted(async () => {
   await Promise.all([loadLeads(), fetchBranches(), fetchEmployees()])
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
 })
 
 // Row click handler

@@ -78,6 +78,10 @@ onMounted(async () => {
   await Promise.all([loadMembers(), fetchBranches()])
 })
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 // Toggle selection
 const toggleSelection = (id: string, event: Event) => {
   event.stopPropagation()

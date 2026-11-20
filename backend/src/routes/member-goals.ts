@@ -75,7 +75,18 @@ app.get(
         .from(memberGoals)
         .where(and(...conditions)),
       db
-        .select()
+        .select({
+          id: memberGoals.id,
+          goalType: memberGoals.goalType,
+          targetValue: memberGoals.targetValue,
+          currentValue: memberGoals.currentValue,
+          startDate: memberGoals.startDate,
+          targetDate: memberGoals.targetDate,
+          status: memberGoals.status,
+          notes: memberGoals.notes,
+          createdAt: memberGoals.createdAt,
+          updatedAt: memberGoals.updatedAt,
+        })
         .from(memberGoals)
         .where(and(...conditions))
         .orderBy(desc(memberGoals.createdAt))
@@ -160,7 +171,18 @@ app.get('/:id', async (c) => {
   const goalId = c.req.param('id');
 
   const [goal] = await db
-    .select()
+    .select({
+      id: memberGoals.id,
+      goalType: memberGoals.goalType,
+      targetValue: memberGoals.targetValue,
+      currentValue: memberGoals.currentValue,
+      startDate: memberGoals.startDate,
+      targetDate: memberGoals.targetDate,
+      status: memberGoals.status,
+      notes: memberGoals.notes,
+      createdAt: memberGoals.createdAt,
+      updatedAt: memberGoals.updatedAt,
+    })
     .from(memberGoals)
     .where(and(
       eq(memberGoals.id, goalId),

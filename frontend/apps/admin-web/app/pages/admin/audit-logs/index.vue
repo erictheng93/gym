@@ -228,7 +228,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 
 const { apiCall } = useAuth()
@@ -420,6 +420,12 @@ const truncate = (str, length) => {
 onMounted(() => {
   loadStats()
   loadLogs()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
 })
 </script>
 
