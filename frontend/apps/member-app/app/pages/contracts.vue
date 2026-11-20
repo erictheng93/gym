@@ -1,3 +1,21 @@
+<script lang="ts">
+const CONTRACT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: '草稿',
+  ACTIVE: '有效',
+  PAUSED: '暫停中',
+  EXPIRED: '已到期',
+  TERMINATED: '已終止'
+}
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  UNPAID: '未付款',
+  PARTIAL: '部分付款',
+  PAID: '已付清'
+}
+
+const contractDateFormatter = new Intl.DateTimeFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import type { Contract } from '@gym-nexus/shared/types'
 import { useFetch } from '~/composables/core/useFetch'
@@ -47,24 +65,6 @@ const fetchContracts = async () => {
 onMounted(() => {
   fetchContracts()
 })
-
-// Hoisted label mappings
-const CONTRACT_STATUS_LABELS: Record<string, string> = {
-  DRAFT: '草稿',
-  ACTIVE: '有效',
-  PAUSED: '暫停中',
-  EXPIRED: '已到期',
-  TERMINATED: '已終止'
-}
-
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  UNPAID: '未付款',
-  PARTIAL: '部分付款',
-  PAID: '已付清'
-}
-
-// Cached Intl formatter
-const contractDateFormatter = new Intl.DateTimeFormat('zh-TW')
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'

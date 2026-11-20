@@ -9,6 +9,23 @@ import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const BOOKING_SELECT = {
+  id: bookings.id,
+  status: bookings.status,
+  createdAt: bookings.createdAt,
+  updatedAt: bookings.updatedAt,
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  contractId: bookings.contractId,
+  bookingStatus: bookings.bookingStatus,
+  waitlistPosition: bookings.waitlistPosition,
+  bookedAt: bookings.bookedAt,
+  cancelledAt: bookings.cancelledAt,
+  cancelReason: bookings.cancelReason,
+  attendedAt: bookings.attendedAt,
+  countDeducted: bookings.countDeducted,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -61,7 +78,7 @@ app.get('/', async (c) => {
       .where(whereCondition),
     db
       .select({
-        booking: bookings,
+        booking: BOOKING_SELECT,
         session: {
           id: classSessions.id,
           sessionDate: classSessions.sessionDate,
@@ -111,7 +128,7 @@ app.get('/:id', async (c) => {
   const [[booking], branchIds] = await Promise.all([
     db
       .select({
-        booking: bookings,
+        booking: BOOKING_SELECT,
         session: {
           id: classSessions.id,
           branchId: classSessions.branchId,

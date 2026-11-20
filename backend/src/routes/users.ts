@@ -10,6 +10,19 @@ import { lucia } from '../auth/lucia.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const USER_SAFE_SELECT = {
+  id: users.id,
+  email: users.email,
+  role: users.role,
+  isActive: users.isActive,
+  emailVerified: users.emailVerified,
+  lastLoginAt: users.lastLoginAt,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+  employeeId: users.employeeId,
+  tenantId: users.tenantId,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -95,16 +108,7 @@ app.get('/', async (c) => {
       .where(and(...conditions)),
     db
       .select({
-        user: {
-          id: users.id,
-          email: users.email,
-          role: users.role,
-          isActive: users.isActive,
-          emailVerified: users.emailVerified,
-          lastLoginAt: users.lastLoginAt,
-          createdAt: users.createdAt,
-          employeeId: users.employeeId,
-        },
+        user: USER_SAFE_SELECT,
         employee: {
           id: employees.id,
           fullName: employees.fullName,
@@ -143,7 +147,7 @@ app.get('/:id', async (c) => {
 
   const [result] = await db
     .select({
-      user: users,
+      user: USER_SAFE_SELECT,
       employee: {
         id: employees.id,
         fullName: employees.fullName,
@@ -172,13 +176,10 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '使用者不存在' }, 404);
   }
 
-  // Exclude password hash
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = result.user;
-
   return c.json({
     success: true,
     data: {
-      ...userWithoutPassword,
+      ...result.user,
       employee: result.employee?.id ? {
         ...result.employee,
         branch: result.branch?.id ? result.branch : null,

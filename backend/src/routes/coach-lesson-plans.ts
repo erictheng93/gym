@@ -13,6 +13,25 @@ import type { CoachVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
+const LESSON_PLAN_SELECT = {
+  id: lessonPlans.id,
+  coachId: lessonPlans.coachId,
+  title: lessonPlans.title,
+  objectives: lessonPlans.objectives,
+  warmupExercises: lessonPlans.warmupExercises,
+  mainExercises: lessonPlans.mainExercises,
+  cooldownExercises: lessonPlans.cooldownExercises,
+  notes: lessonPlans.notes,
+  isTemplate: lessonPlans.isTemplate,
+  templateCategory: lessonPlans.templateCategory,
+  difficulty: lessonPlans.difficulty,
+  durationMinutes: lessonPlans.durationMinutes,
+  sessionId: lessonPlans.sessionId,
+  createdAt: lessonPlans.createdAt,
+  updatedAt: lessonPlans.updatedAt,
+  tenantId: lessonPlans.tenantId,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -240,7 +259,7 @@ app.get('/:id', async (c) => {
   // Get plan (own or shared template) and linked session in a single query
   const [result] = await db
     .select({
-      plan: lessonPlans,
+      plan: LESSON_PLAN_SELECT,
       sessionId: classSessions.id,
       sessionDate: classSessions.sessionDate,
       startTime: classSessions.startTime,

@@ -60,6 +60,28 @@ const CLASS_RETURNING = {
   countDeduction: classes.countDeduction,
 };
 
+const CLASS_SESSION_SELECT = {
+  id: classSessions.id,
+  status: classSessions.status,
+  createdAt: classSessions.createdAt,
+  updatedAt: classSessions.updatedAt,
+  scheduleId: classSessions.scheduleId,
+  classId: classSessions.classId,
+  branchId: classSessions.branchId,
+  instructorId: classSessions.instructorId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+  sessionStatus: classSessions.sessionStatus,
+  cancelledReason: classSessions.cancelledReason,
+  cancelledAt: classSessions.cancelledAt,
+  cancelledBy: classSessions.cancelledBy,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
@@ -248,7 +270,7 @@ app.get('/:id/sessions', async (c) => {
     getTenantBranchIds(tenantId),
     db
       .select({
-        session: classSessions,
+        session: CLASS_SESSION_SELECT,
         instructor: {
           id: employees.id,
           fullName: employees.fullName,

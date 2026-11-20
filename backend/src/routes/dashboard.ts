@@ -7,6 +7,28 @@ import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const DASHBOARD_CLASS_SESSION_SELECT = {
+  id: classSessions.id,
+  status: classSessions.status,
+  createdAt: classSessions.createdAt,
+  updatedAt: classSessions.updatedAt,
+  scheduleId: classSessions.scheduleId,
+  classId: classSessions.classId,
+  branchId: classSessions.branchId,
+  instructorId: classSessions.instructorId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+  sessionStatus: classSessions.sessionStatus,
+  cancelledReason: classSessions.cancelledReason,
+  cancelledAt: classSessions.cancelledAt,
+  cancelledBy: classSessions.cancelledBy,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -220,7 +242,7 @@ app.get('/todays-classes', async (c) => {
 
   const sessions = await db
     .select({
-      session: classSessions,
+      session: DASHBOARD_CLASS_SESSION_SELECT,
       branch: {
         id: branches.id,
         name: branches.name,

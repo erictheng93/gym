@@ -18,6 +18,29 @@ import {
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const REPORT_EXPIRING_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+  memberId: contracts.memberId,
+  planId: contracts.planId,
+  branchId: contracts.branchId,
+  salesPersonId: contracts.salesPersonId,
+  status: contracts.status,
+  signDate: contracts.signDate,
+  startDate: contracts.startDate,
+  originalEndDate: contracts.originalEndDate,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  totalAmount: contracts.totalAmount,
+  paidAmount: contracts.paidAmount,
+  paymentStatus: contracts.paymentStatus,
+  notes: contracts.notes,
+  createdBy: contracts.createdBy,
+  createdAt: contracts.createdAt,
+  updatedAt: contracts.updatedAt,
+  tenantId: contracts.tenantId,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -167,7 +190,7 @@ app.get('/contract-expiry', async (c) => {
 
   const expiringContracts = await db
     .select({
-      contract: contracts,
+      contract: REPORT_EXPIRING_CONTRACT_SELECT,
       member: {
         id: members.id,
         fullName: members.fullName,

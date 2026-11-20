@@ -1,3 +1,26 @@
+<script lang="ts">
+import { PAGES, LABELS } from '~/constants'
+
+const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+})
+
+const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
+  CASH: LABELS.PAYMENT_METHOD.CASH,
+  CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
+  LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
+  TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
+}
+
+const typeOptions = [
+  { value: '', label: PAGES.PAYMENTS.ALL_TYPES },
+  { value: 'INCOME', label: LABELS.PAYMENT_TYPE.INCOME },
+  { value: 'REFUND', label: LABELS.PAYMENT_TYPE.REFUND }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 收款管理頁面
@@ -22,12 +45,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const stats = ref({ income: { count: 0, amount: 0 }, refund: { count: 0, amount: 0 }, netAmount: 0 })
-
-const typeOptions = [
-  { value: '', label: PAGES.PAYMENTS.ALL_TYPES },
-  { value: 'INCOME', label: LABELS.PAYMENT_TYPE.INCOME },
-  { value: 'REFUND', label: LABELS.PAYMENT_TYPE.REFUND }
-]
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 
@@ -79,24 +96,11 @@ onBeforeUnmount(() => {
   clearTimeout(searchTimeout)
 })
 
-const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric'
-})
-
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
   const date = new Date(dateStr)
   if (isNaN(date.getTime())) return '—'
   return paymentDateFormatter.format(date)
-}
-
-const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
-  CASH: LABELS.PAYMENT_METHOD.CASH,
-  CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
-  LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
-  TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
 }
 
 const getPaymentMethodLabel = (method: string | null) => {
