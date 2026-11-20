@@ -11,6 +11,13 @@ import { deduplicateRequest } from '../utils/debounce'
 const CACHE_KEY_MEASUREMENTS = 'member:measurements'
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const measurementDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
 export interface Measurement {
   id: string
   member_id: string
@@ -247,18 +254,13 @@ export const useMeasurements = () => {
     }
   }
 
-// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
-const measurementDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-})
-
   /**
    * Format measurement date for display
    */
   const formatDate = (dateStr: string): string => {
-    return measurementDateFormatter.format(new Date(dateStr))
+    if (!dateStr) return '—'
+    const date = new Date(dateStr)
+    return isNaN(date.getTime()) ? '—' : measurementDateFormatter.format(date)
   }
 
   /**

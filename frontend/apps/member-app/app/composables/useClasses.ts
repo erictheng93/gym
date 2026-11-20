@@ -83,6 +83,26 @@ const CACHE_KEY_SCHEDULE = 'member:class-schedule'
 const CACHE_KEY_SESSIONS = 'member:class-sessions'
 const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
+const CATEGORY_LABELS: Record<string, string> = {
+  'YOGA': '瑜珈',
+  'PILATES': '皮拉提斯',
+  'SPINNING': '飛輪',
+  'AEROBICS': '有氧',
+  'DANCE': '舞蹈',
+  'STRENGTH': '重訓',
+  'HIIT': 'HIIT',
+  'BOXING': '拳擊',
+  'SWIMMING': '游泳',
+  'OTHER': '其他',
+}
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  'BEGINNER': '初級',
+  'INTERMEDIATE': '中級',
+  'ADVANCED': '高級',
+  'ALL_LEVELS': '不限程度',
+}
+
 export const useClasses = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
@@ -348,32 +368,14 @@ export const useClasses = () => {
    * Get category label
    */
   const getCategoryLabel = (category?: string): string => {
-    const labels: Record<string, string> = {
-      'YOGA': '瑜珈',
-      'PILATES': '皮拉提斯',
-      'SPINNING': '飛輪',
-      'AEROBICS': '有氧',
-      'DANCE': '舞蹈',
-      'STRENGTH': '重訓',
-      'HIIT': 'HIIT',
-      'BOXING': '拳擊',
-      'SWIMMING': '游泳',
-      'OTHER': '其他',
-    }
-    return labels[category || ''] || category || '其他'
+    return CATEGORY_LABELS[category || ''] || category || '其他'
   }
 
   /**
    * Get difficulty label
    */
   const getDifficultyLabel = (level?: string): string => {
-    const labels: Record<string, string> = {
-      'BEGINNER': '初級',
-      'INTERMEDIATE': '中級',
-      'ADVANCED': '高級',
-      'ALL_LEVELS': '不限程度',
-    }
-    return labels[level || ''] || level || '不限'
+    return DIFFICULTY_LABELS[level || ''] || level || '不限'
   }
 
   return {
