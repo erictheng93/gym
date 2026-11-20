@@ -6,6 +6,7 @@ import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 
 const inFlightContractsMap = new Map<string, Promise<void>>()
 const inFlightSingleContractMap = new Map<string, Promise<Contract | null>>()
+const inFlightContractStatsMap = new Map<string, Promise<{ active: number; expired: number; draft: number }>>()
 
 export const useContracts = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
@@ -121,48 +122,60 @@ export const useContracts = () => {
   }
 
   // 統計資料
-  const getContractStats = async (branchId?: string) => {
+  const getContractStats = async (branchId?: string, force = false) => {
     const defaultStats = { active: 0, expired: 0, draft: 0 }
+    const key = branchId || '__all__'
 
-    try {
-      // Fetch stats for each status in parallel
-      const [activeResult, expiredResult, draftResult] = await Promise.all([
-        readItems<Contract>('contracts', {
-          limit: 1,
-          filter: {
-            ...(branchId && { branch_id: branchId }),
-            contract_status: 'ACTIVE'
-          }
-        }),
-        readItems<Contract>('contracts', {
-          limit: 1,
-          filter: {
-            ...(branchId && { branch_id: branchId }),
-            contract_status: 'EXPIRED'
-          }
-        }),
-        readItems<Contract>('contracts', {
-          limit: 1,
-          filter: {
-            ...(branchId && { branch_id: branchId }),
-            contract_status: 'DRAFT'
-          }
-        })
-      ])
-
-      return {
-        active: activeResult.total,
-        expired: expiredResult.total,
-        draft: draftResult.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'useContracts.getContractStats',
-        customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED,
-        showToast: false
-      })
-      return defaultStats
+    if (!force && inFlightContractStatsMap.has(key)) {
+      return inFlightContractStatsMap.get(key)!
     }
+
+    const promise = (async () => {
+      try {
+        // Fetch stats for each status in parallel
+        const [activeResult, expiredResult, draftResult] = await Promise.all([
+          readItems<Contract>('contracts', {
+            limit: 1,
+            filter: {
+              ...(branchId && { branch_id: branchId }),
+              contract_status: 'ACTIVE'
+            }
+          }),
+          readItems<Contract>('contracts', {
+            limit: 1,
+            filter: {
+              ...(branchId && { branch_id: branchId }),
+              contract_status: 'EXPIRED'
+            }
+          }),
+          readItems<Contract>('contracts', {
+            limit: 1,
+            filter: {
+              ...(branchId && { branch_id: branchId }),
+              contract_status: 'DRAFT'
+            }
+          })
+        ])
+
+        return {
+          active: activeResult.total,
+          expired: expiredResult.total,
+          draft: draftResult.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useContracts.getContractStats',
+          customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED,
+          showToast: false
+        })
+        return defaultStats
+      } finally {
+        inFlightContractStatsMap.delete(key)
+      }
+    })()
+
+    inFlightContractStatsMap.set(key, promise)
+    return promise
   }
 
   return {

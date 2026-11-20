@@ -3,7 +3,7 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import type { MembershipPlan } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
-let inFlightPlansPromise: Promise<void> | null = null
+const inFlightPlansMap = new Map<string, Promise<void>>()
 const inFlightSinglePlanMap = new Map<string, Promise<MembershipPlan | null>>()
 
 export const usePlans = () => {
@@ -16,11 +16,12 @@ export const usePlans = () => {
     status?: string
     planType?: string
   }, force = false) => {
-    if (!force && inFlightPlansPromise) {
-      return inFlightPlansPromise
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightPlansMap.has(key)) {
+      return inFlightPlansMap.get(key)!
     }
 
-    inFlightPlansPromise = (async () => {
+    const promise = (async () => {
       isLoading.value = true
       const { status, planType } = options || {}
 
@@ -42,11 +43,12 @@ export const usePlans = () => {
         plans.value = []
       } finally {
         isLoading.value = false
-        inFlightPlansPromise = null
+        inFlightPlansMap.delete(key)
       }
     })()
 
-    return inFlightPlansPromise
+    inFlightPlansMap.set(key, promise)
+    return promise
   }
 
   const getPlan = async (id: string) => {

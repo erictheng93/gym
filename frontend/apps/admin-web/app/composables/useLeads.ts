@@ -80,6 +80,7 @@ export interface LeadAnalytics {
 
 const inFlightLeadsMap = new Map<string, Promise<void>>()
 const inFlightSingleLeadMap = new Map<string, Promise<Lead | null>>()
+const inFlightAnalyticsMap = new Map<string, Promise<LeadAnalytics | null>>()
 
 export const useLeads = () => {
   const config = useRuntimeConfig()
@@ -333,25 +334,37 @@ export const useLeads = () => {
     startDate?: string
     endDate?: string
     period?: string
-  }): Promise<LeadAnalytics | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (options?.branchId) params.append('branch_id', options.branchId)
-      if (options?.startDate) params.append('start_date', options.startDate)
-      if (options?.endDate) params.append('end_date', options.endDate)
-      if (options?.period) params.append('period', options.period)
-
-      const response = await $fetch<{ success: boolean; data: LeadAnalytics }>(
-        `${apiUrl}/leads/analytics?${params}`
-      )
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useLeads.fetchAnalytics',
-        customMessage: '取得分析資料失敗'
-      })
-      return null
+  }, force = false): Promise<LeadAnalytics | null> => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightAnalyticsMap.has(key)) {
+      return inFlightAnalyticsMap.get(key)!
     }
+
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (options?.branchId) params.append('branch_id', options.branchId)
+        if (options?.startDate) params.append('start_date', options.startDate)
+        if (options?.endDate) params.append('end_date', options.endDate)
+        if (options?.period) params.append('period', options.period)
+
+        const response = await $fetch<{ success: boolean; data: LeadAnalytics }>(
+          `${apiUrl}/leads/analytics?${params}`
+        )
+        return response.success ? response.data : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useLeads.fetchAnalytics',
+          customMessage: '取得分析資料失敗'
+        })
+        return null
+      } finally {
+        inFlightAnalyticsMap.delete(key)
+      }
+    })()
+
+    inFlightAnalyticsMap.set(key, promise)
+    return promise
   }
 
   // Status helpers

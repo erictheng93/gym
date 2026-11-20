@@ -60,15 +60,14 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
     return c.json({ success: false, error: '電子郵件或密碼錯誤' }, 401);
   }
 
-  const session = await lucia.createSession(user.id, {});
+  const [session, , employee] = await Promise.all([
+    lucia.createSession(user.id, {}),
+    db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id)),
+    user.employeeId ? getEmployeeWithRelations(user.employeeId) : Promise.resolve(null),
+  ]);
+
   const sessionCookie = lucia.createSessionCookie(session.id);
   c.header('Set-Cookie', sessionCookie.serialize());
-
-  await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
-
-  const employee = user.employeeId
-    ? await getEmployeeWithRelations(user.employeeId)
-    : null;
 
   return c.json({
     success: true,

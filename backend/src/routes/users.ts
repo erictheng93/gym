@@ -152,32 +152,24 @@ app.get('/:id', async (c) => {
         branchId: employees.branchId,
         jobTitleId: employees.jobTitleId,
       },
+      branch: {
+        id: branches.id,
+        name: branches.name,
+      },
+      jobTitle: {
+        id: jobTitles.id,
+        name: jobTitles.name,
+      },
     })
     .from(users)
     .leftJoin(employees, eq(users.employeeId, employees.id))
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
 
   if (!result) {
     return c.json({ success: false, error: '使用者不存在' }, 404);
-  }
-
-  // Get employee's branch and job title info if linked
-  let branch = null;
-  let jobTitle = null;
-  if (result.employee?.branchId) {
-    [branch] = await db
-      .select({ id: branches.id, name: branches.name })
-      .from(branches)
-      .where(eq(branches.id, result.employee.branchId))
-      .limit(1);
-  }
-  if (result.employee?.jobTitleId) {
-    [jobTitle] = await db
-      .select({ id: jobTitles.id, name: jobTitles.name })
-      .from(jobTitles)
-      .where(eq(jobTitles.id, result.employee.jobTitleId))
-      .limit(1);
   }
 
   // Exclude password hash
@@ -187,10 +179,10 @@ app.get('/:id', async (c) => {
     success: true,
     data: {
       ...userWithoutPassword,
-      employee: result.employee ? {
+      employee: result.employee?.id ? {
         ...result.employee,
-        branch,
-        jobTitle,
+        branch: result.branch?.id ? result.branch : null,
+        jobTitle: result.jobTitle?.id ? result.jobTitle : null,
       } : null,
     },
   });
@@ -201,12 +193,28 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  // Check if email already exists
-  const [existingUser] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, data.email.toLowerCase()))
-    .limit(1);
+  // Check email and employee relations in parallel
+  const [[existingUser], employeeCheck, existingEmployeeUser] = await Promise.all([
+    db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, data.email.toLowerCase()))
+      .limit(1),
+    data.employeeId
+      ? db
+          .select({ id: employees.id })
+          .from(employees)
+          .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
+          .limit(1)
+      : Promise.resolve([]),
+    data.employeeId
+      ? db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.employeeId, data.employeeId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
 
   if (existingUser) {
     return c.json({ success: false, error: '此電子郵件已被使用' }, 400);
@@ -214,24 +222,11 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
 
   // Verify employee belongs to tenant if provided
   if (data.employeeId) {
-    const [employee] = await db
-      .select()
-      .from(employees)
-      .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
-      .limit(1);
-
-    if (!employee) {
+    if (!employeeCheck[0]) {
       return c.json({ success: false, error: '員工不存在' }, 400);
     }
 
-    // Check if employee already has a user account
-    const [existingEmployeeUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.employeeId, data.employeeId))
-      .limit(1);
-
-    if (existingEmployeeUser) {
+    if (existingEmployeeUser[0]) {
       return c.json({ success: false, error: '此員工已有帳號' }, 400);
     }
   }
@@ -412,16 +407,16 @@ app.delete('/:id', async (c) => {
     return c.json({ success: false, error: '使用者不存在' }, 404);
   }
 
-  // Unlink employee if any
-  if (existingUser.employeeId) {
-    await db.update(employees).set({
-      userId: null,
-      updatedAt: new Date(),
-    }).where(eq(employees.id, existingUser.employeeId));
-  }
-
-  // Delete sessions first
-  await db.delete(sessions).where(eq(sessions.userId, id));
+  // Unlink employee and delete sessions in parallel
+  await Promise.all([
+    existingUser.employeeId
+      ? db.update(employees).set({
+          userId: null,
+          updatedAt: new Date(),
+        }).where(eq(employees.id, existingUser.employeeId))
+      : Promise.resolve(),
+    db.delete(sessions).where(eq(sessions.userId, id)),
+  ]);
 
   // Delete user
   await db.delete(users).where(eq(users.id, id));
