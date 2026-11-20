@@ -24,9 +24,11 @@ const form = reactive({
 // Form validation
 const { errors, validate, clearErrors } = useFormValidation<typeof form>()
 
+const PERMISSION_MODULES_MAP = new Map(PERMISSION_MODULES.map(m => [m.key, m]))
+
 // Permission helpers
 const toggleModuleAll = (moduleKey: string, value: boolean) => {
-  const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
+  const module = PERMISSION_MODULES_MAP.get(moduleKey)
   const modulePerms = form.permissions_config[moduleKey]
   if (!module || !modulePerms) return
 
@@ -36,7 +38,7 @@ const toggleModuleAll = (moduleKey: string, value: boolean) => {
 }
 
 const isModuleFullyEnabled = (moduleKey: string) => {
-  const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
+  const module = PERMISSION_MODULES_MAP.get(moduleKey)
   const modulePerms = form.permissions_config[moduleKey]
   if (!module || !modulePerms) return false
 
@@ -46,13 +48,16 @@ const isModuleFullyEnabled = (moduleKey: string) => {
 }
 
 const isModulePartiallyEnabled = (moduleKey: string) => {
-  const module = PERMISSION_MODULES.find(m => m.key === moduleKey)
+  const module = PERMISSION_MODULES_MAP.get(moduleKey)
   const modulePerms = form.permissions_config[moduleKey]
   if (!module || !modulePerms) return false
 
-  const enabledCount = module.actions.filter(action =>
-    modulePerms[action.key] === true
-  ).length
+  let enabledCount = 0
+  for (const action of module.actions) {
+    if (modulePerms[action.key] === true) {
+      enabledCount++
+    }
+  }
 
   return enabledCount > 0 && enabledCount < module.actions.length
 }

@@ -340,8 +340,10 @@ const formatCurrency = (amount: number | null | undefined) => {
 onMounted(async () => {
   await loadSubscription()
   if (subscription.value) {
-    loadInvoices()
-    loadUsageRecords()
+    await Promise.all([
+      loadInvoices(),
+      loadUsageRecords()
+    ])
   }
 })
 </script>

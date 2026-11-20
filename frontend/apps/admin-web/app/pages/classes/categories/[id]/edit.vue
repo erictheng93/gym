@@ -116,11 +116,13 @@ const handleSubmit = async () => {
 // Load data
 onMounted(async () => {
   try {
-    // Load root categories excluding current one (to prevent circular reference)
-    const allRoots = await fetchRootCategories()
+    // Load root categories (excluding current one), branches, and category concurrently
+    const [allRoots] = await Promise.all([
+      fetchRootCategories(),
+      fetchBranches(),
+      loadCategory()
+    ])
     rootCategories.value = allRoots.filter(c => c.id !== categoryId.value)
-    await fetchBranches()
-    await loadCategory()
   } catch (error) {
     console.error('Failed to load data:', error)
   }

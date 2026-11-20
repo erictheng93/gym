@@ -275,7 +275,6 @@ const loadInvoice = async () => {
     const response = await apiCall(`/gym/billing/invoices?invoice_id=${invoiceId.value}`)
     if (response.success && response.data.invoices.length > 0) {
       invoice.value = response.data.invoices[0]
-      loadTransactions()
     } else {
       error.value = '账单不存在'
     }
@@ -309,7 +308,7 @@ const markAsPaid = async () => {
     })
 
     if (response.success) {
-      await loadInvoice()
+      await Promise.all([loadInvoice(), loadTransactions()])
     } else {
       alert(response.message || '操作失败')
     }
@@ -344,7 +343,7 @@ const formatCurrency = (amount: number | null | undefined) => {
 }
 
 onMounted(() => {
-  loadInvoice()
+  Promise.all([loadInvoice(), loadTransactions()])
 })
 </script>
 

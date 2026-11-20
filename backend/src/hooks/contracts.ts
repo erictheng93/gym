@@ -7,6 +7,15 @@ import { db, contracts, members } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 import { calculateMemberStatus } from './utils.js';
 
+const CONTRACT_STATUS_SYNC_SELECT = {
+  id: contracts.id,
+  status: contracts.status,
+} as const;
+
+const CONTRACT_MEMBER_ID_SELECT = {
+  memberId: contracts.memberId,
+} as const;
+
 /**
  * Sync member status when contract status changes
  * Called after contract create/update operations
@@ -17,10 +26,7 @@ export async function syncMemberStatusOnContractChange(memberId: string): Promis
   try {
     // Get all contracts for this member
     const memberContracts = await db
-      .select({
-        id: contracts.id,
-        status: contracts.status,
-      })
+      .select(CONTRACT_STATUS_SYNC_SELECT)
       .from(contracts)
       .where(eq(contracts.memberId, memberId));
 
@@ -71,7 +77,7 @@ export async function onContractUpdate(
  */
 export async function activateContract(contractId: string): Promise<void> {
   const [contract] = await db
-    .select({ memberId: contracts.memberId })
+    .select(CONTRACT_MEMBER_ID_SELECT)
     .from(contracts)
     .where(eq(contracts.id, contractId));
 
@@ -96,7 +102,7 @@ export async function activateContract(contractId: string): Promise<void> {
  */
 export async function expireContract(contractId: string): Promise<void> {
   const [contract] = await db
-    .select({ memberId: contracts.memberId })
+    .select(CONTRACT_MEMBER_ID_SELECT)
     .from(contracts)
     .where(eq(contracts.id, contractId));
 
@@ -121,7 +127,7 @@ export async function expireContract(contractId: string): Promise<void> {
  */
 export async function cancelContract(contractId: string): Promise<void> {
   const [contract] = await db
-    .select({ memberId: contracts.memberId })
+    .select(CONTRACT_MEMBER_ID_SELECT)
     .from(contracts)
     .where(eq(contracts.id, contractId));
 
