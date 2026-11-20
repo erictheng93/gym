@@ -393,70 +393,81 @@ const resumeContract = async (contract: Contract) => {
 }
 
 .contract-card {
-  background-color: var(--color-background);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow:
-    0 0 0 0.5px var(--color-border),
-    0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--color-surface, #1c1c1e);
+  border-radius: 18px;
+  padding: 20px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-:root.theme-dark .contract-card {
-  background-color: var(--color-surface);
+:root.theme-light .contract-card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
 .contract-card.active {
-  box-shadow:
-    0 0 0 2px var(--color-primary),
-    0 2px 8px rgba(52, 199, 89, 0.15);
+  border-color: rgba(52, 199, 89, 0.35);
+  box-shadow: 0 8px 28px rgba(52, 199, 89, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .contract-card.paused {
-  box-shadow:
-    0 0 0 2px #ff9500,
-    0 2px 8px rgba(255, 149, 0, 0.15);
+  border-color: rgba(255, 149, 0, 0.35);
+  box-shadow: 0 8px 28px rgba(255, 149, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .contract-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.06));
 }
 
 .contract-plan {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.02em;
 }
 
 .contract-status {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 700;
   padding: 4px 10px;
   border-radius: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .contract-status.active {
-  background-color: rgba(52, 199, 89, 0.12);
+  background-color: rgba(52, 199, 89, 0.15);
+  border: 1px solid rgba(52, 199, 89, 0.3);
   color: #34c759;
 }
 
 .contract-status.paused {
-  background-color: rgba(255, 149, 0, 0.12);
+  background-color: rgba(255, 149, 0, 0.15);
+  border: 1px solid rgba(255, 149, 0, 0.3);
   color: #ff9500;
 }
 
 .contract-status.expired,
 .contract-status.terminated {
   background-color: rgba(142, 142, 147, 0.12);
+  border: 1px solid rgba(142, 142, 147, 0.25);
   color: #8e8e93;
 }
 
 .contract-details {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .detail-row {

@@ -637,31 +637,36 @@ onMounted(() => {
   animation: spin 0.8s linear infinite;
 }
 
-/* iOS Style Profile Header */
+/* Profile Header - Executive Luxury Style */
 .profile-header {
-  padding: 24px 16px 20px;
+  padding: 28px 16px 24px;
   text-align: center;
 }
 
 .avatar {
-  width: 88px;
-  height: 88px;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
-  /* iOS system blue gradient for avatar */
-  background: linear-gradient(180deg, #007aff 0%, #0055cc 100%);
+  background: linear-gradient(135deg, #0071e3 0%, #004b99 100%);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 36px;
-  font-weight: 600;
-  margin: 0 auto 12px;
-  /* Subtle inner shadow */
-  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 38px;
+  font-weight: 700;
+  margin: 0 auto 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 113, 227, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.avatar:hover {
+  transform: scale(1.05);
 }
 
 .profile-name {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--color-text);
   letter-spacing: -0.4px;
@@ -671,19 +676,21 @@ onMounted(() => {
 .profile-code {
   font-family: 'SF Mono', ui-monospace, SFMono-Regular, monospace;
   font-size: 13px;
+  font-weight: 500;
   color: var(--color-text-secondary);
-  letter-spacing: 1px;
-  margin-bottom: 8px;
+  letter-spacing: 1.5px;
+  margin-bottom: 12px;
 }
 
 .status-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 4px 14px;
   border-radius: 14px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 .status-dot {
@@ -691,44 +698,51 @@ onMounted(() => {
   height: 6px;
   border-radius: 50%;
   background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: beaconPulse 2s infinite ease-in-out;
+}
+
+@keyframes beaconPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.3); }
 }
 
 .status-active {
   background: rgba(52, 199, 89, 0.12);
+  border: 1px solid rgba(52, 199, 89, 0.25);
   color: #34c759;
 }
 
 .status-expired {
   background: rgba(255, 59, 48, 0.12);
+  border: 1px solid rgba(255, 59, 48, 0.25);
   color: #ff3b30;
 }
 
 .status-suspended {
   background: rgba(255, 149, 0, 0.12);
+  border: 1px solid rgba(255, 149, 0, 0.25);
   color: #ff9500;
 }
 
 .status-inactive {
   background: rgba(142, 142, 147, 0.12);
+  border: 1px solid rgba(142, 142, 147, 0.25);
   color: #8e8e93;
 }
 
-/* Stats Card - iOS Style */
+/* Stats Card - Bento Style */
 .stats-card {
   display: flex;
   align-items: center;
   justify-content: space-around;
   margin: 0 16px 24px;
-  padding: 16px 12px;
-  background: var(--color-background);
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 0.5px var(--color-border),
-    0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-:root.theme-dark .stats-card {
-  background: var(--color-surface);
+  padding: 18px 16px;
+  background: var(--color-surface, #1c1c1e);
+  border-radius: 16px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .stat-item {
@@ -740,55 +754,53 @@ onMounted(() => {
 }
 
 .stat-value {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.02em;
 }
 
 .stat-label {
   font-size: 11px;
+  font-weight: 500;
   color: var(--color-text-secondary);
 }
 
 .stat-divider {
-  width: 0.5px;
+  width: 1px;
   height: 28px;
-  background: var(--color-divider);
+  background: var(--color-border, rgba(255, 255, 255, 0.08));
 }
 
-/* iOS Inset Grouped List Styles */
+/* Inset Grouped List Styles */
 .list-section {
   margin-bottom: 24px;
 }
 
 .list-section-header {
   padding: 8px 36px 8px 16px;
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  letter-spacing: -0.08px;
+  letter-spacing: 0.05em;
 }
 
 .list-inset-grouped {
   margin: 0 16px;
-  background: var(--color-background);
-  border-radius: 10px;
+  background: var(--color-surface, #1c1c1e);
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow:
-    0 0 0 0.5px var(--color-border),
-    0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-:root.theme-dark .list-inset-grouped {
-  background: var(--color-surface);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .list-row {
   display: flex;
   align-items: center;
-  padding: 11px 16px;
-  min-height: 44px;
+  padding: 12px 16px;
+  min-height: 48px;
   gap: 12px;
   text-decoration: none;
   color: var(--color-text);
@@ -797,60 +809,54 @@ onMounted(() => {
   width: 100%;
   text-align: left;
   cursor: pointer;
-  transition: background 0.1s ease;
+  transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
+.list-row:hover {
+  background: var(--color-surface-secondary, rgba(255, 255, 255, 0.04));
+}
+
 .list-row:active {
-  background: var(--color-surface);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .list-row:not(:last-child) {
-  position: relative;
-}
-
-.list-row:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 56px;
-  right: 0;
-  height: 0.5px;
-  background: var(--color-divider);
+  border-bottom: 0.5px solid var(--color-divider, rgba(255, 255, 255, 0.06));
 }
 
 .list-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .list-icon svg {
   color: white;
 }
 
-/* Icon colors - iOS system colors */
-.list-icon.blue { background: #007aff; }
-.list-icon.green { background: #34c759; }
-.list-icon.orange { background: #ff9500; }
-.list-icon.red { background: #ff3b30; }
-.list-icon.purple { background: #af52de; }
-.list-icon.pink { background: #ff2d55; }
-.list-icon.teal { background: #5ac8fa; }
-.list-icon.gray { background: #8e8e93; }
+.list-icon.blue { background: linear-gradient(135deg, #007aff, #0051a8); }
+.list-icon.green { background: linear-gradient(135deg, #34c759, #248a3d); }
+.list-icon.orange { background: linear-gradient(135deg, #ff9500, #c97500); }
+.list-icon.red { background: linear-gradient(135deg, #ff3b30, #b51c14); }
+.list-icon.purple { background: linear-gradient(135deg, #af52de, #7e3b9f); }
+.list-icon.pink { background: linear-gradient(135deg, #ff2d55, #bd1f3d); }
+.list-icon.teal { background: linear-gradient(135deg, #5ac8fa, #2a94c7); }
+.list-icon.gray { background: linear-gradient(135deg, #8e8e93, #636366); }
 
 .list-title {
   flex: 1;
-  font-size: 17px;
-  font-weight: 400;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .list-chevron {
-  color: rgba(60, 60, 67, 0.3);
+  color: rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
 }
 

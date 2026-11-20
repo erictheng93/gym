@@ -223,24 +223,44 @@ const contractStatusText = computed(() => {
       </p>
 
       <div class="qr-card">
-        <div class="qr-container">
-          <img
-            v-if="qrCodeDataUrl"
-            :src="qrCodeDataUrl"
-            alt="入場 QR Code，會員編號 {{ member?.member_code }}"
-            class="qr-image"
-          />
-          <div
-            v-else
-            class="qr-loading"
-            role="status"
-            aria-live="polite"
-          >
-            <div class="qr-loading-spinner" />
+        <!-- Pass Card Header -->
+        <div class="pass-card-header">
+          <div class="pass-brand">
+            <span class="pass-brand-dot" />
+            <span class="pass-brand-text">NEXUS PASS</span>
+          </div>
+          <div class="pass-status-pill">
+            <span class="pass-beacon" />
+            <span class="pass-status-text">ACTIVE</span>
           </div>
         </div>
 
-        <p class="member-code" aria-label="會員編號">{{ member?.member_code }}</p>
+        <div class="qr-container-wrap">
+          <!-- Tactical HUD Reticle Brackets -->
+          <span class="reticle-corner top-left" />
+          <span class="reticle-corner top-right" />
+          <span class="reticle-corner bottom-left" />
+          <span class="reticle-corner bottom-right" />
+
+          <div class="qr-container">
+            <img
+              v-if="qrCodeDataUrl"
+              :src="qrCodeDataUrl"
+              alt="入場 QR Code，會員編號 {{ member?.member_code }}"
+              class="qr-image"
+            />
+            <div
+              v-else
+              class="qr-loading"
+              role="status"
+              aria-live="polite"
+            >
+              <div class="qr-loading-spinner" />
+            </div>
+          </div>
+        </div>
+
+        <p class="member-code tabular-nums" aria-label="會員編號">{{ member?.member_code }}</p>
 
         <p v-if="isQrOffline" class="offline-hint" role="status" aria-live="polite">
           離線模式 - 使用快取資料
@@ -259,7 +279,7 @@ const contractStatusText = computed(() => {
             class="dot"
             :class="{ active: i <= Math.ceil(timeRemaining / 18) }"
           />
-          <span class="time-hint">{{ formatTime(timeRemaining) }}</span>
+          <span class="time-hint tabular-nums">{{ formatTime(timeRemaining) }}</span>
         </div>
 
         <button
@@ -285,7 +305,7 @@ const contractStatusText = computed(() => {
       </div>
     </section>
 
-    <!-- Contract Status - iOS Inset Grouped List -->
+    <!-- Contract Status - Inset Grouped List -->
     <section class="list-section" aria-labelledby="status-section-title">
       <h3 id="status-section-title" class="list-section-header">會籍狀態</h3>
 
@@ -328,45 +348,55 @@ const contractStatusText = computed(() => {
       </div>
     </section>
 
-    <!-- Quick Actions - iOS Inset Grouped List -->
-    <nav class="list-section" aria-label="快速操作">
+    <!-- Quick Actions - Bento Grid Style -->
+    <nav class="quick-actions-section" aria-label="快速操作">
       <h3 class="list-section-header">快速操作</h3>
-
-      <div class="list-inset-grouped">
-        <NuxtLink to="/bookings" class="list-row">
-          <span class="list-icon orange">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="quick-actions-grid">
+        <NuxtLink to="/bookings" class="bento-action-card">
+          <div class="bento-action-icon orange">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="18" rx="2" />
               <line x1="16" y1="2" x2="16" y2="6" />
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
-          </span>
-          <span class="list-title">預約課程</span>
-          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+          </div>
+          <div class="bento-action-content">
+            <span class="bento-action-title">預約課程</span>
+            <span class="bento-action-sub">團課與教練預約</span>
+          </div>
+          <svg class="bento-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
             <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </NuxtLink>
-        <NuxtLink to="/contracts" class="list-row">
-          <span class="list-icon purple">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+
+        <NuxtLink to="/contracts" class="bento-action-card">
+          <div class="bento-action-icon purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
-          </span>
-          <span class="list-title">我的合約</span>
-          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+          </div>
+          <div class="bento-action-content">
+            <span class="bento-action-title">我的合約</span>
+            <span class="bento-action-sub">會籍方案與期限</span>
+          </div>
+          <svg class="bento-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
             <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </NuxtLink>
-        <NuxtLink to="/fitness" class="list-row">
-          <span class="list-icon pink">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+
+        <NuxtLink to="/fitness" class="bento-action-card">
+          <div class="bento-action-icon pink">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
-          </span>
-          <span class="list-title">健身追蹤</span>
-          <svg class="list-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
+          </div>
+          <div class="bento-action-content">
+            <span class="bento-action-title">健身追蹤</span>
+            <span class="bento-action-sub">運動紀錄與身體數據</span>
+          </div>
+          <svg class="bento-chevron" width="8" height="13" viewBox="0 0 8 13" fill="none">
             <path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </NuxtLink>
@@ -445,34 +475,143 @@ const contractStatusText = computed(() => {
   color: var(--color-text-secondary);
 }
 
-/* QR Section - iOS Style */
+/* QR Section - Apple Wallet Holographic Luxury Card */
 .qr-section {
   padding: 0 16px;
   margin-bottom: 24px;
 }
 
 .qr-card {
-  /* Clean white card - NO gradients */
-  background: var(--color-background);
-  border-radius: 20px;
-  padding: 32px 24px;
+  background: linear-gradient(160deg, rgba(32, 32, 36, 0.95), rgba(18, 18, 20, 0.98));
+  border-radius: 24px;
+  padding: 24px 20px 28px;
   text-align: center;
-
-  /* iOS card shadow */
-  box-shadow:
-    0 0.5px 0 0 rgba(0, 0, 0, 0.04),
-    0 2px 8px 0 rgba(0, 0, 0, 0.08),
-    0 8px 24px 0 rgba(0, 0, 0, 0.06);
-
-  /* Subtle border */
-  border: 0.5px solid var(--color-border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.6),
+              inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
 }
 
-:root.theme-dark .qr-card {
-  background: var(--color-surface);
-  box-shadow:
-    0 0.5px 0 0 rgba(255, 255, 255, 0.04),
-    0 2px 8px 0 rgba(0, 0, 0, 0.3);
+:root.theme-light .qr-card {
+  background: linear-gradient(160deg, #ffffff, #f5f5f7);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.1),
+              inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.pass-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+
+.pass-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pass-brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary, #0071e3);
+  box-shadow: 0 0 10px var(--color-primary, #0071e3);
+}
+
+.pass-brand-text {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--color-text-secondary, #8e8e93);
+}
+
+.pass-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(52, 199, 89, 0.12);
+  border: 1px solid rgba(52, 199, 89, 0.25);
+}
+
+.pass-beacon {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34c759;
+  box-shadow: 0 0 8px #34c759;
+  animation: beaconPulse 2s infinite ease-in-out;
+}
+
+@keyframes beaconPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.3); }
+}
+
+.pass-status-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #34c759;
+}
+
+.qr-container-wrap {
+  position: relative;
+  display: inline-flex;
+  padding: 8px;
+  margin-bottom: 16px;
+}
+
+.reticle-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 113, 227, 0.6);
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.reticle-corner.top-left {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 6px;
+}
+
+.reticle-corner.top-right {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 6px;
+}
+
+.reticle-corner.bottom-left {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 6px;
+}
+
+.reticle-corner.bottom-right {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 6px;
+}
+
+.qr-card:hover .reticle-corner {
+  border-color: #34c759;
+  box-shadow: 0 0 8px rgba(52, 199, 89, 0.4);
 }
 
 .qr-container {
@@ -480,10 +619,7 @@ const contractStatusText = computed(() => {
   padding: 16px;
   background: white;
   border-radius: 16px;
-  margin-bottom: 16px;
-
-  /* Inner shadow for depth */
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
 }
 
 .qr-image {
@@ -515,9 +651,9 @@ const contractStatusText = computed(() => {
 
 .member-code {
   font-family: 'SF Mono', ui-monospace, SFMono-Regular, monospace;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text, #ffffff);
   letter-spacing: 2px;
   margin-bottom: 16px;
 }
@@ -546,12 +682,17 @@ const contractStatusText = computed(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-border-strong, rgba(0, 0, 0, 0.12));
-  transition: background 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+:root.theme-light .dot {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .dot.active {
-  background: var(--color-primary);
+  background: var(--color-primary, #0071e3);
+  box-shadow: 0 0 6px var(--color-primary, #0071e3);
   transform: scale(1.2);
 }
 
@@ -560,141 +701,227 @@ const contractStatusText = computed(() => {
   color: var(--color-text-secondary);
   margin-left: 8px;
   min-width: 32px;
+  font-weight: 600;
 }
 
-/* iOS Tertiary button style */
+/* Refresh button */
 .refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: var(--color-surface);
-  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   font-size: 14px;
-  font-weight: 500;
-  color: var(--color-primary);
+  font-weight: 600;
+  color: var(--color-primary, #0071e3);
   cursor: pointer;
-  transition: all 0.15s var(--ease-out);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   -webkit-tap-highlight-color: transparent;
 }
 
-.refresh-btn:active {
-  background: var(--color-border);
-  transform: scale(0.97);
+:root.theme-light .refresh-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
-/* iOS Inset Grouped List Styles */
+.refresh-btn:hover {
+  background: rgba(0, 113, 227, 0.15);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active {
+  transform: scale(0.96);
+}
+
+/* Inset Grouped List Styles */
 .list-section {
   margin-bottom: 24px;
 }
 
 .list-section-header {
   padding: 8px 36px 8px 16px;
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  letter-spacing: -0.08px;
+  letter-spacing: 0.05em;
 }
 
 .list-inset-grouped {
   margin: 0 16px;
-  background: var(--color-background);
-  border-radius: 10px;
+  background: var(--color-surface, #1c1c1e);
+  border-radius: 16px;
   overflow: hidden;
-
-  /* iOS grouped list shadow */
-  box-shadow:
-    0 0 0 0.5px var(--color-border),
-    0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-:root.theme-dark .list-inset-grouped {
-  background: var(--color-surface);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .list-row {
   display: flex;
   align-items: center;
-  padding: 11px 16px;
-  min-height: 44px;
+  padding: 12px 16px;
+  min-height: 48px;
   gap: 12px;
   text-decoration: none;
   color: var(--color-text);
-  transition: background 0.1s ease;
+  transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
+.list-row:hover {
+  background: var(--color-surface-secondary, rgba(255, 255, 255, 0.04));
+}
+
 .list-row:active {
-  background: var(--color-surface);
+  background: rgba(255, 255, 255, 0.08);
 }
 
-/* Inset separator - iOS style */
 .list-row:not(:last-child) {
-  position: relative;
+  border-bottom: 0.5px solid var(--color-divider, rgba(255, 255, 255, 0.06));
 }
 
-.list-row:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 56px;
-  right: 0;
-  height: 0.5px;
-  background: var(--color-divider);
-}
-
-/* iOS-style icon (colored rounded square) */
 .list-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .list-icon svg {
   color: white;
 }
 
-/* Icon colors - iOS system colors */
-.list-icon.blue { background: #007aff; }
-.list-icon.green { background: #34c759; }
-.list-icon.orange { background: #ff9500; }
-.list-icon.red { background: #ff3b30; }
-.list-icon.purple { background: #af52de; }
-.list-icon.pink { background: #ff2d55; }
-.list-icon.teal { background: #5ac8fa; }
-.list-icon.gray { background: #8e8e93; }
+.list-icon.blue { background: linear-gradient(135deg, #007aff, #0051a8); }
+.list-icon.green { background: linear-gradient(135deg, #34c759, #248a3d); }
+.list-icon.orange { background: linear-gradient(135deg, #ff9500, #c97500); }
+.list-icon.purple { background: linear-gradient(135deg, #af52de, #7e3b9f); }
+.list-icon.pink { background: linear-gradient(135deg, #ff2d55, #bd1f3d); }
 
 .list-title {
   flex: 1;
-  font-size: 17px;
-  font-weight: 400;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .list-value {
-  font-size: 17px;
+  font-size: 15px;
   color: var(--color-text-secondary);
 }
 
 .value-success {
-  color: var(--color-success);
+  color: var(--color-success, #34c759);
+  font-weight: 600;
 }
 
 .value-error {
-  color: var(--color-error);
+  color: var(--color-error, #ff3b30);
+  font-weight: 600;
 }
 
 .list-chevron {
-  color: rgba(60, 60, 67, 0.3);
+  color: rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
 }
 
-:root.theme-dark .list-chevron {
-  color: rgba(235, 235, 245, 0.3);
+/* Quick Actions Bento Grid */
+.quick-actions-section {
+  margin-bottom: 28px;
+  padding: 0 16px;
+}
+
+.quick-actions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bento-action-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--color-surface, #1c1c1e);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  text-decoration: none;
+  color: var(--color-text, #ffffff);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bento-action-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 113, 227, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.bento-action-card:active {
+  transform: scale(0.98);
+}
+
+.bento-action-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.bento-action-icon.orange {
+  background: linear-gradient(135deg, #ff9500, #ff5e3a);
+  color: white;
+}
+
+.bento-action-icon.purple {
+  background: linear-gradient(135deg, #af52de, #5856d6);
+  color: white;
+}
+
+.bento-action-icon.pink {
+  background: linear-gradient(135deg, #ff2d55, #ff375f);
+  color: white;
+}
+
+.bento-action-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bento-action-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.bento-action-sub {
+  font-size: 12px;
+  color: var(--color-text-secondary, #8e8e93);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bento-chevron {
+  color: rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.bento-action-card:hover .bento-chevron {
+  transform: translateX(3px);
+  color: rgba(255, 255, 255, 0.7);
 }
 </style>
