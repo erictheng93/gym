@@ -172,7 +172,11 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
   }
 
-  let conditions = [inArray(classSessions.branchId, branchIds)];
+  let conditions = [
+    branchIds.length === 1
+      ? eq(classSessions.branchId, branchIds[0])
+      : inArray(classSessions.branchId, branchIds),
+  ];
 
   if (memberId) {
     conditions.push(eq(bookings.memberId, memberId));
@@ -208,14 +212,20 @@ app.get('/', async (c) => {
 
   const total = Number(countResult?.count || 0);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i]!;
+    data[i] = {
       ...r.booking,
       session: r.session,
       class: r.class,
       member: r.member,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
   });
 });

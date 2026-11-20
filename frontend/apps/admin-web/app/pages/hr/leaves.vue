@@ -21,6 +21,23 @@ const LEAVE_STATUS_BADGE_MAP: Record<string, { label: string; variant: 'success'
   REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
   CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' },
 }
+
+const leaveTypeOptions = [
+  { value: 'ANNUAL', label: PAGES.HR.LEAVES.ANNUAL, color: '#007aff' },
+  { value: 'SICK', label: PAGES.HR.LEAVES.SICK, color: '#ff3b30' },
+  { value: 'PERSONAL', label: PAGES.HR.LEAVES.PERSONAL, color: '#ff9500' },
+  { value: 'MATERNITY', label: PAGES.HR.LEAVES.MATERNITY, color: '#af52de' },
+  { value: 'BEREAVEMENT', label: PAGES.HR.LEAVES.BEREAVEMENT, color: '#8e8e93' },
+  { value: 'OTHER', label: PAGES.HR.LEAVES.OTHER, color: '#5856d6' }
+]
+
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'PENDING', label: PAGES.HR.LEAVES.PENDING_APPROVAL },
+  { value: 'APPROVED', label: PAGES.HR.LEAVES.APPROVED },
+  { value: 'REJECTED', label: PAGES.HR.LEAVES.REJECTED },
+  { value: 'CANCELLED', label: PAGES.HR.LEAVES.CANCELLED }
+]
 </script>
 
 <script setup lang="ts">
@@ -78,24 +95,6 @@ const selectedLeaveId = ref('')
 const reviewData = ref<{ leaveId: string; action: 'APPROVE' | 'REJECT'; employeeName: string } | null>(null)
 const reviewNotes = ref('')
 const isReviewing = ref(false)
-
-// 假別選項
-const leaveTypeOptions = [
-  { value: 'ANNUAL', label: PAGES.HR.LEAVES.ANNUAL, color: '#007aff' },
-  { value: 'SICK', label: PAGES.HR.LEAVES.SICK, color: '#ff3b30' },
-  { value: 'PERSONAL', label: PAGES.HR.LEAVES.PERSONAL, color: '#ff9500' },
-  { value: 'MATERNITY', label: PAGES.HR.LEAVES.MATERNITY, color: '#af52de' },
-  { value: 'BEREAVEMENT', label: PAGES.HR.LEAVES.BEREAVEMENT, color: '#8e8e93' },
-  { value: 'OTHER', label: PAGES.HR.LEAVES.OTHER, color: '#5856d6' }
-]
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: PAGES.HR.LEAVES.PENDING_APPROVAL },
-  { value: 'APPROVED', label: PAGES.HR.LEAVES.APPROVED },
-  { value: 'REJECTED', label: PAGES.HR.LEAVES.REJECTED },
-  { value: 'CANCELLED', label: PAGES.HR.LEAVES.CANCELLED }
-]
 
 onMounted(async () => {
   await checkAuth()

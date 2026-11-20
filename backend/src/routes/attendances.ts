@@ -129,7 +129,9 @@ app.get('/', async (c) => {
   ]);
 
   // Transform to API format expected by frontend
-  const formattedRecords = records.map(r => {
+  const formattedRecords = new Array(records.length);
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i]!;
     const checkInDate = r.checkIn ? new Date(r.checkIn) : null;
     const checkOutDate = r.checkOut ? new Date(r.checkOut) : null;
 
@@ -163,7 +165,7 @@ app.get('/', async (c) => {
       ? checkInDate.toISOString().slice(0, 10)
       : new Date().toISOString().slice(0, 10);
 
-    return {
+    formattedRecords[i] = {
       id: r.id,
       employee_id: r.employeeId,
       employee: {
@@ -188,7 +190,7 @@ app.get('/', async (c) => {
       notes: null,
       date_created: null,
     };
-  });
+  }
 
   return c.json({
     success: true,

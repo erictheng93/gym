@@ -81,11 +81,6 @@ const LEAD_BY_ID_SELECT = {
   },
 };
 
-const LEAD_CONVERT_SELECT = {
-  lead: LEAD_SELECT,
-  branch: { id: branches.id },
-};
-
 const LAST_MEMBER_CODE_SELECT = { memberCode: members.memberCode };
 
 const NEW_MEMBER_RETURNING = {
@@ -133,10 +128,26 @@ app.get('/', async (c) => {
     });
   }
 
-  const conditions = [inArray(leads.branchId, branchIds)];
+  const conditions = [];
 
   if (branchId) {
+    if (!branchIds.includes(branchId)) {
+      return c.json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+        },
+      });
+    }
     conditions.push(eq(leads.branchId, branchId));
+  } else {
+    conditions.push(
+      branchIds.length === 1 ? eq(leads.branchId, branchIds[0]) : inArray(leads.branchId, branchIds)
+    );
   }
 
   if (status) {
@@ -175,13 +186,19 @@ app.get('/', async (c) => {
 
   const total = Number(countResult?.count || 0);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i]!;
+    data[i] = {
       ...r.lead,
       branch: r.branch,
       assignedTo: r.assignedTo,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
     pagination: {
       total,
       page,
@@ -201,13 +218,15 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(leads.branchId, branchIds[0]) : inArray(leads.branchId, branchIds);
+
   const [result] = await db
     .select(LEAD_BY_ID_SELECT)
     .from(leads)
     .leftJoin(branches, eq(leads.branchId, branches.id))
     .leftJoin(employees, eq(leads.assignedToId, employees.id))
     .leftJoin(members, eq(leads.convertedMemberId, members.id))
-    .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
+    .where(and(eq(leads.id, id), branchCondition))
     .limit(1);
 
   if (!result) {
@@ -268,10 +287,12 @@ app.patch('/:id', zValidator('json', updateLeadSchema), async (c) => {
     updateData.expectedBudget = data.expectedBudget ? String(data.expectedBudget) : null;
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(leads.branchId, branchIds[0]) : inArray(leads.branchId, branchIds);
+
   const [updated] = await db
     .update(leads)
     .set(updateData)
-    .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
+    .where(and(eq(leads.id, id), branchCondition))
     .returning(LEAD_RETURNING);
 
   if (!updated) {
@@ -289,12 +310,18 @@ app.post('/:id/convert', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({ success: false, error: '潛在客戶不存在' }, 404);
+  }
+
+  const branchCondition = branchIds.length === 1 ? eq(leads.branchId, branchIds[0]) : inArray(leads.branchId, branchIds);
+
   const [[lead], [lastMember]] = await Promise.all([
     db
-      .select(LEAD_CONVERT_SELECT)
+      .select(LEAD_SELECT)
       .from(leads)
-      .innerJoin(branches, eq(leads.branchId, branches.id))
-      .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
+      .where(and(eq(leads.id, id), branchCondition))
       .limit(1),
     db
       .select(LAST_MEMBER_CODE_SELECT)
@@ -307,7 +334,7 @@ app.post('/:id/convert', async (c) => {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
   }
 
-  if (lead.lead.leadStatus === 'CONVERTED') {
+  if (lead.leadStatus === 'CONVERTED') {
     return c.json({ success: false, error: '此潛在客戶已轉換' }, 400);
   }
 
@@ -315,17 +342,17 @@ app.post('/:id/convert', async (c) => {
   const memberCode = `M${String(lastNum + 1).padStart(6, '0')}`;
 
   // Ensure phone is provided for member creation
-  if (!lead.lead.phone) {
+  if (!lead.phone) {
     return c.json({ success: false, error: '需要電話號碼才能轉換為會員' }, 400);
   }
 
   // Create member from lead
   const [newMember] = await db.insert(members).values({
-    fullName: lead.lead.fullName,
-    phone: lead.lead.phone,
-    email: lead.lead.email,
+    fullName: lead.fullName,
+    phone: lead.phone,
+    email: lead.email,
     memberCode,
-    branchId: lead.lead.branchId,
+    branchId: lead.branchId,
     status: 'ACTIVE',
     joinDate: new Date().toISOString().slice(0, 10),
   }).returning(NEW_MEMBER_RETURNING);
@@ -341,7 +368,7 @@ app.post('/:id/convert', async (c) => {
   return c.json({
     success: true,
     data: {
-      lead: { ...lead.lead, leadStatus: 'CONVERTED', convertedMemberId: newMember.id },
+      lead: { ...lead, leadStatus: 'CONVERTED', convertedMemberId: newMember.id },
       member: newMember,
     },
     message: '潛在客戶已成功轉換為會員',
@@ -358,9 +385,11 @@ app.delete('/:id', async (c) => {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(leads.branchId, branchIds[0]) : inArray(leads.branchId, branchIds);
+
   const [deleted] = await db
     .delete(leads)
-    .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
+    .where(and(eq(leads.id, id), branchCondition))
     .returning(LEAD_DELETE_RETURNING);
 
   if (!deleted) {
@@ -399,10 +428,12 @@ app.get('/stats/summary', async (c) => {
     });
   }
 
+  const branchCondition = targetBranchIds.length === 1 ? eq(leads.branchId, targetBranchIds[0]) : inArray(leads.branchId, targetBranchIds);
+
   const stats = await db
     .select(LEAD_STATS_SELECT)
     .from(leads)
-    .where(inArray(leads.branchId, targetBranchIds))
+    .where(branchCondition)
     .groupBy(leads.status);
 
   const statusCounts: Record<string, number> = {};
