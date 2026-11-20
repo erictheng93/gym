@@ -11,6 +11,28 @@ export interface DateFormatOptions {
   locale?: string
 }
 
+const numberFormatCache = new Map<string, Intl.NumberFormat>()
+function getCachedNumberFormat(locale: string, options?: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = `${locale}:${options ? JSON.stringify(options) : ''}`
+  let fmt = numberFormatCache.get(key)
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale, options)
+    numberFormatCache.set(key, fmt)
+  }
+  return fmt
+}
+
+const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
+function getCachedDateTimeFormat(locale: string, options?: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}:${options ? JSON.stringify(options) : ''}`
+  let fmt = dateTimeFormatCache.get(key)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, options)
+    dateTimeFormatCache.set(key, fmt)
+  }
+  return fmt
+}
+
 /**
  * 格式化日期為繁體中文格式
  *
@@ -44,7 +66,7 @@ export function formatDate(
     dateOptions.minute = '2-digit'
   }
 
-  return date.toLocaleDateString(locale, dateOptions)
+  return getCachedDateTimeFormat(locale, dateOptions).format(date)
 }
 
 /**
@@ -89,7 +111,7 @@ export function formatCurrency(
 
   const { currency = 'TWD', locale = 'zh-TW' } = options
 
-  return new Intl.NumberFormat(locale, {
+  return getCachedNumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
@@ -108,7 +130,7 @@ export function formatNumber(
   locale = 'zh-TW'
 ): string {
   if (num == null) return '—'
-  return new Intl.NumberFormat(locale).format(num)
+  return getCachedNumberFormat(locale).format(num)
 }
 
 /**

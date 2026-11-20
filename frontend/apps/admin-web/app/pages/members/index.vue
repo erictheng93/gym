@@ -151,7 +151,8 @@ const handleBatchDelete = async () => {
 }
 
 const handleExportSelected = () => {
-  const selectedMembers = members.value.filter(m => selectedIds.value.includes(m.id))
+  const selectedSet = new Set(selectedIds.value)
+  const selectedMembers = members.value.filter(m => selectedSet.has(m.id))
   const headers = ['會員編號', '姓名', '電話', 'Email', '狀態', '加入日期']
   const rows = selectedMembers.map(m => [
     m.memberCode,
@@ -188,11 +189,13 @@ const getAvatarVariant = (status: string) => {
   return variants[status] || 'blue'
 }
 
+// Branch name lookup map for O(1) row rendering
+const branchMap = computed(() => new Map(branches.value.map(b => [b.id, b.name])))
+
 // Get branch name by ID
 const getBranchName = (branchId: string | null | undefined) => {
   if (!branchId) return '—'
-  const branch = branches.value.find(b => b.id === branchId)
-  return branch?.name || '—'
+  return branchMap.value.get(branchId) || '—'
 }
 </script>
 

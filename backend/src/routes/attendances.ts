@@ -303,7 +303,10 @@ app.patch('/:id', zValidator('json', updateSchema), async (c) => {
   const data = c.req.valid('json');
 
   const [existing] = await db
-    .select()
+    .select({
+      id: attendances.id,
+      checkIn: attendances.checkIn,
+    })
     .from(attendances)
     .where(eq(attendances.id, id))
     .limit(1);

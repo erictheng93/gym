@@ -46,11 +46,13 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  let condition = inArray(employees.branchId, branchIds);
-
-  if (branchId) {
-    condition = and(condition, eq(employees.branchId, branchId))!;
+  if (branchId && !branchIds.includes(branchId)) {
+    return c.json({ success: true, data: [] });
   }
+
+  const condition = branchId
+    ? eq(employees.branchId, branchId)
+    : inArray(employees.branchId, branchIds);
 
   const result = await db
     .select({
