@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { db, members, contracts, payments, checkIns, branches, classSessions } from '../db/index.js';
-import { eq, and, sql, gte, lte, count, sum, desc, inArray } from 'drizzle-orm';
+import { eq, and, sql, gte, count, sum, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';

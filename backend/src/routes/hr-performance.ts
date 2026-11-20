@@ -15,6 +15,39 @@ const app = new Hono<{ Variables: AuthVariables }>();
 // Apply auth middleware
 app.use('*', authMiddleware, requireAuth);
 
+const REVIEW_RETURNING = {
+  id: performanceReviews.id,
+  employeeId: performanceReviews.employeeId,
+  reviewerId: performanceReviews.reviewerId,
+  reviewPeriod: performanceReviews.reviewPeriod,
+  reviewType: performanceReviews.reviewType,
+  status: performanceReviews.status,
+  overallScore: performanceReviews.overallScore,
+  reviewerComments: performanceReviews.reviewerComments,
+  improvementPlan: performanceReviews.improvementPlan,
+  approvedBy: performanceReviews.approvedBy,
+  approvedAt: performanceReviews.approvedAt,
+  submittedAt: performanceReviews.submittedAt,
+  reviewedAt: performanceReviews.reviewedAt,
+  kpiData: performanceReviews.kpiData,
+  createdAt: performanceReviews.createdAt,
+  updatedAt: performanceReviews.updatedAt,
+};
+
+const KPI_TEMPLATE_RETURNING = {
+  id: kpiTemplates.id,
+  name: kpiTemplates.name,
+  description: kpiTemplates.description,
+  jobTitleId: kpiTemplates.jobTitleId,
+  reviewType: kpiTemplates.reviewType,
+  kpis: kpiTemplates.kpis,
+  isDefault: kpiTemplates.isDefault,
+  isActive: kpiTemplates.isActive,
+  createdBy: kpiTemplates.createdBy,
+  createdAt: kpiTemplates.createdAt,
+  updatedAt: kpiTemplates.updatedAt,
+};
+
 // -----------------------------------------------------------------------------
 // GET /reviews - List performance reviews with filters
 // -----------------------------------------------------------------------------
@@ -217,39 +250,6 @@ app.post('/reviews', async (c) => {
       kpiData = template[0].kpis as unknown[];
     }
   }
-
-const REVIEW_RETURNING = {
-  id: performanceReviews.id,
-  employeeId: performanceReviews.employeeId,
-  reviewerId: performanceReviews.reviewerId,
-  reviewPeriod: performanceReviews.reviewPeriod,
-  reviewType: performanceReviews.reviewType,
-  status: performanceReviews.status,
-  overallScore: performanceReviews.overallScore,
-  reviewerComments: performanceReviews.reviewerComments,
-  improvementPlan: performanceReviews.improvementPlan,
-  approvedBy: performanceReviews.approvedBy,
-  approvedAt: performanceReviews.approvedAt,
-  submittedAt: performanceReviews.submittedAt,
-  reviewedAt: performanceReviews.reviewedAt,
-  kpiData: performanceReviews.kpiData,
-  createdAt: performanceReviews.createdAt,
-  updatedAt: performanceReviews.updatedAt,
-};
-
-const KPI_TEMPLATE_RETURNING = {
-  id: kpiTemplates.id,
-  name: kpiTemplates.name,
-  description: kpiTemplates.description,
-  jobTitleId: kpiTemplates.jobTitleId,
-  reviewType: kpiTemplates.reviewType,
-  kpis: kpiTemplates.kpis,
-  isDefault: kpiTemplates.isDefault,
-  isActive: kpiTemplates.isActive,
-  createdBy: kpiTemplates.createdBy,
-  createdAt: kpiTemplates.createdAt,
-  updatedAt: kpiTemplates.updatedAt,
-};
 
   const [created] = await db.insert(performanceReviews)
     .values({

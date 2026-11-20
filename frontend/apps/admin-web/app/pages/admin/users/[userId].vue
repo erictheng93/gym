@@ -169,15 +169,19 @@ const handleResetPassword = async () => {
 }
 
 // Format date
+const userDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return userDateFormatter.format(d)
 }
 
 onMounted(async () => {

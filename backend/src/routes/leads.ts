@@ -171,6 +171,26 @@ app.get('/:id', async (c) => {
   });
 });
 
+const LEAD_RETURNING = {
+  id: leads.id,
+  status: leads.status,
+  createdAt: leads.createdAt,
+  updatedAt: leads.updatedAt,
+  fullName: leads.fullName,
+  phone: leads.phone,
+  email: leads.email,
+  source: leads.source,
+  sourceDetail: leads.sourceDetail,
+  branchId: leads.branchId,
+  assignedToId: leads.assignedToId,
+  leadStatus: leads.leadStatus,
+  notes: leads.notes,
+  interests: leads.interests,
+  expectedBudget: leads.expectedBudget,
+  convertedMemberId: leads.convertedMemberId,
+  convertedAt: leads.convertedAt,
+};
+
 // Create lead
 app.post('/', zValidator('json', createLeadSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -186,7 +206,7 @@ app.post('/', zValidator('json', createLeadSchema), async (c) => {
   const [newLead] = await db.insert(leads).values({
     ...data,
     expectedBudget: data.expectedBudget ? String(data.expectedBudget) : null,
-  }).returning();
+  }).returning(LEAD_RETURNING);
 
   return c.json({
     success: true,
@@ -218,7 +238,7 @@ app.patch('/:id', zValidator('json', updateLeadSchema), async (c) => {
     .update(leads)
     .set(updateData)
     .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
-    .returning();
+    .returning(LEAD_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
