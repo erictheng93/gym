@@ -14,11 +14,20 @@ definePageMeta({
 const { branches, isLoading, fetchBranches } = useBranches()
 
 // Computed stats
-const statsConfig = computed(() => [
-  { label: PAGES.BRANCHES.TOTAL_BRANCHES, value: branches.value.length, icon: 'calendar' as const, variant: 'default' as const },
-  { label: PAGES.BRANCHES.HEADQUARTERS, value: branches.value.filter(b => b.type === 'HEADQUARTER').length, icon: 'dollar' as const, variant: 'warning' as const },
-  { label: STATUS.OPERATING, value: branches.value.filter(b => b.status === 'active').length, icon: 'check' as const, variant: 'success' as const }
-])
+const statsConfig = computed(() => {
+  const list = branches.value
+  let hqCount = 0
+  let activeCount = 0
+  for (const b of list) {
+    if (b.type === 'HEADQUARTER') hqCount++
+    if (b.status === 'active') activeCount++
+  }
+  return [
+    { label: PAGES.BRANCHES.TOTAL_BRANCHES, value: list.length, icon: 'calendar' as const, variant: 'default' as const },
+    { label: PAGES.BRANCHES.HEADQUARTERS, value: hqCount, icon: 'dollar' as const, variant: 'warning' as const },
+    { label: STATUS.OPERATING, value: activeCount, icon: 'check' as const, variant: 'success' as const }
+  ]
+})
 
 // Initial load
 onMounted(() => {

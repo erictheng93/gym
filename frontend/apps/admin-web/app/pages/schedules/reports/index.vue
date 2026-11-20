@@ -319,27 +319,49 @@ const filterStatus = ref('')
 const rankingType = ref<'late' | 'earlyLeave' | 'overtime'>('late')
 
 const stats = computed(() => {
-  const lateRecords = attendances.value.filter(a => a.late_minutes > 0)
-  const earlyLeaveRecords = attendances.value.filter(a => a.early_leave_minutes > 0)
-  const overtimeRecords = attendances.value.filter(a => a.overtime_hours > 0)
+  const list = attendances.value
+  let lateCount = 0
+  let lateTotalMinutes = 0
+  let earlyLeaveCount = 0
+  let earlyLeaveTotalMinutes = 0
+  let overtimeCount = 0
+  let overtimeTotalHours = 0
+  let presentCount = 0
 
+  for (const a of list) {
+    if (a.late_minutes > 0) {
+      lateCount++
+      lateTotalMinutes += a.late_minutes
+    }
+    if (a.early_leave_minutes > 0) {
+      earlyLeaveCount++
+      earlyLeaveTotalMinutes += a.early_leave_minutes
+    }
+    if (a.overtime_hours > 0) {
+      overtimeCount++
+      overtimeTotalHours += Number(a.overtime_hours)
+    }
+    if (a.attendance_status === 'PRESENT') {
+      presentCount++
+    }
+  }
+
+  const totalDays = list.length
   return {
-    lateCount: lateRecords.length,
-    lateTotalMinutes: lateRecords.reduce((sum, a) => sum + a.late_minutes, 0),
+    lateCount,
+    lateTotalMinutes,
     lateTrend: 0, // Calculate based on historical data
 
-    earlyLeaveCount: earlyLeaveRecords.length,
-    earlyLeaveTotalMinutes: earlyLeaveRecords.reduce((sum, a) => sum + a.early_leave_minutes, 0),
+    earlyLeaveCount,
+    earlyLeaveTotalMinutes,
     earlyLeaveTrend: 0,
 
-    overtimeCount: overtimeRecords.length,
-    overtimeTotalHours: overtimeRecords.reduce((sum, a) => sum + Number(a.overtime_hours), 0),
+    overtimeCount,
+    overtimeTotalHours,
     overtimeTrend: 0,
 
-    totalDays: attendances.value.length,
-    attendanceRate: attendances.value.length > 0
-      ? Math.round((attendances.value.filter(a => a.attendance_status === 'PRESENT').length / attendances.value.length) * 100)
-      : 0,
+    totalDays,
+    attendanceRate: totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 0,
   }
 })
 

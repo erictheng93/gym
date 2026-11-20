@@ -21,11 +21,21 @@ const showDeleteConfirm = ref(false)
 const planToDelete = ref<string | null>(null)
 
 // Stats config
-const statsConfig = computed(() => [
-  { label: PAGES.PLANS.ENABLED_PLANS, value: plans.value.filter(p => p.status === 'active').length, icon: 'check' as const, variant: 'success' as const },
-  { label: PAGES.PLANS.TIME_BASED_PLANS, value: plans.value.filter(p => p.plan_type === 'TIME_BASED').length, icon: 'calendar' as const, variant: 'default' as const },
-  { label: PAGES.PLANS.COUNT_BASED_PLANS, value: plans.value.filter(p => p.plan_type === 'COUNT_BASED').length, icon: 'users' as const, variant: 'warning' as const }
-])
+const statsConfig = computed(() => {
+  let activeCount = 0
+  let timeBasedCount = 0
+  let countBasedCount = 0
+  for (const p of plans.value) {
+    if (p.status === 'active') activeCount++
+    if (p.plan_type === 'TIME_BASED') timeBasedCount++
+    else if (p.plan_type === 'COUNT_BASED') countBasedCount++
+  }
+  return [
+    { label: PAGES.PLANS.ENABLED_PLANS, value: activeCount, icon: 'check' as const, variant: 'success' as const },
+    { label: PAGES.PLANS.TIME_BASED_PLANS, value: timeBasedCount, icon: 'calendar' as const, variant: 'default' as const },
+    { label: PAGES.PLANS.COUNT_BASED_PLANS, value: countBasedCount, icon: 'users' as const, variant: 'warning' as const }
+  ]
+})
 
 // Filtered plans
 const filteredPlans = computed(() => {

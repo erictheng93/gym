@@ -6,16 +6,14 @@ const ANALYTICS_TENANTS_SELECT = {
   name: tenants.name,
 };
 
-const ANALYTICS_BRANCHES_SELECT = {
-  id: branches.id,
-};
-
-const ANALYTICS_REVENUE_SELECT = {
-  total: sum(payments.amount),
-};
-
-const ANALYTICS_COUNT_SELECT = {
+const ANALYTICS_BRANCH_AGG_SELECT = {
+  tenantId: branches.tenantId,
   count: count(),
+};
+
+const ANALYTICS_REVENUE_AGG_SELECT = {
+  tenantId: branches.tenantId,
+  total: sum(payments.amount),
 };
 
 export async function runAnalyticsTasks() {
@@ -39,53 +37,81 @@ async function generateDailySnapshot() {
     .from(tenants)
     .where(eq(tenants.status, 'active'));
 
+  if (allTenants.length === 0) return;
+
+  // Batch aggregate branch, revenue, member, and contract counts across all tenants in 4 parallel queries
+  const [branchAgg, revenueAgg, memberAgg, contractAgg] = await Promise.all([
+    db
+      .select(ANALYTICS_BRANCH_AGG_SELECT)
+      .from(branches)
+      .groupBy(branches.tenantId),
+    db
+      .select(ANALYTICS_REVENUE_AGG_SELECT)
+      .from(payments)
+      .innerJoin(branches, eq(payments.branchId, branches.id))
+      .where(
+        and(
+          eq(payments.type, 'INCOME'),
+          sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
+        )
+      )
+      .groupBy(branches.tenantId),
+    db
+      .select(ANALYTICS_BRANCH_AGG_SELECT)
+      .from(members)
+      .innerJoin(branches, eq(members.branchId, branches.id))
+      .where(eq(members.status, 'ACTIVE'))
+      .groupBy(branches.tenantId),
+    db
+      .select(ANALYTICS_BRANCH_AGG_SELECT)
+      .from(contracts)
+      .innerJoin(branches, eq(contracts.branchId, branches.id))
+      .where(eq(contracts.status, 'ACTIVE'))
+      .groupBy(branches.tenantId),
+  ]);
+
+  const branchCountMap = new Map<string, number>();
+  for (const row of branchAgg) {
+    if (row.tenantId) branchCountMap.set(row.tenantId, Number(row.count));
+  }
+
+  const dailyRevenueMap = new Map<string, number>();
+  for (const row of revenueAgg) {
+    if (row.tenantId) dailyRevenueMap.set(row.tenantId, Number(row.total || 0));
+  }
+
+  const memberCountMap = new Map<string, number>();
+  for (const row of memberAgg) {
+    if (row.tenantId) memberCountMap.set(row.tenantId, Number(row.count));
+  }
+
+  const contractCountMap = new Map<string, number>();
+  for (const row of contractAgg) {
+    if (row.tenantId) contractCountMap.set(row.tenantId, Number(row.count));
+  }
+
   for (const tenant of allTenants) {
+    const branchesCount = branchCountMap.get(tenant.id) || 0;
+    if (branchesCount === 0) continue;
+
+    const dailyRevenue = dailyRevenueMap.get(tenant.id) || 0;
+    const membersCount = memberCountMap.get(tenant.id) || 0;
+    const activeContractsCount = contractCountMap.get(tenant.id) || 0;
+
     try {
-      const tenantBranches = await db
-        .select(ANALYTICS_BRANCHES_SELECT)
-        .from(branches)
-        .where(eq(branches.tenantId, tenant.id));
-
-      const branchIds = tenantBranches.map(b => b.id);
-
-      if (branchIds.length === 0) continue;
-
-      const [revenueResult] = await db
-        .select(ANALYTICS_REVENUE_SELECT)
-        .from(payments)
-        .where(
-          and(
-            sql`${payments.branchId} = ANY(${branchIds})`,
-            eq(payments.type, 'INCOME'),
-            sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
-          )
-        );
-
-      const dailyRevenue = Number(revenueResult?.total || 0);
-
-      const [memberCount] = await db
-        .select(ANALYTICS_COUNT_SELECT)
-        .from(members)
-        .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
-
-      const [contractCount] = await db
-        .select(ANALYTICS_COUNT_SELECT)
-        .from(contracts)
-        .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
-
       await db.insert(usageRecords).values({
         tenantId: tenant.id,
         recordDate: yesterdayStr,
-        branchesCount: branchIds.length,
-        membersCount: Number(memberCount?.count || 0),
-        activeContractsCount: Number(contractCount?.count || 0),
+        branchesCount,
+        membersCount,
+        activeContractsCount,
         dailyRevenue: String(dailyRevenue),
       }).onConflictDoUpdate({
         target: [usageRecords.tenantId, usageRecords.recordDate],
         set: {
-          branchesCount: branchIds.length,
-          membersCount: Number(memberCount?.count || 0),
-          activeContractsCount: Number(contractCount?.count || 0),
+          branchesCount,
+          membersCount,
+          activeContractsCount,
           dailyRevenue: String(dailyRevenue),
         },
       });

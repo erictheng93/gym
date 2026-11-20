@@ -15,6 +15,13 @@ const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CACHE_CONTROL_PUBLIC = 'public, max-age=300, stale-while-revalidate=60';
 const CACHE_CONTROL_SHORT = 'public, max-age=60';
 
+const TENANT_BRANDING_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+  slug: tenants.slug,
+  settings: tenants.settings,
+};
+
 /**
  * Invalidate branding cache for a specific tenant slug or all tenants
  */
@@ -69,12 +76,7 @@ app.get('/', async (c) => {
       fetchPromise = (async () => {
         // Fetch tenant by slug
         const [tenant] = await db
-          .select({
-            id: tenants.id,
-            name: tenants.name,
-            slug: tenants.slug,
-            settings: tenants.settings
-          })
+          .select(TENANT_BRANDING_SELECT)
           .from(tenants)
           .where(eq(tenants.slug, slug))
           .limit(1);

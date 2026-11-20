@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, contractLogs, contracts, members, branches, employees, LOG_TYPE } from '../db/index.js';
-import { eq, and, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, count, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -64,6 +64,23 @@ const CONTRACT_LOG_WITH_RELATIONS_SELECT = {
   createdBy: CONTRACT_LOG_EMPLOYEE_SELECT,
 };
 
+const CONTRACT_LOG_WITH_CREATOR_SELECT = {
+  log: CONTRACT_LOG_SELECT,
+  createdBy: CONTRACT_LOG_EMPLOYEE_SELECT,
+};
+
+const CONTRACT_BRANCH_ID_SELECT = {
+  branchId: contracts.branchId,
+};
+
+const CONTRACT_ID_SELECT = {
+  id: contracts.id,
+};
+
+const COUNT_SELECT = {
+  count: count(),
+};
+
 // List contract logs
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -110,7 +127,7 @@ app.get('/', async (c) => {
       .limit(limit)
       .offset(offset),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(contractLogs)
       .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
       .where(and(inArray(contracts.branchId, branchIds), ...conditions)),
@@ -144,19 +161,13 @@ app.get('/contract/:contractId', async (c) => {
   const [branchIds, logs, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({
-        log: CONTRACT_LOG_SELECT,
-        createdBy: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-      })
+      .select(CONTRACT_LOG_WITH_CREATOR_SELECT)
       .from(contractLogs)
       .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
       .where(eq(contractLogs.contractId, contractId))
       .orderBy(desc(contractLogs.dateCreated)),
     db
-      .select({ branchId: contracts.branchId })
+      .select(CONTRACT_BRANCH_ID_SELECT)
       .from(contracts)
       .where(eq(contracts.id, contractId))
       .limit(1),
@@ -188,7 +199,7 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
   }
 
   const [contract] = await db
-    .select({ id: contracts.id })
+    .select(CONTRACT_ID_SELECT)
     .from(contracts)
     .where(and(eq(contracts.id, data.contractId), inArray(contracts.branchId, tenantBranchIds)))
     .limit(1);

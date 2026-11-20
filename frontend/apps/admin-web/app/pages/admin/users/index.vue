@@ -45,6 +45,17 @@ const filterStatus = ref<string>('')
 const showModal = ref(false)
 const selectedUser = ref<typeof users.value[0] | null>(null)
 
+// Summary stats
+const userStats = computed(() => {
+  let activeCount = 0
+  let adminCount = 0
+  for (const u of users.value) {
+    if (u.isActive) activeCount++
+    if (u.role === 'admin') adminCount++
+  }
+  return { activeCount, adminCount }
+})
+
 // Fetch users with filters
 const loadUsers = async () => {
   await fetchUsers({
@@ -168,7 +179,7 @@ onMounted(() => {
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ users.filter(u => u.isActive).length }}</div>
+          <div class="stat-value">{{ userStats.activeCount }}</div>
           <div class="stat-label">啟用中</div>
         </div>
       </div>
@@ -181,7 +192,7 @@ onMounted(() => {
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ users.filter(u => u.role === 'admin').length }}</div>
+          <div class="stat-value">{{ userStats.adminCount }}</div>
           <div class="stat-label">管理員</div>
         </div>
       </div>
