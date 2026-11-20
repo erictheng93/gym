@@ -238,6 +238,28 @@ describe('useOfflineSync with IndexedDB', () => {
       expect(await getCache('key2')).toBeNull()
       expect(await getCache('key3')).toBeNull()
     })
+
+    it('should prune expired cache entries', async () => {
+      const { setCache, getCache, pruneExpiredCache } = useOfflineSync()
+
+      // Add valid entry (10 mins TTL)
+      await setCache('valid-key', { val: 'valid' }, 600000)
+      // Add expired entries (1ms TTL)
+      await setCache('expired-1', { val: 'expired1' }, 1)
+      await setCache('expired-2', { val: 'expired2' }, 1)
+
+      // Wait for expiration
+      await new Promise(resolve => setTimeout(resolve, 15))
+
+      const pruned = await pruneExpiredCache()
+      expect(pruned).toBe(2)
+
+      // Valid entry remains
+      expect(await getCache('valid-key')).toEqual({ val: 'valid' })
+      // Expired entries are deleted
+      expect(await getCache('expired-1')).toBeNull()
+      expect(await getCache('expired-2')).toBeNull()
+    })
   })
 
   describe('Sync Operations', () => {
