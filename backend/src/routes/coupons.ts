@@ -31,6 +31,8 @@ const createCouponSchema = z.object({
 
 const updateCouponSchema = createCouponSchema.partial().omit({ code: true });
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
 const COUPON_SELECT = {
   id: coupons.id,
   status: coupons.status,
@@ -54,6 +56,40 @@ const COUPON_SELECT = {
   applicablePlans: coupons.applicablePlans,
 };
 
+const COUPON_RETURNING = COUPON_SELECT;
+
+const COUPON_LIST_SELECT = {
+  coupon: COUPON_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  campaign: {
+    id: campaigns.id,
+    name: campaigns.name,
+  },
+  usageCount: sql<number>`(
+    SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = ${coupons.id}
+  )`,
+};
+
+const COUPON_BY_ID_SELECT = {
+  coupon: COUPON_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const COUPON_USAGE_STATS_SELECT = {
+  totalUsage: sql<number>`count(*)`,
+  totalDiscount: sql<string>`sum(discount_amount)`,
+};
+
+const COUPON_DELETE_RETURNING = { id: coupons.id };
+
+const COUPON_ID_SELECT = { id: coupons.id };
+
 // List coupons
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -70,7 +106,7 @@ app.get('/', async (c) => {
   }
 
   if (activeOnly) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().slice(0, 10);
     conditions.push(eq(coupons.isActive, true));
     conditions.push(lte(coupons.validFrom, today));
     conditions.push(gte(coupons.validUntil, today));
@@ -78,20 +114,7 @@ app.get('/', async (c) => {
 
   const [result, [countResult]] = await Promise.all([
     db
-      .select({
-        coupon: COUPON_SELECT,
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-        campaign: {
-          id: campaigns.id,
-          name: campaigns.name,
-        },
-        usageCount: sql<number>`(
-          SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = ${coupons.id}
-        )`,
-      })
+      .select(COUPON_LIST_SELECT)
       .from(coupons)
       .leftJoin(branches, eq(coupons.branchId, branches.id))
       .leftJoin(campaigns, eq(coupons.campaignId, campaigns.id))
@@ -100,7 +123,7 @@ app.get('/', async (c) => {
       .limit(limit)
       .offset(offset),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(coupons)
       .where(and(...conditions)),
   ]);
@@ -129,10 +152,10 @@ app.post('/validate', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { code, memberId, purchaseAmount } = await c.req.json();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   const [coupon] = await db
-    .select()
+    .select(COUPON_SELECT)
     .from(coupons)
     .where(
       and(
@@ -165,13 +188,13 @@ app.post('/validate', async (c) => {
     const [usageCountResult, memberUsageCountResult] = await Promise.all([
       needUsageLimit
         ? db
-            .select({ count: sql<number>`count(*)` })
+            .select(COUNT_SELECT)
             .from(couponUsages)
             .where(eq(couponUsages.couponId, coupon.id))
         : Promise.resolve(null),
       needMemberLimit
         ? db
-            .select({ count: sql<number>`count(*)` })
+            .select(COUNT_SELECT)
             .from(couponUsages)
             .where(
               and(
@@ -212,8 +235,6 @@ app.post('/validate', async (c) => {
   });
 });
 
-const COUPON_RETURNING = COUPON_SELECT;
-
 const COUPON_USAGE_RETURNING = {
   id: couponUsages.id,
   createdAt: couponUsages.createdAt,
@@ -231,7 +252,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCouponSc
 
   // Check for duplicate code
   const [existing] = await db
-    .select({ id: coupons.id })
+    .select(COUPON_ID_SELECT)
     .from(coupons)
     .where(and(eq(coupons.code, data.code.toUpperCase()), eq(coupons.tenantId, tenantId)))
     .limit(1);
@@ -267,7 +288,7 @@ app.post('/:id/use', async (c) => {
   const { memberId, contractId, discountAmount } = await c.req.json();
 
   const [coupon] = await db
-    .select({ id: coupons.id })
+    .select(COUPON_ID_SELECT)
     .from(coupons)
     .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
     .limit(1);
@@ -297,13 +318,7 @@ app.get('/:id', async (c) => {
 
   const [[result], [usageStats]] = await Promise.all([
     db
-      .select({
-        coupon: coupons,
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-      })
+      .select(COUPON_BY_ID_SELECT)
       .from(coupons)
       .leftJoin(branches, eq(coupons.branchId, branches.id))
       .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
@@ -311,10 +326,7 @@ app.get('/:id', async (c) => {
 
     // Get usage stats
     db
-      .select({
-        totalUsage: sql<number>`count(*)`,
-        totalDiscount: sql<string>`sum(discount_amount)`,
-      })
+      .select(COUPON_USAGE_STATS_SELECT)
       .from(couponUsages)
       .where(eq(couponUsages.couponId, id)),
   ]);
@@ -381,7 +393,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const [deleted] = await db
     .delete(coupons)
     .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
-    .returning({ id: coupons.id });
+    .returning(COUPON_DELETE_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '優惠碼不存在' }, 404);

@@ -28,6 +28,8 @@ const createLeadSchema = z.object({
 
 const updateLeadSchema = createLeadSchema.partial();
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
 const LEAD_SELECT = {
   id: leads.id,
   status: leads.status,
@@ -49,6 +51,61 @@ const LEAD_SELECT = {
 };
 
 const LEAD_RETURNING = LEAD_SELECT;
+
+const LEAD_LIST_SELECT = {
+  lead: LEAD_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  assignedTo: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+};
+
+const LEAD_BY_ID_SELECT = {
+  lead: LEAD_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  assignedTo: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+  convertedMember: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+};
+
+const LEAD_CONVERT_SELECT = {
+  lead: LEAD_SELECT,
+  branch: { id: branches.id },
+};
+
+const LAST_MEMBER_CODE_SELECT = { memberCode: members.memberCode };
+
+const NEW_MEMBER_RETURNING = {
+  id: members.id,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  memberCode: members.memberCode,
+  branchId: members.branchId,
+  status: members.status,
+  joinDate: members.joinDate,
+  notes: members.notes,
+};
+
+const LEAD_DELETE_RETURNING = { id: leads.id };
+
+const LEAD_STATS_SELECT = {
+  status: leads.status,
+  count: sql<number>`count(*)`,
+};
 
 // List leads
 app.get('/', async (c) => {
@@ -102,17 +159,7 @@ app.get('/', async (c) => {
 
   const [result, [countResult]] = await Promise.all([
     db
-      .select({
-        lead: LEAD_SELECT,
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-        assignedTo: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-      })
+      .select(LEAD_LIST_SELECT)
       .from(leads)
       .innerJoin(branches, eq(leads.branchId, branches.id))
       .leftJoin(employees, eq(leads.assignedToId, employees.id))
@@ -121,7 +168,7 @@ app.get('/', async (c) => {
       .limit(limit)
       .offset(offset),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(leads)
       .where(and(...conditions)),
   ]);
@@ -155,22 +202,7 @@ app.get('/:id', async (c) => {
   }
 
   const [result] = await db
-    .select({
-      lead: LEAD_SELECT,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      assignedTo: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-      convertedMember: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-    })
+    .select(LEAD_BY_ID_SELECT)
     .from(leads)
     .leftJoin(branches, eq(leads.branchId, branches.id))
     .leftJoin(employees, eq(leads.assignedToId, employees.id))
@@ -259,13 +291,13 @@ app.post('/:id/convert', async (c) => {
 
   const [[lead], [lastMember]] = await Promise.all([
     db
-      .select({ lead: leads, branch: { id: branches.id } })
+      .select(LEAD_CONVERT_SELECT)
       .from(leads)
       .innerJoin(branches, eq(leads.branchId, branches.id))
       .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
       .limit(1),
     db
-      .select({ memberCode: members.memberCode })
+      .select(LAST_MEMBER_CODE_SELECT)
       .from(members)
       .orderBy(desc(members.createdAt))
       .limit(1),
@@ -295,18 +327,8 @@ app.post('/:id/convert', async (c) => {
     memberCode,
     branchId: lead.lead.branchId,
     status: 'ACTIVE',
-    joinDate: new Date().toISOString().split('T')[0],
-  }).returning({
-    id: members.id,
-    fullName: members.fullName,
-    phone: members.phone,
-    email: members.email,
-    memberCode: members.memberCode,
-    branchId: members.branchId,
-    status: members.status,
-    joinDate: members.joinDate,
-    notes: members.notes,
-  });
+    joinDate: new Date().toISOString().slice(0, 10),
+  }).returning(NEW_MEMBER_RETURNING);
 
   // Update lead status
   await db.update(leads).set({
@@ -339,7 +361,7 @@ app.delete('/:id', async (c) => {
   const [deleted] = await db
     .delete(leads)
     .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
-    .returning({ id: leads.id });
+    .returning(LEAD_DELETE_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
@@ -378,10 +400,7 @@ app.get('/stats/summary', async (c) => {
   }
 
   const stats = await db
-    .select({
-      status: leads.status,
-      count: sql<number>`count(*)`,
-    })
+    .select(LEAD_STATS_SELECT)
     .from(leads)
     .where(inArray(leads.branchId, targetBranchIds))
     .groupBy(leads.status);

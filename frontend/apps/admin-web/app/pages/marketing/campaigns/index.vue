@@ -1,3 +1,52 @@
+<script lang="ts">
+const TYPE_OPTIONS = [
+  { value: '', label: '全部類型' },
+  { value: 'PROMOTION', label: '促銷活動' },
+  { value: 'SEASONAL', label: '季節活動' },
+  { value: 'REFERRAL', label: '推薦活動' },
+  { value: 'RETENTION', label: '留存活動' }
+]
+
+const STATUS_OPTIONS = [
+  { value: '', label: '全部狀態' },
+  { value: 'DRAFT', label: '草稿' },
+  { value: 'SCHEDULED', label: '已排程' },
+  { value: 'ACTIVE', label: '進行中' },
+  { value: 'PAUSED', label: '已暫停' },
+  { value: 'ENDED', label: '已結束' }
+]
+
+const CAMPAIGN_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric'
+})
+
+const CAMPAIGN_CURRENCY_FORMATTER = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : CAMPAIGN_DATE_FORMATTER.format(d)
+}
+
+const formatCurrency = (amount: number) => {
+  return CAMPAIGN_CURRENCY_FORMATTER.format(amount)
+}
+
+const COLUMNS = [
+  { key: 'name', label: '活動名稱', slot: 'name' },
+  { key: 'type', label: '類型', slot: 'type' },
+  { key: 'date_range', label: '活動期間', slot: 'dates' },
+  { key: 'budget', label: '預算', slot: 'budget' },
+  { key: 'status', label: '狀態', slot: 'status' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 行銷活動列表頁面
@@ -26,23 +75,6 @@ const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 
-const typeOptions = [
-  { value: '', label: '全部類型' },
-  { value: 'PROMOTION', label: '促銷活動' },
-  { value: 'SEASONAL', label: '季節活動' },
-  { value: 'REFERRAL', label: '推薦活動' },
-  { value: 'RETENTION', label: '留存活動' }
-]
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'DRAFT', label: '草稿' },
-  { value: 'SCHEDULED', label: '已排程' },
-  { value: 'ACTIVE', label: '進行中' },
-  { value: 'PAUSED', label: '已暫停' },
-  { value: 'ENDED', label: '已結束' }
-]
-
 // Load campaigns
 const loadCampaigns = async () => {
   await fetchCampaigns({
@@ -66,39 +98,6 @@ onMounted(loadCampaigns)
 const handleRowClick = (campaign: typeof campaigns.value[0]) => {
   navigateTo(`/marketing/campaigns/${campaign.id}`)
 }
-
-const campaignDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric'
-})
-
-const campaignCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
-  style: 'currency',
-  currency: 'TWD',
-  maximumFractionDigits: 0
-})
-
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr)
-  return isNaN(d.getTime()) ? '—' : campaignDateFormatter.format(d)
-}
-
-// Format currency
-const formatCurrency = (amount: number) => {
-  return campaignCurrencyFormatter.format(amount)
-}
-
-// Table columns
-const columns = [
-  { key: 'name', label: '活動名稱', slot: 'name' },
-  { key: 'type', label: '類型', slot: 'type' },
-  { key: 'date_range', label: '活動期間', slot: 'dates' },
-  { key: 'budget', label: '預算', slot: 'budget' },
-  { key: 'status', label: '狀態', slot: 'status' }
-]
 </script>
 
 <template>
@@ -126,12 +125,12 @@ const columns = [
     <FilterBar>
       <template #filters>
         <select v-model="selectedType" class="input filter-select">
-          <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
         <select v-model="selectedStatus" class="input filter-select">
-          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -144,7 +143,7 @@ const columns = [
     <!-- Data Table -->
     <DataTable
       :data="campaigns"
-      :columns="columns"
+      :columns="COLUMNS"
       :loading="isLoading"
       :loading-message="MESSAGES.ACTIONS.LOADING"
       empty-title="暫無活動"

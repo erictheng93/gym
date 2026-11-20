@@ -14,6 +14,67 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+const COUNT_TOTAL_SELECT = { total: count(issueReports.id) };
+
+const ISSUE_LIST_SELECT = {
+  id: issueReports.id,
+  type: issueReports.type,
+  title: issueReports.title,
+  content: issueReports.content,
+  status: issueReports.status,
+  resolution: issueReports.resolution,
+  resolvedAt: issueReports.resolvedAt,
+  createdAt: issueReports.createdAt,
+  branchId: issueReports.branchId,
+  branchName: branches.name,
+};
+
+const BRANCH_NAME_SELECT = { id: branches.id, name: branches.name };
+
+const ISSUE_INSERT_RETURNING = {
+  id: issueReports.id,
+  type: issueReports.type,
+  title: issueReports.title,
+  status: issueReports.status,
+  createdAt: issueReports.createdAt,
+};
+
+const ISSUE_DETAIL_SELECT = {
+  id: issueReports.id,
+  type: issueReports.type,
+  title: issueReports.title,
+  content: issueReports.content,
+  attachments: issueReports.attachments,
+  status: issueReports.status,
+  resolution: issueReports.resolution,
+  resolvedAt: issueReports.resolvedAt,
+  createdAt: issueReports.createdAt,
+  updatedAt: issueReports.updatedAt,
+  branchId: issueReports.branchId,
+  branchName: branches.name,
+  assignedTo: issueReports.assignedTo,
+  assignedToName: employees.fullName,
+};
+
+const ISSUE_UPDATE_RETURNING = {
+  id: issueReports.id,
+  type: issueReports.type,
+  title: issueReports.title,
+  status: issueReports.status,
+};
+
+const ISSUE_STATUS_SELECT = {
+  id: issueReports.id,
+  status: issueReports.status,
+};
+
+const ISSUE_TYPES = [
+  { value: 'EQUIPMENT', label: '器材問題', description: '健身器材故障或損壞' },
+  { value: 'SERVICE', label: '服務問題', description: '員工服務態度或專業度' },
+  { value: 'SUGGESTION', label: '建議', description: '改善建議或新功能需求' },
+  { value: 'COMPLAINT', label: '投訴', description: '其他投訴或不滿' },
+];
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -68,22 +129,11 @@ app.get(
     // Concurrently get total count and issues
     const [[{ total }], issues] = await Promise.all([
       db
-        .select({ total: count(issueReports.id) })
+        .select(COUNT_TOTAL_SELECT)
         .from(issueReports)
         .where(and(...conditions)),
       db
-        .select({
-          id: issueReports.id,
-          type: issueReports.type,
-          title: issueReports.title,
-          content: issueReports.content,
-          status: issueReports.status,
-          resolution: issueReports.resolution,
-          resolvedAt: issueReports.resolvedAt,
-          createdAt: issueReports.createdAt,
-          branchId: issueReports.branchId,
-          branchName: branches.name,
-        })
+        .select(ISSUE_LIST_SELECT)
         .from(issueReports)
         .leftJoin(branches, eq(issueReports.branchId, branches.id))
         .where(and(...conditions))
@@ -142,7 +192,7 @@ app.post(
 
     // Verify branch exists
     const [branch] = await db
-      .select({ id: branches.id, name: branches.name })
+      .select(BRANCH_NAME_SELECT)
       .from(branches)
       .where(eq(branches.id, data.branchId))
       .limit(1);
@@ -163,13 +213,7 @@ app.post(
       content: data.content,
       attachments: data.attachments || [],
       status: 'SUBMITTED',
-    }).returning({
-      id: issueReports.id,
-      type: issueReports.type,
-      title: issueReports.title,
-      status: issueReports.status,
-      createdAt: issueReports.createdAt,
-    });
+    }).returning(ISSUE_INSERT_RETURNING);
 
     return c.json({
       success: true,
@@ -196,22 +240,7 @@ app.get('/:id', async (c) => {
   const issueId = c.req.param('id');
 
   const [issue] = await db
-    .select({
-      id: issueReports.id,
-      type: issueReports.type,
-      title: issueReports.title,
-      content: issueReports.content,
-      attachments: issueReports.attachments,
-      status: issueReports.status,
-      resolution: issueReports.resolution,
-      resolvedAt: issueReports.resolvedAt,
-      createdAt: issueReports.createdAt,
-      updatedAt: issueReports.updatedAt,
-      branchId: issueReports.branchId,
-      branchName: branches.name,
-      assignedTo: issueReports.assignedTo,
-      assignedToName: employees.fullName,
-    })
+    .select(ISSUE_DETAIL_SELECT)
     .from(issueReports)
     .leftJoin(branches, eq(issueReports.branchId, branches.id))
     .leftJoin(employees, eq(issueReports.assignedTo, employees.id))
@@ -281,20 +310,12 @@ app.put(
         eq(issueReports.memberId, memberInfo.id),
         eq(issueReports.status, 'SUBMITTED'),
       ))
-      .returning({
-        id: issueReports.id,
-        type: issueReports.type,
-        title: issueReports.title,
-        status: issueReports.status,
-      });
+      .returning(ISSUE_UPDATE_RETURNING);
 
     if (!issue) {
       // Discriminate between 404 (not found) and 400 (cannot edit)
       const [existing] = await db
-        .select({
-          id: issueReports.id,
-          status: issueReports.status,
-        })
+        .select(ISSUE_STATUS_SELECT)
         .from(issueReports)
         .where(and(
           eq(issueReports.id, issueId),
@@ -337,16 +358,9 @@ app.put(
 // -----------------------------------------------------------------------------
 
 app.get('/types/list', async (c) => {
-  const issueTypes = [
-    { value: 'EQUIPMENT', label: '器材問題', description: '健身器材故障或損壞' },
-    { value: 'SERVICE', label: '服務問題', description: '員工服務態度或專業度' },
-    { value: 'SUGGESTION', label: '建議', description: '改善建議或新功能需求' },
-    { value: 'COMPLAINT', label: '投訴', description: '其他投訴或不滿' },
-  ];
-
   return c.json({
     success: true,
-    data: { issueTypes },
+    data: { issueTypes: ISSUE_TYPES },
   });
 });
 

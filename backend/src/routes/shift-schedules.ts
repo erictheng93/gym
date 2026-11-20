@@ -8,6 +8,8 @@ import type { AuthVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
 const SHIFT_SCHEDULE_RETURNING = {
   id: shiftSchedules.id,
   status: shiftSchedules.status,
@@ -27,6 +29,29 @@ const SHIFT_SCHEDULE_RETURNING = {
   tenantId: shiftSchedules.tenantId,
 };
 
+const SHIFT_SCHEDULE_LIST_SELECT = {
+  id: shiftSchedules.id,
+  status: shiftSchedules.status,
+  createdAt: shiftSchedules.createdAt,
+  updatedAt: shiftSchedules.updatedAt,
+  branchId: shiftSchedules.branchId,
+  name: shiftSchedules.name,
+  startTime: shiftSchedules.startTime,
+  endTime: shiftSchedules.endTime,
+  breakStart: shiftSchedules.breakStart,
+  breakEnd: shiftSchedules.breakEnd,
+  gracePeriodMinutes: shiftSchedules.gracePeriodMinutes,
+  earlyLeaveMinutes: shiftSchedules.earlyLeaveMinutes,
+  overtimeStartAfter: shiftSchedules.overtimeStartAfter,
+  isDefault: shiftSchedules.isDefault,
+  applicableDays: shiftSchedules.applicableDays,
+  branchName: branches.name,
+};
+
+const SHIFT_SCHEDULE_DELETE_RETURNING = {
+  id: shiftSchedules.id,
+};
+
 const EMPLOYEE_SHIFT_RETURNING = {
   id: employeeShifts.id,
   createdAt: employeeShifts.createdAt,
@@ -36,6 +61,25 @@ const EMPLOYEE_SHIFT_RETURNING = {
   effectiveDate: employeeShifts.effectiveDate,
   endDate: employeeShifts.endDate,
   tenantId: employeeShifts.tenantId,
+};
+
+const EMPLOYEE_SHIFT_LIST_SELECT = {
+  id: employeeShifts.id,
+  createdAt: employeeShifts.createdAt,
+  employeeId: employeeShifts.employeeId,
+  shiftScheduleId: employeeShifts.shiftScheduleId,
+  effectiveDate: employeeShifts.effectiveDate,
+  endDate: employeeShifts.endDate,
+  employeeFullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  employeeBranchId: employees.branchId,
+  shiftName: shiftSchedules.name,
+  shiftStartTime: shiftSchedules.startTime,
+  shiftEndTime: shiftSchedules.endTime,
+};
+
+const EMPLOYEE_SHIFT_DELETE_RETURNING = {
+  id: employeeShifts.id,
 };
 
 app.use('*', authMiddleware, requireAuth);
@@ -83,24 +127,7 @@ app.get('/', async (c) => {
 
     const [records, countResult] = await Promise.all([
       db
-        .select({
-          id: shiftSchedules.id,
-          status: shiftSchedules.status,
-          createdAt: shiftSchedules.createdAt,
-          updatedAt: shiftSchedules.updatedAt,
-          branchId: shiftSchedules.branchId,
-          name: shiftSchedules.name,
-          startTime: shiftSchedules.startTime,
-          endTime: shiftSchedules.endTime,
-          breakStart: shiftSchedules.breakStart,
-          breakEnd: shiftSchedules.breakEnd,
-          gracePeriodMinutes: shiftSchedules.gracePeriodMinutes,
-          earlyLeaveMinutes: shiftSchedules.earlyLeaveMinutes,
-          overtimeStartAfter: shiftSchedules.overtimeStartAfter,
-          isDefault: shiftSchedules.isDefault,
-          applicableDays: shiftSchedules.applicableDays,
-          branchName: branches.name,
-        })
+        .select(SHIFT_SCHEDULE_LIST_SELECT)
         .from(shiftSchedules)
         .leftJoin(branches, eq(shiftSchedules.branchId, branches.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
@@ -108,7 +135,7 @@ app.get('/', async (c) => {
         .limit(parseInt(limit))
         .offset(parseInt(offset)),
       db
-        .select({ count: sql<number>`count(*)` })
+        .select(COUNT_SELECT)
         .from(shiftSchedules)
         .where(conditions.length > 0 ? and(...conditions) : undefined),
     ]);
@@ -153,24 +180,7 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [record] = await db
-    .select({
-      id: shiftSchedules.id,
-      status: shiftSchedules.status,
-      createdAt: shiftSchedules.createdAt,
-      updatedAt: shiftSchedules.updatedAt,
-      branchId: shiftSchedules.branchId,
-      name: shiftSchedules.name,
-      startTime: shiftSchedules.startTime,
-      endTime: shiftSchedules.endTime,
-      breakStart: shiftSchedules.breakStart,
-      breakEnd: shiftSchedules.breakEnd,
-      gracePeriodMinutes: shiftSchedules.gracePeriodMinutes,
-      earlyLeaveMinutes: shiftSchedules.earlyLeaveMinutes,
-      overtimeStartAfter: shiftSchedules.overtimeStartAfter,
-      isDefault: shiftSchedules.isDefault,
-      applicableDays: shiftSchedules.applicableDays,
-      branchName: branches.name,
-    })
+    .select(SHIFT_SCHEDULE_LIST_SELECT)
     .from(shiftSchedules)
     .leftJoin(branches, eq(shiftSchedules.branchId, branches.id))
     .where(eq(shiftSchedules.id, id))
@@ -344,7 +354,7 @@ app.delete('/:id', async (c) => {
     .update(shiftSchedules)
     .set({ status: 'archived', updatedAt: new Date() })
     .where(eq(shiftSchedules.id, id))
-    .returning({ id: shiftSchedules.id });
+    .returning(SHIFT_SCHEDULE_DELETE_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '找不到班表' }, 404);
@@ -395,20 +405,7 @@ app.get('/employee_shifts', async (c) => {
 
     const [records, countResult] = await Promise.all([
       db
-        .select({
-          id: employeeShifts.id,
-          createdAt: employeeShifts.createdAt,
-          employeeId: employeeShifts.employeeId,
-          shiftScheduleId: employeeShifts.shiftScheduleId,
-          effectiveDate: employeeShifts.effectiveDate,
-          endDate: employeeShifts.endDate,
-          employeeFullName: employees.fullName,
-          employeeCode: employees.employeeCode,
-          employeeBranchId: employees.branchId,
-          shiftName: shiftSchedules.name,
-          shiftStartTime: shiftSchedules.startTime,
-          shiftEndTime: shiftSchedules.endTime,
-        })
+        .select(EMPLOYEE_SHIFT_LIST_SELECT)
         .from(employeeShifts)
         .leftJoin(employees, eq(employeeShifts.employeeId, employees.id))
         .leftJoin(shiftSchedules, eq(employeeShifts.shiftScheduleId, shiftSchedules.id))
@@ -417,7 +414,7 @@ app.get('/employee_shifts', async (c) => {
         .limit(limitNum)
         .offset(offsetNum),
       db
-        .select({ count: sql<number>`count(*)` })
+        .select(COUNT_SELECT)
         .from(employeeShifts)
         .where(conditions.length > 0 ? and(...conditions) : undefined),
     ]);
@@ -547,7 +544,7 @@ app.delete('/employee_shifts/:id', async (c) => {
   const [deleted] = await db
     .delete(employeeShifts)
     .where(eq(employeeShifts.id, id))
-    .returning({ id: employeeShifts.id });
+    .returning(EMPLOYEE_SHIFT_DELETE_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '找不到班表指派' }, 404);

@@ -13,6 +13,8 @@ import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
 const PROMOTION_RECORD_RETURNING = {
   id: promotionRecords.id,
   employeeId: promotionRecords.employeeId,
@@ -27,6 +29,117 @@ const PROMOTION_RECORD_RETURNING = {
   createdBy: promotionRecords.createdBy,
   createdAt: promotionRecords.createdAt,
   tenantId: promotionRecords.tenantId,
+};
+
+const SALARY_RECORD_LIST_SELECT = {
+  id: salaryRecords.id,
+  employeeId: salaryRecords.employeeId,
+  period: salaryRecords.period,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  overtimePay: salaryRecords.overtimePay,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+  netSalary: salaryRecords.netSalary,
+  hourlyRate: salaryRecords.hourlyRate,
+  workDays: salaryRecords.workDays,
+  leaveDays: salaryRecords.leaveDays,
+  notes: salaryRecords.notes,
+  status: salaryRecords.status,
+  approvedBy: salaryRecords.approvedBy,
+  approvedAt: salaryRecords.approvedAt,
+  paidAt: salaryRecords.paidAt,
+  createdAt: salaryRecords.createdAt,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const SALARY_RECORD_BY_ID_SELECT = {
+  id: salaryRecords.id,
+  employeeId: salaryRecords.employeeId,
+  period: salaryRecords.period,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  overtimePay: salaryRecords.overtimePay,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+  netSalary: salaryRecords.netSalary,
+  hourlyRate: salaryRecords.hourlyRate,
+  workDays: salaryRecords.workDays,
+  leaveDays: salaryRecords.leaveDays,
+  notes: salaryRecords.notes,
+  status: salaryRecords.status,
+  approvedBy: salaryRecords.approvedBy,
+  approvedAt: salaryRecords.approvedAt,
+  paidAt: salaryRecords.paidAt,
+  createdAt: salaryRecords.createdAt,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+};
+
+const EMPLOYEE_GENERATE_SELECT = {
+  id: employees.id,
+  branchId: employees.branchId,
+  basicSalary: employees.basicSalary,
+};
+
+const SALARY_RECORD_EXISTING_SELECT = {
+  employeeId: salaryRecords.employeeId,
+};
+
+const SALARY_RECORD_UPDATE_SELECT = {
+  id: salaryRecords.id,
+  status: salaryRecords.status,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  hourlyRate: salaryRecords.hourlyRate,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+};
+
+const SALARY_RECORD_EXPORT_SELECT = {
+  id: salaryRecords.id,
+  employeeId: salaryRecords.employeeId,
+  period: salaryRecords.period,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  overtimePay: salaryRecords.overtimePay,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+  netSalary: salaryRecords.netSalary,
+  status: salaryRecords.status,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const PROMOTION_RECORD_LIST_SELECT = {
+  id: promotionRecords.id,
+  employeeId: promotionRecords.employeeId,
+  type: promotionRecords.type,
+  fromJobTitleId: promotionRecords.fromJobTitleId,
+  toJobTitleId: promotionRecords.toJobTitleId,
+  fromBranchId: promotionRecords.fromBranchId,
+  toBranchId: promotionRecords.toBranchId,
+  effectiveDate: promotionRecords.effectiveDate,
+  newBaseSalary: promotionRecords.newBaseSalary,
+  reason: promotionRecords.reason,
+  createdAt: promotionRecords.createdAt,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+};
+
+const EMPLOYEE_PROMOTION_SELECT = {
+  jobTitleId: employees.jobTitleId,
+  branchId: employees.branchId,
 };
 
 app.use('*', authMiddleware, requireAuth);
@@ -46,31 +159,7 @@ app.get('/salary-records', async (c) => {
 
   const [records, countResult] = await Promise.all([
     db
-      .select({
-        id: salaryRecords.id,
-        employeeId: salaryRecords.employeeId,
-        period: salaryRecords.period,
-        baseSalary: salaryRecords.baseSalary,
-        overtimeHours: salaryRecords.overtimeHours,
-        overtimePay: salaryRecords.overtimePay,
-        commission: salaryRecords.commission,
-        bonus: salaryRecords.bonus,
-        deductions: salaryRecords.deductions,
-        netSalary: salaryRecords.netSalary,
-        hourlyRate: salaryRecords.hourlyRate,
-        workDays: salaryRecords.workDays,
-        leaveDays: salaryRecords.leaveDays,
-        notes: salaryRecords.notes,
-        status: salaryRecords.status,
-        approvedBy: salaryRecords.approvedBy,
-        approvedAt: salaryRecords.approvedAt,
-        paidAt: salaryRecords.paidAt,
-        createdAt: salaryRecords.createdAt,
-        employeeName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        branchName: branches.name,
-        jobTitleName: jobTitles.name,
-      })
+      .select(SALARY_RECORD_LIST_SELECT)
       .from(salaryRecords)
       .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
       .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
@@ -80,7 +169,7 @@ app.get('/salary-records', async (c) => {
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(salaryRecords)
       .where(conditions.length > 0 ? and(...conditions) : undefined),
   ]);
@@ -129,30 +218,7 @@ app.get('/salary-records/:id', async (c) => {
   const id = c.req.param('id');
 
   const [record] = await db
-    .select({
-      id: salaryRecords.id,
-      employeeId: salaryRecords.employeeId,
-      period: salaryRecords.period,
-      baseSalary: salaryRecords.baseSalary,
-      overtimeHours: salaryRecords.overtimeHours,
-      overtimePay: salaryRecords.overtimePay,
-      commission: salaryRecords.commission,
-      bonus: salaryRecords.bonus,
-      deductions: salaryRecords.deductions,
-      netSalary: salaryRecords.netSalary,
-      hourlyRate: salaryRecords.hourlyRate,
-      workDays: salaryRecords.workDays,
-      leaveDays: salaryRecords.leaveDays,
-      notes: salaryRecords.notes,
-      status: salaryRecords.status,
-      approvedBy: salaryRecords.approvedBy,
-      approvedAt: salaryRecords.approvedAt,
-      paidAt: salaryRecords.paidAt,
-      createdAt: salaryRecords.createdAt,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchName: branches.name,
-    })
+    .select(SALARY_RECORD_BY_ID_SELECT)
     .from(salaryRecords)
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
@@ -215,17 +281,13 @@ app.post('/generate', zValidator('json', generateSchema), async (c) => {
   }
 
   const employeeList = await db
-    .select({
-      id: employees.id,
-      branchId: employees.branchId,
-      basicSalary: employees.basicSalary,
-    })
+    .select(EMPLOYEE_GENERATE_SELECT)
     .from(employees)
     .where(and(...conditions));
 
   // Check for existing records
   const existingRecords = await db
-    .select({ employeeId: salaryRecords.employeeId })
+    .select(SALARY_RECORD_EXISTING_SELECT)
     .from(salaryRecords)
     .where(
       and(
@@ -282,16 +344,7 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 
   // Get current record
   const [record] = await db
-    .select({
-      id: salaryRecords.id,
-      status: salaryRecords.status,
-      baseSalary: salaryRecords.baseSalary,
-      overtimeHours: salaryRecords.overtimeHours,
-      hourlyRate: salaryRecords.hourlyRate,
-      commission: salaryRecords.commission,
-      bonus: salaryRecords.bonus,
-      deductions: salaryRecords.deductions,
-    })
+    .select(SALARY_RECORD_UPDATE_SELECT)
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -460,23 +513,7 @@ app.get('/export', async (c) => {
   if (branch_id) conditions.push(eq(salaryRecords.branchId, branch_id));
 
   const records = await db
-    .select({
-      id: salaryRecords.id,
-      employeeId: salaryRecords.employeeId,
-      period: salaryRecords.period,
-      baseSalary: salaryRecords.baseSalary,
-      overtimeHours: salaryRecords.overtimeHours,
-      overtimePay: salaryRecords.overtimePay,
-      commission: salaryRecords.commission,
-      bonus: salaryRecords.bonus,
-      deductions: salaryRecords.deductions,
-      netSalary: salaryRecords.netSalary,
-      status: salaryRecords.status,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchName: branches.name,
-      jobTitleName: jobTitles.name,
-    })
+    .select(SALARY_RECORD_EXPORT_SELECT)
     .from(salaryRecords)
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
@@ -501,7 +538,7 @@ app.get('/export', async (c) => {
     status: translateStatus(r.status),
   }));
 
-  const filename = `薪資記錄_${period || new Date().toISOString().split('T')[0]}`;
+  const filename = `薪資記錄_${period || new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(payrollColumns, exportData, '薪資記錄');
@@ -542,21 +579,7 @@ app.get('/promotions', async (c) => {
 
   const [records, countResult] = await Promise.all([
     db
-      .select({
-        id: promotionRecords.id,
-        employeeId: promotionRecords.employeeId,
-        type: promotionRecords.type,
-        fromJobTitleId: promotionRecords.fromJobTitleId,
-        toJobTitleId: promotionRecords.toJobTitleId,
-        fromBranchId: promotionRecords.fromBranchId,
-        toBranchId: promotionRecords.toBranchId,
-        effectiveDate: promotionRecords.effectiveDate,
-        newBaseSalary: promotionRecords.newBaseSalary,
-        reason: promotionRecords.reason,
-        createdAt: promotionRecords.createdAt,
-        employeeName: employees.fullName,
-        employeeCode: employees.employeeCode,
-      })
+      .select(PROMOTION_RECORD_LIST_SELECT)
       .from(promotionRecords)
       .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
@@ -564,7 +587,7 @@ app.get('/promotions', async (c) => {
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(promotionRecords)
       .where(conditions.length > 0 ? and(...conditions) : undefined),
   ]);
@@ -613,10 +636,7 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
 
   // Get current employee data
   const [employee] = await db
-    .select({
-      jobTitleId: employees.jobTitleId,
-      branchId: employees.branchId,
-    })
+    .select(EMPLOYEE_PROMOTION_SELECT)
     .from(employees)
     .where(eq(employees.id, data.employee_id))
     .limit(1);
@@ -643,7 +663,7 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
     .returning(PROMOTION_RECORD_RETURNING);
 
   // Update employee if changes are effective today or earlier
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
   if (data.effective_date <= today) {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (data.to_job_title_id) updates.jobTitleId = data.to_job_title_id;

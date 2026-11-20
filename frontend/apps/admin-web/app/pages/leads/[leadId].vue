@@ -1,3 +1,72 @@
+<script lang="ts">
+type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
+
+const LEAD_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const LEAD_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const formatDate = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '—'
+  return LEAD_DATE_FORMATTER.format(new Date(dateStr))
+}
+
+const formatDateTime = (dateStr: string | null | undefined) => {
+  if (!dateStr) return '—'
+  return LEAD_DATE_TIME_FORMATTER.format(new Date(dateStr))
+}
+
+const ACTIVITY_TYPE_OPTIONS = [
+  { value: 'CALL', label: '電話', icon: 'phone' },
+  { value: 'SMS', label: '簡訊', icon: 'message' },
+  { value: 'EMAIL', label: 'Email', icon: 'mail' },
+  { value: 'VISIT', label: '到訪', icon: 'map-pin' },
+  { value: 'TRIAL', label: '體驗', icon: 'calendar' }
+] as const
+
+const ACTIVITY_TYPE_LABEL_MAP: Record<string, string> = {
+  CALL: '電話',
+  SMS: '簡訊',
+  EMAIL: 'Email',
+  VISIT: '到訪',
+  TRIAL: '體驗'
+}
+
+const ACTIVITY_TYPE_COLOR_MAP: Record<string, string> = {
+  CALL: '#007aff',
+  SMS: '#34c759',
+  EMAIL: '#5856d6',
+  VISIT: '#ff9500',
+  TRIAL: '#af52de'
+}
+
+const getActivityTypeLabel = (type: string) => {
+  return ACTIVITY_TYPE_LABEL_MAP[type] || type
+}
+
+const getActivityTypeColor = (type: string) => {
+  return ACTIVITY_TYPE_COLOR_MAP[type] || '#8e8e93'
+}
+
+const STATUS_OPTIONS = [
+  { value: 'NEW', label: '新建' },
+  { value: 'CONTACTED', label: '已聯繫' },
+  { value: 'TRIAL_BOOKED', label: '已預約體驗' },
+  { value: 'VISITED', label: '已到訪' },
+  { value: 'CONVERTED', label: '已轉換' },
+  { value: 'LOST', label: '已流失' }
+] as const
+</script>
+
 <script setup lang="ts">
 /**
  * 潛在客戶詳情頁面
@@ -52,7 +121,6 @@ const isConverting = ref(false)
 
 // Status update modal
 const showStatusModal = ref(false)
-type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
 const newStatus = ref<LeadStatus | ''>('')
 const isUpdatingStatus = ref(false)
 
@@ -76,73 +144,6 @@ const loadLead = async () => {
 onMounted(async () => {
   await Promise.all([loadLead(), fetchEmployees()])
 })
-
-const leadDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
-
-const leadDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-})
-
-const formatDate = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '—'
-  return leadDateFormatter.format(new Date(dateStr))
-}
-
-const formatDateTime = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '—'
-  return leadDateTimeFormatter.format(new Date(dateStr))
-}
-
-// Activity type options
-const activityTypeOptions = [
-  { value: 'CALL', label: '電話', icon: 'phone' },
-  { value: 'SMS', label: '簡訊', icon: 'message' },
-  { value: 'EMAIL', label: 'Email', icon: 'mail' },
-  { value: 'VISIT', label: '到訪', icon: 'map-pin' },
-  { value: 'TRIAL', label: '體驗', icon: 'calendar' }
-] as const
-
-const ACTIVITY_TYPE_LABEL_MAP: Record<string, string> = {
-  CALL: '電話',
-  SMS: '簡訊',
-  EMAIL: 'Email',
-  VISIT: '到訪',
-  TRIAL: '體驗'
-}
-
-const ACTIVITY_TYPE_COLOR_MAP: Record<string, string> = {
-  CALL: '#007aff',
-  SMS: '#34c759',
-  EMAIL: '#5856d6',
-  VISIT: '#ff9500',
-  TRIAL: '#af52de'
-}
-
-const getActivityTypeLabel = (type: string) => {
-  return ACTIVITY_TYPE_LABEL_MAP[type] || type
-}
-
-const getActivityTypeColor = (type: string) => {
-  return ACTIVITY_TYPE_COLOR_MAP[type] || '#8e8e93'
-}
-
-// Status options
-const statusOptions = [
-  { value: 'NEW', label: '新建' },
-  { value: 'CONTACTED', label: '已聯繫' },
-  { value: 'TRIAL_BOOKED', label: '已預約體驗' },
-  { value: 'VISITED', label: '已到訪' },
-  { value: 'CONVERTED', label: '已轉換' },
-  { value: 'LOST', label: '已流失' }
-] as const
 
 // Add activity
 const handleAddActivity = async () => {
@@ -519,7 +520,7 @@ const openAssignModal = () => {
                 <label class="form-label">活動類型</label>
                 <div class="type-selector">
                   <button
-                    v-for="opt in activityTypeOptions"
+                    v-for="opt in ACTIVITY_TYPE_OPTIONS"
                     :key="opt.value"
                     type="button"
                     :class="['type-option', { active: activityForm.activity_type === opt.value }]"
@@ -605,7 +606,7 @@ const openAssignModal = () => {
               <div class="form-group">
                 <label class="form-label">選擇狀態</label>
                 <select v-model="newStatus" class="input">
-                  <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+                  <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
                     {{ opt.label }}
                   </option>
                 </select>
