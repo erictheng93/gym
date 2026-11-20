@@ -260,31 +260,33 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [result] = await db
-    .select({
-      coupon: coupons,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(coupons)
-    .leftJoin(branches, eq(coupons.branchId, branches.id))
-    .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
-    .limit(1);
+  const [[result], [usageStats]] = await Promise.all([
+    db
+      .select({
+        coupon: coupons,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+      })
+      .from(coupons)
+      .leftJoin(branches, eq(coupons.branchId, branches.id))
+      .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
+      .limit(1),
+
+    // Get usage stats
+    db
+      .select({
+        totalUsage: sql<number>`count(*)`,
+        totalDiscount: sql<string>`sum(discount_amount)`,
+      })
+      .from(couponUsages)
+      .where(eq(couponUsages.couponId, id)),
+  ]);
 
   if (!result) {
     return c.json({ success: false, error: '優惠碼不存在' }, 404);
   }
-
-  // Get usage stats
-  const [usageStats] = await db
-    .select({
-      totalUsage: sql<number>`count(*)`,
-      totalDiscount: sql<string>`sum(discount_amount)`,
-    })
-    .from(couponUsages)
-    .where(eq(couponUsages.couponId, id));
 
   return c.json({
     success: true,
@@ -305,16 +307,6 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCoup
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(coupons)
-    .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '優惠碼不存在' }, 404);
-  }
-
   const updateData: Record<string, unknown> = {
     ...data,
     updatedAt: new Date(),
@@ -330,7 +322,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCoup
     updateData.maxDiscount = data.maxDiscount ? String(data.maxDiscount) : null;
   }
 
-  const [updated] = await db.update(coupons).set(updateData).where(eq(coupons.id, id)).returning();
+  const [updated] = await db
+    .update(coupons)
+    .set(updateData)
+    .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '優惠碼不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -343,17 +343,14 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(coupons)
+  const [deleted] = await db
+    .delete(coupons)
     .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
-    .limit(1);
+    .returning({ id: coupons.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '優惠碼不存在' }, 404);
   }
-
-  await db.delete(coupons).where(eq(coupons.id, id));
 
   return c.json({ success: true, message: '優惠碼已刪除' });
 });

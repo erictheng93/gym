@@ -256,16 +256,6 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(shiftSchedules)
-    .where(eq(shiftSchedules.id, id))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
-  }
-
   const updates: Record<string, unknown> = {
     updatedAt: new Date(),
   };
@@ -288,6 +278,10 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
     .set(updates)
     .where(eq(shiftSchedules.id, id))
     .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到班表' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -315,21 +309,16 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select()
-    .from(shiftSchedules)
-    .where(eq(shiftSchedules.id, id))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
-  }
-
-  // Soft delete by setting status to archived
-  await db
+  // Atomic soft delete by setting status to archived
+  const [updated] = await db
     .update(shiftSchedules)
     .set({ status: 'archived', updatedAt: new Date() })
-    .where(eq(shiftSchedules.id, id));
+    .where(eq(shiftSchedules.id, id))
+    .returning({ id: shiftSchedules.id });
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到班表' }, 404);
+  }
 
   return c.json({ success: true, message: '班表已刪除' });
 });
@@ -491,16 +480,6 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
   const id = c.req.param('id');
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(employeeShifts)
-    .where(eq(employeeShifts.id, id))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '找不到班表指派' }, 404);
-  }
-
   const updates: Record<string, unknown> = {
     updatedAt: new Date(),
   };
@@ -513,6 +492,10 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
     .set(updates)
     .where(eq(employeeShifts.id, id))
     .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '找不到班表指派' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -531,17 +514,14 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
 app.delete('/employee_shifts/:id', async (c) => {
   const id = c.req.param('id');
 
-  const [existing] = await db
-    .select()
-    .from(employeeShifts)
+  const [deleted] = await db
+    .delete(employeeShifts)
     .where(eq(employeeShifts.id, id))
-    .limit(1);
+    .returning({ id: employeeShifts.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '找不到班表指派' }, 404);
   }
-
-  await db.delete(employeeShifts).where(eq(employeeShifts.id, id));
 
   return c.json({ success: true, message: '班表指派已刪除' });
 });

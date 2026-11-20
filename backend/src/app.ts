@@ -155,7 +155,6 @@ app.route('/api/tenant', tenantRoutes);
 app.route('/api/member/otp', memberOtpRoutes);
 app.route('/api/member/auth', memberAuthRoutes);
 app.route('/api/member/me', memberProfileRoutes);
-app.route('/api/member', memberProfileRoutes);
 app.route('/api/member/oauth', memberOAuthRoutes);
 app.route('/api/member/push', memberPushRoutes);
 app.route('/api/member/notifications', memberNotificationsRoutes);
@@ -165,6 +164,7 @@ app.route('/api/member/workouts', memberWorkoutsRoutes);
 app.route('/api/member/goals', memberGoalsRoutes);
 app.route('/api/member/measurements', memberMeasurementsRoutes);
 app.route('/api/member/issues', memberIssuesRoutes);
+app.route('/api/member', memberProfileRoutes);
 
 // Coach-App routes (authenticated via X-Coach-Token)
 app.route('/api/coach/auth', coachAuthRoutes);

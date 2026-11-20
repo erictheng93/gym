@@ -57,9 +57,12 @@ app.get('/vapid-public-key', async (c) => {
   });
 });
 
-// Apply auth middleware for remaining routes
-app.use('*', memberAuthMiddleware);
-app.use('*', requireMember);
+// Apply auth middleware for authenticated routes
+app.use('/subscribe', memberAuthMiddleware, requireMember);
+app.use('/unsubscribe', memberAuthMiddleware, requireMember);
+app.use('/subscriptions', memberAuthMiddleware, requireMember);
+app.use('/preferences', memberAuthMiddleware, requireMember);
+app.use('/test', memberAuthMiddleware, requireMember);
 
 // -----------------------------------------------------------------------------
 // POST /api/member/push/subscribe - Subscribe to push notifications
