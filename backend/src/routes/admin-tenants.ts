@@ -148,11 +148,26 @@ app.get('/:id', async (c) => {
   const tenantId = c.req.param('id');
 
   try {
-    const [tenant] = await db
-      .select()
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
+    // Fetch tenant and usage counts in parallel
+    const [[tenant], memberRows, employeeRows, branchRows] = await Promise.all([
+      db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1),
+      db
+        .select({ count: count() })
+        .from(members)
+        .where(eq(members.tenantId, tenantId)),
+      db
+        .select({ count: count() })
+        .from(employees)
+        .where(eq(employees.tenantId, tenantId)),
+      db
+        .select({ count: count() })
+        .from(branches)
+        .where(eq(branches.tenantId, tenantId)),
+    ]);
 
     if (!tenant) {
       return c.json({
@@ -161,24 +176,9 @@ app.get('/:id', async (c) => {
       }, 404);
     }
 
-    // Get usage counts
-    const [memberCount, employeeCount, branchCount] = await Promise.all([
-      db
-        .select({ count: count() })
-        .from(members)
-        .where(eq(members.tenantId, tenantId))
-        .then(rows => Number(rows[0]?.count || 0)),
-      db
-        .select({ count: count() })
-        .from(employees)
-        .where(eq(employees.tenantId, tenantId))
-        .then(rows => Number(rows[0]?.count || 0)),
-      db
-        .select({ count: count() })
-        .from(branches)
-        .where(eq(branches.tenantId, tenantId))
-        .then(rows => Number(rows[0]?.count || 0)),
-    ]);
+    const memberCount = Number(memberRows[0]?.count || 0);
+    const employeeCount = Number(employeeRows[0]?.count || 0);
+    const branchCount = Number(branchRows[0]?.count || 0);
 
     return c.json({
       success: true,

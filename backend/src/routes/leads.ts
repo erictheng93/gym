@@ -127,6 +127,11 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({ success: false, error: '潛在客戶不存在' }, 404);
+  }
+
   const [result] = await db
     .select({
       lead: leads,
@@ -145,10 +150,10 @@ app.get('/:id', async (c) => {
       },
     })
     .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
+    .leftJoin(branches, eq(leads.branchId, branches.id))
     .leftJoin(employees, eq(leads.assignedToId, employees.id))
     .leftJoin(members, eq(leads.convertedMemberId, members.id))
-    .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
+    .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
     .limit(1);
 
   if (!result) {
@@ -317,10 +322,28 @@ app.get('/stats/summary', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
 
-  const conditions = [eq(branches.tenantId, tenantId)];
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: {
+        total: 0,
+        byStatus: {},
+        conversionRate: '0.0',
+      },
+    });
+  }
 
-  if (branchId) {
-    conditions.push(eq(leads.branchId, branchId));
+  const targetBranchIds = branchId ? branchIds.filter(id => id === branchId) : branchIds;
+  if (targetBranchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: {
+        total: 0,
+        byStatus: {},
+        conversionRate: '0.0',
+      },
+    });
   }
 
   const stats = await db
@@ -329,8 +352,7 @@ app.get('/stats/summary', async (c) => {
       count: sql<number>`count(*)`,
     })
     .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
-    .where(and(...conditions))
+    .where(inArray(leads.branchId, targetBranchIds))
     .groupBy(leads.status);
 
   const statusCounts: Record<string, number> = {};

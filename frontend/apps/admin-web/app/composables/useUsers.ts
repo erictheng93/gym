@@ -55,6 +55,10 @@ interface ApiResponse<T> {
   }
 }
 
+const inFlightUsersMap = new Map<string, Promise<{ success: boolean; data?: User[] }>>()
+const inFlightSingleUserMap = new Map<string, Promise<{ success: boolean; data: User | null }>>()
+let inFlightAvailableEmployeesPromise: Promise<{ success: boolean; data: AvailableEmployee[] }> | null = null
+
 export const useUsers = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -100,59 +104,80 @@ export const useUsers = () => {
     search?: string
     role?: string
     isActive?: boolean
-  } = {}) => {
-    isLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      if (options.page) params.append('page', String(options.page))
-      if (options.limit) params.append('limit', String(options.limit))
-      if (options.search) params.append('search', options.search)
-      if (options.role) params.append('role', options.role)
-      if (options.isActive !== undefined) params.append('isActive', String(options.isActive))
-
-      const queryString = params.toString()
-      const endpoint = `/api/users${queryString ? `?${queryString}` : ''}`
-
-      const response = await apiRequest<User[]>(endpoint)
-
-      if (response.success && response.data) {
-        users.value = response.data
-        if (response.pagination) {
-          pagination.value = response.pagination
-        }
-      }
-
-      return { success: true, data: users.value }
-    } catch (error) {
-      handleError(error, {
-        context: 'useUsers.fetchUsers',
-        customMessage: '載入使用者列表失敗',
-      })
-      return { success: false }
-    } finally {
-      isLoading.value = false
+  } = {}, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightUsersMap.has(key)) {
+      return inFlightUsersMap.get(key)!
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      try {
+        const params = new URLSearchParams()
+        if (options.page) params.append('page', String(options.page))
+        if (options.limit) params.append('limit', String(options.limit))
+        if (options.search) params.append('search', options.search)
+        if (options.role) params.append('role', options.role)
+        if (options.isActive !== undefined) params.append('isActive', String(options.isActive))
+
+        const queryString = params.toString()
+        const endpoint = `/api/users${queryString ? `?${queryString}` : ''}`
+
+        const response = await apiRequest<User[]>(endpoint)
+
+        if (response.success && response.data) {
+          users.value = response.data
+          if (response.pagination) {
+            pagination.value = response.pagination
+          }
+        }
+
+        return { success: true, data: users.value }
+      } catch (error) {
+        handleError(error, {
+          context: 'useUsers.fetchUsers',
+          customMessage: '載入使用者列表失敗',
+        })
+        return { success: false }
+      } finally {
+        isLoading.value = false
+        inFlightUsersMap.delete(key)
+      }
+    })()
+
+    inFlightUsersMap.set(key, promise)
+    return promise
   }
 
-  const fetchUser = async (id: string) => {
-    isLoading.value = true
-    try {
-      const response = await apiRequest<User>(`/api/users/${id}`)
-
-      if (response.success && response.data) {
-        return { success: true, data: response.data }
-      }
-
-      throw new Error('Failed to fetch user')
-    } catch (error) {
-      handleError(error, {
-        context: 'useUsers.fetchUser',
-        customMessage: '載入使用者資料失敗',
-      })
-      return { success: false, data: null }
-    } finally {
-      isLoading.value = false
+  const fetchUser = async (id: string, force = false) => {
+    if (!force && inFlightSingleUserMap.has(id)) {
+      return inFlightSingleUserMap.get(id)!
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      try {
+        const response = await apiRequest<User>(`/api/users/${id}`)
+
+        if (response.success && response.data) {
+          return { success: true, data: response.data }
+        }
+
+        throw new Error('Failed to fetch user')
+      } catch (error) {
+        handleError(error, {
+          context: 'useUsers.fetchUser',
+          customMessage: '載入使用者資料失敗',
+        })
+        return { success: false, data: null }
+      } finally {
+        isLoading.value = false
+        inFlightSingleUserMap.delete(id)
+      }
+    })()
+
+    inFlightSingleUserMap.set(id, promise)
+    return promise
   }
 
   const createUser = async (input: CreateUserInput) => {
@@ -263,22 +288,32 @@ export const useUsers = () => {
     }
   }
 
-  const fetchAvailableEmployees = async () => {
-    try {
-      const response = await apiRequest<AvailableEmployee[]>('/api/users/available-employees')
-
-      if (response.success && response.data) {
-        return { success: true, data: response.data }
-      }
-
-      throw new Error('Failed to fetch available employees')
-    } catch (error) {
-      handleError(error, {
-        context: 'useUsers.fetchAvailableEmployees',
-        customMessage: '載入可用員工列表失敗',
-      })
-      return { success: false, data: [] }
+  const fetchAvailableEmployees = async (force = false) => {
+    if (!force && inFlightAvailableEmployeesPromise) {
+      return inFlightAvailableEmployeesPromise
     }
+
+    inFlightAvailableEmployeesPromise = (async () => {
+      try {
+        const response = await apiRequest<AvailableEmployee[]>('/api/users/available-employees')
+
+        if (response.success && response.data) {
+          return { success: true, data: response.data }
+        }
+
+        throw new Error('Failed to fetch available employees')
+      } catch (error) {
+        handleError(error, {
+          context: 'useUsers.fetchAvailableEmployees',
+          customMessage: '載入可用員工列表失敗',
+        })
+        return { success: false, data: [] }
+      } finally {
+        inFlightAvailableEmployeesPromise = null
+      }
+    })()
+
+    return inFlightAvailableEmployeesPromise
   }
 
   const toggleUserStatus = async (id: string, isActive: boolean) => {

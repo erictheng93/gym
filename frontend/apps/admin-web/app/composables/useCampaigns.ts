@@ -92,6 +92,7 @@ export interface ROISummary {
 
 const inFlightCampaignsMap = new Map<string, Promise<void>>()
 const inFlightSingleCampaignMap = new Map<string, Promise<Campaign | null>>()
+const inFlightROIReportMap = new Map<string, Promise<{ summary: ROISummary; data: ROIReport[] } | null>>()
 
 export const useCampaigns = () => {
   const config = useRuntimeConfig()
@@ -368,28 +369,40 @@ export const useCampaigns = () => {
     startDate?: string
     endDate?: string
     type?: string
-  }): Promise<{ summary: ROISummary; data: ROIReport[] } | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (options?.startDate) params.append('start_date', options.startDate)
-      if (options?.endDate) params.append('end_date', options.endDate)
-      if (options?.type) params.append('type', options.type)
-
-      const response = await $fetch<{
-        success: boolean
-        period: { start_date: string; end_date: string }
-        summary: ROISummary
-        data: ROIReport[]
-      }>(`${apiUrl}/campaigns/roi-report?${params}`)
-
-      return response.success ? { summary: response.summary, data: response.data } : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.getROIReport',
-        customMessage: '取得 ROI 報表失敗'
-      })
-      return null
+  }, force = false): Promise<{ summary: ROISummary; data: ROIReport[] } | null> => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightROIReportMap.has(key)) {
+      return inFlightROIReportMap.get(key)!
     }
+
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (options?.startDate) params.append('start_date', options.startDate)
+        if (options?.endDate) params.append('end_date', options.endDate)
+        if (options?.type) params.append('type', options.type)
+
+        const response = await $fetch<{
+          success: boolean
+          period: { start_date: string; end_date: string }
+          summary: ROISummary
+          data: ROIReport[]
+        }>(`${apiUrl}/campaigns/roi-report?${params}`)
+
+        return response.success ? { summary: response.summary, data: response.data } : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useCampaigns.getROIReport',
+          customMessage: '取得 ROI 報表失敗'
+        })
+        return null
+      } finally {
+        inFlightROIReportMap.delete(key)
+      }
+    })()
+
+    inFlightROIReportMap.set(key, promise)
+    return promise
   }
 
   /**

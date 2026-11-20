@@ -35,11 +35,27 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(branches.tenantId, tenantId)];
-
-  if (branchId) {
-    conditions.push(eq(notifications.branchId, branchId));
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      pagination: { total: 0, page, limit, totalPages: 0 },
+      unreadCount: 0,
+    });
   }
+
+  const targetBranchIds = branchId ? branchIds.filter(id => id === branchId) : branchIds;
+  if (targetBranchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      pagination: { total: 0, page, limit, totalPages: 0 },
+      unreadCount: 0,
+    });
+  }
+
+  const conditions = [inArray(notifications.branchId, targetBranchIds)];
 
   if (unreadOnly) {
     conditions.push(isNull(notifications.readAt));
@@ -70,12 +86,10 @@ app.get('/', async (c) => {
     db
       .select({ count: sql<number>`count(*)` })
       .from(notifications)
-      .innerJoin(branches, eq(notifications.branchId, branches.id))
       .where(and(...conditions)),
     db
       .select({ count: sql<number>`count(*)` })
       .from(notifications)
-      .innerJoin(branches, eq(notifications.branchId, branches.id))
       .where(and(...conditions, isNull(notifications.readAt))),
   ]);
 
@@ -167,21 +181,23 @@ app.post('/:id/read', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(eq(notifications.id, id), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '通知不存在' }, 404);
   }
 
-  await db.update(notifications).set({
-    readAt: new Date(),
-    updatedAt: new Date(),
-  }).where(eq(notifications.id, id));
+  const [updated] = await db
+    .update(notifications)
+    .set({
+      readAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(notifications.id, id), inArray(notifications.branchId, branchIds)))
+    .returning({ id: notifications.id });
+
+  if (!updated) {
+    return c.json({ success: false, error: '通知不存在' }, 404);
+  }
 
   return c.json({ success: true, message: '已標記為已讀' });
 });
@@ -192,14 +208,26 @@ app.post('/read-all', async (c) => {
   const user = c.get('user')!;
   const branchId = c.req.query('branchId');
 
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      message: '已將 0 則通知標記為已讀',
+    });
+  }
+
+  const targetBranchIds = branchId ? branchIds.filter(id => id === branchId) : branchIds;
+  if (targetBranchIds.length === 0) {
+    return c.json({
+      success: true,
+      message: '已將 0 則通知標記為已讀',
+    });
+  }
+
   const conditions = [
-    eq(branches.tenantId, tenantId),
+    inArray(notifications.branchId, targetBranchIds),
     isNull(notifications.readAt),
   ];
-
-  if (branchId) {
-    conditions.push(eq(notifications.branchId, branchId));
-  }
 
   if (user.employeeId) {
     conditions.push(
@@ -207,24 +235,19 @@ app.post('/read-all', async (c) => {
     );
   }
 
-  // Get IDs to update
-  const toUpdate = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions));
-
-  if (toUpdate.length > 0) {
-    const ids = toUpdate.map(n => n.id);
-    await db.update(notifications).set({
+  // Direct atomic update
+  const updatedRows = await db
+    .update(notifications)
+    .set({
       readAt: new Date(),
       updatedAt: new Date(),
-    }).where(inArray(notifications.id, ids));
-  }
+    })
+    .where(and(...conditions))
+    .returning({ id: notifications.id });
 
   return c.json({
     success: true,
-    message: `已將 ${toUpdate.length} 則通知標記為已讀`,
+    message: `已將 ${updatedRows.length} 則通知標記為已讀`,
   });
 });
 
@@ -233,18 +256,19 @@ app.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(eq(notifications.id, id), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '通知不存在' }, 404);
   }
 
-  await db.delete(notifications).where(eq(notifications.id, id));
+  const [deleted] = await db
+    .delete(notifications)
+    .where(and(eq(notifications.id, id), inArray(notifications.branchId, branchIds)))
+    .returning({ id: notifications.id });
+
+  if (!deleted) {
+    return c.json({ success: false, error: '通知不存在' }, 404);
+  }
 
   return c.json({ success: true, message: '通知已刪除' });
 });
@@ -255,14 +279,26 @@ app.get('/count/unread', async (c) => {
   const user = c.get('user')!;
   const branchId = c.req.query('branchId');
 
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: { count: 0 },
+    });
+  }
+
+  const targetBranchIds = branchId ? branchIds.filter(id => id === branchId) : branchIds;
+  if (targetBranchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: { count: 0 },
+    });
+  }
+
   const conditions = [
-    eq(branches.tenantId, tenantId),
+    inArray(notifications.branchId, targetBranchIds),
     isNull(notifications.readAt),
   ];
-
-  if (branchId) {
-    conditions.push(eq(notifications.branchId, branchId));
-  }
 
   if (user.employeeId) {
     conditions.push(
@@ -273,7 +309,6 @@ app.get('/count/unread', async (c) => {
   const [result] = await db
     .select({ count: sql<number>`count(*)` })
     .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
     .where(and(...conditions));
 
   return c.json({
