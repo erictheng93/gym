@@ -75,8 +75,10 @@ onMounted(async () => {
     currentTime.value = new Date()
   }, 1000)
 
-  await checkAuth()
-  await fetchBranches()
+  await Promise.all([
+    checkAuth(),
+    fetchBranches()
+  ])
   await loadAttendanceData()
 
   // 取得位置資訊

@@ -23,6 +23,72 @@ const USER_SAFE_SELECT = {
   tenantId: users.tenantId,
 };
 
+const USER_RETURNING = USER_SAFE_SELECT;
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const AVAILABLE_EMPLOYEE_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  email: employees.email,
+};
+
+const USER_LIST_JOIN_SELECT = {
+  user: USER_SAFE_SELECT,
+  employee: {
+    id: employees.id,
+    fullName: employees.fullName,
+    employeeCode: employees.employeeCode,
+  },
+};
+
+const USER_DETAIL_JOIN_SELECT = {
+  user: USER_SAFE_SELECT,
+  employee: {
+    id: employees.id,
+    fullName: employees.fullName,
+    employeeCode: employees.employeeCode,
+    phone: employees.phone,
+    branchId: employees.branchId,
+    jobTitleId: employees.jobTitleId,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  jobTitle: {
+    id: jobTitles.id,
+    name: jobTitles.name,
+  },
+};
+
+const USER_ID_SELECT = {
+  id: users.id,
+};
+
+const EMPLOYEE_ID_SELECT = {
+  id: employees.id,
+};
+
+const EMPLOYEE_USER_SELECT = {
+  id: employees.id,
+  userId: employees.userId,
+};
+
+const USER_EXISTING_SELECT = {
+  id: users.id,
+  email: users.email,
+  employeeId: users.employeeId,
+};
+
+const USER_DELETE_SELECT = {
+  id: users.id,
+  employeeId: users.employeeId,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -60,12 +126,7 @@ app.get('/available-employees', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const result = await db
-    .select({
-      id: employees.id,
-      fullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      email: employees.email,
-    })
+    .select(AVAILABLE_EMPLOYEE_SELECT)
     .from(employees)
     .where(and(
       eq(employees.tenantId, tenantId),
@@ -103,18 +164,11 @@ app.get('/', async (c) => {
 
   const [[countResult], result] = await Promise.all([
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(users)
       .where(and(...conditions)),
     db
-      .select({
-        user: USER_SAFE_SELECT,
-        employee: {
-          id: employees.id,
-          fullName: employees.fullName,
-          employeeCode: employees.employeeCode,
-        },
-      })
+      .select(USER_LIST_JOIN_SELECT)
       .from(users)
       .leftJoin(employees, eq(users.employeeId, employees.id))
       .where(and(...conditions))
@@ -146,25 +200,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      user: USER_SAFE_SELECT,
-      employee: {
-        id: employees.id,
-        fullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        phone: employees.phone,
-        branchId: employees.branchId,
-        jobTitleId: employees.jobTitleId,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      jobTitle: {
-        id: jobTitles.id,
-        name: jobTitles.name,
-      },
-    })
+    .select(USER_DETAIL_JOIN_SELECT)
     .from(users)
     .leftJoin(employees, eq(users.employeeId, employees.id))
     .leftJoin(branches, eq(employees.branchId, branches.id))
@@ -197,20 +233,20 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
   // Check email and employee relations in parallel
   const [[existingUser], employeeCheck, existingEmployeeUser] = await Promise.all([
     db
-      .select({ id: users.id })
+      .select(USER_ID_SELECT)
       .from(users)
       .where(eq(users.email, data.email.toLowerCase()))
       .limit(1),
     data.employeeId
       ? db
-          .select({ id: employees.id })
+          .select(EMPLOYEE_ID_SELECT)
           .from(employees)
           .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
           .limit(1)
       : Promise.resolve([]),
     data.employeeId
       ? db
-          .select({ id: users.id })
+          .select(USER_ID_SELECT)
           .from(users)
           .where(eq(users.employeeId, data.employeeId))
           .limit(1)
@@ -247,18 +283,7 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
     tenantId,
     isActive: true,
     emailVerified: false,
-  }).returning({
-    id: users.id,
-    email: users.email,
-    role: users.role,
-    employeeId: users.employeeId,
-    tenantId: users.tenantId,
-    isActive: users.isActive,
-    emailVerified: users.emailVerified,
-    lastLoginAt: users.lastLoginAt,
-    createdAt: users.createdAt,
-    updatedAt: users.updatedAt,
-  });
+  }).returning(USER_RETURNING);
 
   // Update employee with userId if linked
   if (data.employeeId) {
@@ -284,11 +309,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   }
 
   const [existingUser] = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      employeeId: users.employeeId,
-    })
+    .select(USER_EXISTING_SELECT)
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -300,7 +321,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   // Check email uniqueness if changing
   if (data.email && data.email.toLowerCase() !== existingUser.email) {
     const [emailExists] = await db
-      .select({ id: users.id })
+      .select(USER_ID_SELECT)
       .from(users)
       .where(eq(users.email, data.email.toLowerCase()))
       .limit(1);
@@ -323,7 +344,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
     // Link new employee if provided
     if (data.employeeId) {
       const [employee] = await db
-        .select({ id: employees.id, userId: employees.userId })
+        .select(EMPLOYEE_USER_SELECT)
         .from(employees)
         .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
         .limit(1);
@@ -354,18 +375,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(users.id, id))
-    .returning({
-      id: users.id,
-      email: users.email,
-      role: users.role,
-      employeeId: users.employeeId,
-      tenantId: users.tenantId,
-      isActive: users.isActive,
-      emailVerified: users.emailVerified,
-      lastLoginAt: users.lastLoginAt,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-    });
+    .returning(USER_RETURNING);
 
   // Invalidate sessions if user is deactivated
   if (data.isActive === false) {
@@ -382,7 +392,7 @@ app.post('/:id/reset-password', zValidator('json', changePasswordSchema), async 
   const { newPassword } = c.req.valid('json');
 
   const [existingUser] = await db
-    .select({ id: users.id })
+    .select(USER_ID_SELECT)
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -422,7 +432,7 @@ app.delete('/:id', async (c) => {
   }
 
   const [existingUser] = await db
-    .select({ id: users.id, employeeId: users.employeeId })
+    .select(USER_DELETE_SELECT)
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);

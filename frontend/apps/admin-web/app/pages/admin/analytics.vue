@@ -42,9 +42,11 @@ const statsTimeRange = ref<'24h' | '7d' | '30d'>('24h')
 onMounted(async () => {
   isLoading.value = true
   try {
-    await fetchTenantInfo()
-    await fetchTenantQuota()
-    await fetchApiStats()
+    await Promise.all([
+      fetchTenantInfo(),
+      fetchTenantQuota(),
+      fetchApiStats()
+    ])
   } catch (error) {
     console.error('[Analytics] Error loading data:', error)
   } finally {

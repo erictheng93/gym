@@ -38,6 +38,106 @@ const CONTRACT_RETURNING = {
 
 const CONTRACT_SELECT = CONTRACT_RETURNING;
 
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const CONTRACT_LIST_JOIN_SELECT = {
+  contract: CONTRACT_SELECT,
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+  plan: {
+    id: membershipPlans.id,
+    name: membershipPlans.name,
+    planType: membershipPlans.planType,
+  },
+};
+
+const CONTRACT_EXPORT_JOIN_SELECT = {
+  contract: CONTRACT_SELECT,
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+  plan: {
+    id: membershipPlans.id,
+    name: membershipPlans.name,
+  },
+};
+
+const CONTRACT_DETAIL_JOIN_SELECT = {
+  contract: CONTRACT_SELECT,
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+    phone: members.phone,
+    email: members.email,
+  },
+  plan: {
+    id: membershipPlans.id,
+    name: membershipPlans.name,
+    planType: membershipPlans.planType,
+    price: membershipPlans.price,
+  },
+};
+
+const CONTRACT_LOGS_SELECT = {
+  id: contractLogs.id,
+  contractId: contractLogs.contractId,
+  logType: contractLogs.logType,
+  startDate: contractLogs.startDate,
+  endDate: contractLogs.endDate,
+  daysAffected: contractLogs.daysAffected,
+  reason: contractLogs.reason,
+  dateCreated: contractLogs.dateCreated,
+};
+
+const CONTRACT_PAYMENTS_SELECT = {
+  id: payments.id,
+  contractId: payments.contractId,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  paymentDate: payments.paymentDate,
+  type: payments.type,
+  receiptNo: payments.receiptNo,
+  createdAt: payments.createdAt,
+};
+
+const MEMBER_ID_SELECT = {
+  id: members.id,
+};
+
+const PLAN_CONTRACT_SELECT = {
+  id: membershipPlans.id,
+  planType: membershipPlans.planType,
+  durationMonths: membershipPlans.durationMonths,
+  classCounts: membershipPlans.classCounts,
+};
+
+const CONTRACT_BRANCH_CHECK_SELECT = {
+  id: contracts.id,
+  branchId: contracts.branchId,
+};
+
+const CONTRACT_STATUS_CHECK_SELECT = {
+  id: contracts.id,
+  branchId: contracts.branchId,
+  status: contracts.status,
+  memberId: contracts.memberId,
+};
+
+const CONTRACT_PAUSE_CHECK_SELECT = {
+  id: contracts.id,
+  branchId: contracts.branchId,
+  status: contracts.status,
+  endDate: contracts.endDate,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -85,23 +185,11 @@ app.get('/', async (c) => {
   // Concurrently execute count and paginated query
   const [[countResult], result] = await Promise.all([
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(contracts)
       .where(and(...conditions)),
     db
-      .select({
-        contract: CONTRACT_SELECT,
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-        },
-        plan: {
-          id: membershipPlans.id,
-          name: membershipPlans.name,
-          planType: membershipPlans.planType,
-        },
-      })
+      .select(CONTRACT_LIST_JOIN_SELECT)
       .from(contracts)
       .leftJoin(members, eq(contracts.memberId, members.id))
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
@@ -148,18 +236,7 @@ app.get('/export', async (c) => {
   }
 
   const result = await db
-    .select({
-      contract: CONTRACT_SELECT,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      plan: {
-        id: membershipPlans.id,
-        name: membershipPlans.name,
-      },
-    })
+    .select(CONTRACT_EXPORT_JOIN_SELECT)
     .from(contracts)
     .leftJoin(members, eq(contracts.memberId, members.id))
     .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
@@ -211,22 +288,7 @@ app.get('/:id', async (c) => {
 
   const [[contract], branchIds, logs, contractPayments] = await Promise.all([
     db
-      .select({
-        contract: CONTRACT_SELECT,
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-          phone: members.phone,
-          email: members.email,
-        },
-        plan: {
-          id: membershipPlans.id,
-          name: membershipPlans.name,
-          planType: membershipPlans.planType,
-          price: membershipPlans.price,
-        },
-      })
+      .select(CONTRACT_DETAIL_JOIN_SELECT)
       .from(contracts)
       .leftJoin(members, eq(contracts.memberId, members.id))
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
@@ -234,30 +296,12 @@ app.get('/:id', async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: contractLogs.id,
-        contractId: contractLogs.contractId,
-        logType: contractLogs.logType,
-        startDate: contractLogs.startDate,
-        endDate: contractLogs.endDate,
-        daysAffected: contractLogs.daysAffected,
-        reason: contractLogs.reason,
-        dateCreated: contractLogs.dateCreated,
-      })
+      .select(CONTRACT_LOGS_SELECT)
       .from(contractLogs)
       .where(eq(contractLogs.contractId, id))
       .orderBy(desc(contractLogs.dateCreated)),
     db
-      .select({
-        id: payments.id,
-        contractId: payments.contractId,
-        amount: payments.amount,
-        paymentMethod: payments.paymentMethod,
-        paymentDate: payments.paymentDate,
-        type: payments.type,
-        receiptNo: payments.receiptNo,
-        createdAt: payments.createdAt,
-      })
+      .select(CONTRACT_PAYMENTS_SELECT)
       .from(payments)
       .where(eq(payments.contractId, id))
       .orderBy(desc(payments.createdAt)),
@@ -293,22 +337,17 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
 
   const [[member], [plan], [countResult]] = await Promise.all([
     db
-      .select({ id: members.id })
+      .select(MEMBER_ID_SELECT)
       .from(members)
       .where(eq(members.id, data.memberId))
       .limit(1),
     db
-      .select({
-        id: membershipPlans.id,
-        planType: membershipPlans.planType,
-        durationMonths: membershipPlans.durationMonths,
-        classCounts: membershipPlans.classCounts,
-      })
+      .select(PLAN_CONTRACT_SELECT)
       .from(membershipPlans)
       .where(eq(membershipPlans.id, data.planId))
       .limit(1),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(contracts)
       .where(inArray(contracts.branchId, branchIds)),
   ]);
@@ -376,7 +415,7 @@ app.patch('/:id', zValidator('json', updateContractSchema), async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({ id: contracts.id, branchId: contracts.branchId })
+      .select(CONTRACT_BRANCH_CHECK_SELECT)
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),
@@ -409,12 +448,7 @@ app.post('/:id/activate', async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: contracts.id,
-        branchId: contracts.branchId,
-        status: contracts.status,
-        memberId: contracts.memberId,
-      })
+      .select(CONTRACT_STATUS_CHECK_SELECT)
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),
@@ -459,12 +493,7 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: contracts.id,
-        branchId: contracts.branchId,
-        status: contracts.status,
-        endDate: contracts.endDate,
-      })
+      .select(CONTRACT_PAUSE_CHECK_SELECT)
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),
@@ -527,12 +556,7 @@ app.post('/:id/resume', async (c) => {
   const [branchIds, [contract]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: contracts.id,
-        branchId: contracts.branchId,
-        status: contracts.status,
-        memberId: contracts.memberId,
-      })
+      .select(CONTRACT_STATUS_CHECK_SELECT)
       .from(contracts)
       .where(eq(contracts.id, id))
       .limit(1),

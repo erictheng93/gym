@@ -58,6 +58,54 @@ const EMPLOYEE_SELECT = {
 
 const EMPLOYEE_RETURNING = EMPLOYEE_SELECT;
 
+const EMPLOYEE_COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const EMPLOYEE_LIST_JOIN_SELECT = {
+  employee: EMPLOYEE_SELECT,
+  jobTitle: {
+    id: jobTitles.id,
+    name: jobTitles.name,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const EMPLOYEE_DETAIL_JOIN_SELECT = {
+  employee: EMPLOYEE_SELECT,
+  jobTitle: {
+    id: jobTitles.id,
+    name: jobTitles.name,
+    permissionsConfig: jobTitles.permissionsConfig,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const EMPLOYEE_ATTENDANCE_SELECT = {
+  id: attendances.id,
+  createdAt: attendances.createdAt,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  checkOut: attendances.checkOut,
+  workHours: attendances.workHours,
+  branchId: attendances.branchId,
+};
+
+const EMPLOYEE_ID_SELECT = {
+  id: employees.id,
+};
+
+const EMPLOYEE_RESIGNED_RETURNING = {
+  id: employees.id,
+  userId: employees.userId,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
@@ -77,17 +125,7 @@ app.get('/', async (c) => {
     : inArray(employees.branchId, branchIds);
 
   const result = await db
-    .select({
-      employee: EMPLOYEE_SELECT,
-      jobTitle: {
-        id: jobTitles.id,
-        name: jobTitles.name,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(EMPLOYEE_LIST_JOIN_SELECT)
     .from(employees)
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .leftJoin(branches, eq(employees.branchId, branches.id))
@@ -110,18 +148,7 @@ app.get('/:id', async (c) => {
 
   const [[employee], branchIds, recentAttendances] = await Promise.all([
     db
-      .select({
-        employee: EMPLOYEE_SELECT,
-        jobTitle: {
-          id: jobTitles.id,
-          name: jobTitles.name,
-          permissionsConfig: jobTitles.permissionsConfig,
-        },
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-      })
+      .select(EMPLOYEE_DETAIL_JOIN_SELECT)
       .from(employees)
       .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
       .leftJoin(branches, eq(employees.branchId, branches.id))
@@ -129,15 +156,7 @@ app.get('/:id', async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: attendances.id,
-        createdAt: attendances.createdAt,
-        employeeId: attendances.employeeId,
-        checkIn: attendances.checkIn,
-        checkOut: attendances.checkOut,
-        workHours: attendances.workHours,
-        branchId: attendances.branchId,
-      })
+      .select(EMPLOYEE_ATTENDANCE_SELECT)
       .from(attendances)
       .where(eq(attendances.employeeId, id))
       .orderBy(desc(attendances.createdAt))
@@ -175,7 +194,7 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
   }
 
   const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select(EMPLOYEE_COUNT_SELECT)
     .from(employees)
     .where(inArray(employees.branchId, branchIds));
 
@@ -229,7 +248,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
 
   if (!updatedEmployee) {
     const [existingEmployee] = await db
-      .select({ id: employees.id })
+      .select(EMPLOYEE_ID_SELECT)
       .from(employees)
       .where(eq(employees.id, id))
       .limit(1);
@@ -259,11 +278,11 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
       updatedAt: new Date(),
     })
     .where(and(eq(employees.id, id), inArray(employees.branchId, branchIds)))
-    .returning({ id: employees.id, userId: employees.userId });
+    .returning(EMPLOYEE_RESIGNED_RETURNING);
 
   if (!resignedEmployee) {
     const [existingEmployee] = await db
-      .select({ id: employees.id })
+      .select(EMPLOYEE_ID_SELECT)
       .from(employees)
       .where(eq(employees.id, id))
       .limit(1);

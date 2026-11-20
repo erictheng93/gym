@@ -43,6 +43,35 @@ const CREDENTIALS_RESET_SELECT = {
   passwordResetTokenHash: memberCredentials.passwordResetTokenHash,
 };
 
+const MEMBER_LOGIN_SELECT = {
+  member: {
+    id: members.id,
+    memberCode: members.memberCode,
+    email: members.email,
+    fullName: members.fullName,
+    branchId: members.branchId,
+    tenantId: members.tenantId,
+    status: members.status,
+  },
+  credentials: memberCredentials,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+    tenantId: branches.tenantId,
+  },
+};
+
+const MEMBER_CREDENTIALS_ID_SELECT = {
+  id: memberCredentials.id,
+};
+
+const MEMBER_FORGOT_PW_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+  email: members.email,
+  status: members.status,
+};
+
 // -----------------------------------------------------------------------------
 // Rate Limiters
 // -----------------------------------------------------------------------------
@@ -184,23 +213,7 @@ app.post(
 
     // Find member, credentials, and branch info in a single joined query
     const [result] = await db
-      .select({
-        member: {
-          id: members.id,
-          memberCode: members.memberCode,
-          email: members.email,
-          fullName: members.fullName,
-          branchId: members.branchId,
-          tenantId: members.tenantId,
-          status: members.status,
-        },
-        credentials: memberCredentials,
-        branch: {
-          id: branches.id,
-          name: branches.name,
-          tenantId: branches.tenantId,
-        },
-      })
+      .select(MEMBER_LOGIN_SELECT)
       .from(members)
       .leftJoin(memberCredentials, eq(members.id, memberCredentials.memberId))
       .leftJoin(branches, eq(members.branchId, branches.id))
@@ -336,7 +349,7 @@ app.get(
     const member = c.get('member')!;
 
     const [credentials] = await db
-      .select({ id: memberCredentials.id })
+      .select(MEMBER_CREDENTIALS_ID_SELECT)
       .from(memberCredentials)
       .where(eq(memberCredentials.memberId, member.id))
       .limit(1);
@@ -365,7 +378,7 @@ app.post(
 
     // Check if password already set
     const [existingCredentials] = await db
-      .select({ id: memberCredentials.id })
+      .select(MEMBER_CREDENTIALS_ID_SELECT)
       .from(memberCredentials)
       .where(eq(memberCredentials.memberId, member.id))
       .limit(1);
@@ -465,12 +478,7 @@ app.post(
 
     // Find member (always return success to prevent enumeration)
     const [member] = await db
-      .select({
-        id: members.id,
-        fullName: members.fullName,
-        email: members.email,
-        status: members.status,
-      })
+      .select(MEMBER_FORGOT_PW_SELECT)
       .from(members)
       .where(eq(members.email, email))
       .limit(1);
@@ -483,7 +491,7 @@ app.post(
 
       // Save token hash to database
       const [credentials] = await db
-        .select({ id: memberCredentials.id })
+        .select(MEMBER_CREDENTIALS_ID_SELECT)
         .from(memberCredentials)
         .where(eq(memberCredentials.memberId, member.id))
         .limit(1);

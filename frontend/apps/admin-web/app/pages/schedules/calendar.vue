@@ -274,6 +274,7 @@ const calendarDays = computed((): CalendarDay[] => {
   const days: CalendarDay[] = []
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const todayISO = formatDateISO(today)
 
   // Previous month days
   const firstDayOfWeek = firstDay.getDay()
@@ -291,11 +292,12 @@ const calendarDays = computed((): CalendarDay[] => {
   // Current month days
   for (let i = 1; i <= lastDay.getDate(); i++) {
     const date = new Date(year, month, i)
+    const dateISO = formatDateISO(date)
     days.push({
-      date: formatDateISO(date),
+      date: dateISO,
       day: i,
       isCurrentMonth: true,
-      isToday: formatDateISO(date) === formatDateISO(today),
+      isToday: dateISO === todayISO,
     })
   }
 
@@ -316,8 +318,9 @@ const calendarDays = computed((): CalendarDay[] => {
 
 const filteredEmployees = computed(() => {
   if (!employeeSearch.value) return employees.value
+  const query = employeeSearch.value.toLowerCase()
   return employees.value.filter(emp =>
-    emp.name.toLowerCase().includes(employeeSearch.value.toLowerCase())
+    emp.name.toLowerCase().includes(query)
   )
 })
 

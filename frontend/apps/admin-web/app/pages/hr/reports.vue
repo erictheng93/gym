@@ -58,8 +58,10 @@ const loadStats = async () => {
 }
 
 onMounted(async () => {
-  await fetchBranches()
-  await loadStats()
+  await Promise.all([
+    fetchBranches(),
+    loadStats()
+  ])
 })
 
 watch([selectedBranch, selectedYear, selectedMonth], () => {

@@ -174,8 +174,10 @@ watch([selectedPeriod, selectedBranch], () => {
 
 // 初始化
 onMounted(async () => {
-  await fetchBranches()
-  await loadData()
+  await Promise.all([
+    fetchBranches(),
+    loadData()
+  ])
 })
 
 onUnmounted(() => {
