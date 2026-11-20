@@ -6,6 +6,9 @@
 import { useFetch } from '~/composables/core/useFetch'
 import type { MakeupRequest, MakeupApprovalLog, Attendance, Employee } from '~/types/schema'
 
+const inFlightMakeupRequestsMap = new Map<string, Promise<void>>()
+const inFlightPendingMakeupApprovalsMap = new Map<string, Promise<void>>()
+
 export const useMakeupRequests = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
 
@@ -25,69 +28,94 @@ export const useMakeupRequests = () => {
   /**
    * 取得員工補打卡申請
    */
-  const fetchMakeupRequests = async (options?: {
-    employeeId?: string
-    status?: string
-    page?: number
-    limit?: number
-  }) => {
-    isMakeupLoading.value = true
-    const { employeeId, status, page = 1, limit = 20 } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-      if (employeeId) filter.employee_id = employeeId
-      if (status) filter.request_status = status
-
-      const result = await readItems<MakeupRequest>('makeup_requests', {
-        filter,
-        sort: 'date_created',
-        sortOrder: 'desc',
-        limit,
-        page
-      })
-
-      makeupRequests.value = result.data
-      makeupTotalCount.value = result.total
-    } catch (error) {
-      console.error('Failed to fetch makeup requests:', error)
-    } finally {
-      isMakeupLoading.value = false
+  const fetchMakeupRequests = async (
+    options?: {
+      employeeId?: string
+      status?: string
+      page?: number
+      limit?: number
+    },
+    force = false
+  ) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightMakeupRequestsMap.has(key)) {
+      return inFlightMakeupRequestsMap.get(key)
     }
+
+    const promise = (async () => {
+      isMakeupLoading.value = true
+      const { employeeId, status, page = 1, limit = 20 } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+        if (employeeId) filter.employee_id = employeeId
+        if (status) filter.request_status = status
+
+        const result = await readItems<MakeupRequest>('makeup_requests', {
+          filter,
+          sort: 'date_created',
+          sortOrder: 'desc',
+          limit,
+          page
+        })
+
+        makeupRequests.value = result.data
+        makeupTotalCount.value = result.total
+      } catch (error) {
+        console.error('Failed to fetch makeup requests:', error)
+      } finally {
+        isMakeupLoading.value = false
+        inFlightMakeupRequestsMap.delete(key)
+      }
+    })()
+
+    inFlightMakeupRequestsMap.set(key, promise)
+    return promise
   }
 
   /**
    * 取得待審核的補打卡申請（主管用）
    */
-  const fetchPendingMakeupApprovals = async (supervisorId: string) => {
-    try {
-      const subordinatesResult = await readItems<Employee>('employees', {
-        filter: { supervisor_id: supervisorId }
-      })
-
-      if (subordinatesResult.data.length === 0) {
-        pendingMakeupApprovals.value = []
-        return
-      }
-
-      const subordinateIds = subordinatesResult.data.map(e => e.id)
-
-      // Fetch pending makeup requests and filter client-side
-      const result = await readItems<MakeupRequest>('makeup_requests', {
-        filter: {
-          request_status: 'PENDING'
-        },
-        sort: 'submitted_at',
-        sortOrder: 'desc',
-        limit: 100
-      })
-
-      pendingMakeupApprovals.value = result.data.filter(mr =>
-        subordinateIds.includes(mr.employee_id)
-      )
-    } catch (error) {
-      console.error('Failed to fetch pending makeup approvals:', error)
+  const fetchPendingMakeupApprovals = async (supervisorId: string, force = false) => {
+    if (!force && inFlightPendingMakeupApprovalsMap.has(supervisorId)) {
+      return inFlightPendingMakeupApprovalsMap.get(supervisorId)
     }
+
+    const promise = (async () => {
+      try {
+        const subordinatesResult = await readItems<Employee>('employees', {
+          filter: { supervisor_id: supervisorId }
+        })
+
+        if (subordinatesResult.data.length === 0) {
+          pendingMakeupApprovals.value = []
+          return
+        }
+
+        const subordinateIds = subordinatesResult.data.map(e => e.id)
+
+        // Fetch pending makeup requests and filter client-side
+        const result = await readItems<MakeupRequest>('makeup_requests', {
+          filter: {
+            request_status: 'PENDING'
+          },
+          sort: 'submitted_at',
+          sortOrder: 'desc',
+          limit: 100
+        })
+
+        pendingMakeupApprovals.value = result.data.filter(mr =>
+          subordinateIds.includes(mr.employee_id)
+        )
+      } catch (error) {
+        console.error('Failed to fetch pending makeup approvals:', error)
+      } finally {
+        inFlightPendingMakeupApprovalsMap.delete(supervisorId)
+      }
+    })()
+
+    inFlightPendingMakeupApprovalsMap.set(supervisorId, promise)
+    return promise
   }
 
   // ============================================

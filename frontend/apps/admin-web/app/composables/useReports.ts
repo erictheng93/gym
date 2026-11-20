@@ -233,6 +233,9 @@ export interface CoachPerformanceReport {
   data: CoachPerformanceData[]
 }
 
+// In-flight deduplication map for reports
+const inFlightReports = new Map<string, Promise<any>>()
+
 export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
@@ -251,9 +254,6 @@ export const useReports = () => {
       }
     })
   }
-
-  // In-flight deduplication map for reports
-  const inFlightReports = new Map<string, Promise<any>>()
 
   /**
    * 獲取營收報表

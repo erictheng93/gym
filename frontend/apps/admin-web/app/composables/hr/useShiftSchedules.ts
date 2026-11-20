@@ -8,6 +8,7 @@ import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
 
 const inFlightShiftSchedulesMap = new Map<string, Promise<void>>()
 const inFlightEmployeeShiftsMap = new Map<string, Promise<void>>()
+const inFlightSingleShiftMap = new Map<string, Promise<ShiftSchedule | null>>()
 
 export const useShiftSchedules = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
@@ -59,9 +60,22 @@ export const useShiftSchedules = () => {
   /**
    * 取得單一班表
    */
-  const getShiftSchedule = async (id: string) => {
-    const data = await readItem<ShiftSchedule>('shift_schedules', id)
-    return data
+  const getShiftSchedule = async (id: string, force = false): Promise<ShiftSchedule | null> => {
+    if (!force && inFlightSingleShiftMap.has(id)) {
+      return inFlightSingleShiftMap.get(id)!
+    }
+
+    const promise = (async () => {
+      try {
+        const data = await readItem<ShiftSchedule>('shift_schedules', id)
+        return data
+      } finally {
+        inFlightSingleShiftMap.delete(id)
+      }
+    })()
+
+    inFlightSingleShiftMap.set(id, promise)
+    return promise
   }
 
   /**

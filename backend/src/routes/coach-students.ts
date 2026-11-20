@@ -195,56 +195,44 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Concurrently verify assignment and get member details
-  const [[assignment], [member]] = await Promise.all([
-    db
-      .select()
-      .from(coachMemberAssignments)
-      .where(
-        and(
-          eq(coachMemberAssignments.coachId, coach.id),
-          eq(coachMemberAssignments.memberId, id),
-          sql`${coachMemberAssignments.unassignedAt} IS NULL`
-        )
+  // Verify assignment and get member details in a single query
+  const [member] = await db
+    .select({
+      id: members.id,
+      memberCode: members.memberCode,
+      fullName: members.fullName,
+      phone: members.phone,
+      email: members.email,
+      gender: members.gender,
+      birthday: members.birthday,
+      status: members.status,
+      avatar: members.avatar,
+      joinDate: members.joinDate,
+      address: members.address,
+      emergencyContact: members.emergencyContact,
+      emergencyPhone: members.emergencyPhone,
+      height: members.height,
+      notes: members.notes,
+      role: coachMemberAssignments.role,
+      assignedAt: coachMemberAssignments.assignedAt,
+    })
+    .from(coachMemberAssignments)
+    .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
+    .where(
+      and(
+        eq(coachMemberAssignments.coachId, coach.id),
+        eq(coachMemberAssignments.memberId, id),
+        sql`${coachMemberAssignments.unassignedAt} IS NULL`
       )
-      .limit(1),
-    db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        fullName: members.fullName,
-        phone: members.phone,
-        email: members.email,
-        gender: members.gender,
-        birthday: members.birthday,
-        status: members.status,
-        avatar: members.avatar,
-        joinDate: members.joinDate,
-        address: members.address,
-        emergencyContact: members.emergencyContact,
-        emergencyPhone: members.emergencyPhone,
-        height: members.height,
-        notes: members.notes,
-      })
-      .from(members)
-      .where(eq(members.id, id))
-      .limit(1),
-  ]);
+    )
+    .limit(1);
 
-  if (!assignment) {
+  if (!member) {
     return c.json({
       success: false,
       error: '無權查看此學員',
       code: 'FORBIDDEN',
     }, 403);
-  }
-
-  if (!member) {
-    return c.json({
-      success: false,
-      error: '找不到學員',
-      code: 'NOT_FOUND',
-    }, 404);
   }
 
   // Concurrently fetch contracts, goals, measurements, class history, and notes
@@ -567,27 +555,6 @@ app.patch(
     const { id, noteId } = c.req.param();
     const updates = c.req.valid('json');
 
-    // Verify note exists and belongs to this coach
-    const [existingNote] = await db
-      .select()
-      .from(coachNotes)
-      .where(
-        and(
-          eq(coachNotes.id, noteId),
-          eq(coachNotes.coachId, coach.id),
-          eq(coachNotes.memberId, id)
-        )
-      )
-      .limit(1);
-
-    if (!existingNote) {
-      return c.json({
-        success: false,
-        error: '找不到筆記',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
     // Build update object
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -603,12 +570,26 @@ app.patch(
       updateData.isPrivate = updates.is_private;
     }
 
-    // Update note
+    // Atomic update note scoped to coach and member
     const [updatedNote] = await db
       .update(coachNotes)
       .set(updateData)
-      .where(eq(coachNotes.id, noteId))
+      .where(
+        and(
+          eq(coachNotes.id, noteId),
+          eq(coachNotes.coachId, coach.id),
+          eq(coachNotes.memberId, id)
+        )
+      )
       .returning();
+
+    if (!updatedNote) {
+      return c.json({
+        success: false,
+        error: '找不到筆記',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,
@@ -633,10 +614,9 @@ app.delete('/:id/notes/:noteId', async (c) => {
   const coach = c.get('coach')!;
   const { id, noteId } = c.req.param();
 
-  // Verify note exists and belongs to this coach
-  const [existingNote] = await db
-    .select()
-    .from(coachNotes)
+  // Atomic delete note scoped to coach and member
+  const [deletedNote] = await db
+    .delete(coachNotes)
     .where(
       and(
         eq(coachNotes.id, noteId),
@@ -644,20 +624,15 @@ app.delete('/:id/notes/:noteId', async (c) => {
         eq(coachNotes.memberId, id)
       )
     )
-    .limit(1);
+    .returning({ id: coachNotes.id });
 
-  if (!existingNote) {
+  if (!deletedNote) {
     return c.json({
       success: false,
       error: '找不到筆記',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  // Delete note
-  await db
-    .delete(coachNotes)
-    .where(eq(coachNotes.id, noteId));
 
   return c.json({
     success: true,

@@ -153,21 +153,13 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [[classItem], branchIds] = await Promise.all([
-    db
-      .select()
-      .from(classes)
-      .where(eq(classes.id, id))
-      .limit(1),
-    getTenantBranchIds(tenantId),
-  ]);
-
-  if (!classItem) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  if (!branchIds.includes(classItem.branchId)) {
-    return c.json({ success: false, error: '無權限修改此課程' }, 403);
+  if (data.branchId && !branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   const [updatedClass] = await db
@@ -176,8 +168,16 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
       ...data,
       updatedAt: new Date(),
     })
-    .where(eq(classes.id, id))
+    .where(and(eq(classes.id, id), inArray(classes.branchId, branchIds)))
     .returning();
+
+  if (!updatedClass) {
+    const [exists] = await db.select({ id: classes.id }).from(classes).where(eq(classes.id, id)).limit(1);
+    if (exists) {
+      return c.json({ success: false, error: '無權限修改此課程' }, 403);
+    }
+    return c.json({ success: false, error: '課程不存在' }, 404);
+  }
 
   return c.json({ success: true, data: updatedClass });
 });
