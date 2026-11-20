@@ -163,7 +163,13 @@ app.post(
       content: data.content,
       attachments: data.attachments || [],
       status: 'SUBMITTED',
-    }).returning();
+    }).returning({
+      id: issueReports.id,
+      type: issueReports.type,
+      title: issueReports.title,
+      status: issueReports.status,
+      createdAt: issueReports.createdAt,
+    });
 
     return c.json({
       success: true,
@@ -275,7 +281,12 @@ app.put(
         eq(issueReports.memberId, memberInfo.id),
         eq(issueReports.status, 'SUBMITTED'),
       ))
-      .returning();
+      .returning({
+        id: issueReports.id,
+        type: issueReports.type,
+        title: issueReports.title,
+        status: issueReports.status,
+      });
 
     if (!issue) {
       // Discriminate between 404 (not found) and 400 (cannot edit)

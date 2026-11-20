@@ -117,7 +117,15 @@ app.post(
       bmi: data.bmi,
       source: data.source,
       rawData: data.rawData,
-    }).returning();
+    }).returning({
+      id: bodyMeasurements.id,
+      date: bodyMeasurements.date,
+      weight: bodyMeasurements.weight,
+      bodyFat: bodyMeasurements.bodyFat,
+      muscleMass: bodyMeasurements.muscleMass,
+      bmi: bodyMeasurements.bmi,
+      source: bodyMeasurements.source,
+    });
 
     return c.json({
       success: true,

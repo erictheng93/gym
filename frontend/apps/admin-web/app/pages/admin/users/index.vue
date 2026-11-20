@@ -80,16 +80,27 @@ const handleToggleStatus = async (user: any) => {
   }
 }
 
+// 格式化器與靜態標籤快取
+const userDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const ROLE_BADGE_CLASSES: Record<string, string> = {
+  admin: 'badge-error',
+  super_admin: 'badge-error',
+  manager: 'badge-warning',
+  coach: 'badge-info',
+  staff: 'badge-default'
+}
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return userDateTimeFormatter.format(new Date(dateStr))
 }
 
 // Row click handler - open modal
@@ -105,14 +116,7 @@ const getUserInitial = (email: string) => {
 
 // Get role badge color class
 const getRoleBadgeClass = (role: string) => {
-  const classes: Record<string, string> = {
-    admin: 'badge-error',
-    super_admin: 'badge-error',
-    manager: 'badge-warning',
-    coach: 'badge-info',
-    staff: 'badge-default'
-  }
-  return classes[role] || 'badge-default'
+  return ROLE_BADGE_CLASSES[role] || 'badge-default'
 }
 
 // Load data on mount

@@ -30,10 +30,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const loading = ref(true)
 const error = ref<string | null>(null)
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+const scheduleClose = (delay: number) => {
+  if (closeTimer) clearTimeout(closeTimer)
+  closeTimer = setTimeout(() => {
+    window.close()
+    closeTimer = null
+  }, delay)
+}
+
+onBeforeUnmount(() => {
+  if (closeTimer) {
+    clearTimeout(closeTimer)
+    closeTimer = null
+  }
+})
 
 onMounted(() => {
   try {
@@ -60,9 +76,7 @@ onMounted(() => {
       }
 
       // Close after 3 seconds
-      setTimeout(() => {
-        window.close()
-      }, 3000)
+      scheduleClose(3000)
       return
     }
 
@@ -77,9 +91,7 @@ onMounted(() => {
         }, window.location.origin)
       }
 
-      setTimeout(() => {
-        window.close()
-      }, 3000)
+      scheduleClose(3000)
       return
     }
 
@@ -96,9 +108,7 @@ onMounted(() => {
       loading.value = false
 
       // Close window after 1 second
-      setTimeout(() => {
-        window.close()
-      }, 1000)
+      scheduleClose(1000)
     } else {
       error.value = '無法與父視窗通訊'
       loading.value = false
@@ -114,9 +124,7 @@ onMounted(() => {
       }, window.location.origin)
     }
 
-    setTimeout(() => {
-      window.close()
-    }, 3000)
+    scheduleClose(3000)
   }
 })
 

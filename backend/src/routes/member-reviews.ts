@@ -243,7 +243,13 @@ app.post(
       comment: comment || null,
       isAnonymous,
       tenantId: memberInfo.tenantId,
-    }).returning();
+    }).returning({
+      id: classReviews.id,
+      rating: classReviews.rating,
+      comment: classReviews.comment,
+      isAnonymous: classReviews.isAnonymous,
+      createdAt: classReviews.createdAt,
+    });
 
     return c.json({
       success: true,
@@ -318,7 +324,13 @@ app.put(
         updatedAt: new Date(),
       })
       .where(eq(classReviews.id, reviewId))
-      .returning();
+      .returning({
+        id: classReviews.id,
+        rating: classReviews.rating,
+        comment: classReviews.comment,
+        isAnonymous: classReviews.isAnonymous,
+        updatedAt: classReviews.updatedAt,
+      });
 
     return c.json({
       success: true,

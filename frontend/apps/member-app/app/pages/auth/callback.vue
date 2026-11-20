@@ -18,6 +18,14 @@ const { loginWithOAuth } = useMemberAuth()
 // 狀態
 const status = ref<'processing' | 'success' | 'error'>('processing')
 const errorMessage = ref('')
+let redirectTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+})
 
 onMounted(async () => {
   try {
@@ -55,8 +63,10 @@ onMounted(async () => {
     status.value = 'success'
 
     // 延遲後導向首頁
-    setTimeout(() => {
+    if (redirectTimer) clearTimeout(redirectTimer)
+    redirectTimer = setTimeout(() => {
       navigateTo('/')
+      redirectTimer = null
     }, 1500)
   }
   catch (err) {

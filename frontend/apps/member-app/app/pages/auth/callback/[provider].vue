@@ -39,6 +39,15 @@ const socialInfo = ref<{
   avatarUrl?: string
 } | null>(null)
 
+let redirectTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (redirectTimer) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+})
+
 onMounted(async () => {
   // 檢查是否有錯誤參數 (OAuth 失敗)
   if (errorParam.value) {
@@ -89,8 +98,10 @@ onMounted(async () => {
       }
 
       // 延遲後導向到完成資料頁面
-      setTimeout(() => {
+      if (redirectTimer) clearTimeout(redirectTimer)
+      redirectTimer = setTimeout(() => {
         navigateTo('/auth/complete-profile')
+        redirectTimer = null
       }, 2000)
       return
     }
@@ -111,8 +122,10 @@ onMounted(async () => {
     status.value = 'success'
 
     // 延遲後導向首頁
-    setTimeout(() => {
+    if (redirectTimer) clearTimeout(redirectTimer)
+    redirectTimer = setTimeout(() => {
       navigateTo('/')
+      redirectTimer = null
     }, 1500)
   }
   catch (err) {
@@ -129,14 +142,15 @@ const goToCompleteProfile = () => {
   navigateTo('/auth/complete-profile')
 }
 
+const PROVIDER_NAMES: Record<string, string> = {
+  google: 'Google',
+  line: 'LINE',
+  apple: 'Apple',
+}
+
 // Provider 名稱對應
 const providerName = computed(() => {
-  const names: Record<string, string> = {
-    google: 'Google',
-    line: 'LINE',
-    apple: 'Apple',
-  }
-  return names[provider.value] || provider.value
+  return PROVIDER_NAMES[provider.value] || provider.value
 })
 </script>
 

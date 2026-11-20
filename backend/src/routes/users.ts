@@ -246,7 +246,18 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
     tenantId,
     isActive: true,
     emailVerified: false,
-  }).returning();
+  }).returning({
+    id: users.id,
+    email: users.email,
+    role: users.role,
+    employeeId: users.employeeId,
+    tenantId: users.tenantId,
+    isActive: users.isActive,
+    emailVerified: users.emailVerified,
+    lastLoginAt: users.lastLoginAt,
+    createdAt: users.createdAt,
+    updatedAt: users.updatedAt,
+  });
 
   // Update employee with userId if linked
   if (data.employeeId) {
@@ -256,9 +267,7 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
     }).where(eq(employees.id, data.employeeId));
   }
 
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = newUser;
-
-  return c.json({ success: true, data: userWithoutPassword }, 201);
+  return c.json({ success: true, data: newUser }, 201);
 });
 
 // Update user
@@ -344,16 +353,25 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(users.id, id))
-    .returning();
+    .returning({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      employeeId: users.employeeId,
+      tenantId: users.tenantId,
+      isActive: users.isActive,
+      emailVerified: users.emailVerified,
+      lastLoginAt: users.lastLoginAt,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    });
 
   // Invalidate sessions if user is deactivated
   if (data.isActive === false) {
     await lucia.invalidateUserSessions(id);
   }
 
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = updatedUser;
-
-  return c.json({ success: true, data: userWithoutPassword });
+  return c.json({ success: true, data: updatedUser });
 });
 
 // Reset user password (admin action)
