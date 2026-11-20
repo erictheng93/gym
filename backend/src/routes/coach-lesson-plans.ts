@@ -49,6 +49,34 @@ const ID_RETURNING_SELECT = {
   id: lessonPlans.id,
 };
 
+const TEMPLATE_LIST_SELECT = {
+  id: lessonPlans.id,
+  title: lessonPlans.title,
+  objectives: lessonPlans.objectives,
+  warmupExercises: lessonPlans.warmupExercises,
+  mainExercises: lessonPlans.mainExercises,
+  cooldownExercises: lessonPlans.cooldownExercises,
+  notes: lessonPlans.notes,
+  isTemplate: lessonPlans.isTemplate,
+  templateCategory: lessonPlans.templateCategory,
+  difficulty: lessonPlans.difficulty,
+  durationMinutes: lessonPlans.durationMinutes,
+  coachId: lessonPlans.coachId,
+  createdAt: lessonPlans.createdAt,
+};
+
+const TEMPLATE_CATEGORY_SELECT = {
+  category: lessonPlans.templateCategory,
+};
+
+const LESSON_PLAN_WITH_SESSION_SELECT = {
+  plan: LESSON_PLAN_SELECT,
+  sessionId: classSessions.id,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  sessionStatus: classSessions.sessionStatus,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -206,28 +234,14 @@ app.get('/templates', async (c) => {
   // Get templates and unique categories in parallel
   const [templatesData, categoriesResult] = await Promise.all([
     db
-      .select({
-        id: lessonPlans.id,
-        title: lessonPlans.title,
-        objectives: lessonPlans.objectives,
-        warmupExercises: lessonPlans.warmupExercises,
-        mainExercises: lessonPlans.mainExercises,
-        cooldownExercises: lessonPlans.cooldownExercises,
-        notes: lessonPlans.notes,
-        isTemplate: lessonPlans.isTemplate,
-        templateCategory: lessonPlans.templateCategory,
-        difficulty: lessonPlans.difficulty,
-        durationMinutes: lessonPlans.durationMinutes,
-        coachId: lessonPlans.coachId,
-        createdAt: lessonPlans.createdAt,
-      })
+      .select(TEMPLATE_LIST_SELECT)
       .from(lessonPlans)
       .where(and(...conditions))
       .orderBy(lessonPlans.templateCategory, lessonPlans.title)
       .limit(limitNum)
       .offset(offsetNum),
     db
-      .selectDistinct({ category: lessonPlans.templateCategory })
+      .selectDistinct(TEMPLATE_CATEGORY_SELECT)
       .from(lessonPlans)
       .where(
         and(
@@ -275,13 +289,7 @@ app.get('/:id', async (c) => {
 
   // Get plan (own or shared template) and linked session in a single query
   const [result] = await db
-    .select({
-      plan: LESSON_PLAN_SELECT,
-      sessionId: classSessions.id,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      sessionStatus: classSessions.sessionStatus,
-    })
+    .select(LESSON_PLAN_WITH_SESSION_SELECT)
     .from(lessonPlans)
     .leftJoin(classSessions, eq(lessonPlans.sessionId, classSessions.id))
     .where(

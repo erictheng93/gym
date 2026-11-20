@@ -7,6 +7,48 @@ import { validateBranding, mergeBranding } from '../types/branding.js';
 import type { TenantBranding } from '../types/branding.js';
 import { invalidateBrandingCache } from './branding.js';
 
+const TENANT_DETAIL_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+  slug: tenants.slug,
+  planType: tenants.planType,
+  status: tenants.tenantStatus,
+  maxBranches: tenants.maxBranches,
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxStorageMb: tenants.maxStorageMb,
+  trialEndsAt: tenants.trialEndsAt,
+  billingCycle: tenants.billingCycle,
+  nextBillingDate: tenants.nextBillingDate,
+  settings: tenants.settings,
+};
+
+const TENANT_LIMITS_SELECT = {
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxBranches: tenants.maxBranches,
+  maxStorageMb: tenants.maxStorageMb,
+};
+
+const TENANT_CHECK_LIMITS_SELECT = {
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxBranches: tenants.maxBranches,
+};
+
+const TENANT_SETTINGS_SELECT = {
+  slug: tenants.slug,
+  settings: tenants.settings,
+};
+
+const TENANT_BRANDING_SELECT = {
+  settings: tenants.settings,
+};
+
+const COUNT_SELECT = {
+  count: count(),
+};
+
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
 // All routes require authentication and tenant context
@@ -25,21 +67,7 @@ app.get('/', async (c) => {
   }
 
   const [tenant] = await db
-    .select({
-      id: tenants.id,
-      name: tenants.name,
-      slug: tenants.slug,
-      planType: tenants.planType,
-      status: tenants.tenantStatus,
-      maxBranches: tenants.maxBranches,
-      maxMembers: tenants.maxMembers,
-      maxEmployees: tenants.maxEmployees,
-      maxStorageMb: tenants.maxStorageMb,
-      trialEndsAt: tenants.trialEndsAt,
-      billingCycle: tenants.billingCycle,
-      nextBillingDate: tenants.nextBillingDate,
-      settings: tenants.settings,
-    })
+    .select(TENANT_DETAIL_SELECT)
     .from(tenants)
     .where(eq(tenants.id, tenantId))
     .limit(1);
@@ -68,25 +96,20 @@ app.get('/quota', async (c) => {
   // Fetch tenant limits and current usage in parallel
   const [[tenant], memberRows, employeeRows, branchRows] = await Promise.all([
     db
-      .select({
-        maxMembers: tenants.maxMembers,
-        maxEmployees: tenants.maxEmployees,
-        maxBranches: tenants.maxBranches,
-        maxStorageMb: tenants.maxStorageMb,
-      })
+      .select(TENANT_LIMITS_SELECT)
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1),
     db
-      .select({ count: count() })
+      .select(COUNT_SELECT)
       .from(members)
       .where(eq(members.tenantId, tenantId)),
     db
-      .select({ count: count() })
+      .select(COUNT_SELECT)
       .from(employees)
       .where(eq(employees.tenantId, tenantId)),
     db
-      .select({ count: count() })
+      .select(COUNT_SELECT)
       .from(branches)
       .where(eq(branches.tenantId, tenantId)),
   ]);
@@ -148,19 +171,15 @@ app.get('/quota/check/:resource', async (c) => {
   }
 
   const countQuery = resource === 'members'
-    ? db.select({ count: count() }).from(members).where(eq(members.tenantId, tenantId))
+    ? db.select(COUNT_SELECT).from(members).where(eq(members.tenantId, tenantId))
     : resource === 'employees'
-    ? db.select({ count: count() }).from(employees).where(eq(employees.tenantId, tenantId))
-    : db.select({ count: count() }).from(branches).where(eq(branches.tenantId, tenantId));
+    ? db.select(COUNT_SELECT).from(employees).where(eq(employees.tenantId, tenantId))
+    : db.select(COUNT_SELECT).from(branches).where(eq(branches.tenantId, tenantId));
 
   // Get tenant limits and resource count in parallel
   const [[tenant], countRows] = await Promise.all([
     db
-      .select({
-        maxMembers: tenants.maxMembers,
-        maxEmployees: tenants.maxEmployees,
-        maxBranches: tenants.maxBranches,
-      })
+      .select(TENANT_CHECK_LIMITS_SELECT)
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1),
@@ -213,10 +232,7 @@ app.patch('/settings', async (c) => {
 
     // Fetch current tenant settings
     const [tenant] = await db
-      .select({
-        slug: tenants.slug,
-        settings: tenants.settings
-      })
+      .select(TENANT_SETTINGS_SELECT)
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);
@@ -290,9 +306,7 @@ app.get('/settings/branding', async (c) => {
 
   try {
     const [tenant] = await db
-      .select({
-        settings: tenants.settings
-      })
+      .select(TENANT_BRANDING_SELECT)
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);

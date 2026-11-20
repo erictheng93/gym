@@ -81,6 +81,39 @@ const CHECK_IN_HOURLY_STATS_SELECT = {
   count: sql<number>`count(*)`,
 };
 
+const CHECK_IN_MEMBER_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  status: members.status,
+};
+
+const CHECK_IN_ACTIVE_CONTRACT_SELECT = {
+  contract: {
+    id: contracts.id,
+    remainingCounts: contracts.remainingCounts,
+  },
+  plan: {
+    planType: membershipPlans.planType,
+  },
+};
+
+const CHECK_IN_EXISTING_SELECT = {
+  id: checkIns.id,
+  memberId: checkIns.memberId,
+  branchId: checkIns.branchId,
+  contractId: checkIns.contractId,
+  checkInType: checkIns.checkInType,
+  checkInTime: checkIns.checkInTime,
+  notes: checkIns.notes,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -153,7 +186,7 @@ app.get('/', async (c) => {
         .limit(limit)
         .offset(offset),
       db
-        .select({ count: sql<number>`count(*)` })
+        .select(COUNT_SELECT)
         .from(checkIns)
         .where(whereCondition),
     ]);
@@ -198,27 +231,12 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const [tenantBranchIds, [member], [activeContractResult], [existingCheckIn]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        fullName: members.fullName,
-        phone: members.phone,
-        email: members.email,
-        status: members.status,
-      })
+      .select(CHECK_IN_MEMBER_SELECT)
       .from(members)
       .where(eq(members.id, data.memberId))
       .limit(1),
     db
-      .select({
-        contract: {
-          id: contracts.id,
-          remainingCounts: contracts.remainingCounts,
-        },
-        plan: {
-          planType: membershipPlans.planType,
-        },
-      })
+      .select(CHECK_IN_ACTIVE_CONTRACT_SELECT)
       .from(contracts)
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
       .where(
@@ -231,15 +249,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       )
       .limit(1),
     db
-      .select({
-        id: checkIns.id,
-        memberId: checkIns.memberId,
-        branchId: checkIns.branchId,
-        contractId: checkIns.contractId,
-        checkInType: checkIns.checkInType,
-        checkInTime: checkIns.checkInTime,
-        notes: checkIns.notes,
-      })
+      .select(CHECK_IN_EXISTING_SELECT)
       .from(checkIns)
       .where(
         and(

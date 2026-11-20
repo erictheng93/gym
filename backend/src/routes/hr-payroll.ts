@@ -92,6 +92,10 @@ const SALARY_RECORD_EXISTING_SELECT = {
   employeeId: salaryRecords.employeeId,
 };
 
+const SALARY_RECORD_ID_SELECT = {
+  id: salaryRecords.id,
+};
+
 const SALARY_RECORD_UPDATE_SELECT = {
   id: salaryRecords.id,
   status: salaryRecords.status,
@@ -406,7 +410,7 @@ app.post('/salary-records/:id/approve', async (c) => {
         eq(salaryRecords.status, 'PENDING')
       )
     )
-    .returning({ id: salaryRecords.id });
+    .returning(SALARY_RECORD_ID_SELECT);
 
   if (approved) {
     return c.json({ success: true, message: '薪資已核准' });
@@ -414,7 +418,7 @@ app.post('/salary-records/:id/approve', async (c) => {
 
   // Fallback to distinguish between 404 and 400
   const [record] = await db
-    .select({ id: salaryRecords.id })
+    .select(SALARY_RECORD_ID_SELECT)
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -480,7 +484,7 @@ app.post('/salary-records/:id/pay', async (c) => {
         eq(salaryRecords.status, 'APPROVED')
       )
     )
-    .returning({ id: salaryRecords.id });
+    .returning(SALARY_RECORD_ID_SELECT);
 
   if (paid) {
     return c.json({ success: true, message: '已標記為已發放' });
@@ -488,7 +492,7 @@ app.post('/salary-records/:id/pay', async (c) => {
 
   // Fallback to distinguish between 404 and 400
   const [record] = await db
-    .select({ id: salaryRecords.id })
+    .select(SALARY_RECORD_ID_SELECT)
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);

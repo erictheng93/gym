@@ -65,6 +65,78 @@ const changePasswordSchema = z.object({
     .max(72, '密碼最多 72 個字元'),
 });
 
+const COACH_LOGIN_EMPLOYEE_SELECT = {
+  id: employees.id,
+  userId: employees.userId,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  email: employees.email,
+  branchId: employees.branchId,
+  jobTitleId: employees.jobTitleId,
+  status: employees.status,
+  tenantId: employees.tenantId,
+};
+
+const COACH_USER_AUTH_SELECT = {
+  id: users.id,
+  passwordHash: users.passwordHash,
+  isActive: users.isActive,
+};
+
+const COACH_JOB_TITLE_SELECT = {
+  id: jobTitles.id,
+  name: jobTitles.name,
+  code: jobTitles.code,
+};
+
+const COACH_JOB_TITLE_CODE_SELECT = {
+  code: jobTitles.code,
+};
+
+const COACH_BRANCH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+  tenantId: branches.tenantId,
+};
+
+const COACH_REFRESH_EMPLOYEE_SELECT = {
+  id: employees.id,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  email: employees.email,
+  branchId: employees.branchId,
+  jobTitleId: employees.jobTitleId,
+  status: employees.status,
+  tenantId: employees.tenantId,
+};
+
+const COACH_CHANGE_PW_EMPLOYEE_SELECT = {
+  id: employees.id,
+  userId: employees.userId,
+};
+
+const COACH_CHANGE_PW_USER_SELECT = {
+  id: users.id,
+  passwordHash: users.passwordHash,
+};
+
+const COACH_ME_EMPLOYEE_SELECT = {
+  id: employees.id,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  email: employees.email,
+  phone: employees.phone,
+  branchId: employees.branchId,
+  jobTitleId: employees.jobTitleId,
+  status: employees.status,
+  tenantId: employees.tenantId,
+};
+
+const COACH_ME_BRANCH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+};
+
 // -----------------------------------------------------------------------------
 // POST /api/coach/auth/login - Coach Login
 // -----------------------------------------------------------------------------
@@ -86,17 +158,7 @@ app.post(
     }
 
     const [employee] = await db
-      .select({
-        id: employees.id,
-        userId: employees.userId,
-        employeeCode: employees.employeeCode,
-        fullName: employees.fullName,
-        email: employees.email,
-        branchId: employees.branchId,
-        jobTitleId: employees.jobTitleId,
-        status: employees.status,
-        tenantId: employees.tenantId,
-      })
+      .select(COACH_LOGIN_EMPLOYEE_SELECT)
       .from(employees)
       .where(or(...conditions))
       .limit(1);
@@ -127,11 +189,7 @@ app.post(
     }
 
     const [user] = await db
-      .select({
-        id: users.id,
-        passwordHash: users.passwordHash,
-        isActive: users.isActive,
-      })
+      .select(COACH_USER_AUTH_SELECT)
       .from(users)
       .where(eq(users.id, employee.userId))
       .limit(1);
@@ -163,27 +221,19 @@ app.post(
       }, 401);
     }
 
-    // Get job title
-    const [jobTitle] = await db
-      .select({
-        id: jobTitles.id,
-        name: jobTitles.name,
-        code: jobTitles.code,
-      })
-      .from(jobTitles)
-      .where(eq(jobTitles.id, employee.jobTitleId))
-      .limit(1);
-
-    // Get branch info
-    const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
-      .from(branches)
-      .where(eq(branches.id, employee.branchId))
-      .limit(1);
+    // Concurrently get job title and branch info
+    const [[jobTitle], [branch]] = await Promise.all([
+      db
+        .select(COACH_JOB_TITLE_SELECT)
+        .from(jobTitles)
+        .where(eq(jobTitles.id, employee.jobTitleId))
+        .limit(1),
+      db
+        .select(COACH_BRANCH_SELECT)
+        .from(branches)
+        .where(eq(branches.id, employee.branchId))
+        .limit(1),
+    ]);
 
     // Generate tokens
     const tokens = coachJwtService.generateTokens({
@@ -245,16 +295,7 @@ app.post(
 
     // Get employee info
     const [employee] = await db
-      .select({
-        id: employees.id,
-        employeeCode: employees.employeeCode,
-        fullName: employees.fullName,
-        email: employees.email,
-        branchId: employees.branchId,
-        jobTitleId: employees.jobTitleId,
-        status: employees.status,
-        tenantId: employees.tenantId,
-      })
+      .select(COACH_REFRESH_EMPLOYEE_SELECT)
       .from(employees)
       .where(eq(employees.id, tokenData.employeeId))
       .limit(1);
@@ -269,7 +310,7 @@ app.post(
 
     // Get job title
     const [jobTitle] = await db
-      .select({ code: jobTitles.code })
+      .select(COACH_JOB_TITLE_CODE_SELECT)
       .from(jobTitles)
       .where(eq(jobTitles.id, employee.jobTitleId))
       .limit(1);
@@ -307,10 +348,7 @@ app.post(
 
     // Get employee and user
     const [employee] = await db
-      .select({
-        id: employees.id,
-        userId: employees.userId,
-      })
+      .select(COACH_CHANGE_PW_EMPLOYEE_SELECT)
       .from(employees)
       .where(eq(employees.id, coach.id))
       .limit(1);
@@ -324,10 +362,7 @@ app.post(
     }
 
     const [user] = await db
-      .select({
-        id: users.id,
-        passwordHash: users.passwordHash,
-      })
+      .select(COACH_CHANGE_PW_USER_SELECT)
       .from(users)
       .where(eq(users.id, employee.userId))
       .limit(1);
@@ -382,17 +417,7 @@ app.get(
 
     // Get full employee info
     const [employee] = await db
-      .select({
-        id: employees.id,
-        employeeCode: employees.employeeCode,
-        fullName: employees.fullName,
-        email: employees.email,
-        phone: employees.phone,
-        branchId: employees.branchId,
-        jobTitleId: employees.jobTitleId,
-        status: employees.status,
-        tenantId: employees.tenantId,
-      })
+      .select(COACH_ME_EMPLOYEE_SELECT)
       .from(employees)
       .where(eq(employees.id, coach.id))
       .limit(1);
@@ -405,26 +430,19 @@ app.get(
       }, 404);
     }
 
-    // Get job title
-    const [jobTitle] = await db
-      .select({
-        id: jobTitles.id,
-        name: jobTitles.name,
-        code: jobTitles.code,
-      })
-      .from(jobTitles)
-      .where(eq(jobTitles.id, employee.jobTitleId))
-      .limit(1);
-
-    // Get branch info
-    const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-      })
-      .from(branches)
-      .where(eq(branches.id, employee.branchId))
-      .limit(1);
+    // Concurrently get job title and branch info
+    const [[jobTitle], [branch]] = await Promise.all([
+      db
+        .select(COACH_JOB_TITLE_SELECT)
+        .from(jobTitles)
+        .where(eq(jobTitles.id, employee.jobTitleId))
+        .limit(1),
+      db
+        .select(COACH_ME_BRANCH_SELECT)
+        .from(branches)
+        .where(eq(branches.id, employee.branchId))
+        .limit(1),
+    ]);
 
     return c.json({
       success: true,

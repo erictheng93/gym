@@ -210,15 +210,15 @@ const selectMember = async (member: any) => {
     isCrossBranch.value = true
   }
 
-  // Check if member has already checked in today
+  // Check if member has already checked in today and fetch active contract in parallel
   const branchId = currentEmployee.value?.branch_id || undefined
-  const checkedIn = await hasCheckedInToday(member.id, branchId)
+  const [checkedIn, contract] = await Promise.all([
+    hasCheckedInToday(member.id, branchId),
+    getMemberActiveContract(member.id),
+  ])
   if (checkedIn) {
     alreadyCheckedIn.value = true
   }
-
-  // Get member's active contract
-  const contract = await getMemberActiveContract(member.id)
   selectedContract.value = contract
 }
 
@@ -401,18 +401,38 @@ const stopScanner = () => {
   isScannerActive.value = false
 }
 
+const memberCodeMap = computed(() => {
+  const map = new Map<string, any>()
+  for (const m of members.value) {
+    if (m.member_code) {
+      map.set(m.member_code, m)
+    }
+  }
+  return map
+})
+
+const employeeCodeMap = computed(() => {
+  const map = new Map<string, any>()
+  for (const e of employees.value) {
+    if (e.employee_code) {
+      map.set(e.employee_code, e)
+    }
+  }
+  return map
+})
+
 const handleScannedCode = async (code: string) => {
   stopScanner()
 
   if (activeTab.value === 'member') {
-    const member = members.value.find(m => m.member_code === code)
+    const member = memberCodeMap.value.get(code)
     if (member) {
       await selectMember(member)
     } else {
       errorMessage.value = `找不到會員編號: ${code}`
     }
   } else {
-    const employee = employees.value.find(e => e.employee_code === code)
+    const employee = employeeCodeMap.value.get(code)
     if (employee) {
       await selectEmployee(employee)
     } else {

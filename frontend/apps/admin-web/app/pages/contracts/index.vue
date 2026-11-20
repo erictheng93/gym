@@ -87,8 +87,7 @@ const handleSearch = () => {
 // Watch filters
 watch([selectedBranch, selectedStatus], () => {
   selectedIds.value = [] // Clear selection on filter change
-  loadContracts()
-  loadStats()
+  Promise.all([loadContracts(), loadStats()])
 })
 
 // Initial load
@@ -125,8 +124,7 @@ const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'PAUSED' | 'TERMINATED
     )
     toast.success(`成功更新 ${selectedIds.value.length} 份合約狀態`)
     selectedIds.value = []
-    await loadContracts()
-    await loadStats()
+    await Promise.all([loadContracts(), loadStats()])
   } catch (error) {
     console.error('Failed to batch update:', error)
     toast.error('批量更新失敗')

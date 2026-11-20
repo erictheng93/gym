@@ -89,6 +89,14 @@ const TEACHING_MATERIAL_RELATED_SELECT = {
   muscleGroups: teachingMaterials.muscleGroups,
 };
 
+const TEACHING_MATERIAL_WITH_FILE_SELECT = {
+  material: TEACHING_MATERIAL_SELECT,
+  fileId: files.id,
+  filename: files.filename,
+  mimeType: files.mimeType,
+  size: files.size,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -437,13 +445,7 @@ app.get('/:id', async (c) => {
   const { id } = c.req.param();
   // Get material and file info in a single query
   const [result] = await db
-    .select({
-      material: TEACHING_MATERIAL_SELECT,
-      fileId: files.id,
-      filename: files.filename,
-      mimeType: files.mimeType,
-      size: files.size,
-    })
+    .select(TEACHING_MATERIAL_WITH_FILE_SELECT)
     .from(teachingMaterials)
     .leftJoin(files, eq(teachingMaterials.fileId, files.id))
     .where(
