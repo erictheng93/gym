@@ -49,11 +49,7 @@ app.get('/revenue', async (c) => {
     conditions.push(eq(payments.branchId, branchId));
   }
 
-  const [[totalResult], byBranch, byDay] = await Promise.all([
-    db
-      .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)` })
-      .from(payments)
-      .where(and(...conditions)),
+  const [byBranch, byDay] = await Promise.all([
     db
       .select({
         branchId: payments.branchId,
@@ -75,15 +71,18 @@ app.get('/revenue', async (c) => {
       .orderBy(sql`DATE(${payments.paymentDate})`),
   ]);
 
+  const mappedByBranch = byBranch.map(b => ({
+    branchId: b.branchId,
+    branchName: b.branchName,
+    total: Number(b.total),
+  }));
+  const total = mappedByBranch.reduce((sum, b) => sum + b.total, 0);
+
   return c.json({
     success: true,
     data: {
-      total: Number(totalResult?.total || 0),
-      byBranch: byBranch.map(b => ({
-        branchId: b.branchId,
-        branchName: b.branchName,
-        total: Number(b.total),
-      })),
+      total,
+      byBranch: mappedByBranch,
       byDay: byDay.map(d => ({
         date: d.date,
         total: Number(d.total),
