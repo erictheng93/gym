@@ -41,6 +41,23 @@ const BRANCH_OTP_AUTH_SELECT = {
   tenantId: branches.tenantId,
 };
 
+const OTP_MEMBER_SELECT = {
+  id: members.id,
+  phone: members.phone,
+  email: members.email,
+  fullName: members.fullName,
+  status: members.status,
+};
+
+const OTP_REFRESH_MEMBER_JOIN_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  branchId: members.branchId,
+  tenantId: members.tenantId,
+  status: members.status,
+  branchTenantId: branches.tenantId,
+};
+
 // -----------------------------------------------------------------------------
 // Rate Limiters
 // -----------------------------------------------------------------------------
@@ -161,13 +178,7 @@ app.post(
       : eq(members.email, identifier);
 
     const [member] = await db
-      .select({
-        id: members.id,
-        phone: members.phone,
-        email: members.email,
-        fullName: members.fullName,
-        status: members.status,
-      })
+      .select(OTP_MEMBER_SELECT)
       .from(members)
       .where(whereClause)
       .limit(1);
@@ -436,16 +447,11 @@ app.post(
       }, 401);
     }
 
-    // Get member
+    // Get member with branch in single query
     const [member] = await db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-        status: members.status,
-      })
+      .select(OTP_REFRESH_MEMBER_JOIN_SELECT)
       .from(members)
+      .leftJoin(branches, eq(members.branchId, branches.id))
       .where(eq(members.id, tokenData.memberId))
       .limit(1);
 
@@ -465,19 +471,12 @@ app.post(
       }, 403);
     }
 
-    // Get branch for tenantId
-    const [branch] = await db
-      .select({ tenantId: branches.tenantId })
-      .from(branches)
-      .where(eq(branches.id, member.branchId))
-      .limit(1);
-
     // Generate new tokens
     const tokens = memberJwtService.generateTokens({
       id: member.id,
       memberCode: member.memberCode,
       branchId: member.branchId,
-      tenantId: member.tenantId || branch?.tenantId || '',
+      tenantId: member.tenantId || member.branchTenantId || '',
     });
 
     return c.json({

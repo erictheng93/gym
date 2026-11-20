@@ -176,12 +176,16 @@ const contractId = computed(() => route.params.contractId as string)
 const loadContract = async () => {
   isLoading.value = true
   try {
-    contract.value = await getContract(contractId.value)
-    await fetchPayments({ contractId: contractId.value })
+    const promises: Promise<unknown>[] = [
+      getContract(contractId.value),
+      fetchPayments({ contractId: contractId.value }),
+    ]
     // 確保有當前員工資訊（用於記錄操作者）
     if (!currentEmployee.value) {
-      await fetchCurrentEmployee()
+      promises.push(fetchCurrentEmployee())
     }
+    const [contractData] = await Promise.all(promises)
+    contract.value = contractData as any
   } catch (error) {
     console.error('Failed to load contract:', error)
     useToast().error(MESSAGES.ERRORS.CONTRACT_LOAD_FAILED)

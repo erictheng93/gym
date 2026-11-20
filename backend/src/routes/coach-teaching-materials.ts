@@ -89,6 +89,16 @@ const TEACHING_MATERIAL_RELATED_SELECT = {
   muscleGroups: teachingMaterials.muscleGroups,
 };
 
+const TEACHING_MATERIAL_CREATE_RETURNING = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  name: teachingMaterials.name,
+};
+
+const TEACHING_MATERIAL_ID_RETURNING = {
+  id: teachingMaterials.id,
+};
+
 const TEACHING_MATERIAL_WITH_FILE_SELECT = {
   material: TEACHING_MATERIAL_SELECT,
   fileId: files.id,
@@ -568,11 +578,7 @@ app.post(
         createdBy: coach.id,
         tenantId: coach.tenantId,
       })
-      .returning({
-        id: teachingMaterials.id,
-        type: teachingMaterials.type,
-        name: teachingMaterials.name,
-      });
+      .returning(TEACHING_MATERIAL_CREATE_RETURNING);
 
     return c.json({
       success: true,
@@ -626,7 +632,7 @@ app.patch(
           eq(teachingMaterials.tenantId, coach.tenantId)
         )
       )
-      .returning({ id: teachingMaterials.id });
+      .returning(TEACHING_MATERIAL_ID_RETURNING);
 
     if (!updatedMaterial) {
       return c.json({
@@ -665,7 +671,7 @@ app.delete('/:id', async (c) => {
         eq(teachingMaterials.isActive, true)
       )
     )
-    .returning({ id: teachingMaterials.id });
+    .returning(TEACHING_MATERIAL_ID_RETURNING);
 
   if (!deletedMaterial) {
     return c.json({

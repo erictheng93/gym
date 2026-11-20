@@ -18,6 +18,23 @@ import type { CoachVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
+const COACH_PROFILE_EMPLOYEE_SELECT = {
+  id: employees.id,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  email: employees.email,
+  phone: employees.phone,
+  branchId: employees.branchId,
+  branchName: branches.name,
+  jobTitleId: employees.jobTitleId,
+  jobTitleName: jobTitles.name,
+  jobTitleCode: jobTitles.code,
+  status: employees.status,
+  tenantId: employees.tenantId,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -48,27 +65,14 @@ app.get('/', async (c) => {
     [weekClassCountResult],
   ] = await Promise.all([
     db
-      .select({
-        id: employees.id,
-        employeeCode: employees.employeeCode,
-        fullName: employees.fullName,
-        email: employees.email,
-        phone: employees.phone,
-        branchId: employees.branchId,
-        branchName: branches.name,
-        jobTitleId: employees.jobTitleId,
-        jobTitleName: jobTitles.name,
-        jobTitleCode: jobTitles.code,
-        status: employees.status,
-        tenantId: employees.tenantId,
-      })
+      .select(COACH_PROFILE_EMPLOYEE_SELECT)
       .from(employees)
       .leftJoin(branches, eq(employees.branchId, branches.id))
       .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
       .where(eq(employees.id, coach.id))
       .limit(1),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(coachMemberAssignments)
       .where(
         and(
@@ -77,7 +81,7 @@ app.get('/', async (c) => {
         )
       ),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(classSessions)
       .where(
         and(
@@ -87,7 +91,7 @@ app.get('/', async (c) => {
         )
       ),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(classSessions)
       .where(
         and(

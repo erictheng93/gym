@@ -36,6 +36,10 @@ const JOB_TITLE_SELECT = {
 
 const JOB_TITLE_RETURNING = JOB_TITLE_SELECT;
 
+const JOB_TITLE_ID_RETURNING = {
+  id: jobTitles.id,
+};
+
 // List job titles
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -119,7 +123,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const [deleted] = await db
     .delete(jobTitles)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .returning({ id: jobTitles.id });
+    .returning(JOB_TITLE_ID_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '職稱不存在' }, 404);

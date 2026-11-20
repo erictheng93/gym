@@ -18,6 +18,62 @@ import type { CoachVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
+const COACH_SCHEDULE_SESSION_SELECT = {
+  id: classSessions.id,
+  classId: classSessions.classId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+  sessionStatus: classSessions.sessionStatus,
+  className: classes.name,
+  classCategory: classes.category,
+  classDuration: classes.durationMinutes,
+  branchId: classSessions.branchId,
+};
+
+const COACH_SCHEDULE_AVAILABILITY_SELECT = {
+  dayOfWeek: classSchedules.dayOfWeek,
+  startTime: classSchedules.startTime,
+  endTime: classSchedules.endTime,
+  classId: classSchedules.classId,
+  className: classes.name,
+  room: classSchedules.room,
+  maxCapacity: classSchedules.maxCapacity,
+  isRecurring: classSchedules.isRecurring,
+};
+
+const COACH_SCHEDULE_BOOKINGS_SELECT = {
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  memberName: members.fullName,
+  memberCode: members.memberCode,
+  bookingStatus: bookings.bookingStatus,
+};
+
+const COACH_TODAY_SESSIONS_SELECT = {
+  id: classSessions.id,
+  classId: classSessions.classId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  sessionStatus: classSessions.sessionStatus,
+  className: classes.name,
+  classCategory: classes.category,
+};
+
+const COACH_TODAY_COUNTS_SELECT = {
+  sessionId: bookings.sessionId,
+  bookingStatus: bookings.bookingStatus,
+  count: sql<number>`count(*)`,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -45,22 +101,7 @@ app.get('/', async (c) => {
   // Concurrently fetch sessions in date range and recurring schedule (availability)
   const [sessionsData, availability] = await Promise.all([
     db
-      .select({
-        id: classSessions.id,
-        classId: classSessions.classId,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-        endTime: classSessions.endTime,
-        room: classSessions.room,
-        maxCapacity: classSessions.maxCapacity,
-        currentCount: classSessions.currentCount,
-        waitlistCount: classSessions.waitlistCount,
-        sessionStatus: classSessions.sessionStatus,
-        className: classes.name,
-        classCategory: classes.category,
-        classDuration: classes.durationMinutes,
-        branchId: classSessions.branchId,
-      })
+      .select(COACH_SCHEDULE_SESSION_SELECT)
       .from(classSessions)
       .innerJoin(classes, eq(classSessions.classId, classes.id))
       .where(
@@ -72,16 +113,7 @@ app.get('/', async (c) => {
       )
       .orderBy(classSessions.sessionDate, classSessions.startTime),
     db
-      .select({
-        dayOfWeek: classSchedules.dayOfWeek,
-        startTime: classSchedules.startTime,
-        endTime: classSchedules.endTime,
-        classId: classSchedules.classId,
-        className: classes.name,
-        room: classSchedules.room,
-        maxCapacity: classSchedules.maxCapacity,
-        isRecurring: classSchedules.isRecurring,
-      })
+      .select(COACH_SCHEDULE_AVAILABILITY_SELECT)
       .from(classSchedules)
       .innerJoin(classes, eq(classSchedules.classId, classes.id))
       .where(
@@ -105,13 +137,7 @@ app.get('/', async (c) => {
 
   if (sessionIds.length > 0) {
     bookingsData = await db
-      .select({
-        sessionId: bookings.sessionId,
-        memberId: bookings.memberId,
-        memberName: members.fullName,
-        memberCode: members.memberCode,
-        bookingStatus: bookings.bookingStatus,
-      })
+      .select(COACH_SCHEDULE_BOOKINGS_SELECT)
       .from(bookings)
       .innerJoin(members, eq(bookings.memberId, members.id))
       .where(
@@ -202,19 +228,7 @@ app.get('/today', async (c) => {
 
   // Get today's sessions
   const sessionsData = await db
-    .select({
-      id: classSessions.id,
-      classId: classSessions.classId,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      endTime: classSessions.endTime,
-      room: classSessions.room,
-      maxCapacity: classSessions.maxCapacity,
-      currentCount: classSessions.currentCount,
-      sessionStatus: classSessions.sessionStatus,
-      className: classes.name,
-      classCategory: classes.category,
-    })
+    .select(COACH_TODAY_SESSIONS_SELECT)
     .from(classSessions)
     .innerJoin(classes, eq(classSessions.classId, classes.id))
     .where(
@@ -231,24 +245,19 @@ app.get('/today', async (c) => {
 
   if (sessionIds.length > 0) {
     const countsData = await db
-      .select({
-        sessionId: bookings.sessionId,
-        bookingStatus: bookings.bookingStatus,
-        count: sql<number>`count(*)`,
-      })
+      .select(COACH_TODAY_COUNTS_SELECT)
       .from(bookings)
       .where(inArray(bookings.sessionId, sessionIds))
       .groupBy(bookings.sessionId, bookings.bookingStatus);
 
-    attendanceCounts = countsData.reduce((acc, row) => {
-      if (!acc[row.sessionId]) {
-        acc[row.sessionId] = { confirmed: 0, attended: 0, noShow: 0 };
+    for (const row of countsData) {
+      if (!attendanceCounts[row.sessionId]) {
+        attendanceCounts[row.sessionId] = { confirmed: 0, attended: 0, noShow: 0 };
       }
-      if (row.bookingStatus === 'CONFIRMED') acc[row.sessionId].confirmed = Number(row.count);
-      if (row.bookingStatus === 'ATTENDED') acc[row.sessionId].attended = Number(row.count);
-      if (row.bookingStatus === 'NO_SHOW') acc[row.sessionId].noShow = Number(row.count);
-      return acc;
-    }, {} as typeof attendanceCounts);
+      if (row.bookingStatus === 'CONFIRMED') attendanceCounts[row.sessionId]!.confirmed = Number(row.count);
+      if (row.bookingStatus === 'ATTENDED') attendanceCounts[row.sessionId]!.attended = Number(row.count);
+      if (row.bookingStatus === 'NO_SHOW') attendanceCounts[row.sessionId]!.noShow = Number(row.count);
+    }
   }
 
   const formattedSessions = sessionsData.map(session => ({

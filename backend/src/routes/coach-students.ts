@@ -88,6 +88,18 @@ const COUNT_SELECT = {
   count: sql<number>`count(*)`,
 };
 
+const COACH_NOTE_CREATE_RETURNING = {
+  id: coachNotes.id,
+  noteType: coachNotes.noteType,
+  content: coachNotes.content,
+  isPrivate: coachNotes.isPrivate,
+  createdAt: coachNotes.createdAt,
+};
+
+const COACH_NOTE_ID_RETURNING = {
+  id: coachNotes.id,
+};
+
 const STUDENT_DETAIL_CONTRACT_SELECT = {
   id: contracts.id,
   contractNo: contracts.contractNo,
@@ -595,13 +607,7 @@ app.post(
         isPrivate: is_private,
         tenantId: coach.tenantId || null,
       })
-      .returning({
-        id: coachNotes.id,
-        noteType: coachNotes.noteType,
-        content: coachNotes.content,
-        isPrivate: coachNotes.isPrivate,
-        createdAt: coachNotes.createdAt,
-      });
+      .returning(COACH_NOTE_CREATE_RETURNING);
 
     return c.json({
       success: true,
@@ -655,14 +661,7 @@ app.patch(
           eq(coachNotes.memberId, id)
         )
       )
-      .returning({
-        id: coachNotes.id,
-        noteType: coachNotes.noteType,
-        content: coachNotes.content,
-        isPrivate: coachNotes.isPrivate,
-        createdAt: coachNotes.createdAt,
-        updatedAt: coachNotes.updatedAt,
-      });
+      .returning(COACH_NOTE_SELECT);
 
     if (!updatedNote) {
       return c.json({
@@ -705,7 +704,7 @@ app.delete('/:id/notes/:noteId', async (c) => {
         eq(coachNotes.memberId, id)
       )
     )
-    .returning({ id: coachNotes.id });
+    .returning(COACH_NOTE_ID_RETURNING);
 
   if (!deletedNote) {
     return c.json({

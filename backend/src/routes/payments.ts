@@ -29,6 +29,72 @@ const PAYMENT_RETURNING = {
 
 const PAYMENT_SELECT = PAYMENT_RETURNING;
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
+const BRANCH_ID_SELECT = { id: branches.id };
+
+const MEMBER_ID_SELECT = { id: members.id };
+
+const CONTRACT_TOTAL_AMOUNT_SELECT = {
+  id: contracts.id,
+  totalAmount: contracts.totalAmount,
+};
+
+const PAYMENT_TOTAL_AMOUNT_SELECT = { total: sum(payments.amount) };
+
+const PAYMENT_LIST_JOIN_SELECT = {
+  payment: PAYMENT_SELECT,
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+  contract: {
+    id: contracts.id,
+    contractNo: contracts.contractNo,
+  },
+};
+
+const PAYMENT_SUMMARY_SELECT = {
+  totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'INCOME' THEN ${payments.amount} ELSE 0 END), 0)`,
+  totalRefund: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'REFUND' THEN ${payments.amount} ELSE 0 END), 0)`,
+  count: sql<number>`count(*)`,
+};
+
+const PAYMENT_EXPORT_SELECT = {
+  payment: {
+    receiptNo: payments.receiptNo,
+    amount: payments.amount,
+    paymentMethod: payments.paymentMethod,
+    paymentDate: payments.paymentDate,
+    type: payments.type,
+  },
+  member: {
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+};
+
+const PAYMENT_DETAIL_SELECT = {
+  payment: PAYMENT_SELECT,
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+    phone: members.phone,
+    email: members.email,
+  },
+  contract: {
+    id: contracts.id,
+    contractNo: contracts.contractNo,
+    status: contracts.status,
+    startDate: contracts.startDate,
+    endDate: contracts.endDate,
+    totalAmount: contracts.totalAmount,
+    remainingCounts: contracts.remainingCounts,
+  },
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -80,22 +146,11 @@ app.get('/', async (c) => {
 
   const [[countResult], result] = await Promise.all([
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(payments)
       .where(whereCondition),
     db
-      .select({
-        payment: PAYMENT_SELECT,
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-          memberCode: members.memberCode,
-        },
-        contract: {
-          id: contracts.id,
-          contractNo: contracts.contractNo,
-        },
-      })
+      .select(PAYMENT_LIST_JOIN_SELECT)
       .from(payments)
       .leftJoin(members, eq(payments.memberId, members.id))
       .leftJoin(contracts, eq(payments.contractId, contracts.id))
@@ -158,11 +213,7 @@ app.get('/summary', async (c) => {
   const whereCondition = and(...conditions);
 
   const [summaryResult] = await db
-    .select({
-      totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'INCOME' THEN ${payments.amount} ELSE 0 END), 0)`,
-      totalRefund: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'REFUND' THEN ${payments.amount} ELSE 0 END), 0)`,
-      count: sql<number>`count(*)`,
-    })
+    .select(PAYMENT_SUMMARY_SELECT)
     .from(payments)
     .where(whereCondition);
 
@@ -217,19 +268,7 @@ app.get('/export', async (c) => {
   }
 
   const result = await db
-    .select({
-      payment: {
-        receiptNo: payments.receiptNo,
-        amount: payments.amount,
-        paymentMethod: payments.paymentMethod,
-        paymentDate: payments.paymentDate,
-        type: payments.type,
-      },
-      member: {
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-    })
+    .select(PAYMENT_EXPORT_SELECT)
     .from(payments)
     .leftJoin(members, eq(payments.memberId, members.id))
     .where(and(...conditions))
@@ -277,25 +316,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [payment] = await db
-    .select({
-      payment: PAYMENT_SELECT,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-        phone: members.phone,
-        email: members.email,
-      },
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-        status: contracts.status,
-        startDate: contracts.startDate,
-        endDate: contracts.endDate,
-        totalAmount: contracts.totalAmount,
-        remainingCounts: contracts.remainingCounts,
-      },
-    })
+    .select(PAYMENT_DETAIL_SELECT)
     .from(payments)
     .leftJoin(members, eq(payments.memberId, members.id))
     .leftJoin(contracts, eq(payments.contractId, contracts.id))
@@ -307,7 +328,7 @@ app.get('/:id', async (c) => {
   }
 
   const [branch] = await db
-    .select({ id: branches.id })
+    .select(BRANCH_ID_SELECT)
     .from(branches)
     .where(and(eq(branches.id, payment.payment.branchId!), eq(branches.tenantId, tenantId)))
     .limit(1);
@@ -332,7 +353,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   const data = c.req.valid('json');
 
   const [branch] = await db
-    .select({ id: branches.id })
+    .select(BRANCH_ID_SELECT)
     .from(branches)
     .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
     .limit(1);
@@ -342,7 +363,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   }
 
   const [member] = await db
-    .select({ id: members.id })
+    .select(MEMBER_ID_SELECT)
     .from(members)
     .where(eq(members.id, data.memberId))
     .limit(1);
@@ -372,7 +393,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   if (data.contractId) {
     const [existingPayments, [contract]] = await Promise.all([
       db
-        .select({ total: sum(payments.amount) })
+        .select(PAYMENT_TOTAL_AMOUNT_SELECT)
         .from(payments)
         .where(
           and(
@@ -381,10 +402,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
           )
         ),
       db
-        .select({
-          id: contracts.id,
-          totalAmount: contracts.totalAmount,
-        })
+        .select(CONTRACT_TOTAL_AMOUNT_SELECT)
         .from(contracts)
         .where(eq(contracts.id, data.contractId))
         .limit(1),

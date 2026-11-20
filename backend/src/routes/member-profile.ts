@@ -89,6 +89,17 @@ const MEMBER_ACTIVE_CONTRACTS_SELECT = {
 
 const MEMBER_CREDENTIALS_ID_SELECT = { id: memberCredentials.id };
 
+const MEMBER_COMPLETE_PROFILE_RETURNING = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  status: members.status,
+};
+
 const MEMBER_SOCIAL_ACCOUNTS_SELECT = {
   provider: memberSocialAccounts.provider,
   email: memberSocialAccounts.email,
@@ -330,16 +341,7 @@ app.post(
         updatedAt: new Date(),
       })
       .where(eq(members.id, memberInfo.id))
-      .returning({
-        id: members.id,
-        memberCode: members.memberCode,
-        fullName: members.fullName,
-        phone: members.phone,
-        email: members.email,
-        gender: members.gender,
-        birthday: members.birthday,
-        status: members.status,
-      });
+      .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
 
     return c.json({
       success: true,
