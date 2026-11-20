@@ -1,3 +1,11 @@
+<script lang="ts">
+const typeOptions = [
+  { value: 'MONTHLY', label: '月考核' },
+  { value: 'QUARTERLY', label: '季考核' },
+  { value: 'ANNUAL', label: '年度考核' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增績效考核頁面
@@ -24,12 +32,6 @@ const formData = ref({
 })
 
 const errors = ref<Record<string, string>>({})
-
-const typeOptions = [
-  { value: 'MONTHLY', label: '月考核' },
-  { value: 'QUARTERLY', label: '季考核' },
-  { value: 'ANNUAL', label: '年度考核' }
-]
 
 // Get current period (YYYY-MM or YYYY-QX)
 function getCurrentPeriod() {

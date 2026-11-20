@@ -1,3 +1,21 @@
+<script lang="ts">
+const periodOptions = [
+  { value: '7d', label: '最近 7 天' },
+  { value: '30d', label: '最近 30 天' },
+  { value: '90d', label: '最近 90 天' },
+  { value: 'all', label: '全部' }
+]
+
+const sourceColors: Record<string, string> = {
+  FB_AD: '#4267b2',
+  IG_AD: '#e1306c',
+  GOOGLE_AD: '#db4437',
+  WEBSITE: '#007aff',
+  WALK_IN: '#34c759',
+  REFERRAL: '#af52de'
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 潛在客戶數據分析頁面
@@ -17,13 +35,6 @@ const analytics = ref<Awaited<ReturnType<typeof fetchAnalytics>> | null>(null)
 const isLoading = ref(true)
 const selectedPeriod = ref('30d')
 
-const periodOptions = [
-  { value: '7d', label: '最近 7 天' },
-  { value: '30d', label: '最近 30 天' },
-  { value: '90d', label: '最近 90 天' },
-  { value: 'all', label: '全部' }
-]
-
 const loadAnalytics = async () => {
   isLoading.value = true
   try {
@@ -41,16 +52,6 @@ const loadAnalytics = async () => {
 onMounted(loadAnalytics)
 
 watch(selectedPeriod, loadAnalytics)
-
-// Source colors
-const sourceColors: Record<string, string> = {
-  FB_AD: '#4267b2',
-  IG_AD: '#e1306c',
-  GOOGLE_AD: '#db4437',
-  WEBSITE: '#007aff',
-  WALK_IN: '#34c759',
-  REFERRAL: '#af52de'
-}
 
 // Calculate conversion rate
 const conversionRate = computed(() => {

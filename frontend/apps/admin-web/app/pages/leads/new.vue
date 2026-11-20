@@ -1,3 +1,14 @@
+<script lang="ts">
+const sourceOptions = [
+  { value: 'FB_AD', label: 'Facebook 廣告' },
+  { value: 'IG_AD', label: 'Instagram 廣告' },
+  { value: 'GOOGLE_AD', label: 'Google 廣告' },
+  { value: 'WEBSITE', label: '網站' },
+  { value: 'WALK_IN', label: '現場' },
+  { value: 'REFERRAL', label: '推薦' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增潛在客戶頁面
@@ -42,16 +53,6 @@ const {
 
 // Form submission helper
 const { isSubmitting, submit } = useFormSubmit()
-
-// Options
-const sourceOptions = [
-  { value: 'FB_AD', label: 'Facebook 廣告' },
-  { value: 'IG_AD', label: 'Instagram 廣告' },
-  { value: 'GOOGLE_AD', label: 'Google 廣告' },
-  { value: 'WEBSITE', label: '網站' },
-  { value: 'WALK_IN', label: '現場' },
-  { value: 'REFERRAL', label: '推薦' }
-]
 
 const branchOptions = computed(() =>
   branches.value.map(b => ({ value: b.id, label: b.name }))

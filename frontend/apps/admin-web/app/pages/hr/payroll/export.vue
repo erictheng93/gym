@@ -1,3 +1,10 @@
+<script lang="ts">
+const formatOptions = [
+  { value: 'csv', label: 'CSV (Excel 相容)' },
+  { value: 'pdf', label: 'PDF 報表' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 薪資匯出頁面
@@ -37,11 +44,6 @@ const periodOptions = computed(() => {
   }
   return options
 })
-
-const formatOptions = [
-  { value: 'csv', label: 'CSV (Excel 相容)' },
-  { value: 'pdf', label: 'PDF 報表' }
-]
 
 onMounted(fetchBranches)
 

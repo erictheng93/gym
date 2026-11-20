@@ -15,6 +15,20 @@ const columns = [
   { key: 'status', label: '狀態', slot: 'status' },
   { key: 'date_created', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
 ]
+
+const typeOptions = [
+  { value: '', label: '全部類型' },
+  { value: 'MONTHLY', label: '月考核' },
+  { value: 'QUARTERLY', label: '季考核' },
+  { value: 'ANNUAL', label: '年度考核' }
+]
+
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'DRAFT', label: '草稿' },
+  { value: 'SUBMITTED', label: '待審核' },
+  { value: 'APPROVED', label: '已核准' }
+]
 </script>
 
 <script setup lang="ts">
@@ -48,20 +62,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-const typeOptions = [
-  { value: '', label: '全部類型' },
-  { value: 'MONTHLY', label: '月考核' },
-  { value: 'QUARTERLY', label: '季考核' },
-  { value: 'ANNUAL', label: '年度考核' }
-]
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'DRAFT', label: '草稿' },
-  { value: 'SUBMITTED', label: '待審核' },
-  { value: 'APPROVED', label: '已核准' }
-]
 
 // Load reviews
 const loadReviews = async () => {
