@@ -15,6 +15,13 @@ interface PushPayload {
   data?: Record<string, unknown>;
 }
 
+const PUSH_SUBSCRIPTION_SELECT = {
+  id: pushSubscriptions.id,
+  endpoint: pushSubscriptions.endpoint,
+  p256dh: pushSubscriptions.p256dh,
+  auth: pushSubscriptions.auth,
+};
+
 class PushService {
   private initialized = false;
 
@@ -36,7 +43,7 @@ class PushService {
     }
 
     const subscriptions = await db
-      .select()
+      .select(PUSH_SUBSCRIPTION_SELECT)
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.userId, userId));
 
@@ -73,7 +80,7 @@ class PushService {
     }
 
     const subscriptions = await db
-      .select()
+      .select(PUSH_SUBSCRIPTION_SELECT)
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.memberId, memberId));
 

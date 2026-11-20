@@ -446,8 +446,12 @@ const isCountBasedContract = computed(() => {
   return selectedContract.value?.plan?.plan_type === 'COUNT_BASED'
 })
 
+const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
 const formatTime = (iso: string) => {
-  return new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return checkinTimeFormatter.format(date)
 }
 
 const MEMBER_STATUS_CLASS_MAP: Record<string, string> = {
