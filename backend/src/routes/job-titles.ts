@@ -105,7 +105,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const [deleted] = await db
     .delete(jobTitles)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .returning();
+    .returning({ id: jobTitles.id });
 
   if (!deleted) {
     return c.json({ success: false, error: '職稱不存在' }, 404);

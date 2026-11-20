@@ -237,7 +237,7 @@ app.post('/:id/convert', async (c) => {
 
   const [[lead], [lastMember]] = await Promise.all([
     db
-      .select({ lead: leads, branch: branches })
+      .select({ lead: leads, branch: { id: branches.id } })
       .from(leads)
       .innerJoin(branches, eq(leads.branchId, branches.id))
       .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
