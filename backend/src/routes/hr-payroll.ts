@@ -13,6 +13,22 @@ import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const PROMOTION_RECORD_RETURNING = {
+  id: promotionRecords.id,
+  employeeId: promotionRecords.employeeId,
+  type: promotionRecords.type,
+  fromJobTitleId: promotionRecords.fromJobTitleId,
+  toJobTitleId: promotionRecords.toJobTitleId,
+  fromBranchId: promotionRecords.fromBranchId,
+  toBranchId: promotionRecords.toBranchId,
+  effectiveDate: promotionRecords.effectiveDate,
+  newBaseSalary: promotionRecords.newBaseSalary,
+  reason: promotionRecords.reason,
+  createdBy: promotionRecords.createdBy,
+  createdAt: promotionRecords.createdAt,
+  tenantId: promotionRecords.tenantId,
+};
+
 app.use('*', authMiddleware, requireAuth);
 
 // -----------------------------------------------------------------------------
@@ -624,7 +640,7 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
       reason: data.reason,
       createdBy: user?.employeeId,
     })
-    .returning();
+    .returning(PROMOTION_RECORD_RETURNING);
 
   // Update employee if changes are effective today or earlier
   const today = new Date().toISOString().split('T')[0];

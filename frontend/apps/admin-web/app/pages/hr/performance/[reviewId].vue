@@ -48,13 +48,17 @@ onMounted(async () => {
 })
 
 // Format date
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return '—'
+  return reviewDateFormatter.format(date)
 }
 
 // Check if current user is reviewer

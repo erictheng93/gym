@@ -11,6 +11,22 @@ import { generateExcel, generateCsv, paymentsColumns, translatePaymentMethod, tr
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const PAYMENT_RETURNING = {
+  id: payments.id,
+  contractId: payments.contractId,
+  memberId: payments.memberId,
+  branchId: payments.branchId,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  paymentDate: payments.paymentDate,
+  type: payments.type,
+  receiptNo: payments.receiptNo,
+  notes: payments.notes,
+  createdBy: payments.createdBy,
+  createdAt: payments.createdAt,
+  tenantId: payments.tenantId,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -349,7 +365,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
     notes: data.notes,
     createdBy: user.employeeId,
     tenantId,
-  }).returning();
+  }).returning(PAYMENT_RETURNING);
 
   if (data.contractId) {
     const [existingPayments, [contract]] = await Promise.all([

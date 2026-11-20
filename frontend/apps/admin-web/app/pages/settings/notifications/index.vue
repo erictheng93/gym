@@ -459,9 +459,20 @@ async function toggleActive() {
   }
 }
 
+const notificationDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric'
+})
+
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '從未'
-  return new Date(dateStr).toLocaleString('zh-TW')
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '從未'
+  return notificationDateTimeFormatter.format(d)
 }
 </script>
 

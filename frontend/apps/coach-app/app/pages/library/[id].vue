@@ -234,12 +234,17 @@ const getDifficultyText = (difficulty: string) => {
   return texts[difficulty] || difficulty
 }
 
+const libraryDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return dateStr
+  return libraryDateFormatter.format(date)
 }
 
 onMounted(async () => {

@@ -46,6 +46,12 @@ const discountTypeOptions = [
   { value: 'FIXED_AMOUNT', label: '固定金額折扣' }
 ]
 
+const couponPlanNumberFormatter = new Intl.NumberFormat('zh-TW')
+const formatPrice = (price?: number | null) => {
+  if (price === undefined || price === null) return '0'
+  return couponPlanNumberFormatter.format(price)
+}
+
 // Generate random code
 const generateCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -303,7 +309,7 @@ const handleSubmit = async () => {
                 }"
               />
               <span class="plan-name">{{ plan.name }}</span>
-              <span class="plan-price">NT$ {{ plan.price?.toLocaleString() }}</span>
+              <span class="plan-price">NT$ {{ formatPrice(plan.price) }}</span>
             </label>
           </div>
         </div>

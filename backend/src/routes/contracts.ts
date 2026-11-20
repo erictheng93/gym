@@ -10,6 +10,32 @@ import { generateExcel, generateCsv, contractsColumns, translateStatus } from '.
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const CONTRACT_RETURNING = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+  memberId: contracts.memberId,
+  planId: contracts.planId,
+  branchId: contracts.branchId,
+  salesPersonId: contracts.salesPersonId,
+  status: contracts.status,
+  signDate: contracts.signDate,
+  startDate: contracts.startDate,
+  originalEndDate: contracts.originalEndDate,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  totalAmount: contracts.totalAmount,
+  paidAmount: contracts.paidAmount,
+  paymentStatus: contracts.paymentStatus,
+  digitalSignature: contracts.digitalSignature,
+  contractPdf: contracts.contractPdf,
+  termsAccepted: contracts.termsAccepted,
+  notes: contracts.notes,
+  createdBy: contracts.createdBy,
+  createdAt: contracts.createdAt,
+  updatedAt: contracts.updatedAt,
+  tenantId: contracts.tenantId,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -330,7 +356,7 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
     branchId: data.branchId,
     notes: data.notes,
     tenantId,
-  }).returning();
+  }).returning(CONTRACT_RETURNING);
 
   return c.json({ success: true, data: newContract }, 201);
 });
@@ -369,7 +395,7 @@ app.patch('/:id', zValidator('json', updateContractSchema), async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, id))
-    .returning();
+    .returning(CONTRACT_RETURNING);
 
   return c.json({ success: true, data: updatedContract });
 });
@@ -409,7 +435,7 @@ app.post('/:id/activate', async (c) => {
       .update(contracts)
       .set({ status: 'ACTIVE', updatedAt: new Date() })
       .where(eq(contracts.id, id))
-      .returning(),
+      .returning(CONTRACT_RETURNING),
     db
       .update(members)
       .set({
@@ -483,7 +509,7 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(contracts.id, id))
-      .returning(),
+      .returning(CONTRACT_RETURNING),
   ]);
 
   // Member status stays ACTIVE - the contract is paused, not the member
@@ -537,7 +563,7 @@ app.post('/:id/resume', async (c) => {
       .update(contracts)
       .set({ status: 'ACTIVE', updatedAt: new Date() })
       .where(eq(contracts.id, id))
-      .returning(),
+      .returning(CONTRACT_RETURNING),
     db.update(members).set({
       status: 'ACTIVE',
       updatedAt: new Date(),

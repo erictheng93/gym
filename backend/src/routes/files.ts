@@ -11,6 +11,25 @@ import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
 type Variables = AuthVariables & TenantVariables;
 
+const FILE_RETURNING = {
+  id: files.id,
+  createdAt: files.createdAt,
+  updatedAt: files.updatedAt,
+  tenantId: files.tenantId,
+  uploadedBy: files.uploadedBy,
+  filename: files.filename,
+  originalFilename: files.originalFilename,
+  mimeType: files.mimeType,
+  size: files.size,
+  storageKey: files.storageKey,
+  folder: files.folder,
+  title: files.title,
+  description: files.description,
+  width: files.width,
+  height: files.height,
+  metadata: files.metadata,
+};
+
 const app = new Hono<{ Variables: Variables }>();
 
 /**
@@ -231,7 +250,7 @@ app.patch('/:id', async (c) => {
         eq(files.tenantId, tenantId)
       )
     )
-    .returning();
+    .returning(FILE_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '檔案不存在' }, 404);
