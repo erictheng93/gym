@@ -96,64 +96,96 @@ async function updateUsageRecords() {
     .from(tenants)
     .where(eq(tenants.status, 'active'));
 
-  for (const tenant of allTenants) {
-    try {
-      const [branchCount] = await db
-        .select({ count: count() })
-        .from(branches)
-        .where(and(eq(branches.tenantId, tenant.id), eq(branches.status, 'active')));
-
-      const tenantBranches = await db
-        .select({ id: branches.id })
-        .from(branches)
-        .where(eq(branches.tenantId, tenant.id));
-
-      const branchIds = tenantBranches.map(b => b.id);
-
-      let memberCount = 0;
-      let employeeCount = 0;
-      let contractCount = 0;
-
-      if (branchIds.length > 0) {
-        const [mc] = await db
-          .select({ count: count() })
-          .from(members)
-          .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
-        memberCount = Number(mc?.count || 0);
-
-        const [ec] = await db
-          .select({ count: count() })
-          .from(employees)
-          .where(sql`${employees.branchId} = ANY(${branchIds}) AND ${employees.status} = 'ACTIVE'`);
-        employeeCount = Number(ec?.count || 0);
-
-        const [cc] = await db
-          .select({ count: count() })
-          .from(contracts)
-          .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
-        contractCount = Number(cc?.count || 0);
-      }
-
-      await db.insert(usageRecords).values({
-        tenantId: tenant.id,
-        recordDate: today,
-        branchesCount: Number(branchCount?.count || 0),
-        membersCount: memberCount,
-        employeesCount: employeeCount,
-        activeContractsCount: contractCount,
-      }).onConflictDoUpdate({
-        target: [usageRecords.tenantId, usageRecords.recordDate],
-        set: {
-          branchesCount: Number(branchCount?.count || 0),
-          membersCount: memberCount,
-          employeesCount: employeeCount,
-          activeContractsCount: contractCount,
-        },
-      });
-    } catch (error) {
-      console.error(`[Billing] Failed to update usage for tenant ${tenant.id}:`, error);
-    }
+  if (allTenants.length === 0) {
+    console.log('[Billing] No active tenants to update usage records');
+    return;
   }
 
-  console.log(`[Billing] Updated usage records for ${allTenants.length} tenants`);
+  try {
+    // Run all 4 count aggregations concurrently in batch (O(1) queries instead of 5N)
+    const [branchCounts, memberCounts, employeeCounts, contractCounts] = await Promise.all([
+      db
+        .select({
+          tenantId: branches.tenantId,
+          count: count(),
+        })
+        .from(branches)
+        .where(eq(branches.status, 'active'))
+        .groupBy(branches.tenantId),
+      db
+        .select({
+          tenantId: branches.tenantId,
+          count: count(),
+        })
+        .from(members)
+        .innerJoin(branches, eq(members.branchId, branches.id))
+        .where(eq(members.status, 'ACTIVE'))
+        .groupBy(branches.tenantId),
+      db
+        .select({
+          tenantId: branches.tenantId,
+          count: count(),
+        })
+        .from(employees)
+        .innerJoin(branches, eq(employees.branchId, branches.id))
+        .where(eq(employees.status, 'ACTIVE'))
+        .groupBy(branches.tenantId),
+      db
+        .select({
+          tenantId: branches.tenantId,
+          count: count(),
+        })
+        .from(contracts)
+        .innerJoin(branches, eq(contracts.branchId, branches.id))
+        .where(eq(contracts.status, 'ACTIVE'))
+        .groupBy(branches.tenantId),
+    ]);
+
+    const branchMap = new Map<string, number>();
+    for (const r of branchCounts) {
+      if (r.tenantId) branchMap.set(r.tenantId, Number(r.count || 0));
+    }
+
+    const memberMap = new Map<string, number>();
+    for (const r of memberCounts) {
+      if (r.tenantId) memberMap.set(r.tenantId, Number(r.count || 0));
+    }
+
+    const employeeMap = new Map<string, number>();
+    for (const r of employeeCounts) {
+      if (r.tenantId) employeeMap.set(r.tenantId, Number(r.count || 0));
+    }
+
+    const contractMap = new Map<string, number>();
+    for (const r of contractCounts) {
+      if (r.tenantId) contractMap.set(r.tenantId, Number(r.count || 0));
+    }
+
+    const usageValues = allTenants.map((tenant) => ({
+      tenantId: tenant.id,
+      recordDate: today,
+      branchesCount: branchMap.get(tenant.id) || 0,
+      membersCount: memberMap.get(tenant.id) || 0,
+      employeesCount: employeeMap.get(tenant.id) || 0,
+      activeContractsCount: contractMap.get(tenant.id) || 0,
+    }));
+
+    // Batch upsert in chunks of 100
+    for (let i = 0; i < usageValues.length; i += 100) {
+      const chunk = usageValues.slice(i, i + 100);
+      await db.insert(usageRecords).values(chunk).onConflictDoUpdate({
+        target: [usageRecords.tenantId, usageRecords.recordDate],
+        set: {
+          branchesCount: sql`excluded.branches_count`,
+          membersCount: sql`excluded.members_count`,
+          employeesCount: sql`excluded.employees_count`,
+          activeContractsCount: sql`excluded.active_contracts_count`,
+        },
+      });
+    }
+
+    console.log(`[Billing] Updated usage records for ${allTenants.length} tenants`);
+  } catch (error) {
+    console.error('[Billing] Failed to batch update usage records:', error);
+  }
 }

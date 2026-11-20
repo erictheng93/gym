@@ -135,18 +135,19 @@ export default defineNuxtConfig({
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
       runtimeCaching: [
         {
-          // API 請求 - Network First
-          urlPattern: /^https:\/\/.*\/items\/.*/i,
+          // Member API 請求 - Network First with timeout for offline support
+          urlPattern: /\/api\/member\/.*/i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'api-cache',
+            cacheName: 'member-api-cache',
             expiration: {
-              maxEntries: 50,
+              maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24
             },
             cacheableResponse: {
               statuses: [0, 200]
-            }
+            },
+            networkTimeoutSeconds: 5,
           }
         },
         {

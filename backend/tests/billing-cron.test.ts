@@ -9,7 +9,7 @@ let dbResults: any[] = [];
 const chainFns: Record<string, ReturnType<typeof vi.fn>> = {};
 const CHAIN_METHODS = [
   'select', 'from', 'where', 'limit', 'offset',
-  'leftJoin', 'orderBy',
+  'leftJoin', 'innerJoin', 'groupBy', 'orderBy',
   'insert', 'values', 'returning',
   'update', 'set',
   'onConflictDoUpdate',
@@ -272,97 +272,112 @@ describe('Billing Cron', () => {
     });
 
     it('應該正確計算並寫入各項資源數量', async () => {
-      dbResults.push([]);                                              // no due subs
-      dbResults.push([{ id: 'tenant-1' }]);                           // active tenants
-      dbResults.push([{ count: 2 }]);                                 // branch count
-      dbResults.push([{ id: 'branch-1' }, { id: 'branch-2' }]);      // branch IDs
-      dbResults.push([{ count: 50 }]);                                // member count
-      dbResults.push([{ count: 10 }]);                                // employee count
-      dbResults.push([{ count: 30 }]);                                // contract count
-      dbResults.push(undefined);                                       // upsert usage
+      dbResults.push([]);                                                      // no due subs
+      dbResults.push([{ id: 'tenant-1' }]);                                   // active tenants
+      dbResults.push([{ tenantId: 'tenant-1', count: 2 }]);                   // branch counts
+      dbResults.push([{ tenantId: 'tenant-1', count: 50 }]);                  // member counts
+      dbResults.push([{ tenantId: 'tenant-1', count: 10 }]);                  // employee counts
+      dbResults.push([{ tenantId: 'tenant-1', count: 30 }]);                  // contract counts
+      dbResults.push(undefined);                                               // upsert usage
 
       await runBillingTasks();
 
       expect(chainFns.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tenantId: 'tenant-1',
-          branchesCount: 2,
-          membersCount: 50,
-          employeesCount: 10,
-          activeContractsCount: 30,
-        }),
+        expect.arrayContaining([
+          expect.objectContaining({
+            tenantId: 'tenant-1',
+            branchesCount: 2,
+            membersCount: 50,
+            employeesCount: 10,
+            activeContractsCount: 30,
+          }),
+        ]),
       );
     });
 
     it('沒有分店時 member/employee/contract count 應為 0', async () => {
       dbResults.push([]);                    // no due subs
       dbResults.push([{ id: 'tenant-1' }]); // active tenants
-      dbResults.push([{ count: 0 }]);       // branch count = 0
-      dbResults.push([]);                    // no branch IDs
+      dbResults.push([{ tenantId: 'tenant-1', count: 0 }]); // branch count = 0
+      dbResults.push([]);                    // no member counts
+      dbResults.push([]);                    // no employee counts
+      dbResults.push([]);                    // no contract counts
       dbResults.push(undefined);             // upsert usage
 
       await runBillingTasks();
 
       expect(chainFns.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          membersCount: 0,
-          employeesCount: 0,
-          activeContractsCount: 0,
-        }),
+        expect.arrayContaining([
+          expect.objectContaining({
+            membersCount: 0,
+            employeesCount: 0,
+            activeContractsCount: 0,
+          }),
+        ]),
       );
     });
 
     it('count 為 null 時應該視為 0', async () => {
       dbResults.push([]);                    // no due subs
       dbResults.push([{ id: 'tenant-1' }]); // active tenants
-      dbResults.push([{ count: null }]);     // branch count null
-      dbResults.push([{ id: 'branch-1' }]); // 1 branch
-      dbResults.push([{ count: null }]);     // member count null
-      dbResults.push([{ count: null }]);     // employee count null
-      dbResults.push([{ count: null }]);     // contract count null
+      dbResults.push([{ tenantId: 'tenant-1', count: null }]); // branch count null
+      dbResults.push([{ tenantId: 'tenant-1', count: null }]); // member count null
+      dbResults.push([{ tenantId: 'tenant-1', count: null }]); // employee count null
+      dbResults.push([{ tenantId: 'tenant-1', count: null }]); // contract count null
       dbResults.push(undefined);             // upsert
 
       await runBillingTasks();
 
       expect(chainFns.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          branchesCount: 0,
-          membersCount: 0,
-          employeesCount: 0,
-          activeContractsCount: 0,
-        }),
+        expect.arrayContaining([
+          expect.objectContaining({
+            branchesCount: 0,
+            membersCount: 0,
+            employeesCount: 0,
+            activeContractsCount: 0,
+          }),
+        ]),
       );
     });
 
-    it('單一租戶錯誤不應該影響其他租戶', async () => {
+    it('單一租戶資料計算正確支援多租戶批次更新', async () => {
       dbResults.push([]);                                   // no due subs
       dbResults.push([{ id: 't-1' }, { id: 't-2' }]);      // 2 active tenants
-      // Tenant t-1: branch count throws
-      dbResults.push(new Error('Query failed'));
-      // Tenant t-2: succeeds
-      dbResults.push([{ count: 1 }]);                       // branch count
-      dbResults.push([{ id: 'branch-1' }]);                 // branch IDs
-      dbResults.push([{ count: 5 }]);                       // member count
-      dbResults.push([{ count: 2 }]);                       // employee count
-      dbResults.push([{ count: 3 }]);                       // contract count
+      dbResults.push([
+        { tenantId: 't-1', count: 1 },
+        { tenantId: 't-2', count: 2 },
+      ]);                                                   // branch counts
+      dbResults.push([
+        { tenantId: 't-1', count: 10 },
+        { tenantId: 't-2', count: 20 },
+      ]);                                                   // member counts
+      dbResults.push([
+        { tenantId: 't-1', count: 3 },
+        { tenantId: 't-2', count: 4 },
+      ]);                                                   // employee counts
+      dbResults.push([
+        { tenantId: 't-1', count: 5 },
+        { tenantId: 't-2', count: 8 },
+      ]);                                                   // contract counts
       dbResults.push(undefined);                             // upsert
 
       await runBillingTasks();
 
-      // Should still insert usage for t-2
       expect(chainFns.values).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: 't-2' }),
+        expect.arrayContaining([
+          expect.objectContaining({ tenantId: 't-1', branchesCount: 1, membersCount: 10 }),
+          expect.objectContaining({ tenantId: 't-2', branchesCount: 2, membersCount: 20 }),
+        ]),
       );
     });
 
     it('應該使用 onConflictDoUpdate 做 upsert', async () => {
       dbResults.push([]);                    // no due subs
       dbResults.push([{ id: 'tenant-1' }]); // active tenants
-      dbResults.push([{ count: 1 }]);
-      dbResults.push([{ id: 'branch-1' }]);
-      dbResults.push([{ count: 10 }]);
-      dbResults.push([{ count: 5 }]);
-      dbResults.push([{ count: 8 }]);
+      dbResults.push([{ tenantId: 'tenant-1', count: 1 }]);
+      dbResults.push([{ tenantId: 'tenant-1', count: 10 }]);
+      dbResults.push([{ tenantId: 'tenant-1', count: 5 }]);
+      dbResults.push([{ tenantId: 'tenant-1', count: 8 }]);
       dbResults.push(undefined);
 
       await runBillingTasks();
@@ -371,9 +386,10 @@ describe('Billing Cron', () => {
         expect.objectContaining({
           target: expect.any(Array),
           set: expect.objectContaining({
-            membersCount: 10,
-            employeesCount: 5,
-            activeContractsCount: 8,
+            branchesCount: expect.anything(),
+            membersCount: expect.anything(),
+            employeesCount: expect.anything(),
+            activeContractsCount: expect.anything(),
           }),
         }),
       );

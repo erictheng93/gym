@@ -391,6 +391,7 @@ export const classSessions = pgTable('class_sessions', {
   cancelledBy: uuid('cancelled_by'),
 }, (table) => [
   index('idx_sessions_date').on(table.branchId, table.sessionDate, table.startTime),
+  index('idx_sessions_instructor').on(table.instructorId, table.sessionStatus, table.sessionDate),
   uniqueIndex('uq_session').on(table.classId, table.branchId, table.sessionDate, table.startTime),
 ]);
 
@@ -1025,6 +1026,8 @@ export const classReviews = pgTable('class_reviews', {
   index('idx_class_reviews_member').on(table.memberId),
   index('idx_class_reviews_class').on(table.classId),
   index('idx_class_reviews_session').on(table.sessionId),
+  index('idx_class_reviews_coach_status').on(table.coachId, table.status),
+  index('idx_class_reviews_tenant').on(table.tenantId),
   uniqueIndex('uq_class_review_booking').on(table.bookingId),
 ]);
 
