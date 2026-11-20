@@ -1,6 +1,6 @@
 import { db, users, employees, branches, tenants, members, contracts, membershipPlans, sessions, jobTitles, checkIns, classes, classSessions, bookings, classReviews, classRecords, contractLogs, coachMemberAssignments, teachingMaterials, lessonPlans, coachNotes } from '../src/db/index.js';
 import { hash } from '@node-rs/argon2';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import app from '../src/app.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { generateCoachTokens } from '../src/services/coach-jwt.js';
@@ -103,7 +103,9 @@ export async function createTestFixtures() {
   }).onConflictDoNothing();
 
   // Create employee linked to user (with all required fields)
-  // First delete any existing employee with this id or employeeCode to ensure clean state
+  // First delete any existing class sessions and classes referencing this employee
+  await db.delete(classSessions).where(eq(classSessions.instructorId, TEST_EMPLOYEE_ID));
+  await db.delete(classes).where(eq(classes.instructorId, TEST_EMPLOYEE_ID));
   await db.delete(employees).where(eq(employees.id, TEST_EMPLOYEE_ID));
   await db.delete(employees).where(eq(employees.employeeCode, 'EMP001'));
 
@@ -327,8 +329,18 @@ export async function cleanupTestFixtures() {
   await db.delete(contractLogs).where(eq(contractLogs.tenantId, TEST_TENANT_ID));
   // Delete all check-ins for the test branch (including ones created during tests)
   await db.delete(checkIns).where(eq(checkIns.branchId, TEST_BRANCH_ID));
-  // Delete bookings, class records, sessions, schedules, classes (cascades handle most)
-  await db.delete(classes).where(eq(classes.branchId, TEST_BRANCH_ID));
+  // Delete class sessions and classes before employees to satisfy FK constraint
+  await db.delete(classSessions).where(or(
+    eq(classSessions.branchId, TEST_BRANCH_ID),
+    eq(classSessions.branchId, TEST_BRANCH_B_ID),
+    eq(classSessions.instructorId, TEST_EMPLOYEE_ID),
+    eq(classSessions.instructorId, TEST_EMPLOYEE_B_ID),
+    eq(classSessions.instructorId, TEST_STAFF_EMPLOYEE_ID)
+  ));
+  await db.delete(classes).where(or(
+    eq(classes.branchId, TEST_BRANCH_ID),
+    eq(classes.branchId, TEST_BRANCH_B_ID)
+  ));
   // Delete all contracts for the test tenant (including ones created during tests)
   await db.delete(contracts).where(eq(contracts.tenantId, TEST_TENANT_ID));
   // Delete all members for the test tenant

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, members, branches, contracts, membershipPlans, memberCredentials, memberSocialAccounts } from '../db/index.js';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, ne, desc, inArray } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
@@ -207,14 +207,14 @@ app.put(
     // Concurrently check if email or phone is already taken by another member
     const [existingEmailMembers, existingPhoneMembers] = await Promise.all([
       updates.email
-        ? db.select({ id: members.id }).from(members).where(eq(members.email, updates.email)).limit(1)
+        ? db.select({ id: members.id }).from(members).where(and(eq(members.email, updates.email), ne(members.id, memberInfo.id))).limit(1)
         : Promise.resolve([]),
       updates.phone
-        ? db.select({ id: members.id }).from(members).where(eq(members.phone, updates.phone)).limit(1)
+        ? db.select({ id: members.id }).from(members).where(and(eq(members.phone, updates.phone), ne(members.id, memberInfo.id))).limit(1)
         : Promise.resolve([]),
     ]);
 
-    if (existingEmailMembers[0] && existingEmailMembers[0].id !== memberInfo.id) {
+    if (existingEmailMembers[0]) {
       return c.json({
         success: false,
         error: '此 Email 已被使用',
@@ -222,7 +222,7 @@ app.put(
       }, 400);
     }
 
-    if (existingPhoneMembers[0] && existingPhoneMembers[0].id !== memberInfo.id) {
+    if (existingPhoneMembers[0]) {
       return c.json({
         success: false,
         error: '此手機號碼已被使用',
@@ -284,7 +284,7 @@ app.post(
         .where(eq(members.id, memberInfo.id))
         .limit(1),
       profileData.phone
-        ? db.select({ id: members.id }).from(members).where(eq(members.phone, profileData.phone)).limit(1)
+        ? db.select({ id: members.id }).from(members).where(and(eq(members.phone, profileData.phone), ne(members.id, memberInfo.id))).limit(1)
         : Promise.resolve([]),
     ]);
 
@@ -296,7 +296,7 @@ app.post(
       }, 404);
     }
 
-    if (existingPhoneMembers[0] && existingPhoneMembers[0].id !== memberInfo.id) {
+    if (existingPhoneMembers[0]) {
       return c.json({
         success: false,
         error: '此手機號碼已被使用',
