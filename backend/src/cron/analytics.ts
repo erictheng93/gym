@@ -1,5 +1,5 @@
 import { db, tenants, branches, members, contracts, payments, usageRecords } from '../db/index.js';
-import { eq, and, sql, sum, count } from 'drizzle-orm';
+import { eq, and, sql, sum, count, gte, lte } from 'drizzle-orm';
 
 export async function runAnalyticsTasks() {
   console.log('[Analytics] Starting analytics tasks...');
@@ -17,6 +17,9 @@ async function generateDailySnapshot() {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+  const yesterdayStart = new Date(yesterdayStr + 'T00:00:00.000Z');
+  const yesterdayEnd = new Date(yesterdayStr + 'T23:59:59.999Z');
+
   const allTenants = await db
     .select({ id: tenants.id, name: tenants.name })
     .from(tenants)
@@ -33,28 +36,33 @@ async function generateDailySnapshot() {
 
       if (branchIds.length === 0) continue;
 
-      const [revenueResult] = await db
-        .select({ total: sum(payments.amount) })
-        .from(payments)
-        .where(
-          and(
-            sql`${payments.branchId} = ANY(${branchIds})`,
-            eq(payments.type, 'INCOME'),
-            sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
-          )
-        );
+      // Execute metrics in parallel with sargable date range filter
+      const [revenueResult, memberCountResult, contractCountResult] = await Promise.all([
+        db
+          .select({ total: sum(payments.amount) })
+          .from(payments)
+          .where(
+            and(
+              sql`${payments.branchId} = ANY(${branchIds})`,
+              eq(payments.type, 'INCOME'),
+              gte(payments.paymentDate, yesterdayStart),
+              lte(payments.paymentDate, yesterdayEnd)
+            )
+          ),
+        db
+          .select({ count: count() })
+          .from(members)
+          .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`),
+        db
+          .select({ count: count() })
+          .from(contracts)
+          .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`),
+      ]);
 
-      const dailyRevenue = Number(revenueResult?.total || 0);
-
-      const [memberCount] = await db
-        .select({ count: count() })
-        .from(members)
-        .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
-
-      const [contractCount] = await db
-        .select({ count: count() })
-        .from(contracts)
-        .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
+      const [revenueRow] = revenueResult;
+      const dailyRevenue = Number(revenueRow?.total || 0);
+      const [memberCount] = memberCountResult;
+      const [contractCount] = contractCountResult;
 
       await db.insert(usageRecords).values({
         tenantId: tenant.id,

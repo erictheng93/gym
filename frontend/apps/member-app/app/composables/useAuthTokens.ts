@@ -7,6 +7,9 @@
 
 import type { TokenState } from '../types/auth'
 
+// Module-level single-flight promise to prevent refresh token stampede
+let activeRefreshPromise: Promise<boolean> | null = null
+
 export const useAuthTokens = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
@@ -54,35 +57,46 @@ export const useAuthTokens = () => {
 
   /**
    * Refresh access token using refresh token
+   * Uses single-flight promise lock to prevent concurrent refresh stampede
    * Returns true if refresh was successful
    */
   const refreshAccessToken = async (): Promise<boolean> => {
     if (!refreshToken.value) return false
 
-    try {
-      const response = await $fetch<{
-        success: boolean
-        data: {
-          accessToken: string
-          refreshToken: string
-        }
-      }>(`${apiUrl}/api/member/otp/refresh`, {
-        method: 'POST',
-        body: {
-          refreshToken: refreshToken.value,
-        },
-      })
-
-      if (response.success && response.data) {
-        accessToken.value = response.data.accessToken
-        refreshToken.value = response.data.refreshToken
-        return true
-      }
-
-      return false
-    } catch {
-      return false
+    if (activeRefreshPromise) {
+      return activeRefreshPromise
     }
+
+    activeRefreshPromise = (async () => {
+      try {
+        const response = await $fetch<{
+          success: boolean
+          data: {
+            accessToken: string
+            refreshToken: string
+          }
+        }>(`${apiUrl}/api/member/otp/refresh`, {
+          method: 'POST',
+          body: {
+            refreshToken: refreshToken.value,
+          },
+        })
+
+        if (response.success && response.data) {
+          accessToken.value = response.data.accessToken
+          refreshToken.value = response.data.refreshToken
+          return true
+        }
+
+        return false
+      } catch {
+        return false
+      } finally {
+        activeRefreshPromise = null
+      }
+    })()
+
+    return activeRefreshPromise
   }
 
   /**

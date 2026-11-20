@@ -6,6 +6,7 @@ import {
   verifyECPayWebhook,
   verifyLinePayWebhook,
 } from '../services/payment.js';
+import { updateContractPaymentStatus } from '../hooks/payments.js';
 
 // =============================================================================
 // PAYMENT WEBHOOK ROUTES
@@ -332,33 +333,52 @@ interface PaymentSuccessDetails {
 
 async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDetails): Promise<void> {
   try {
-    // Update payment record with transaction details
-    await db
-      .update(payments)
-      .set({
-        receiptNo: details.transactionId,
-        notes: `Paid via ${details.gateway} - Transaction: ${details.transactionId}`,
-      })
-      .where(eq(payments.id, paymentId));
+    const runInTx = async (tx: typeof db) => {
+      // 1. Get payment details to check idempotency and contractId
+      const selectResult = await tx
+        .select({
+          contractId: payments.contractId,
+          receiptNo: payments.receiptNo,
+        })
+        .from(payments)
+        .where(eq(payments.id, paymentId))
+        .limit(1);
 
-    // Get payment details to update contract
-    const [payment] = await db
-      .select({ contractId: payments.contractId })
-      .from(payments)
-      .where(eq(payments.id, paymentId))
-      .limit(1);
+      const payment = selectResult && selectResult.length > 0 ? selectResult[0] : null;
 
-    if (payment?.contractId) {
-      // Update contract status to ACTIVE if it was DRAFT
-      await db
-        .update(contracts)
-        .set({ status: 'ACTIVE' })
-        .where(eq(contracts.id, payment.contractId));
+      // Idempotency: If already processed with this transaction ID, skip duplicate execution
+      if (details.transactionId && payment?.receiptNo === details.transactionId) {
+        console.log(`[Payment Success] Payment ${paymentId} already processed with transaction ${details.transactionId}`);
+        return;
+      }
 
-      console.log(`[Payment Success] Contract ${payment.contractId} activated`);
+      // 2. Update payment record with transaction details
+      await tx
+        .update(payments)
+        .set({
+          receiptNo: details.transactionId,
+          notes: `Paid via ${details.gateway} - Transaction: ${details.transactionId}`,
+        })
+        .where(eq(payments.id, paymentId));
+
+      if (payment?.contractId) {
+        // Update contract status to ACTIVE if it was DRAFT
+        await tx
+          .update(contracts)
+          .set({ status: 'ACTIVE' })
+          .where(eq(contracts.id, payment.contractId));
+
+        console.log(`[Payment Success] Contract ${payment.contractId} activated`);
+      }
+
+      console.log(`[Payment Success] Payment ${paymentId} completed via ${details.gateway}`);
+    };
+
+    if (typeof db.transaction === 'function') {
+      await db.transaction(runInTx);
+    } else {
+      await runInTx(db);
     }
-
-    console.log(`[Payment Success] Payment ${paymentId} completed via ${details.gateway}`);
 
   } catch (error) {
     console.error('[Payment Success] Error:', error);

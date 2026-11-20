@@ -295,26 +295,26 @@ const handleDelete = async () => {
         <div v-else class="contracts-grid">
           <NuxtLink
             v-for="contract in memberContracts"
-            :key="contract.id"
-            :to="`/contracts/${contract.id}`"
+            :key="contract.id || (contract as any).contract?.id"
+            :to="`/contracts/${contract.id || (contract as any).contract?.id}`"
             class="contract-card card card-interactive"
           >
             <div class="contract-header">
-              <code class="contract-no">{{ contract.contractNo }}</code>
-              <span :class="['badge', getContractStatusBadge(contract.contractStatus || '').class]">
-                {{ getContractStatusBadge(contract.contractStatus || '').label }}
+              <code class="contract-no">{{ contract.contractNo || (contract as any).contract?.contractNo || (contract as any).contract_no }}</code>
+              <span :class="['badge', getContractStatusBadge(contract.contractStatus || (contract as any).status || (contract as any).contract?.status || '').class]">
+                {{ getContractStatusBadge(contract.contractStatus || (contract as any).status || (contract as any).contract?.status || '').label }}
               </span>
             </div>
-            <h4 class="plan-name">{{ contract.plan?.name || '—' }}</h4>
+            <h4 class="plan-name">{{ contract.plan?.name || (contract as any).plan?.name || '—' }}</h4>
             <div class="contract-dates">
-              <span>{{ formatDate(contract.startDate) }}</span>
+              <span>{{ formatDate(contract.startDate || (contract as any).contract?.startDate || (contract as any).start_date) }}</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
               </svg>
-              <span>{{ formatDate(contract.endDate) }}</span>
+              <span>{{ formatDate(contract.endDate || (contract as any).contract?.endDate || (contract as any).end_date) }}</span>
             </div>
             <div class="contract-amount">
-              NT$ {{ contract.totalAmount?.toLocaleString() || 0 }}
+              NT$ {{ (contract.totalAmount ?? (contract as any).contract?.totalAmount ?? (contract as any).total_amount ?? 0).toLocaleString() }}
             </div>
           </NuxtLink>
         </div>

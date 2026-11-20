@@ -70,6 +70,7 @@ watch([selectedBranch, selectedStatus], () => {
 })
 
 watch(currentPage, () => {
+  selectedIds.value = []
   loadMembers()
 })
 
@@ -171,11 +172,6 @@ const handleExportSelected = () => {
 
   toast.success(`成功匯出 ${selectedMembers.length} 位會員資料`)
 }
-
-// Clear selection when page changes
-watch(currentPage, () => {
-  selectedIds.value = []
-})
 
 // Get avatar variant based on status
 const getAvatarVariant = (status: string) => {
