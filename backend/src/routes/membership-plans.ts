@@ -142,22 +142,12 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [[existing], branchIds] = await Promise.all([
-    db
-      .select()
-      .from(membershipPlans)
-      .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
-      .limit(1),
-    data.branchId ? getTenantBranchIds(tenantId) : Promise.resolve(null),
-  ]);
-
-  if (!existing) {
-    return c.json({ success: false, error: '方案不存在' }, 404);
-  }
-
   // Validate branch if updated
-  if (data.branchId && branchIds && !branchIds.includes(data.branchId)) {
-    return c.json({ success: false, error: '無效的分店' }, 400);
+  if (data.branchId) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
+      return c.json({ success: false, error: '無效的分店' }, 400);
+    }
   }
 
   const updateData: Record<string, unknown> = {
@@ -169,7 +159,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
     updateData.price = String(data.price);
   }
 
-  const [updated] = await db.update(membershipPlans).set(updateData).where(eq(membershipPlans.id, id)).returning();
+  const [updated] = await db
+    .update(membershipPlans)
+    .set(updateData)
+    .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '方案不存在' }, 404);
+  }
 
   return c.json({
     success: true,

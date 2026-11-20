@@ -125,23 +125,17 @@ app.get('/summary', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [[incomeResult], [refundResult], [countResult]] = await Promise.all([
-    db
-      .select({ total: sum(payments.amount) })
-      .from(payments)
-      .where(and(whereCondition, eq(payments.type, 'INCOME'))),
-    db
-      .select({ total: sum(payments.amount) })
-      .from(payments)
-      .where(and(whereCondition, eq(payments.type, 'REFUND'))),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(payments)
-      .where(whereCondition),
-  ]);
+  const [summaryResult] = await db
+    .select({
+      totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'INCOME' THEN ${payments.amount} ELSE 0 END), 0)`,
+      totalRefund: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'REFUND' THEN ${payments.amount} ELSE 0 END), 0)`,
+      count: sql<number>`count(*)`,
+    })
+    .from(payments)
+    .where(whereCondition);
 
-  const totalIncome = Number(incomeResult?.total || 0);
-  const totalRefund = Number(refundResult?.total || 0);
+  const totalIncome = Number(summaryResult?.totalIncome || 0);
+  const totalRefund = Number(summaryResult?.totalRefund || 0);
 
   return c.json({
     success: true,
@@ -149,7 +143,7 @@ app.get('/summary', async (c) => {
       totalIncome,
       totalRefund,
       netIncome: totalIncome - totalRefund,
-      paymentCount: Number(countResult?.count || 0),
+      paymentCount: Number(summaryResult?.count || 0),
     },
   });
 });

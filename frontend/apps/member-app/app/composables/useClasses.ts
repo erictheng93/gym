@@ -270,26 +270,55 @@ export const useClasses = () => {
     })
   }
 
-  /**
-   * Get schedules for a specific day of week
-   */
-  const getSchedulesByDay = (dayOfWeek: number) => {
-    return schedules.value
-      .filter(s => s.day_of_week === dayOfWeek && s.is_active)
-      .sort((a, b) => a.start_time.localeCompare(b.start_time))
-  }
+  const schedulesByDayMap = computed(() => {
+    const map = new Map<number, ClassSchedule[]>()
+    for (const s of schedules.value) {
+      if (!s.is_active) continue
+      let list = map.get(s.day_of_week)
+      if (!list) {
+        list = []
+        map.set(s.day_of_week, list)
+      }
+      list.push(s)
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.start_time.localeCompare(b.start_time))
+    }
+    return map
+  })
 
   /**
-   * Get sessions for a specific date
+   * Get schedules for a specific day of week (O(1) memoized lookup)
    */
-  const getSessionsByDate = (date: string) => {
-    return upcomingSessions.value
-      .filter(s => s.session_date === date)
-      .sort((a, b) => {
+  const getSchedulesByDay = (dayOfWeek: number) => {
+    return schedulesByDayMap.value.get(dayOfWeek) || []
+  }
+
+  const sessionsByDateMap = computed(() => {
+    const map = new Map<string, ClassSession[]>()
+    for (const s of upcomingSessions.value) {
+      let list = map.get(s.session_date)
+      if (!list) {
+        list = []
+        map.set(s.session_date, list)
+      }
+      list.push(s)
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
         const timeA = a.schedule?.start_time || ''
         const timeB = b.schedule?.start_time || ''
         return timeA.localeCompare(timeB)
       })
+    }
+    return map
+  })
+
+  /**
+   * Get sessions for a specific date (O(1) memoized lookup)
+   */
+  const getSessionsByDate = (date: string) => {
+    return sessionsByDateMap.value.get(date) || []
   }
 
   /**

@@ -66,18 +66,27 @@ export const useBookings = () => {
   const isOfflineData = useState('bookings_is_offline', () => false)
 
   /**
-   * Split bookings into upcoming and past
+   * Split bookings into upcoming and past (single-pass partition)
    */
   const splitBookings = (bookings: Booking[]) => {
-    const now = new Date()
-    upcomingBookings.value = bookings.filter(b => {
-      const sessionDate = new Date(b.session_date || b.session?.session_date || '')
-      return sessionDate >= now && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
-    })
-    pastBookings.value = bookings.filter(b => {
-      const sessionDate = new Date(b.session_date || b.session?.session_date || '')
-      return sessionDate < now || ['CANCELLED', 'NO_SHOW', 'ATTENDED'].includes(b.booking_status)
-    })
+    const nowMs = Date.now()
+    const upcoming: Booking[] = []
+    const past: Booking[] = []
+
+    for (const b of bookings) {
+      const dateStr = b.session_date || b.session?.session_date
+      const sessionTime = dateStr ? new Date(dateStr).getTime() : 0
+      const isUpcomingStatus = b.booking_status === 'CONFIRMED' || b.booking_status === 'WAITLISTED'
+
+      if (sessionTime >= nowMs && isUpcomingStatus) {
+        upcoming.push(b)
+      } else {
+        past.push(b)
+      }
+    }
+
+    upcomingBookings.value = upcoming
+    pastBookings.value = past
   }
 
   /**
