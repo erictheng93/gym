@@ -8,6 +8,8 @@ definePageMeta({
 const { member } = useMemberAuth()
 const { getCache, setCache } = useOfflineSync()
 const toast = useToast()
+const sound = useSoundEffects()
+const haptic = useHapticFeedback()
 
 const qrCodeDataUrl = ref('')
 const qrExpiry = ref<Date | null>(null)
@@ -135,13 +137,24 @@ const handleTouchEnd = async () => {
 
   if (pullDistance.value >= PULL_THRESHOLD) {
     isRefreshing.value = true
+    haptic.medium()
     await generateQRCode()
+    sound.success()
+    haptic.success()
     toast.success('已更新')
   }
 
   isPulling.value = false
   pullDistance.value = 0
   isRefreshing.value = false
+}
+
+const handleManualRefresh = async () => {
+  sound.tap()
+  haptic.light()
+  await generateQRCode()
+  sound.success()
+  haptic.success()
 }
 
 // 初始化
@@ -286,7 +299,7 @@ const contractStatusText = computed(() => {
           class="refresh-btn"
           type="button"
           aria-label="立即刷新 QR Code"
-          @click="generateQRCode"
+          @click="handleManualRefresh"
         >
           <svg
             width="16"

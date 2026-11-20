@@ -194,6 +194,8 @@ const userEmail = computed(() => {
 })
 
 // Command Palette state (Raycast / Linear grade)
+const sound = useSoundEffects()
+const haptic = useHapticFeedback()
 const isCommandPaletteOpen = ref(false)
 const commandSearchQuery = ref('')
 const selectedCommandIndex = ref(0)
@@ -271,7 +273,11 @@ const commands = computed<CommandItem[]>(() => [
     subtitle: '切換全域視覺主題風格',
     category: '系統',
     icon: isDark.value ? '☀️' : '🌙',
-    action: () => toggleTheme()
+    action: () => {
+      sound.toggle()
+      haptic.light()
+      toggleTheme()
+    }
   },
   {
     id: 'action-logout',
@@ -294,6 +300,8 @@ const filteredCommands = computed(() => {
 })
 
 const openCommandPalette = () => {
+  sound.pop()
+  haptic.light()
   isCommandPaletteOpen.value = true
   commandSearchQuery.value = ''
   selectedCommandIndex.value = 0
@@ -309,6 +317,8 @@ const closeCommandPalette = () => {
 const executeSelectedCommand = () => {
   const item = filteredCommands.value[selectedCommandIndex.value]
   if (item) {
+    sound.select()
+    haptic.medium()
     closeCommandPalette()
     item.action()
   }
@@ -330,11 +340,15 @@ const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault()
       if (filteredCommands.value.length > 0) {
         selectedCommandIndex.value = (selectedCommandIndex.value + 1) % filteredCommands.value.length
+        sound.tap()
+        haptic.selection()
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       if (filteredCommands.value.length > 0) {
         selectedCommandIndex.value = (selectedCommandIndex.value - 1 + filteredCommands.value.length) % filteredCommands.value.length
+        sound.tap()
+        haptic.selection()
       }
     } else if (e.key === 'Enter') {
       e.preventDefault()
