@@ -33,6 +33,14 @@ Chart.register(
   Filler
 )
 
+// Cached formatters to avoid re-instantiation on every chart render
+const chartNumberFormatter = new Intl.NumberFormat('zh-TW')
+const chartCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
 // ============================================
 // Types
 // ============================================
@@ -414,18 +422,14 @@ export const useCharts = () => {
    * 格式化數字 (千分位)
    */
   const formatNumber = (value: number): string => {
-    return new Intl.NumberFormat('zh-TW').format(value)
+    return chartNumberFormatter.format(value)
   }
 
   /**
    * 格式化金額
    */
   const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('zh-TW', {
-      style: 'currency',
-      currency: 'TWD',
-      maximumFractionDigits: 0
-    }).format(value)
+    return chartCurrencyFormatter.format(value)
   }
 
   /**

@@ -12,6 +12,29 @@ import { deduplicateRequest } from '../utils/debounce'
 const CACHE_KEY_ISSUES = 'member:issues'
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
+  EQUIPMENT: '設備問題',
+  SERVICE: '服務問題',
+  SUGGESTION: '意見建議',
+  COMPLAINT: '客訴反映',
+}
+
+const ISSUE_TYPE_ICONS: Record<IssueType, string> = {
+  EQUIPMENT: 'tool',
+  SERVICE: 'users',
+  SUGGESTION: 'lightbulb',
+  COMPLAINT: 'alert-triangle',
+}
+
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const issueDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 export interface Issue {
   id: string
   member_id: string
@@ -225,26 +248,14 @@ export const useIssues = () => {
    * Get type label
    */
   const getTypeLabel = (type: IssueType): string => {
-    const labels: Record<IssueType, string> = {
-      EQUIPMENT: '設備問題',
-      SERVICE: '服務問題',
-      SUGGESTION: '意見建議',
-      COMPLAINT: '客訴反映',
-    }
-    return labels[type] || type
+    return ISSUE_TYPE_LABELS[type] || type
   }
 
   /**
    * Get type icon
    */
   const getTypeIcon = (type: IssueType): string => {
-    const icons: Record<IssueType, string> = {
-      EQUIPMENT: 'tool',
-      SERVICE: 'users',
-      SUGGESTION: 'lightbulb',
-      COMPLAINT: 'alert-triangle',
-    }
-    return icons[type] || 'help-circle'
+    return ISSUE_TYPE_ICONS[type] || 'help-circle'
   }
 
   /**
@@ -254,20 +265,13 @@ export const useIssues = () => {
     return issue.status === 'SUBMITTED'
   }
 
-// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
-const issueDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
   /**
    * Format date for display
    */
   const formatDate = (dateStr: string): string => {
-    return issueDateFormatter.format(new Date(dateStr))
+    if (!dateStr) return '—'
+    const date = new Date(dateStr)
+    return isNaN(date.getTime()) ? '—' : issueDateFormatter.format(date)
   }
 
   /**

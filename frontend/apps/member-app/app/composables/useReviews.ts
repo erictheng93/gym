@@ -6,6 +6,17 @@
 import { extractErrorMessage } from '../utils/apiHelpers'
 import { deduplicateRequest } from '../utils/debounce'
 
+const RATING_LABELS: Record<number, string> = {
+  5: '非常滿意',
+  4: '滿意',
+  3: '普通',
+  2: '不滿意',
+  1: '非常不滿意',
+}
+
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+
 export interface Review {
   id: string
   booking_id: string
@@ -230,24 +241,16 @@ export const useReviews = () => {
    * Get rating label
    */
   const getRatingLabel = (rating: number): string => {
-    const labels: Record<number, string> = {
-      5: '非常滿意',
-      4: '滿意',
-      3: '普通',
-      2: '不滿意',
-      1: '非常不滿意',
-    }
-    return labels[rating] || ''
+    return RATING_LABELS[rating] || ''
   }
-
-// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
-const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
 
   /**
    * Format review date
    */
   const formatReviewDate = (dateStr: string): string => {
+    if (!dateStr) return '—'
     const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return '—'
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))

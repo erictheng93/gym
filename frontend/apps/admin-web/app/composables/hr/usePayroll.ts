@@ -79,6 +79,30 @@ const inFlightSalaryRecordsMap = new Map<string, Promise<void>>()
 const inFlightSingleSalaryRecordMap = new Map<string, Promise<void>>()
 const inFlightPromotionsMap = new Map<string, Promise<void>>()
 
+const SALARY_STATUS_LABELS: Record<SalaryRecord['status'], string> = {
+  PENDING: '待審核',
+  APPROVED: '已核准',
+  PAID: '已發放'
+}
+
+const SALARY_STATUS_VARIANTS: Record<SalaryRecord['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+  PENDING: 'warning',
+  APPROVED: 'info',
+  PAID: 'success'
+}
+
+const PROMOTION_TYPE_LABELS: Record<PromotionRecord['type'], string> = {
+  PROMOTION: '升遷',
+  TRANSFER: '調動',
+  DEMOTION: '降職'
+}
+
+const payrollCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  minimumFractionDigits: 0
+})
+
 export const usePayroll = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -375,38 +399,19 @@ export const usePayroll = () => {
 
   // Helper functions
   const getStatusLabel = (status: SalaryRecord['status']): string => {
-    const labels: Record<SalaryRecord['status'], string> = {
-      PENDING: '待審核',
-      APPROVED: '已核准',
-      PAID: '已發放'
-    }
-    return labels[status] || status
+    return SALARY_STATUS_LABELS[status] || status
   }
 
   const getStatusVariant = (status: SalaryRecord['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
-    const variants: Record<SalaryRecord['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
-      PENDING: 'warning',
-      APPROVED: 'info',
-      PAID: 'success'
-    }
-    return variants[status] || 'default'
+    return SALARY_STATUS_VARIANTS[status] || 'default'
   }
 
   const getPromotionTypeLabel = (type: PromotionRecord['type']): string => {
-    const labels: Record<PromotionRecord['type'], string> = {
-      PROMOTION: '升遷',
-      TRANSFER: '調動',
-      DEMOTION: '降職'
-    }
-    return labels[type] || type
+    return PROMOTION_TYPE_LABELS[type] || type
   }
 
   const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('zh-TW', {
-      style: 'currency',
-      currency: 'TWD',
-      minimumFractionDigits: 0
-    }).format(amount)
+    return payrollCurrencyFormatter.format(amount)
   }
 
   // Alias for generateSalaryRecords

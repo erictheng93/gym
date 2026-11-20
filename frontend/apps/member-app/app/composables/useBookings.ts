@@ -13,6 +13,24 @@ import { formatDateWithDay } from '@gym-nexus/shared'
 const CACHE_KEY_MY_BOOKINGS = 'member:bookings'
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+const ACTIVE_BOOKING_STATUSES = new Set(['CONFIRMED', 'WAITLISTED'])
+
+const BOOKING_STATUS_LABELS: Record<string, string> = {
+  'CONFIRMED': '已確認',
+  'WAITLISTED': '候補中',
+  'CANCELLED': '已取消',
+  'NO_SHOW': '未出席',
+  'ATTENDED': '已出席',
+}
+
+const BOOKING_STATUS_COLORS: Record<string, string> = {
+  'CONFIRMED': 'success',
+  'WAITLISTED': 'warning',
+  'CANCELLED': 'muted',
+  'NO_SHOW': 'error',
+  'ATTENDED': 'primary',
+}
+
 export interface Booking {
   id: string
   session_id: string
@@ -256,7 +274,7 @@ export const useBookings = () => {
    */
   const hasBookedSession = (sessionId: string): boolean => {
     return myBookings.value.some(
-      b => b.session_id === sessionId && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
+      b => b.session_id === sessionId && ACTIVE_BOOKING_STATUSES.has(b.booking_status)
     )
   }
 
@@ -265,7 +283,7 @@ export const useBookings = () => {
    */
   const getBookingForSession = (sessionId: string): Booking | undefined => {
     return myBookings.value.find(
-      b => b.session_id === sessionId && ['CONFIRMED', 'WAITLISTED'].includes(b.booking_status)
+      b => b.session_id === sessionId && ACTIVE_BOOKING_STATUSES.has(b.booking_status)
     )
   }
 
@@ -273,28 +291,14 @@ export const useBookings = () => {
    * Get booking status label
    */
   const getStatusLabel = (status: string): string => {
-    const labels: Record<string, string> = {
-      'CONFIRMED': '已確認',
-      'WAITLISTED': '候補中',
-      'CANCELLED': '已取消',
-      'NO_SHOW': '未出席',
-      'ATTENDED': '已出席',
-    }
-    return labels[status] || status
+    return BOOKING_STATUS_LABELS[status] || status
   }
 
   /**
    * Get booking status color class
    */
   const getStatusColor = (status: string): string => {
-    const colors: Record<string, string> = {
-      'CONFIRMED': 'success',
-      'WAITLISTED': 'warning',
-      'CANCELLED': 'muted',
-      'NO_SHOW': 'error',
-      'ATTENDED': 'primary',
-    }
-    return colors[status] || 'muted'
+    return BOOKING_STATUS_COLORS[status] || 'muted'
   }
 
   /**
@@ -302,7 +306,7 @@ export const useBookings = () => {
    * Usually can cancel up to X hours before the session
    */
   const canCancel = (booking: Booking, hoursBeforeSession = 2): boolean => {
-    if (!['CONFIRMED', 'WAITLISTED'].includes(booking.booking_status)) {
+    if (!ACTIVE_BOOKING_STATUSES.has(booking.booking_status)) {
       return false
     }
 

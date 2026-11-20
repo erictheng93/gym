@@ -184,8 +184,10 @@ export function getDayName(dayIndex: number): string {
  * @example
  * formatDateWithDay('2024-01-15') // '1/15 (週一)'
  */
-export function formatDateWithDay(dateStr: string): string {
+export function formatDateWithDay(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—'
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '—'
   const month = date.getMonth() + 1
   const day = date.getDate()
   const dayName = DAY_OF_WEEK_NAMES[date.getDay()]

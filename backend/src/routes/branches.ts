@@ -23,12 +23,27 @@ const createBranchSchema = z.object({
 
 const updateBranchSchema = createBranchSchema.partial();
 
+const BRANCH_SELECT = {
+  id: branches.id,
+  status: branches.status,
+  createdAt: branches.createdAt,
+  updatedAt: branches.updatedAt,
+  name: branches.name,
+  code: branches.code,
+  type: branches.type,
+  address: branches.address,
+  phone: branches.phone,
+  taxId: branches.taxId,
+  settings: branches.settings,
+  tenantId: branches.tenantId,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [tenantBranches, employeeCounts, memberCounts] = await Promise.all([
     db
-      .select()
+      .select(BRANCH_SELECT)
       .from(branches)
       .where(eq(branches.tenantId, tenantId))
       .orderBy(desc(branches.type), branches.name),
@@ -77,7 +92,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [branch] = await db
-    .select()
+    .select(BRANCH_SELECT)
     .from(branches)
     .where(eq(branches.id, id))
     .limit(1);
@@ -125,20 +140,7 @@ app.get('/:id', async (c) => {
   });
 });
 
-const BRANCH_RETURNING = {
-  id: branches.id,
-  status: branches.status,
-  createdAt: branches.createdAt,
-  updatedAt: branches.updatedAt,
-  name: branches.name,
-  code: branches.code,
-  type: branches.type,
-  address: branches.address,
-  phone: branches.phone,
-  taxId: branches.taxId,
-  settings: branches.settings,
-  tenantId: branches.tenantId,
-};
+const BRANCH_RETURNING = BRANCH_SELECT;
 
 app.post('/', requireRole('super_admin', 'admin'), zValidator('json', createBranchSchema), async (c) => {
   const tenantId = c.get('tenantId')!;

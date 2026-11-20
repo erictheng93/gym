@@ -41,6 +41,25 @@ const createScheduleSchema = z.object({
   validUntil: z.string().optional().nullable(),
 });
 
+const CLASS_RETURNING = {
+  id: classes.id,
+  status: classes.status,
+  createdAt: classes.createdAt,
+  updatedAt: classes.updatedAt,
+  name: classes.name,
+  description: classes.description,
+  durationMinutes: classes.durationMinutes,
+  maxCapacity: classes.maxCapacity,
+  instructorId: classes.instructorId,
+  branchId: classes.branchId,
+  category: classes.category,
+  difficultyLevel: classes.difficultyLevel,
+  imageUrl: classes.imageUrl,
+  isActive: classes.isActive,
+  requiresCount: classes.requiresCount,
+  countDeduction: classes.countDeduction,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
@@ -63,7 +82,7 @@ app.get('/', async (c) => {
 
   const result = await db
     .select({
-      class: classes,
+      class: CLASS_RETURNING,
       instructor: {
         id: employees.id,
         fullName: employees.fullName,
@@ -96,7 +115,7 @@ app.get('/:id', async (c) => {
   const [[classItem], branchIds, schedules] = await Promise.all([
     db
       .select({
-        class: classes,
+        class: CLASS_RETURNING,
         instructor: {
           id: employees.id,
           fullName: employees.fullName,
@@ -146,25 +165,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const CLASS_RETURNING = {
-  id: classes.id,
-  status: classes.status,
-  createdAt: classes.createdAt,
-  updatedAt: classes.updatedAt,
-  name: classes.name,
-  description: classes.description,
-  durationMinutes: classes.durationMinutes,
-  maxCapacity: classes.maxCapacity,
-  instructorId: classes.instructorId,
-  branchId: classes.branchId,
-  category: classes.category,
-  difficultyLevel: classes.difficultyLevel,
-  imageUrl: classes.imageUrl,
-  isActive: classes.isActive,
-  requiresCount: classes.requiresCount,
-  countDeduction: classes.countDeduction,
-};
 
 const CLASS_SCHEDULE_RETURNING = {
   id: classSchedules.id,
