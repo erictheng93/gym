@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Contract Alerts Component
+ * Contract Alerts Component (Awwwards Grade)
  * 合約到期警示列表
  */
 
@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'view-contract', contractId: string): void
   (e: 'view-all'): void
+  (e: 'refresh'): void
 }>()
 
 // 過濾並限制數量
@@ -55,35 +56,37 @@ const formatDays = (days: number) => {
   <div class="alerts-container">
     <div class="alerts-header">
       <div class="header-left">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon">
-          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-          <line x1="12" x2="12" y1="9" y2="13" />
-          <line x1="12" x2="12.01" y1="17" y2="17" />
-        </svg>
+        <div class="alert-icon-box">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+            <line x1="12" x2="12" y1="9" y2="13" />
+            <line x1="12" x2="12.01" y1="17" y2="17" />
+          </svg>
+        </div>
         <h3 class="alerts-title">合約到期警示</h3>
       </div>
       <div class="header-right">
         <div v-if="alerts?.summary" class="summary-badges">
-          <span class="badge badge-urgent">{{ alerts.summary.urgent }} 緊急</span>
-          <span class="badge badge-soon">{{ alerts.summary.soon }} 即將</span>
+          <span class="badge badge-urgent"><span class="badge-dot" />{{ alerts.summary.urgent }} 緊急</span>
+          <span class="badge badge-soon"><span class="badge-dot" />{{ alerts.summary.soon }} 即將</span>
         </div>
       </div>
     </div>
 
     <div v-if="loading" class="alerts-loading">
       <div class="loading-spinner" />
-      <span>載入中...</span>
+      <span>合約數據載入中...</span>
     </div>
 
     <div v-else-if="!alerts || displayedAlerts.length === 0" class="alerts-empty">
-      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
         <path d="m9 11 3 3L22 4" />
       </svg>
-      <span>目前無到期警示</span>
+      <span>目前無即將到期之合約警示</span>
     </div>
 
-    <ul v-else class="alerts-list">
+    <ul v-else class="alerts-list custom-scrollbar">
       <li
         v-for="alert in displayedAlerts"
         :key="alert.contract_id"
@@ -99,8 +102,8 @@ const formatDays = (days: number) => {
           </div>
           <div class="alert-details">
             <span class="plan-name">{{ alert.plan_name }}</span>
-            <span class="separator">|</span>
-            <span class="expiry-date">{{ formatDays(alert.days_until_expiry) }}到期</span>
+            <span class="separator">·</span>
+            <span class="expiry-date tabular-nums">{{ formatDays(alert.days_until_expiry) }}到期</span>
           </div>
         </div>
         <div class="alert-action">
@@ -124,7 +127,9 @@ const formatDays = (days: number) => {
 <style scoped>
 .alerts-container {
   background: var(--color-bg-secondary);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-xl);
   padding: var(--space-xl);
   display: flex;
   flex-direction: column;
@@ -136,6 +141,8 @@ const formatDays = (days: number) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
   flex-wrap: wrap;
   gap: var(--space-sm);
 }
@@ -146,37 +153,62 @@ const formatDays = (days: number) => {
   gap: var(--space-sm);
 }
 
+.alert-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 159, 10, 0.12);
+  border: 1px solid rgba(255, 159, 10, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .alert-icon {
-  color: var(--color-warning);
+  color: #ff9f0a;
 }
 
 .alerts-title {
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--color-text-primary);
   margin: 0;
 }
 
 .summary-badges {
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .badge {
-  font-size: 11px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
   padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
+}
+
+.badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .badge-urgent {
-  background: rgba(255, 59, 48, 0.1);
-  color: #ff3b30;
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--color-error);
+  border: 1px solid rgba(255, 59, 48, 0.25);
 }
 
 .badge-soon {
-  background: rgba(255, 159, 10, 0.1);
+  background: rgba(255, 159, 10, 0.12);
   color: #ff9f0a;
+  border: 1px solid rgba(255, 159, 10, 0.25);
 }
 
 .alerts-list {
@@ -185,20 +217,28 @@ const formatDays = (days: number) => {
   padding: 0;
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
 }
 
 .alert-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md);
+  padding: 10px 12px;
   border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background var(--duration-fast) ease;
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .alert-item:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg-surface);
+  border-color: var(--color-border);
+  transform: translateX(2px);
 }
 
 .alert-content {
@@ -210,11 +250,12 @@ const formatDays = (days: number) => {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .member-name {
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -223,29 +264,29 @@ const formatDays = (days: number) => {
 
 .urgency-badge {
   font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
+  font-weight: 700;
+  padding: 1px 6px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 
 .urgency-urgent {
-  background: rgba(255, 59, 48, 0.1);
-  color: #ff3b30;
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--color-error);
 }
 
 .urgency-soon {
-  background: rgba(255, 159, 10, 0.1);
+  background: rgba(255, 159, 10, 0.12);
   color: #ff9f0a;
 }
 
 .urgency-upcoming {
-  background: rgba(0, 113, 227, 0.1);
-  color: #0071e3;
+  background: rgba(0, 113, 227, 0.12);
+  color: var(--color-accent);
 }
 
 .alert-details {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--color-text-tertiary);
   display: flex;
   align-items: center;
@@ -253,7 +294,7 @@ const formatDays = (days: number) => {
 }
 
 .separator {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .expiry-date {
@@ -264,25 +305,33 @@ const formatDays = (days: number) => {
   color: var(--color-text-tertiary);
   flex-shrink: 0;
   margin-left: var(--space-sm);
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.alert-item:hover .alert-action {
+  transform: translateX(2px);
+  color: var(--color-text-primary);
 }
 
 .view-all-btn {
   margin-top: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  background: transparent;
+  padding: 8px var(--space-md);
+  background: var(--color-bg-tertiary);
   border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--duration-fast) ease;
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .view-all-btn:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg-primary);
   color: var(--color-accent);
   border-color: var(--color-accent);
+  transform: translateY(-1px);
 }
 
 .alerts-loading,
@@ -294,12 +343,14 @@ const formatDays = (days: number) => {
   justify-content: center;
   gap: var(--space-md);
   color: var(--color-text-tertiary);
+  font-size: 13px;
+  padding: var(--space-2xl);
 }
 
 .loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--color-border);
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--color-border);
   border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

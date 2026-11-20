@@ -161,7 +161,7 @@ const getStatusBadge = (status: string) => {
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.TOTAL_MEMBERS }}</span>
           </div>
-          <div class="stat-value text-display">{{ stats.members.total }}</div>
+          <div class="stat-value text-display tabular-nums">{{ stats.members.total }}</div>
           <div class="stat-footer">
             <span class="stat-change positive">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -185,7 +185,7 @@ const getStatusBadge = (status: string) => {
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.ACTIVE_MEMBERS }}</span>
           </div>
-          <div class="stat-value text-display">{{ stats.members.active }}</div>
+          <div class="stat-value text-display tabular-nums">{{ stats.members.active }}</div>
           <div class="stat-footer">
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: stats.members.total ? `${(stats.members.active / stats.members.total * 100)}%` : '0%' }" />
@@ -205,7 +205,7 @@ const getStatusBadge = (status: string) => {
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.ACTIVE_CONTRACTS }}</span>
           </div>
-          <div class="stat-value text-display">{{ stats.contracts.active }}</div>
+          <div class="stat-value text-display tabular-nums">{{ stats.contracts.active }}</div>
           <div class="stat-footer">
             <span class="badge">{{ stats.contracts.draft }} {{ PAGES.DASHBOARD.PENDING_SIGN }}</span>
           </div>
@@ -221,7 +221,7 @@ const getStatusBadge = (status: string) => {
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.MONTHLY_REVENUE }}</span>
           </div>
-          <div class="stat-value text-display">{{ formatCurrency(stats.revenue.month) }}</div>
+          <div class="stat-value text-display tabular-nums">{{ formatCurrency(stats.revenue.month) }}</div>
           <div class="stat-footer">
             <span class="text-caption text-tertiary">{{ MESSAGES.TIME.TODAY }}：{{ formatCurrency(stats.revenue.today) }}</span>
           </div>
@@ -297,7 +297,7 @@ const getStatusBadge = (status: string) => {
                   <span :class="['badge', getStatusBadge(contract.status || contract.contract_status).class]">
                     {{ getStatusBadge(contract.status || contract.contract_status).label }}
                   </span>
-                  <span class="contract-amount text-body-emphasis">{{ formatCurrency(contract.totalAmount || contract.total_amount) }}</span>
+                  <span class="contract-amount text-body-emphasis tabular-nums">{{ formatCurrency(contract.totalAmount || contract.total_amount) }}</span>
                 </div>
               </li>
             </ul>
@@ -398,7 +398,7 @@ const getStatusBadge = (status: string) => {
   margin-bottom: var(--space-sm);
 }
 
-/* Stats Section */
+/* Stats Section - Bento Grid */
 .stats-section {
   margin-bottom: var(--space-2xl);
 }
@@ -406,15 +406,28 @@ const getStatusBadge = (status: string) => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-lg);
+  gap: var(--space-xl);
 }
 
 .stat-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-xl);
   padding: var(--space-xl);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  animation: statAppear 0.6s var(--ease-out) backwards;
+  animation: statAppear 0.6s var(--ease-spring) backwards;
+  transition: transform var(--duration-normal) var(--ease-spring),
+              box-shadow var(--duration-normal) var(--ease-spring),
+              border-color var(--duration-normal) ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md), 0 0 24px -6px var(--color-accent-glow);
+  border-color: var(--color-border-focus);
 }
 
 .stat-card:nth-child(1) { animation-delay: 0.1s; }
@@ -438,37 +451,45 @@ const getStatusBadge = (status: string) => {
 .stat-icon {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .stat-icon.members {
-  background: rgba(0, 113, 227, 0.1);
-  color: #0071e3;
+  background: rgba(0, 113, 227, 0.12);
+  color: var(--color-accent);
+  border-color: rgba(0, 113, 227, 0.25);
 }
 
 .stat-icon.active {
-  background: rgba(52, 199, 89, 0.1);
-  color: #34c759;
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--color-success);
+  border-color: rgba(52, 199, 89, 0.25);
 }
 
 .stat-icon.contracts {
-  background: rgba(88, 86, 214, 0.1);
+  background: rgba(88, 86, 214, 0.12);
   color: #5856d6;
+  border-color: rgba(88, 86, 214, 0.25);
 }
 
 .stat-icon.revenue {
-  background: rgba(255, 159, 10, 0.1);
+  background: rgba(255, 159, 10, 0.12);
   color: #ff9f0a;
+  border-color: rgba(255, 159, 10, 0.25);
 }
 
 .stat-value {
-  font-size: 48px;
+  font-family: var(--font-display);
+  font-size: 42px;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
   line-height: 1;
+  color: var(--color-text-primary);
 }
 
 .stat-footer {
@@ -495,16 +516,18 @@ const getStatusBadge = (status: string) => {
 
 .progress-bar {
   flex: 1;
-  height: 4px;
+  height: 6px;
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-full);
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .progress-fill {
   height: 100%;
-  background: var(--color-success);
+  background: linear-gradient(90deg, var(--color-success), #30d158);
   border-radius: var(--radius-full);
+  box-shadow: 0 0 8px var(--color-success);
   transition: width 1s var(--ease-out);
 }
 
@@ -520,6 +543,11 @@ const getStatusBadge = (status: string) => {
 }
 
 .content-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
   animation: contentAppear 0.6s var(--ease-out) backwards;
   animation-delay: 0.5s;
 }
@@ -582,9 +610,17 @@ const getStatusBadge = (status: string) => {
   transition: background var(--duration-fast) var(--ease-out);
 }
 
+.member-item,
+.contract-item {
+  border: 1px solid transparent;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
 .member-item:hover,
 .contract-item:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg-surface);
+  border-color: var(--color-border);
+  transform: translateX(4px);
 }
 
 .member-avatar {
@@ -671,20 +707,32 @@ const getStatusBadge = (status: string) => {
   padding: var(--space-xl);
   text-decoration: none;
   color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-xl);
+  transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.action-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md), 0 0 20px -4px var(--color-accent-glow);
+  border-color: var(--color-accent);
 }
 
 .action-icon {
   width: 56px;
   height: 56px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: transform var(--duration-normal) var(--ease-spring);
 }
 
 .action-card:hover .action-icon {
-  transform: scale(1.1);
+  transform: scale(1.08) translateY(-2px);
 }
 
 .action-icon.add-member {

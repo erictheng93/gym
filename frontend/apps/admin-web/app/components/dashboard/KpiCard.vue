@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * KPI Card Component
- * 單一 KPI 指標卡片
+ * KPI Card Component (Awwwards Grade)
+ * 總部戰情室單一 KPI 指標卡片
  */
 
 interface Props {
@@ -49,19 +49,19 @@ const changeClass = computed(() => {
       <div v-if="icon" :class="['kpi-icon', `kpi-icon--${icon}`]">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="1.5"
+          stroke-width="1.75"
           stroke-linecap="round"
           stroke-linejoin="round"
           v-html="iconComponents[icon]"
         />
       </div>
       <div class="kpi-title-wrapper">
-        <span class="kpi-title">{{ title }}</span>
+        <span class="kpi-title uppercase-label tracking-wide">{{ title }}</span>
         <span v-if="live" class="kpi-live-badge">
           <span class="live-dot" />
           LIVE
@@ -73,18 +73,18 @@ const changeClass = computed(() => {
       <div class="loading-skeleton" />
     </div>
     <div v-else class="kpi-body">
-      <div class="kpi-value">{{ formattedValue }}</div>
+      <div class="kpi-value tabular-nums">{{ formattedValue }}</div>
       <div v-if="subtitle || change !== undefined" class="kpi-footer">
-        <span v-if="change !== undefined" :class="['kpi-change', changeClass]">
+        <span v-if="change !== undefined" :class="['kpi-change', 'tabular-nums', changeClass]">
           <svg
             v-if="change !== 0"
             xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2"
+            stroke-width="2.5"
             stroke-linecap="round"
             stroke-linejoin="round"
           >
@@ -102,18 +102,24 @@ const changeClass = computed(() => {
 <style scoped>
 .kpi-card {
   background: var(--color-bg-secondary);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  border-radius: var(--radius-xl);
   padding: var(--space-xl);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  transition: transform var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-normal) var(--ease-spring),
+              box-shadow var(--duration-normal) var(--ease-spring),
+              border-color var(--duration-normal) ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md), 0 0 24px -4px var(--color-accent-glow);
+  border-color: var(--color-border-focus);
 }
 
 .kpi-header {
@@ -123,49 +129,57 @@ const changeClass = computed(() => {
 }
 
 .kpi-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .kpi-icon--revenue {
-  background: rgba(255, 159, 10, 0.1);
+  background: rgba(255, 159, 10, 0.12);
   color: #ff9f0a;
+  border-color: rgba(255, 159, 10, 0.25);
 }
 
 .kpi-icon--members {
-  background: rgba(0, 113, 227, 0.1);
-  color: #0071e3;
+  background: rgba(0, 113, 227, 0.12);
+  color: var(--color-accent);
+  border-color: rgba(0, 113, 227, 0.25);
 }
 
 .kpi-icon--contracts {
-  background: rgba(88, 86, 214, 0.1);
+  background: rgba(88, 86, 214, 0.12);
   color: #5856d6;
+  border-color: rgba(88, 86, 214, 0.25);
 }
 
 .kpi-icon--checkin {
-  background: rgba(52, 199, 89, 0.1);
-  color: #34c759;
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--color-success);
+  border-color: rgba(52, 199, 89, 0.25);
 }
 
 .kpi-icon--alert {
-  background: rgba(255, 59, 48, 0.1);
-  color: #ff3b30;
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--color-error);
+  border-color: rgba(255, 59, 48, 0.25);
 }
 
 .kpi-title-wrapper {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .kpi-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--color-text-secondary);
 }
 
@@ -174,40 +188,45 @@ const changeClass = computed(() => {
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-success);
-  background: rgba(52, 199, 89, 0.1);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  background: rgba(52, 199, 89, 0.12);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
 }
 
 .live-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   background: var(--color-success);
   border-radius: 50%;
-  animation: pulse 2s infinite;
+  box-shadow: 0 0 6px var(--color-success);
+  animation: livePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-@keyframes pulse {
+@keyframes livePulse {
   0%, 100% {
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.3;
+    transform: scale(1.3);
   }
 }
 
 .kpi-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .kpi-value {
-  font-size: 36px;
+  font-family: var(--font-display);
+  font-size: 34px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
   color: var(--color-text-primary);
 }
@@ -216,26 +235,31 @@ const changeClass = computed(() => {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  margin-top: 2px;
 }
 
 .kpi-change {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
 .kpi-change.positive {
   color: var(--color-success);
+  background: rgba(52, 199, 89, 0.1);
 }
 
 .kpi-change.negative {
   color: var(--color-error);
+  background: rgba(255, 59, 48, 0.1);
 }
 
 .kpi-subtitle {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
 }
 
@@ -253,7 +277,7 @@ const changeClass = computed(() => {
     var(--color-bg-tertiary) 75%
   );
   background-size: 200% 100%;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   animation: shimmer 1.5s infinite;
 }
 
@@ -282,17 +306,12 @@ const changeClass = computed(() => {
 /* Responsive */
 @media (max-width: 768px) {
   .kpi-value {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .kpi-icon {
     width: 36px;
     height: 36px;
-  }
-
-  .kpi-icon svg {
-    width: 20px;
-    height: 20px;
   }
 }
 </style>
