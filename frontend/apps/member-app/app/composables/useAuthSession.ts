@@ -17,6 +17,8 @@ interface MemberProfileResponse {
   }
 }
 
+let inFlightFetchMemberPromise: Promise<boolean> | null = null
+
 export const useAuthSession = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
@@ -55,50 +57,67 @@ export const useAuthSession = () => {
       return false
     }
 
-    try {
-      const response = await $fetch<MemberProfileResponse>(`${apiUrl}/api/member/me`, {
-        headers: {
-          'X-Member-Token': authToken,
-        },
-      })
+    // Reuse in-flight promise when using default ambient token without retry
+    if (!token && retryCount === 0 && inFlightFetchMemberPromise) {
+      return inFlightFetchMemberPromise
+    }
 
-      if (response.success && response.data) {
-        const data = response.data
+    const promise = (async (): Promise<boolean> => {
+      try {
+        const response = await $fetch<MemberProfileResponse>(`${apiUrl}/api/member/me`, {
+          headers: {
+            'X-Member-Token': authToken,
+          },
+        })
 
-        // Find active contract
-        const contract = data.contracts?.find(
-          (c: Contract) => c.contract_status === 'ACTIVE'
-        ) || null
+        if (response.success && response.data) {
+          const data = response.data
 
-        member.value = {
-          id: data.id,
-          member_code: data.member_code,
-          full_name: data.full_name,
-          phone: data.phone,
-          email: data.email,
-          branch_id: data.branch_id,
-          branch_name: data.branch_name || data.branch?.name || null,
-          member_status: data.member_status,
-          activeContract: contract,
+          // Find active contract
+          const contract = data.contracts?.find(
+            (c: Contract) => c.contract_status === 'ACTIVE'
+          ) || null
+
+          member.value = {
+            id: data.id,
+            member_code: data.member_code,
+            full_name: data.full_name,
+            phone: data.phone,
+            email: data.email,
+            branch_id: data.branch_id,
+            branch_name: data.branch_name || data.branch?.name || null,
+            member_status: data.member_status,
+            activeContract: contract,
+          }
+          return true
+        } else {
+          member.value = null
+          return false
         }
-        return true
-      } else {
+      } catch {
+        // Try to refresh token (only once to prevent infinite loop)
+        if (retryCount < 1) {
+          const refreshed = await refreshAccessToken()
+          if (refreshed) {
+            // Retry fetching member with the new token
+            return await fetchMember(undefined, retryCount + 1)
+          }
+        }
+
         member.value = null
         return false
-      }
-    } catch {
-      // Try to refresh token (only once to prevent infinite loop)
-      if (retryCount < 1) {
-        const refreshed = await refreshAccessToken()
-        if (refreshed) {
-          // Retry fetching member with the new token
-          return await fetchMember(undefined, retryCount + 1)
+      } finally {
+        if (!token && retryCount === 0) {
+          inFlightFetchMemberPromise = null
         }
       }
+    })()
 
-      member.value = null
-      return false
+    if (!token && retryCount === 0) {
+      inFlightFetchMemberPromise = promise
     }
+
+    return promise
   }
 
   /**

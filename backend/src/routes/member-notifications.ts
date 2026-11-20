@@ -179,26 +179,32 @@ app.put(
       notificationPreferences: newPreferences,
     };
 
-    await db
-      .update(members)
-      .set({
-        tags: newTags,
-        updatedAt: new Date(),
-      })
-      .where(eq(members.id, memberInfo.id));
+    const updatePromises: Promise<unknown>[] = [
+      db
+        .update(members)
+        .set({
+          tags: newTags,
+          updatedAt: new Date(),
+        })
+        .where(eq(members.id, memberInfo.id)),
+    ];
 
     // Also update push subscription preferences if push settings changed
     if (updates.types) {
-      await db
-        .update(pushSubscriptions)
-        .set({
-          notifyBookingReminder: newPreferences.types.booking_reminder,
-          notifyClassCancelled: newPreferences.types.class_cancelled,
-          notifyContractExpiry: newPreferences.types.contract_expiry,
-          updatedAt: new Date(),
-        })
-        .where(eq(pushSubscriptions.memberId, memberInfo.id));
+      updatePromises.push(
+        db
+          .update(pushSubscriptions)
+          .set({
+            notifyBookingReminder: newPreferences.types.booking_reminder,
+            notifyClassCancelled: newPreferences.types.class_cancelled,
+            notifyContractExpiry: newPreferences.types.contract_expiry,
+            updatedAt: new Date(),
+          })
+          .where(eq(pushSubscriptions.memberId, memberInfo.id))
+      );
     }
+
+    await Promise.all(updatePromises);
 
     return c.json({
       success: true,
