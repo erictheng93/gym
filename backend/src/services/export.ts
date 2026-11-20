@@ -59,12 +59,14 @@ export async function generateExcel(
     headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
     // Add data rows
-    for (const row of data) {
-      const rowData: Record<string, unknown> = {};
-      for (const col of columns) {
-        rowData[col.key] = formatCellValue(row[col.key]);
+    const colCount = columns.length;
+    for (let r = 0; r < data.length; r++) {
+      const row = data[r];
+      const rowValues = new Array(colCount);
+      for (let c = 0; c < colCount; c++) {
+        rowValues[c] = formatCellValue(row[columns[c].key]);
       }
-      worksheet.addRow(rowData);
+      worksheet.addRow(rowValues);
     }
 
     // Auto-filter
@@ -96,18 +98,26 @@ export function generateCsv(
   data: Record<string, unknown>[]
 ): ExportResult {
   try {
-    const rows: string[] = [];
+    const colCount = columns.length;
+    const rowCount = data.length;
+    const rows: string[] = new Array(rowCount + 1);
 
     // Header row
-    rows.push(columns.map(col => escapeCSVField(col.header)).join(','));
+    const headerParts = new Array(colCount);
+    for (let c = 0; c < colCount; c++) {
+      headerParts[c] = escapeCSVField(columns[c].header);
+    }
+    rows[0] = headerParts.join(',');
 
     // Data rows
-    for (const row of data) {
-      const values = columns.map(col => {
-        const value = formatCellValue(row[col.key]);
-        return escapeCSVField(String(value ?? ''));
-      });
-      rows.push(values.join(','));
+    for (let r = 0; r < rowCount; r++) {
+      const row = data[r];
+      const cellValues = new Array(colCount);
+      for (let c = 0; c < colCount; c++) {
+        const value = formatCellValue(row[columns[c].key]);
+        cellValues[c] = escapeCSVField(String(value ?? ''));
+      }
+      rows[r + 1] = cellValues.join(',');
     }
 
     // Add BOM for UTF-8 encoding (helps with Excel opening)

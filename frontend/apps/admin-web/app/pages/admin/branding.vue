@@ -1,3 +1,30 @@
+<script lang="ts">
+const DEFAULT_BRANDING = {
+  brandName: 'GymNexus',
+  appSuffix: {
+    admin: '',
+    member: '',
+    coach: 'Coach'
+  },
+  colors: {
+    admin: { start: '#0a84ff', end: '#5e5ce6' },
+    member: { start: '#30d158', end: '#34c759' },
+    coach: { start: '#007AFF', end: '#5856D6' }
+  }
+}
+
+const COLOR_PRESETS = [
+  '#0a84ff', // Apple Blue
+  '#30d158', // Apple Green
+  '#ff9500', // Apple Orange
+  '#ff375f', // Apple Pink
+  '#5e5ce6', // Apple Purple
+  '#64d2ff', // Apple Teal
+  '#007AFF', // iOS Blue
+  '#5856D6', // iOS Purple
+]
+</script>
+
 <script setup lang="ts">
 /**
  * Branding Settings Page
@@ -16,19 +43,7 @@ const isLoading = ref(true)
 const isSaving = ref(false)
 
 // Branding form
-const form = ref({
-  brandName: 'GymNexus',
-  appSuffix: {
-    admin: '',
-    member: '',
-    coach: 'Coach'
-  },
-  colors: {
-    admin: { start: '#0a84ff', end: '#5e5ce6' },
-    member: { start: '#30d158', end: '#34c759' },
-    coach: { start: '#007AFF', end: '#5856D6' }
-  }
-})
+const form = ref(JSON.parse(JSON.stringify(DEFAULT_BRANDING)))
 
 // Preview theme state
 const previewTheme = ref<'light' | 'dark'>('dark')
@@ -109,33 +124,12 @@ async function handleSave() {
 
 // Reset to defaults
 function handleReset() {
-  form.value = {
-    brandName: 'GymNexus',
-    appSuffix: {
-      admin: '',
-      member: '',
-      coach: 'Coach'
-    },
-    colors: {
-      admin: { start: '#0a84ff', end: '#5e5ce6' },
-      member: { start: '#30d158', end: '#34c759' },
-      coach: { start: '#007AFF', end: '#5856D6' }
-    }
-  }
+  form.value = JSON.parse(JSON.stringify(DEFAULT_BRANDING))
   toast.info('已重置為預設值')
 }
 
 // Color presets
-const colorPresets = [
-  '#0a84ff', // Apple Blue
-  '#30d158', // Apple Green
-  '#ff9500', // Apple Orange
-  '#ff375f', // Apple Pink
-  '#5e5ce6', // Apple Purple
-  '#64d2ff', // Apple Teal
-  '#007AFF', // iOS Blue
-  '#5856D6', // iOS Purple
-]
+const colorPresets = COLOR_PRESETS
 </script>
 
 <template>

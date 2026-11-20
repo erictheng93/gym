@@ -317,27 +317,27 @@ const markAsPaid = async () => {
   }
 }
 
-const getPlanLabel = (planType: string) => {
+const getPlanLabel = (planType) => {
   return PLAN_LABELS[planType] || planType
 }
 
-const getStatusLabel = (status: string) => {
+const getStatusLabel = (status) => {
   return INVOICE_STATUS_LABELS[status] || status
 }
 
-const formatDate = (dateStr: string | null) => {
+const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return isNaN(d.getTime()) ? '' : invoiceDateFormatter.format(d)
 }
 
-const formatDateTime = (dateStr: string | null) => {
+const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return isNaN(d.getTime()) ? '' : invoiceDateTimeFormatter.format(d)
 }
 
-const formatCurrency = (amount: number | null | undefined) => {
+const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
   return invoiceCurrencyFormatter.format(amount)
 }

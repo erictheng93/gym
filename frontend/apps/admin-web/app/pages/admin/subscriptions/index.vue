@@ -291,16 +291,16 @@ const cancelSubscription = async (subscriptionId) => {
   }
 }
 
-const getPlanLabel = (planType: string) => SUBSCRIPTION_PLAN_LABELS[planType] || planType
-const getStatusLabel = (status: string) => SUBSCRIPTION_STATUS_LABELS[status] || status
+const getPlanLabel = (planType) => SUBSCRIPTION_PLAN_LABELS[planType] || planType
+const getStatusLabel = (status) => SUBSCRIPTION_STATUS_LABELS[status] || status
 
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return isNaN(d.getTime()) ? '' : subscriptionDateFormatter.format(d)
 }
 
-const formatCurrency = (amount: number | null | undefined) => {
+const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
   return subscriptionCurrencyFormatter.format(amount)
 }

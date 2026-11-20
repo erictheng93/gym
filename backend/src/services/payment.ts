@@ -1,6 +1,11 @@
 import crypto from 'crypto';
-import { db, payments, branches } from '../db/index.js';
+import { db, payments } from '../db/index.js';
 import { eq } from 'drizzle-orm';
+import { getTenantIdForBranch } from '../utils/tenant-cache.js';
+
+const PAYMENT_ID_SELECT = {
+  id: payments.id,
+};
 
 // =============================================================================
 // PAYMENT GATEWAY SERVICE
@@ -197,7 +202,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
       type: 'INCOME',
       notes: description || `Payment via ${gateway}`,
       tenantId: await getTenantIdForBranch(branchId),
-    }).returning({ id: payments.id });
+    }).returning(PAYMENT_ID_SELECT);
 
     // Process payment based on gateway
     let result: PaymentResult;
@@ -255,10 +260,6 @@ type PaymentRefundInfo = {
   memberId: string;
   branchId: string;
   tenantId: string | null;
-};
-
-const BRANCH_TENANT_SELECT = {
-  tenantId: branches.tenantId,
 };
 
 /**
@@ -715,19 +716,6 @@ function paymentMethodToGateway(method: string | null): PaymentGateway {
     DEBIT_CARD: 'ecpay',
   };
   return map[method] || 'manual';
-}
-
-async function getTenantIdForBranch(branchId: string): Promise<string | null> {
-  try {
-    const [branch] = await db
-      .select(BRANCH_TENANT_SELECT)
-      .from(branches)
-      .where(eq(branches.id, branchId))
-      .limit(1);
-    return branch?.tenantId || null;
-  } catch {
-    return null;
-  }
 }
 
 // -----------------------------------------------------------------------------

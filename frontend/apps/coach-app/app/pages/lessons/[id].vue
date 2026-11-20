@@ -255,6 +255,20 @@
   </div>
 </template>
 
+<script lang="ts">
+const DIFFICULTY_CLASSES: Record<string, string> = {
+  BEGINNER: 'bg-green-100 text-green-800',
+  INTERMEDIATE: 'bg-yellow-100 text-yellow-800',
+  ADVANCED: 'bg-red-100 text-red-800',
+}
+
+const DIFFICULTY_TEXTS: Record<string, string> = {
+  BEGINNER: '初階',
+  INTERMEDIATE: '中階',
+  ADVANCED: '進階',
+}
+</script>
+
 <script setup lang="ts">
 import type { Exercise, LessonPlan } from '~/types/coach'
 
@@ -286,21 +300,11 @@ const form = ref({
 })
 
 const getDifficultyClass = (difficulty: string) => {
-  const classes: Record<string, string> = {
-    BEGINNER: 'bg-green-100 text-green-800',
-    INTERMEDIATE: 'bg-yellow-100 text-yellow-800',
-    ADVANCED: 'bg-red-100 text-red-800',
-  }
-  return classes[difficulty] || 'bg-gray-100 text-gray-600'
+  return DIFFICULTY_CLASSES[difficulty] || 'bg-gray-100 text-gray-600'
 }
 
 const getDifficultyText = (difficulty: string) => {
-  const texts: Record<string, string> = {
-    BEGINNER: '初階',
-    INTERMEDIATE: '中階',
-    ADVANCED: '進階',
-  }
-  return texts[difficulty] || difficulty
+  return DIFFICULTY_TEXTS[difficulty] || difficulty
 }
 
 const startEdit = () => {

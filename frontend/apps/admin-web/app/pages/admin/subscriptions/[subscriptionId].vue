@@ -306,33 +306,33 @@ const cancelSubscription = async () => {
   }
 }
 
-const getPlanLabel = (planType: string) => {
+const getPlanLabel = (planType) => {
   return PLAN_LABELS[planType] || planType
 }
 
-const getStatusLabel = (status: string) => {
+const getStatusLabel = (status) => {
   return STATUS_LABELS[status] || status
 }
 
-const getInvoiceStatusLabel = (status: string) => {
+const getInvoiceStatusLabel = (status) => {
   return INVOICE_STATUS_LABELS[status] || status
 }
 
-const formatDate = (dateStr: string | null) => {
+const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   if (Number.isNaN(d.getTime())) return ''
   return subDateFormatter.format(d)
 }
 
-const formatDateTime = (dateStr: string | null) => {
+const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   if (Number.isNaN(d.getTime())) return ''
   return subDateTimeFormatter.format(d)
 }
 
-const formatCurrency = (amount: number | null | undefined) => {
+const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
   return subCurrencyFormatter.format(amount)
 }
