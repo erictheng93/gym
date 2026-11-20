@@ -135,6 +135,8 @@ definePageMeta({
 const router = useRouter()
 const { success, error: showError } = useToast()
 const { classes, loading, total, fetchClasses, markAttendance } = useCoachClasses()
+const sound = useSoundEffects()
+const haptic = useHapticFeedback()
 
 const selectedDate = ref(new Date().toISOString().split('T')[0])
 const selectedStatus = ref('')
@@ -188,12 +190,16 @@ const getDateLabel = () => {
 }
 
 const selectDate = (date: string) => {
+  sound.tap()
+  haptic.selection()
   selectedDate.value = date
   offset.value = 0
   loadClasses()
 }
 
 const setStatusFilter = (status: string) => {
+  sound.tap()
+  haptic.selection()
   selectedStatus.value = status
   offset.value = 0
   loadClasses()
@@ -266,9 +272,18 @@ const handleAttendance = async (classId: string, attended: boolean) => {
   const result = await markAttendance(classId, { attended })
 
   if (result.success) {
+    if (attended) {
+      sound.success()
+      haptic.success()
+    } else {
+      sound.error()
+      haptic.warning()
+    }
     success(attended ? '已標記出席' : '已標記未到')
     await loadClasses()
   } else {
+    sound.error()
+    haptic.error()
     showError(result.message || '操作失敗')
   }
 }
