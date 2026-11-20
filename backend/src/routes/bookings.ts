@@ -212,25 +212,24 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
     waitlistPosition = waitlistCount + 1;
   }
 
-  const [newBooking] = await db.insert(bookings).values({
-    sessionId: data.sessionId,
-    memberId: data.memberId,
-    contractId: data.contractId,
-    bookingStatus,
-    waitlistPosition,
-  }).returning();
-
-  if (bookingStatus === 'CONFIRMED') {
-    await db.update(classSessions).set({
-      currentCount: currentCount + 1,
-      updatedAt: new Date(),
-    }).where(eq(classSessions.id, data.sessionId));
-  } else {
-    await db.update(classSessions).set({
-      waitlistCount: waitlistCount + 1,
-      updatedAt: new Date(),
-    }).where(eq(classSessions.id, data.sessionId));
-  }
+  const [[newBooking]] = await Promise.all([
+    db.insert(bookings).values({
+      sessionId: data.sessionId,
+      memberId: data.memberId,
+      contractId: data.contractId,
+      bookingStatus,
+      waitlistPosition,
+    }).returning(),
+    bookingStatus === 'CONFIRMED'
+      ? db.update(classSessions).set({
+          currentCount: currentCount + 1,
+          updatedAt: new Date(),
+        }).where(eq(classSessions.id, data.sessionId))
+      : db.update(classSessions).set({
+          waitlistCount: waitlistCount + 1,
+          updatedAt: new Date(),
+        }).where(eq(classSessions.id, data.sessionId)),
+  ]);
 
   return c.json({
     success: true,
