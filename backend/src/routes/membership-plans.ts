@@ -5,6 +5,7 @@ import { db, membershipPlans, branches, PLAN_TYPE } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -108,13 +109,8 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createPlanSche
 
   // Validate branch if provided
   if (data.branchId) {
-    const [branch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-      .limit(1);
-
-    if (!branch) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
       return c.json({ success: false, error: '無效的分店' }, 400);
     }
   }
@@ -154,6 +150,14 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
 
   if (!existing) {
     return c.json({ success: false, error: '方案不存在' }, 404);
+  }
+
+  // Validate branch if updated
+  if (data.branchId) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
+      return c.json({ success: false, error: '無效的分店' }, 400);
+    }
   }
 
   const updateData: Record<string, unknown> = {

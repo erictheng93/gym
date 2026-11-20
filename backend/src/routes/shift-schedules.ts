@@ -371,28 +371,37 @@ app.get('/employee_shifts', async (c) => {
 
     const orderFn = sortOrder === 'asc' ? asc : desc;
 
-    const records = await db
-      .select({
-        id: employeeShifts.id,
-        createdAt: employeeShifts.createdAt,
-        employeeId: employeeShifts.employeeId,
-        shiftScheduleId: employeeShifts.shiftScheduleId,
-        effectiveDate: employeeShifts.effectiveDate,
-        endDate: employeeShifts.endDate,
-        employeeFullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        employeeBranchId: employees.branchId,
-        shiftName: shiftSchedules.name,
-        shiftStartTime: shiftSchedules.startTime,
-        shiftEndTime: shiftSchedules.endTime,
-      })
-      .from(employeeShifts)
-      .leftJoin(employees, eq(employeeShifts.employeeId, employees.id))
-      .leftJoin(shiftSchedules, eq(employeeShifts.shiftScheduleId, shiftSchedules.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(orderFn(sortColumn))
-      .limit(parseInt(limit))
-      .offset(parseInt(offset));
+    const limitNum = parseInt(limit);
+    const offsetNum = parseInt(offset);
+
+    const [records, countResult] = await Promise.all([
+      db
+        .select({
+          id: employeeShifts.id,
+          createdAt: employeeShifts.createdAt,
+          employeeId: employeeShifts.employeeId,
+          shiftScheduleId: employeeShifts.shiftScheduleId,
+          effectiveDate: employeeShifts.effectiveDate,
+          endDate: employeeShifts.endDate,
+          employeeFullName: employees.fullName,
+          employeeCode: employees.employeeCode,
+          employeeBranchId: employees.branchId,
+          shiftName: shiftSchedules.name,
+          shiftStartTime: shiftSchedules.startTime,
+          shiftEndTime: shiftSchedules.endTime,
+        })
+        .from(employeeShifts)
+        .leftJoin(employees, eq(employeeShifts.employeeId, employees.id))
+        .leftJoin(shiftSchedules, eq(employeeShifts.shiftScheduleId, shiftSchedules.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(orderFn(sortColumn))
+        .limit(limitNum)
+        .offset(offsetNum),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(employeeShifts)
+        .where(conditions.length > 0 ? and(...conditions) : undefined),
+    ]);
 
     const formattedRecords = records.map(r => ({
       id: r.id,
@@ -415,13 +424,16 @@ app.get('/employee_shifts', async (c) => {
       } : null,
     }));
 
+    const total = Number(countResult[0]?.count || 0);
+
     return c.json({
       success: true,
       data: formattedRecords,
       pagination: {
-        total: formattedRecords.length,
-        page: 1,
-        limit: parseInt(limit),
+        total,
+        page: Math.floor(offsetNum / limitNum) + 1,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   } catch (error) {

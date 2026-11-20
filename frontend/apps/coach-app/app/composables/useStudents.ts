@@ -5,6 +5,7 @@
  */
 
 import type { Student, StudentNote } from '../types/coach'
+import { deduplicateRequest } from '../utils/debounce'
 
 interface StudentsResponse {
   success: boolean
@@ -90,16 +91,19 @@ export const useStudents = () => {
     offset?: number
   }): Promise<void> => {
     loading.value = true
+    const dedupKey = `coach:students:${JSON.stringify(params || {})}`
     try {
-      const response = await $fetch<StudentsResponse>(`${apiUrl}/api/coach/students`, {
-        headers: getAuthHeader(),
-        query: params,
-      })
+      await deduplicateRequest(dedupKey, async () => {
+        const response = await $fetch<StudentsResponse>(`${apiUrl}/api/coach/students`, {
+          headers: getAuthHeader(),
+          query: params,
+        })
 
-      if (response.success) {
-        students.value = response.data
-        total.value = response.meta.total
-      }
+        if (response.success) {
+          students.value = response.data
+          total.value = response.meta.total
+        }
+      })
     } catch (error) {
       console.error('Failed to fetch students:', error)
       students.value = []
@@ -113,19 +117,21 @@ export const useStudents = () => {
    * Get student details
    */
   const getStudent = async (id: string): Promise<StudentDetailResponse['data'] | null> => {
-    try {
-      const response = await $fetch<StudentDetailResponse>(
-        `${apiUrl}/api/coach/students/${id}`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    return deduplicateRequest(`coach:student:${id}`, async () => {
+      try {
+        const response = await $fetch<StudentDetailResponse>(
+          `${apiUrl}/api/coach/students/${id}`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      return response.success ? response.data : null
-    } catch (error) {
-      console.error('Failed to fetch student:', error)
-      return null
-    }
+        return response.success ? response.data : null
+      } catch (error) {
+        console.error('Failed to fetch student:', error)
+        return null
+      }
+    })
   }
 
   /**
@@ -139,20 +145,23 @@ export const useStudents = () => {
       offset?: number
     }
   ): Promise<NotesResponse['data']> => {
-    try {
-      const response = await $fetch<NotesResponse>(
-        `${apiUrl}/api/coach/students/${studentId}/notes`,
-        {
-          headers: getAuthHeader(),
-          query: params,
-        }
-      )
+    const dedupKey = `coach:student-notes:${studentId}:${JSON.stringify(params || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<NotesResponse>(
+          `${apiUrl}/api/coach/students/${studentId}/notes`,
+          {
+            headers: getAuthHeader(),
+            query: params,
+          }
+        )
 
-      return response.success ? response.data : []
-    } catch (error) {
-      console.error('Failed to fetch notes:', error)
-      return []
-    }
+        return response.success ? response.data : []
+      } catch (error) {
+        console.error('Failed to fetch notes:', error)
+        return []
+      }
+    })
   }
 
   /**
