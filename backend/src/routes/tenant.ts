@@ -5,6 +5,7 @@ import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { validateBranding, mergeBranding } from '../types/branding.js';
 import type { TenantBranding } from '../types/branding.js';
+import { invalidateBrandingCache } from './branding.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -229,6 +230,7 @@ app.patch('/settings', async (c) => {
     // Fetch current tenant settings
     const [tenant] = await db
       .select({
+        slug: tenants.slug,
         settings: tenants.settings
       })
       .from(tenants)
@@ -272,6 +274,10 @@ app.patch('/settings', async (c) => {
         updatedAt: new Date()
       })
       .where(eq(tenants.id, tenantId));
+
+    if (tenant.slug) {
+      invalidateBrandingCache(tenant.slug);
+    }
 
     return c.json({
       success: true,

@@ -72,20 +72,20 @@ app.get(
       conditions.push(lte(workoutLogs.date, endDate));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(workoutLogs.id) })
-      .from(workoutLogs)
-      .where(and(...conditions));
-
-    // Get workouts
-    const workouts = await db
-      .select()
-      .from(workoutLogs)
-      .where(and(...conditions))
-      .orderBy(desc(workoutLogs.date))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and workouts
+    const [[{ total }], workouts] = await Promise.all([
+      db
+        .select({ total: count(workoutLogs.id) })
+        .from(workoutLogs)
+        .where(and(...conditions)),
+      db
+        .select()
+        .from(workoutLogs)
+        .where(and(...conditions))
+        .orderBy(desc(workoutLogs.date))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

@@ -68,20 +68,20 @@ app.get(
       conditions.push(eq(memberGoals.status, status));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(memberGoals.id) })
-      .from(memberGoals)
-      .where(and(...conditions));
-
-    // Get goals
-    const goals = await db
-      .select()
-      .from(memberGoals)
-      .where(and(...conditions))
-      .orderBy(desc(memberGoals.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and goals
+    const [[{ total }], goals] = await Promise.all([
+      db
+        .select({ total: count(memberGoals.id) })
+        .from(memberGoals)
+        .where(and(...conditions)),
+      db
+        .select()
+        .from(memberGoals)
+        .where(and(...conditions))
+        .orderBy(desc(memberGoals.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

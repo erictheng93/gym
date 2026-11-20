@@ -107,30 +107,30 @@ app.get('/', async (c) => {
   }
 
   // Get members
-  const membersData = await db
-    .select({
-      id: members.id,
-      memberCode: members.memberCode,
-      fullName: members.fullName,
-      phone: members.phone,
-      email: members.email,
-      gender: members.gender,
-      birthday: members.birthday,
-      status: members.status,
-      avatar: members.avatar,
-      joinDate: members.joinDate,
-    })
-    .from(members)
-    .where(and(...memberConditions))
-    .orderBy(members.fullName)
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(and(...memberConditions));
+  const [membersData, [countResult]] = await Promise.all([
+    db
+      .select({
+        id: members.id,
+        memberCode: members.memberCode,
+        fullName: members.fullName,
+        phone: members.phone,
+        email: members.email,
+        gender: members.gender,
+        birthday: members.birthday,
+        status: members.status,
+        avatar: members.avatar,
+        joinDate: members.joinDate,
+      })
+      .from(members)
+      .where(and(...memberConditions))
+      .orderBy(members.fullName)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(and(...memberConditions)),
+  ]);
 
   // Get active contracts for each member
   const memberIdsForContracts = membersData.map(m => m.id);

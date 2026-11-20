@@ -3,6 +3,7 @@ import { db, members, contracts, payments, branches, checkIns, classSessions, em
 import { eq, and, sql, gte, lte, count, inArray, avg, or, isNotNull } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranches, getTenantBranchIds } from '../utils/tenant-cache.js';
 import {
   generateExcel,
   generateCsv,
@@ -30,11 +31,7 @@ app.get('/revenue', async (c) => {
   })();
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
   if (branchIds.length === 0) {
@@ -100,12 +97,7 @@ app.get('/member-growth', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const months = Number(c.req.query('months')) || 6;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: { total: 0, byMonth: [] } });
@@ -152,12 +144,7 @@ app.get('/contract-expiry', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days') || c.req.query('days_ahead')) || 30;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });
@@ -216,11 +203,7 @@ app.get('/member-activity', async (c) => {
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days')) || 30;
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
   if (branchIds.length === 0) {
@@ -299,11 +282,7 @@ app.get('/revenue/export', async (c) => {
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().split('T')[0];
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
   if (branchIds.length === 0) {
@@ -383,12 +362,7 @@ app.get('/member-growth/export', async (c) => {
   const months = Number(c.req.query('months')) || 6;
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     const result = generateCsv(memberGrowthColumns, []);
@@ -461,12 +435,7 @@ app.get('/contract-expiry/export', async (c) => {
   const days = Number(c.req.query('days') || c.req.query('days_ahead')) || 30;
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     const result = generateCsv(contractExpiryColumns, []);
@@ -563,11 +532,7 @@ app.get('/member-activity/export', async (c) => {
   const days = Number(c.req.query('days')) || 30;
   const format = c.req.query('format') || 'csv';
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
   if (branchIds.length === 0) {
@@ -683,11 +648,7 @@ app.get('/branch-performance', async (c) => {
   }
 
   // Get tenant branches
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
 
   if (branchId) {
@@ -985,11 +946,7 @@ app.get('/branch-performance/export', async (c) => {
       break;
   }
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
   if (branchId) {
     branchIds = branchIds.filter(id => id === branchId);
@@ -1134,11 +1091,7 @@ app.get('/coach-performance', async (c) => {
   }
 
   // Get all branches for tenant
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
   if (branchId) {
     branchIds = branchIds.filter(id => id === branchId);
@@ -1421,11 +1374,7 @@ app.get('/coach-performance/export', async (c) => {
       break;
   }
 
-  const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
+  const tenantBranches = await getTenantBranches(tenantId);
   let branchIds = tenantBranches.map(b => b.id);
   if (branchId) {
     branchIds = branchIds.filter(id => id === branchId);
