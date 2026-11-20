@@ -83,12 +83,33 @@ type Variables = AuthVariables & TenantVariables;
 const app = new Hono<{ Variables: Variables }>();
 
 // Parse CORS origins from environment variable or use defaults
-const corsOrigins = process.env.CORS_ORIGIN
+const configuredCorsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'];
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:3004',
+      'http://localhost:3005',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:3002',
+      'http://127.0.0.1:3003',
+      'http://127.0.0.1:3004',
+      'http://127.0.0.1:3005',
+    ];
 
 app.use('*', cors({
-  origin: corsOrigins,
+  origin: (origin) => {
+    if (!origin) return '*';
+    if (configuredCorsOrigins.includes(origin)) return origin;
+    // Allow any localhost/127.0.0.1/0.0.0.0 on any port in development
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(origin)) {
+      return origin;
+    }
+    return undefined;
+  },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token', 'X-Coach-Token'],

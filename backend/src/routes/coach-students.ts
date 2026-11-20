@@ -273,7 +273,15 @@ app.get('/:id', async (c) => {
 
     // Get goals
     db
-      .select()
+      .select({
+        id: memberGoals.id,
+        goalType: memberGoals.goalType,
+        targetValue: memberGoals.targetValue,
+        currentValue: memberGoals.currentValue,
+        startDate: memberGoals.startDate,
+        targetDate: memberGoals.targetDate,
+        status: memberGoals.status,
+      })
       .from(memberGoals)
       .where(eq(memberGoals.memberId, id))
       .orderBy(desc(memberGoals.createdAt))
@@ -281,7 +289,15 @@ app.get('/:id', async (c) => {
 
     // Get measurements
     db
-      .select()
+      .select({
+        id: bodyMeasurements.id,
+        date: bodyMeasurements.date,
+        weight: bodyMeasurements.weight,
+        bodyFat: bodyMeasurements.bodyFat,
+        muscleMass: bodyMeasurements.muscleMass,
+        bmi: bodyMeasurements.bmi,
+        source: bodyMeasurements.source,
+      })
       .from(bodyMeasurements)
       .where(eq(bodyMeasurements.memberId, id))
       .orderBy(desc(bodyMeasurements.date))
@@ -308,7 +324,14 @@ app.get('/:id', async (c) => {
 
     // Get notes
     db
-      .select()
+      .select({
+        id: coachNotes.id,
+        noteType: coachNotes.noteType,
+        content: coachNotes.content,
+        isPrivate: coachNotes.isPrivate,
+        createdAt: coachNotes.createdAt,
+        updatedAt: coachNotes.updatedAt,
+      })
       .from(coachNotes)
       .where(
         and(

@@ -105,30 +105,35 @@ onMounted(() => {
   fetchDashboardData()
 })
 
+const dashboardDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric'
+})
+
+const dashboardCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
+}
+
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric'
-  })
+  return dashboardDateFormatter.format(new Date(dateStr))
 }
 
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    maximumFractionDigits: 0
-  }).format(amount)
+  return dashboardCurrencyFormatter.format(amount)
 }
 
 const getStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-    SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
-  }
-  return map[status] || { label: status, class: '' }
+  return CONTRACT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 </script>
 

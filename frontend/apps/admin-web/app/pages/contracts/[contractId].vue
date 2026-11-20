@@ -148,6 +148,10 @@ const loadContract = async () => {
 
 onMounted(loadContract)
 
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
+
 const contractDateFormatter = new Intl.DateTimeFormat('zh-TW', {
   year: 'numeric',
   month: 'long',
@@ -165,24 +169,37 @@ const formatCurrency = (amount: number | null) => {
   return `NT$ ${contractCurrencyFormatter.format(amount || 0)}`
 }
 
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
+}
+
+const PAYMENT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  UNPAID: { label: STATUS.PAYMENT.UNPAID, class: 'badge-error' },
+  PARTIAL: { label: STATUS.PAYMENT.PARTIAL, class: 'badge-warning' },
+  PAID: { label: STATUS.PAYMENT.PAID, class: 'badge-success' }
+}
+
+const LOG_TYPE_LABEL_MAP: Record<string, string> = {
+  PAUSE: LABELS.LOG_TYPE.PAUSE,
+  RESUME: LABELS.LOG_TYPE.RESUME,
+  EXTEND: LABELS.LOG_TYPE.EXTENSION,
+  EXTENSION: LABELS.LOG_TYPE.EXTENSION,
+  TRANSFER: LABELS.LOG_TYPE.TRANSFER,
+  CANCEL: LABELS.LOG_TYPE.CANCEL,
+  RENEWAL: LABELS.LOG_TYPE.RENEWAL,
+  CLASS_USED: LABELS.LOG_TYPE.CLASS_USED
+}
+
 const getStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-    TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
-  }
-  return map[status] || { label: status, class: '' }
+  return CONTRACT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 
 const getPaymentStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    UNPAID: { label: STATUS.PAYMENT.UNPAID, class: 'badge-error' },
-    PARTIAL: { label: STATUS.PAYMENT.PARTIAL, class: 'badge-warning' },
-    PAID: { label: STATUS.PAYMENT.PAID, class: 'badge-success' }
-  }
-  return map[status] || { label: status, class: '' }
+  return PAYMENT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 
 const getPlanTypeLabel = (type: string) => {
@@ -190,17 +207,7 @@ const getPlanTypeLabel = (type: string) => {
 }
 
 const getLogTypeLabel = (type: string) => {
-  const map: Record<string, string> = {
-    PAUSE: LABELS.LOG_TYPE.PAUSE,
-    RESUME: LABELS.LOG_TYPE.RESUME,
-    EXTEND: LABELS.LOG_TYPE.EXTENSION,
-    EXTENSION: LABELS.LOG_TYPE.EXTENSION,
-    TRANSFER: LABELS.LOG_TYPE.TRANSFER,
-    CANCEL: LABELS.LOG_TYPE.CANCEL,
-    RENEWAL: LABELS.LOG_TYPE.RENEWAL,
-    CLASS_USED: LABELS.LOG_TYPE.CLASS_USED
-  }
-  return map[type] || type
+  return LOG_TYPE_LABEL_MAP[type] || type
 }
 
 // 暫停合約

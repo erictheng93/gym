@@ -113,7 +113,16 @@ app.get('/:id', async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: classSchedules.id,
+        dayOfWeek: classSchedules.dayOfWeek,
+        startTime: classSchedules.startTime,
+        endTime: classSchedules.endTime,
+        room: classSchedules.room,
+        maxCapacity: classSchedules.maxCapacity,
+        isRecurring: classSchedules.isRecurring,
+        status: classSchedules.status,
+      })
       .from(classSchedules)
       .where(eq(classSchedules.classId, id))
       .orderBy(classSchedules.dayOfWeek, classSchedules.startTime),
