@@ -74,7 +74,7 @@ const cache = new Map<string, CacheEntry<unknown>>()
  * 生成請求的唯一標識
  */
 function generateRequestKey(fn: Function, args?: unknown[]): string {
-  const fnString = fn.toString().slice(0, 100)
+  const fnString = fn.toString()
   const argsString = args ? JSON.stringify(args) : ''
   return `${fnString}:${argsString}`
 }
@@ -125,7 +125,7 @@ export function useApi() {
       errorMessage
     } = options || {}
 
-    const requestKey = cacheKey || generateRequestKey(fn)
+    const requestKey = cacheKey || (context && context !== 'API Request' ? `${context}:${generateRequestKey(fn)}` : generateRequestKey(fn))
 
     // 檢查緩存
     if (cacheTTL > 0) {
@@ -230,22 +230,32 @@ export function useApi() {
     let pendingResolve: ((result: ApiResult<T>) => void) | null = null
 
     return (...args: Args): Promise<ApiResult<T>> => {
-      return new Promise((resolve) => {
-        // 清除之前的計時器
-        if (timeoutId) {
-          clearTimeout(timeoutId)
-        }
+      // Settle previous unfulfilled debounce promise
+      if (pendingResolve) {
+        pendingResolve({ data: null, error: null, fromCache: false })
+        pendingResolve = null
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
 
-        // 保存 resolve 函數
+      return new Promise((resolve) => {
         pendingResolve = resolve
 
-        // 設置新的計時器
         timeoutId = setTimeout(async () => {
-          const result = await request(() => fn(...args), {
-            dedupe: false // 防抖請求不需要額外的去重
-          })
-          if (pendingResolve === resolve) {
-            resolve(result)
+          try {
+            const result = await request(() => fn(...args), {
+              dedupe: false // 防抖請求不需要額外的去重
+            })
+            if (pendingResolve === resolve) {
+              pendingResolve = null
+              resolve(result)
+            }
+          } catch {
+            if (pendingResolve === resolve) {
+              pendingResolve = null
+              resolve({ data: null, error: null, fromCache: false })
+            }
           }
         }, wait)
       })

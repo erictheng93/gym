@@ -143,6 +143,37 @@ describe('useCoachTokens', () => {
       expect(cookieStore.get('coach_refresh_token')!.value).toBe('new-refresh')
     })
 
+    it('should coalesce multiple concurrent refresh calls into a single request (anti-stampede)', async () => {
+      cookieStore.set('coach_refresh_token', { value: 'old-refresh' })
+
+      mockFetch.mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  success: true,
+                  access_token: 'coalesced-coach-access',
+                  refresh_token: 'coalesced-coach-refresh',
+                }),
+              10
+            )
+          )
+      )
+
+      const { refreshAccessToken } = useCoachTokens()
+      const [res1, res2, res3] = await Promise.all([
+        refreshAccessToken(),
+        refreshAccessToken(),
+        refreshAccessToken(),
+      ])
+
+      expect(res1).toBe(true)
+      expect(res2).toBe(true)
+      expect(res3).toBe(true)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
     it('should return false on refresh failure', async () => {
       cookieStore.set('coach_refresh_token', { value: 'expired-refresh' })
 

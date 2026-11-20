@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, checkIns, members, contracts, branches, membershipPlans } from '../db/index.js';
-import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, sql, gt } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
@@ -215,6 +215,38 @@ app.post(
       });
     }
 
+    // Deduct session for COUNT_BASED contracts atomically
+    let newRemainingCounts: number | null = null;
+    if (activePlan?.planType === 'COUNT_BASED') {
+      const [updatedContract] = await db
+        .update(contracts)
+        .set({
+          remainingCounts: sql`${contracts.remainingCounts} - 1`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(contracts.id, activeContract.id),
+            gt(contracts.remainingCounts, 0)
+          )
+        )
+        .returning();
+
+      if (!updatedContract) {
+        return c.json({
+          success: false,
+          error: '剩餘次數不足',
+          code: 'NO_REMAINING_COUNTS',
+          contract: {
+            id: activeContract.id,
+            contractNo: activeContract.contractNo,
+            remainingCounts: 0,
+          },
+        }, 400);
+      }
+      newRemainingCounts = updatedContract.remainingCounts;
+    }
+
     // Create check-in
     const [newCheckIn] = await db.insert(checkIns).values({
       memberId: member.id,
@@ -224,18 +256,6 @@ app.post(
       checkInMethod: 'QR_CODE',
       checkInTime: new Date(),
     }).returning();
-
-    // Deduct session for COUNT_BASED contracts
-    let newRemainingCounts: number | null = null;
-    if (activePlan?.planType === 'COUNT_BASED') {
-      const remainingCounts = activeContract.remainingCounts ?? 0;
-      newRemainingCounts = remainingCounts - 1;
-
-      await db.update(contracts).set({
-        remainingCounts: newRemainingCounts,
-        updatedAt: new Date(),
-      }).where(eq(contracts.id, activeContract.id));
-    }
 
     return c.json({
       success: true,

@@ -77,10 +77,15 @@ app.get('/', async (c) => {
         id: contracts.id,
         contractNo: contracts.contractNo,
       },
+      branch: {
+        id: branches.id,
+        name: branches.name,
+      },
     })
     .from(payments)
     .leftJoin(members, eq(payments.memberId, members.id))
     .leftJoin(contracts, eq(payments.contractId, contracts.id))
+    .leftJoin(branches, eq(payments.branchId, branches.id))
     .where(whereCondition)
     .orderBy(desc(payments.createdAt))
     .limit(limit)
@@ -90,8 +95,25 @@ app.get('/', async (c) => {
     success: true,
     data: result.map(r => ({
       ...r.payment,
-      member: r.member,
-      contract: r.contract,
+      payment_date: r.payment.paymentDate,
+      payment_type: r.payment.type,
+      paymentType: r.payment.type,
+      payment_method: r.payment.paymentMethod,
+      paymentMethod: r.payment.paymentMethod,
+      receipt_no: r.payment.receiptNo,
+      branch_id: r.payment.branchId,
+      member_id: r.payment.memberId,
+      contract_id: r.payment.contractId,
+      member: r.member ? {
+        ...r.member,
+        full_name: r.member.fullName,
+        member_code: r.member.memberCode,
+      } : null,
+      contract: r.contract ? {
+        ...r.contract,
+        contract_no: r.contract.contractNo,
+      } : null,
+      branch: r.branch,
     })),
     meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
   });

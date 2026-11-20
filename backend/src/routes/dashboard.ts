@@ -46,105 +46,105 @@ app.get('/overview', async (c) => {
     });
   }
 
-  // Member stats
-  const [memberStats] = await db
-    .select({
-      total: count(),
-      active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
-    })
-    .from(members)
-    .where(inArray(members.branchId, branchIds));
-
-  const [newMembersThisMonth] = await db
-    .select({ count: count() })
-    .from(members)
-    .where(
-      and(
-        inArray(members.branchId, branchIds),
-        gte(members.createdAt, monthStartDate)
-      )
-    );
-
-  // Contract stats
-  const [contractStats] = await db
-    .select({
-      active: count(),
-    })
-    .from(contracts)
-    .where(
-      and(
-        inArray(contracts.branchId, branchIds),
-        eq(contracts.status, 'ACTIVE')
-      )
-    );
-
-  // Contracts expiring in 7 days
   const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const [expiringContracts] = await db
-    .select({ count: count() })
-    .from(contracts)
-    .where(
-      and(
-        inArray(contracts.branchId, branchIds),
-        eq(contracts.status, 'ACTIVE'),
-        gte(contracts.endDate, todayStr),
-        lte(contracts.endDate, sevenDaysFromNow)
-      )
-    );
+  const todayStart = new Date(today);
+  todayStart.setHours(0, 0, 0, 0);
 
-  // Revenue stats
-  const [thisMonthRevenue] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(
-      and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, monthStartDate)
-      )
-    );
-
-  const [lastMonthRevenue] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(
-      and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, lastMonthStartDate),
-        lte(payments.paymentDate, lastMonthEndDate)
-      )
-    );
+  // Execute stats queries in parallel
+  const [
+    [memberStats],
+    [newMembersThisMonth],
+    [contractStats],
+    [expiringContracts],
+    [thisMonthRevenue],
+    [lastMonthRevenue],
+    [todayCheckIns],
+    [monthCheckIns],
+  ] = await Promise.all([
+    db
+      .select({
+        total: count(),
+        active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
+      })
+      .from(members)
+      .where(inArray(members.branchId, branchIds)),
+    db
+      .select({ count: count() })
+      .from(members)
+      .where(
+        and(
+          inArray(members.branchId, branchIds),
+          gte(members.createdAt, monthStartDate)
+        )
+      ),
+    db
+      .select({
+        active: count(),
+      })
+      .from(contracts)
+      .where(
+        and(
+          inArray(contracts.branchId, branchIds),
+          eq(contracts.status, 'ACTIVE')
+        )
+      ),
+    db
+      .select({ count: count() })
+      .from(contracts)
+      .where(
+        and(
+          inArray(contracts.branchId, branchIds),
+          eq(contracts.status, 'ACTIVE'),
+          gte(contracts.endDate, todayStr),
+          lte(contracts.endDate, sevenDaysFromNow)
+        )
+      ),
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, monthStartDate)
+        )
+      ),
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, lastMonthStartDate),
+          lte(payments.paymentDate, lastMonthEndDate)
+        )
+      ),
+    db
+      .select({ count: count() })
+      .from(checkIns)
+      .where(
+        and(
+          inArray(checkIns.branchId, branchIds),
+          gte(checkIns.checkInTime, todayStart)
+        )
+      ),
+    db
+      .select({ count: count() })
+      .from(checkIns)
+      .where(
+        and(
+          inArray(checkIns.branchId, branchIds),
+          gte(checkIns.checkInTime, monthStartDate)
+        )
+      ),
+  ]);
 
   const thisMonthTotal = Number(thisMonthRevenue?.total || 0);
   const lastMonthTotal = Number(lastMonthRevenue?.total || 0);
   const revenueGrowth = lastMonthTotal > 0
     ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100).toFixed(1)
     : '0.0';
-
-  // Check-in stats
-  const todayStart = new Date(today);
-  todayStart.setHours(0, 0, 0, 0);
-
-  const [todayCheckIns] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(
-      and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, todayStart)
-      )
-    );
-
-  const [monthCheckIns] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(
-      and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, monthStartDate)
-      )
-    );
 
   return c.json({
     success: true,

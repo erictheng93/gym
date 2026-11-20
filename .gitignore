@@ -36,6 +36,7 @@ backend/uploads/
 # Test reports
 playwright-report/
 .playwright-mcp/
+.playwright-cli/
 test-results/
 
 # Claude Code

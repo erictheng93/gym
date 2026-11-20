@@ -200,12 +200,15 @@ The database contains 51 tables organized by domain:
 - **Marketing:** leads, leadActivities, campaigns, coupons, couponUsages
 - **Notifications:** notifications, branchNotificationConfig, lineMessageLogs, smsLogs
 
-## Architecture
+## Architecture & Concurrency Hardening
 
 | Feature | Implementation |
 |---------|----------------|
-| Auth | Lucia (staff sessions) + JWT (member/coach) |
-| ORM | Drizzle with type-safe queries |
+| Auth | Lucia (staff sessions) + JWT (member/coach) with Single-Flight Refresh Mutex |
+| ORM | Drizzle with type-safe queries, composite indexes & database transactions |
+| Concurrency Safety | Webhook idempotency guard (`receiptNo` check) + atomic transaction commit |
+| Query Optimization | Sargable datetime ranges, composite indexes (`check_ins`, `payments`) |
+| Batch Cron Jobs | Parallel bulk pre-aggregation (RFM segmentation, daily analytics) |
 | Hooks | Native TypeScript event handlers |
 | File storage | S3/R2 compatible |
 | Notifications | Email, Push, LINE, SMS |

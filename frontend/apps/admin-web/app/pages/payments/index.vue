@@ -90,7 +90,8 @@ const getPaymentMethodLabel = (method: string | null) => {
     CASH: LABELS.PAYMENT_METHOD.CASH,
     CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
     LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
-    TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
+    TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER,
+    BANK_TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
   }
   return map[method] || method
 }
@@ -126,14 +127,13 @@ const setDateRange = (range: string) => {
 
 // Table columns config
 const columns = [
-  { key: 'payment_date', label: PAGES.PAYMENTS.DATE },
-  { key: 'payment_type', label: PAGES.PAYMENTS.TYPE },
-  { key: 'member', label: PAGES.PAYMENTS.MEMBER },
-  { key: 'contract', label: PAGES.PAYMENTS.CONTRACT_NO },
-  { key: 'payment_method', label: PAGES.PAYMENTS.PAYMENT_METHOD },
-  { key: 'branch', label: PAGES.PAYMENTS.BRANCH },
-  { key: 'amount', label: PAGES.PAYMENTS.AMOUNT },
-  { key: 'actions', label: '', width: '60px' }
+  { key: 'payment_date', label: PAGES.PAYMENTS.DATE, slot: 'payment_date' },
+  { key: 'payment_type', label: PAGES.PAYMENTS.TYPE, slot: 'payment_type' },
+  { key: 'member', label: PAGES.PAYMENTS.MEMBER, slot: 'member' },
+  { key: 'contract', label: PAGES.PAYMENTS.CONTRACT_NO, slot: 'contract' },
+  { key: 'payment_method', label: PAGES.PAYMENTS.PAYMENT_METHOD, slot: 'payment_method' },
+  { key: 'branch', label: PAGES.PAYMENTS.BRANCH, slot: 'branch' },
+  { key: 'amount', label: PAGES.PAYMENTS.AMOUNT, slot: 'amount' }
 ]
 </script>
 
@@ -253,47 +253,47 @@ const columns = [
 
     <!-- Payments Table -->
     <DataTable v-else :columns="columns" :data="payments" row-key="id">
-      <template #cell-payment_date="{ row }">
-        <span class="date-cell">{{ formatDate(row.payment_date) }}</span>
+      <template #payment_date="{ row }">
+        <span class="date-cell">{{ formatDate(row.payment_date || row.paymentDate || row.createdAt) }}</span>
       </template>
 
-      <template #cell-payment_type="{ row }">
+      <template #payment_type="{ row }">
         <AppBadge
-          :label="row.payment_type === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND"
-          :variant="row.payment_type === 'INCOME' ? 'success' : 'warning'"
+          :label="(row.payment_type || row.type || row.paymentType) === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND"
+          :variant="(row.payment_type || row.type || row.paymentType) === 'INCOME' ? 'success' : 'warning'"
         />
       </template>
 
-      <template #cell-member="{ row }">
+      <template #member="{ row }">
         <div class="member-cell">
-          <AppAvatar :name="row.member?.full_name || '?'" size="sm" />
+          <AppAvatar :name="row.member?.full_name || row.member?.fullName || '?'" size="sm" />
           <div class="member-info">
-            <span class="member-name">{{ row.member?.full_name || '—' }}</span>
-            <span class="member-code text-caption text-tertiary">{{ row.member?.member_code }}</span>
+            <span class="member-name">{{ row.member?.full_name || row.member?.fullName || '—' }}</span>
+            <span class="member-code text-caption text-tertiary">{{ row.member?.member_code || row.member?.memberCode }}</span>
           </div>
         </div>
       </template>
 
-      <template #cell-contract="{ row }">
-        <code v-if="row.contract?.contract_no" class="contract-code">{{ row.contract.contract_no }}</code>
+      <template #contract="{ row }">
+        <code v-if="row.contract?.contract_no || row.contract?.contractNo" class="contract-code">{{ row.contract?.contract_no || row.contract?.contractNo }}</code>
         <span v-else class="text-tertiary">—</span>
       </template>
 
-      <template #cell-payment_method="{ row }">
-        <span>{{ getPaymentMethodLabel(row.payment_method) }}</span>
+      <template #payment_method="{ row }">
+        <span>{{ getPaymentMethodLabel(row.payment_method || row.paymentMethod) }}</span>
       </template>
 
-      <template #cell-branch="{ row }">
+      <template #branch="{ row }">
         <span>{{ row.branch?.name || '—' }}</span>
       </template>
 
-      <template #cell-amount="{ row }">
-        <span class="amount" :class="row.payment_type === 'INCOME' ? 'amount-income' : 'amount-refund'">
-          {{ row.payment_type === 'REFUND' ? '-' : '' }}{{ formatCurrency(row.amount) }}
+      <template #amount="{ row }">
+        <span class="amount" :class="(row.payment_type || row.type || row.paymentType) === 'INCOME' ? 'amount-income' : 'amount-refund'">
+          {{ (row.payment_type || row.type || row.paymentType) === 'REFUND' ? '-' : '' }}{{ formatCurrency(row.amount) }}
         </span>
       </template>
 
-      <template #cell-actions="{ row }">
+      <template #actions="{ row }">
         <div class="actions-cell">
           <NuxtLink :to="`/payments/${row.id}`" class="action-btn" title="查看詳情">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
