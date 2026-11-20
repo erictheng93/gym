@@ -50,6 +50,18 @@ const MEMBERSHIP_PLAN_SELECT = {
 
 const MEMBERSHIP_PLAN_RETURNING = MEMBERSHIP_PLAN_SELECT;
 
+const MEMBERSHIP_PLAN_JOIN_SELECT = {
+  plan: MEMBERSHIP_PLAN_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const MEMBERSHIP_PLAN_ID_RETURNING = {
+  id: membershipPlans.id,
+};
+
 // List membership plans
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -72,13 +84,7 @@ app.get('/', async (c) => {
   }
 
   const result = await db
-    .select({
-      plan: MEMBERSHIP_PLAN_SELECT,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(MEMBERSHIP_PLAN_JOIN_SELECT)
     .from(membershipPlans)
     .leftJoin(branches, eq(membershipPlans.branchId, branches.id))
     .where(and(...conditions))
@@ -99,13 +105,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      plan: MEMBERSHIP_PLAN_SELECT,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(MEMBERSHIP_PLAN_JOIN_SELECT)
     .from(membershipPlans)
     .leftJoin(branches, eq(membershipPlans.branchId, branches.id))
     .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
@@ -210,7 +210,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
       updatedAt: new Date(),
     })
     .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
-    .returning({ id: membershipPlans.id });
+    .returning(MEMBERSHIP_PLAN_ID_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '方案不存在' }, 404);

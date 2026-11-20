@@ -105,8 +105,10 @@ watch([selectedBranch, selectedPeriod], () => {
 })
 
 onMounted(async () => {
-  await fetchBranches()
-  await loadReport()
+  await Promise.all([
+    fetchBranches(),
+    loadReport()
+  ])
 })
 </script>
 

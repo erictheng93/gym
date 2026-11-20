@@ -89,9 +89,9 @@ const sessionsByDate = computed(() => {
 })
 
 // Check if date is today
+const todayDateStr = new Date().toDateString()
 const isToday = (date: Date) => {
-  const today = new Date()
-  return date.toDateString() === today.toDateString()
+  return date.toDateString() === todayDateStr
 }
 
 // Navigate week
@@ -119,18 +119,20 @@ const loadSessions = async () => {
   const startDate = formatDateApi(firstDate)
   const endDate = formatDateApi(lastDate)
 
-  await fetchSessions({
-    branchId: selectedBranch.value || undefined,
-    startDate,
-    endDate
-  })
+  // Concurrently load sessions and session stats
+  const [, statsResult] = await Promise.all([
+    fetchSessions({
+      branchId: selectedBranch.value || undefined,
+      startDate,
+      endDate
+    }),
+    getSessionStats(
+      selectedBranch.value || undefined,
+      startDate,
+      endDate
+    )
+  ])
 
-  // Load stats
-  const statsResult = await getSessionStats(
-    selectedBranch.value || undefined,
-    startDate,
-    endDate
-  )
   stats.value = statsResult
 }
 
@@ -141,8 +143,10 @@ watch([currentWeekStart, selectedBranch], () => {
 
 // Initial load
 onMounted(async () => {
-  await fetchBranches()
-  await loadSessions()
+  await Promise.all([
+    fetchBranches(),
+    loadSessions()
+  ])
 })
 
 // Cancel session handler

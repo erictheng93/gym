@@ -106,10 +106,9 @@ const handleBatchApprove = async () => {
   if (!confirmed) return
 
   try {
-    for (const id of selectedIds.value) {
-      await approveSalary(id)
-    }
-    toast.success(`已核准 ${selectedIds.value.length} 筆薪資紀錄`)
+    const count = selectedIds.value.length
+    await Promise.all(selectedIds.value.map(id => approveSalary(id)))
+    toast.success(`已核准 ${count} 筆薪資紀錄`)
     selectedIds.value = []
     await loadRecords()
   } catch (error) {

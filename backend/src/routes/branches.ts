@@ -38,6 +38,44 @@ const BRANCH_SELECT = {
   tenantId: branches.tenantId,
 };
 
+const BRANCH_RETURNING = BRANCH_SELECT;
+
+const BRANCH_EMP_AGG_SELECT = {
+  branchId: employees.branchId,
+  count: count(),
+};
+
+const BRANCH_MEM_AGG_SELECT = {
+  branchId: members.branchId,
+  count: count(),
+};
+
+const BRANCH_EMPLOYEE_LIST_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+  phone: employees.phone,
+  email: employees.email,
+  status: employees.status,
+  employmentType: employees.employmentType,
+  jobTitleId: employees.jobTitleId,
+  branchId: employees.branchId,
+  employeeCode: employees.employeeCode,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const BRANCH_ID_SELECT = {
+  id: branches.id,
+};
+
+const BRANCH_DELETE_CHECK_SELECT = {
+  id: branches.id,
+  tenantId: branches.tenantId,
+  type: branches.type,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
 
@@ -48,19 +86,13 @@ app.get('/', async (c) => {
       .where(eq(branches.tenantId, tenantId))
       .orderBy(desc(branches.type), branches.name),
     db
-      .select({
-        branchId: employees.branchId,
-        count: count(),
-      })
+      .select(BRANCH_EMP_AGG_SELECT)
       .from(employees)
       .innerJoin(branches, eq(employees.branchId, branches.id))
       .where(and(eq(branches.tenantId, tenantId), eq(employees.status, 'ACTIVE')))
       .groupBy(employees.branchId),
     db
-      .select({
-        branchId: members.branchId,
-        count: count(),
-      })
+      .select(BRANCH_MEM_AGG_SELECT)
       .from(members)
       .where(and(eq(members.tenantId, tenantId), eq(members.status, 'ACTIVE')))
       .groupBy(members.branchId),
@@ -107,22 +139,12 @@ app.get('/:id', async (c) => {
 
   const [branchEmployees, [memberCount]] = await Promise.all([
     db
-      .select({
-        id: employees.id,
-        fullName: employees.fullName,
-        phone: employees.phone,
-        email: employees.email,
-        status: employees.status,
-        employmentType: employees.employmentType,
-        jobTitleId: employees.jobTitleId,
-        branchId: employees.branchId,
-        employeeCode: employees.employeeCode,
-      })
+      .select(BRANCH_EMPLOYEE_LIST_SELECT)
       .from(employees)
       .where(eq(employees.branchId, id))
       .orderBy(employees.fullName),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(members)
       .where(eq(members.branchId, id)),
   ]);
@@ -139,8 +161,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const BRANCH_RETURNING = BRANCH_SELECT;
 
 app.post('/', requireRole('super_admin', 'admin'), zValidator('json', createBranchSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -179,7 +199,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
 
   if (!updatedBranch) {
     const [existing] = await db
-      .select({ id: branches.id })
+      .select(BRANCH_ID_SELECT)
       .from(branches)
       .where(eq(branches.id, id))
       .limit(1);
@@ -201,12 +221,12 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
 
   const [[branch], [employeeCount]] = await Promise.all([
     db
-      .select({ id: branches.id, tenantId: branches.tenantId, type: branches.type })
+      .select(BRANCH_DELETE_CHECK_SELECT)
       .from(branches)
       .where(eq(branches.id, id))
       .limit(1),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(employees)
       .where(eq(employees.branchId, id)),
   ]);

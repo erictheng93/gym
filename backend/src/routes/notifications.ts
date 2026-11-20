@@ -25,6 +25,38 @@ const createNotificationSchema = z.object({
   expiresAt: z.string().optional(),
 });
 
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const NOTIFICATION_LIST_JOIN_SELECT = {
+  notification: notifications,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const NOTIFICATION_DETAIL_JOIN_SELECT = {
+  notification: notifications,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  targetMember: {
+    id: members.id,
+    fullName: members.fullName,
+  },
+  targetEmployee: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+};
+
+const NOTIFICATION_ID_RETURNING = {
+  id: notifications.id,
+};
+
 // List notifications
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -70,13 +102,7 @@ app.get('/', async (c) => {
 
   const [result, [countResult], unreadCountResult] = await Promise.all([
     db
-      .select({
-        notification: notifications,
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-      })
+      .select(NOTIFICATION_LIST_JOIN_SELECT)
       .from(notifications)
       .innerJoin(branches, eq(notifications.branchId, branches.id))
       .where(and(...conditions))
@@ -84,13 +110,13 @@ app.get('/', async (c) => {
       .limit(limit)
       .offset(offset),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(notifications)
       .where(and(...conditions)),
     unreadOnly
       ? Promise.resolve(null)
       : db
-          .select({ count: sql<number>`count(*)` })
+          .select(COUNT_SELECT)
           .from(notifications)
           .where(and(...conditions, isNull(notifications.readAt))),
   ]);
@@ -120,21 +146,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      notification: notifications,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      targetMember: {
-        id: members.id,
-        fullName: members.fullName,
-      },
-      targetEmployee: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
+    .select(NOTIFICATION_DETAIL_JOIN_SELECT)
     .from(notifications)
     .innerJoin(branches, eq(notifications.branchId, branches.id))
     .leftJoin(members, eq(notifications.targetMemberId, members.id))
@@ -222,7 +234,7 @@ app.post('/:id/read', async (c) => {
       updatedAt: new Date(),
     })
     .where(and(eq(notifications.id, id), inArray(notifications.branchId, branchIds)))
-    .returning({ id: notifications.id });
+    .returning(NOTIFICATION_ID_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '通知不存在' }, 404);
@@ -272,7 +284,7 @@ app.post('/read-all', async (c) => {
       updatedAt: new Date(),
     })
     .where(and(...conditions))
-    .returning({ id: notifications.id });
+    .returning(NOTIFICATION_ID_RETURNING);
 
   return c.json({
     success: true,
@@ -293,7 +305,7 @@ app.delete('/:id', async (c) => {
   const [deleted] = await db
     .delete(notifications)
     .where(and(eq(notifications.id, id), inArray(notifications.branchId, branchIds)))
-    .returning({ id: notifications.id });
+    .returning(NOTIFICATION_ID_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '通知不存在' }, 404);
@@ -336,7 +348,7 @@ app.get('/count/unread', async (c) => {
   }
 
   const [result] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select(COUNT_SELECT)
     .from(notifications)
     .where(and(...conditions));
 
