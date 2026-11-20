@@ -176,7 +176,9 @@ const profileDateFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric',
 // 格式化日期
 const formatDate = (dateStr: string | null | undefined) => {
   if (!dateStr) return '-'
-  return profileDateFormatter.format(new Date(dateStr))
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return profileDateFormatter.format(d)
 }
 
 const GENDER_MAP: Record<string, string> = {

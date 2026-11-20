@@ -20,6 +20,7 @@ function startCleanup() {
       }
     }
   }, CLEANUP_INTERVAL);
+  cleanupTimer.unref?.();
 }
 
 export interface RateLimitOptions {

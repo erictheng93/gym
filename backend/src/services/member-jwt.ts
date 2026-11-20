@@ -43,12 +43,12 @@ function base64urlDecode(str: string): string {
   return Buffer.from(base64, 'base64').toString('utf8');
 }
 
+const JWT_HEADER_ENCODED = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+
 // Sign JWT
 function signJwt(payload: Record<string, unknown>): string {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const headerEncoded = base64urlEncode(JSON.stringify(header));
   const payloadEncoded = base64urlEncode(JSON.stringify(payload));
-  const signatureInput = `${headerEncoded}.${payloadEncoded}`;
+  const signatureInput = `${JWT_HEADER_ENCODED}.${payloadEncoded}`;
   const signature = createHmac('sha256', JWT_SECRET)
     .update(signatureInput)
     .digest();

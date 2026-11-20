@@ -90,7 +90,9 @@ const currencyFormatter = new Intl.NumberFormat('zh-TW', {
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return paymentDateFormatter.format(new Date(dateStr))
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return paymentDateFormatter.format(d)
 }
 
 const formatAmount = (amount: number, type: 'INCOME' | 'REFUND') => {

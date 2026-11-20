@@ -237,7 +237,10 @@ const notificationDateFormatter = new Intl.DateTimeFormat('zh-TW', {
 
 // Format date for display
 const formatDate = (dateStr: string) => {
-  return notificationDateFormatter.format(new Date(dateStr))
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return notificationDateFormatter.format(d)
 }
 
 // Get status badge class

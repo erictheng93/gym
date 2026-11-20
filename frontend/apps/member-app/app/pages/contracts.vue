@@ -68,7 +68,9 @@ const contractDateFormatter = new Intl.DateTimeFormat('zh-TW')
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return contractDateFormatter.format(new Date(dateStr))
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return contractDateFormatter.format(d)
 }
 
 const statusLabels = CONTRACT_STATUS_LABELS

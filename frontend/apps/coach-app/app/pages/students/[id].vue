@@ -351,76 +351,87 @@ const studentDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
   minute: '2-digit',
 })
 
+const STUDENT_GOAL_TEXTS: Record<string, string> = {
+  WEIGHT_LOSS: '減重',
+  MUSCLE_GAIN: '增肌',
+  BODY_SHAPE: '體態雕塑',
+  HEALTH: '健康維持',
+  OTHER: '其他',
+}
+
+const STUDENT_CONTRACT_STATUS_CLASSES: Record<string, string> = {
+  ACTIVE: 'green',
+  PAUSED: 'yellow',
+  EXPIRED: 'gray',
+}
+
+const STUDENT_CONTRACT_STATUS_TEXTS: Record<string, string> = {
+  ACTIVE: '有效',
+  PAUSED: '暫停',
+  EXPIRED: '已過期',
+  TERMINATED: '已終止',
+}
+
+const STUDENT_CLASS_STATUS_CLASSES: Record<string, string> = {
+  BOOKED: 'blue',
+  COMPLETED: 'green',
+  MEMBER_CANCELLED: 'gray',
+  COACH_CANCELLED: 'gray',
+  NO_SHOW: 'red',
+}
+
+const STUDENT_CLASS_STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '已預約',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
+
+const STUDENT_NOTE_TYPE_COLORS: Record<string, string> = {
+  PROGRESS: 'blue',
+  GOAL: 'green',
+  INJURY: 'red',
+  FEEDBACK: 'purple',
+  GENERAL: 'gray',
+}
+
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-'
-  return studentDateFormatter.format(new Date(dateStr))
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return studentDateFormatter.format(d)
 }
 
 const formatDateTime = (dateStr: string) => {
-  return studentDateTimeFormatter.format(new Date(dateStr))
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return studentDateTimeFormatter.format(d)
 }
 
 const getGoalText = (goalType: string) => {
-  const goals: Record<string, string> = {
-    WEIGHT_LOSS: '減重',
-    MUSCLE_GAIN: '增肌',
-    BODY_SHAPE: '體態雕塑',
-    HEALTH: '健康維持',
-    OTHER: '其他',
-  }
-  return goals[goalType] || goalType
+  return STUDENT_GOAL_TEXTS[goalType] || goalType
 }
 
 const getContractStatusClass = (status: string) => {
-  const classes: Record<string, string> = {
-    ACTIVE: 'green',
-    PAUSED: 'yellow',
-    EXPIRED: 'gray',
-  }
-  return classes[status] || 'gray'
+  return STUDENT_CONTRACT_STATUS_CLASSES[status] || 'gray'
 }
 
 const getContractStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    ACTIVE: '有效',
-    PAUSED: '暫停',
-    EXPIRED: '已過期',
-    TERMINATED: '已終止',
-  }
-  return texts[status] || status
+  return STUDENT_CONTRACT_STATUS_TEXTS[status] || status
 }
 
 const getClassStatusClass = (status: string) => {
-  const classes: Record<string, string> = {
-    BOOKED: 'blue',
-    COMPLETED: 'green',
-    MEMBER_CANCELLED: 'gray',
-    COACH_CANCELLED: 'gray',
-    NO_SHOW: 'red',
-  }
-  return classes[status] || 'gray'
+  return STUDENT_CLASS_STATUS_CLASSES[status] || 'gray'
 }
 
 const getClassStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    BOOKED: '已預約',
-    COMPLETED: '已完成',
-    MEMBER_CANCELLED: '學員取消',
-    COACH_CANCELLED: '教練取消',
-    NO_SHOW: '未到',
-  }
-  return texts[status] || status
+  return STUDENT_CLASS_STATUS_TEXTS[status] || status
 }
 
 const getNoteTypeColor = (type: string) => {
-  const colors: Record<string, string> = {
-    PROGRESS: 'blue',
-    GOAL: 'green',
-    INJURY: 'red',
-    FEEDBACK: 'purple',
-    GENERAL: 'gray',
-  }
-  return colors[type] || 'gray'
+  return STUDENT_NOTE_TYPE_COLORS[type] || 'gray'
 }
 
 const getNoteTypeText = (type: string) => {
