@@ -184,6 +184,8 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   const dateStr = booking.session_date || booking.session?.session_date || ''
   return formatDateLocal(dateStr)
 }
+
+const displayedPastBookings = computed(() => pastBookings.value.slice(0, 10))
 </script>
 
 <template>
@@ -273,7 +275,7 @@ const getReviewSessionDate = (booking: Booking | null): string => {
         <h2 class="section-title">歷史紀錄</h2>
         <div class="booking-list">
           <BookingCard
-            v-for="booking in pastBookings.slice(0, 10)"
+            v-for="booking in displayedPastBookings"
             :key="booking.id"
             :booking="booking"
             @review="handleReview(booking)"

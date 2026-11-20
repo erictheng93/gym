@@ -47,8 +47,7 @@ app.get('/', async (c) => {
         count: count(),
       })
       .from(members)
-      .innerJoin(branches, eq(members.branchId, branches.id))
-      .where(and(eq(branches.tenantId, tenantId), eq(members.status, 'ACTIVE')))
+      .where(and(eq(members.tenantId, tenantId), eq(members.status, 'ACTIVE')))
       .groupBy(members.branchId),
   ]);
 
@@ -77,12 +76,21 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [[branch], branchEmployees, [memberCount]] = await Promise.all([
-    db
-      .select()
-      .from(branches)
-      .where(eq(branches.id, id))
-      .limit(1),
+  const [branch] = await db
+    .select()
+    .from(branches)
+    .where(eq(branches.id, id))
+    .limit(1);
+
+  if (!branch) {
+    return c.json({ success: false, error: '分店不存在' }, 404);
+  }
+
+  if (branch.tenantId !== tenantId) {
+    return c.json({ success: false, error: '無權限存取此分店' }, 403);
+  }
+
+  const [branchEmployees, [memberCount]] = await Promise.all([
     db
       .select()
       .from(employees)
@@ -93,14 +101,6 @@ app.get('/:id', async (c) => {
       .from(members)
       .where(eq(members.branchId, id)),
   ]);
-
-  if (!branch) {
-    return c.json({ success: false, error: '分店不存在' }, 404);
-  }
-
-  if (branch.tenantId !== tenantId) {
-    return c.json({ success: false, error: '無權限存取此分店' }, 403);
-  }
 
   return c.json({
     success: true,

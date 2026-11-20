@@ -229,37 +229,40 @@ const formatTime = (dateStr: string) => {
   return timeFormatter.format(new Date(dateStr))
 }
 
+const TIME_BLOCK_CLASSES: Record<string, string> = {
+  BOOKED: 'time-booked',
+  COMPLETED: 'time-completed',
+  MEMBER_CANCELLED: 'time-cancelled',
+  COACH_CANCELLED: 'time-cancelled',
+  NO_SHOW: 'time-no-show',
+}
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  BOOKED: 'badge-blue',
+  COMPLETED: 'badge-green',
+  MEMBER_CANCELLED: 'badge-gray',
+  COACH_CANCELLED: 'badge-gray',
+  NO_SHOW: 'badge-red',
+}
+
+const STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '待上課',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
+
 const getTimeBlockClass = (status: string) => {
-  const classes: Record<string, string> = {
-    BOOKED: 'time-booked',
-    COMPLETED: 'time-completed',
-    MEMBER_CANCELLED: 'time-cancelled',
-    COACH_CANCELLED: 'time-cancelled',
-    NO_SHOW: 'time-no-show',
-  }
-  return classes[status] || 'time-default'
+  return TIME_BLOCK_CLASSES[status] || 'time-default'
 }
 
 const getStatusBadgeClass = (status: string) => {
-  const classes: Record<string, string> = {
-    BOOKED: 'badge-blue',
-    COMPLETED: 'badge-green',
-    MEMBER_CANCELLED: 'badge-gray',
-    COACH_CANCELLED: 'badge-gray',
-    NO_SHOW: 'badge-red',
-  }
-  return classes[status] || 'badge-gray'
+  return STATUS_BADGE_CLASSES[status] || 'badge-gray'
 }
 
 const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    BOOKED: '待上課',
-    COMPLETED: '已完成',
-    MEMBER_CANCELLED: '學員取消',
-    COACH_CANCELLED: '教練取消',
-    NO_SHOW: '未到',
-  }
-  return texts[status] || status
+  return STATUS_TEXTS[status] || status
 }
 
 const goToClass = (id: string) => {
