@@ -1,3 +1,19 @@
+<script lang="ts">
+const numberFormatter = new Intl.NumberFormat('zh-TW')
+
+const CATEGORY_LABELS: Record<string, string> = {
+  YOGA: '瑜珈',
+  CARDIO: '有氧',
+  STRENGTH: '重訓',
+  DANCE: '舞蹈',
+  SPINNING: '飛輪',
+  PILATES: '皮拉提斯',
+  BOXING: '拳擊',
+  SWIMMING: '游泳',
+  OTHER: '其他',
+}
+</script>
+
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
@@ -25,7 +41,6 @@ const loadReport = async () => {
   }
 }
 
-const numberFormatter = new Intl.NumberFormat('zh-TW')
 const formatNumber = (value: number) => {
   return numberFormatter.format(value)
 }
@@ -38,18 +53,6 @@ const formatPercent = (value: number | null) => {
 const formatRating = (value: number | null) => {
   if (value === null) return '-'
   return value.toFixed(1)
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  YOGA: '瑜珈',
-  CARDIO: '有氧',
-  STRENGTH: '重訓',
-  DANCE: '舞蹈',
-  SPINNING: '飛輪',
-  PILATES: '皮拉提斯',
-  BOXING: '拳擊',
-  SWIMMING: '游泳',
-  OTHER: '其他',
 }
 
 const getCategoryLabel = (category: string | null) => {

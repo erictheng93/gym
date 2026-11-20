@@ -42,6 +42,8 @@ const ATTENDANCE_PATCH_SELECT = {
   checkIn: attendances.checkIn,
 };
 
+const ATTENDANCE_COUNT_SELECT = { count: sql<number>`count(*)` };
+
 app.use('*', authMiddleware, requireAuth);
 
 // -----------------------------------------------------------------------------
@@ -110,7 +112,7 @@ app.get('/', async (c) => {
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(ATTENDANCE_COUNT_SELECT)
       .from(attendances)
       .where(conditions.length > 0 ? and(...conditions) : undefined),
   ]);
@@ -147,8 +149,8 @@ app.get('/', async (c) => {
 
     // Get attendance date from check_in
     const attendanceDateStr = checkInDate
-      ? checkInDate.toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0];
+      ? checkInDate.toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
 
     return {
       id: r.id,

@@ -1,8 +1,46 @@
+<script lang="ts">
+import { PAGES } from '~/constants'
+
+const MAKEUP_TYPE_LABEL_MAP: Record<string, string> = {
+  CHECK_IN: PAGES.HR.MAKEUP.CHECK_IN,
+  CHECK_OUT: PAGES.HR.MAKEUP.CHECK_OUT,
+  BOTH: PAGES.HR.MAKEUP.BOTH,
+}
+
+const MAKEUP_TYPE_COLOR_MAP: Record<string, string> = {
+  CHECK_IN: '#34c759',
+  CHECK_OUT: '#ff9500',
+  BOTH: '#007aff',
+}
+
+const STATUS_BADGE_CONFIG_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
+  PENDING: { label: PAGES.HR.MAKEUP.PENDING_APPROVAL, variant: 'warning' },
+  APPROVED: { label: PAGES.HR.MAKEUP.APPROVED, variant: 'success' },
+  REJECTED: { label: PAGES.HR.MAKEUP.REJECTED, variant: 'error' },
+  CANCELLED: { label: PAGES.HR.MAKEUP.CANCELLED, variant: 'default' },
+}
+
+const makeupDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short',
+})
+
+const makeupDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+</script>
+
 <script setup lang="ts">
 /**
  * 補打卡申請頁面
  */
-import { PAGES, MESSAGES } from '~/constants'
+import { MESSAGES } from '~/constants'
 import { useMakeupRequests } from '~/composables/hr'
 import type { MakeupRequest, MakeupApprovalLog } from '~/types/schema'
 
@@ -93,40 +131,6 @@ watch([selectedStatus, currentPage], () => {
       limit: pageSize
     })
   }
-})
-
-const MAKEUP_TYPE_LABEL_MAP: Record<string, string> = {
-  CHECK_IN: PAGES.HR.MAKEUP.CHECK_IN,
-  CHECK_OUT: PAGES.HR.MAKEUP.CHECK_OUT,
-  BOTH: PAGES.HR.MAKEUP.BOTH,
-}
-
-const MAKEUP_TYPE_COLOR_MAP: Record<string, string> = {
-  CHECK_IN: '#34c759',
-  CHECK_OUT: '#ff9500',
-  BOTH: '#007aff',
-}
-
-const STATUS_BADGE_CONFIG_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
-  PENDING: { label: PAGES.HR.MAKEUP.PENDING_APPROVAL, variant: 'warning' },
-  APPROVED: { label: PAGES.HR.MAKEUP.APPROVED, variant: 'success' },
-  REJECTED: { label: PAGES.HR.MAKEUP.REJECTED, variant: 'error' },
-  CANCELLED: { label: PAGES.HR.MAKEUP.CANCELLED, variant: 'default' },
-}
-
-const makeupDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  weekday: 'short',
-})
-
-const makeupDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
 })
 
 // 取得類型標籤

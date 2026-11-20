@@ -1,3 +1,19 @@
+<script lang="ts">
+const LEAVE_TYPE_LABEL_MAP: Record<string, string> = {
+  ANNUAL: '特休',
+  SICK: '病假',
+  PERSONAL: '事假',
+  MATERNITY: '產假',
+  BEREAVEMENT: '喪假',
+  OTHER: '其他'
+}
+
+const hrDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric'
+})
+</script>
+
 <script setup lang="ts">
 import { PAGES } from '~/constants'
 import { useAttendance, useLeaveRequests } from '~/composables/hr'
@@ -96,20 +112,6 @@ const attendanceRate = computed(() => {
   const { totalEmployees, checkedIn, onLeave } = todayAttendanceSummary.value
   if (totalEmployees === 0) return 0
   return Math.round(((checkedIn + onLeave) / totalEmployees) * 100)
-})
-
-const LEAVE_TYPE_LABEL_MAP: Record<string, string> = {
-  ANNUAL: '特休',
-  SICK: '病假',
-  PERSONAL: '事假',
-  MATERNITY: '產假',
-  BEREAVEMENT: '喪假',
-  OTHER: '其他'
-}
-
-const hrDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  month: 'short',
-  day: 'numeric'
 })
 
 // 格式化日期

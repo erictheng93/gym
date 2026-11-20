@@ -1,3 +1,10 @@
+<script lang="ts">
+const liveFeedTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit'
+})
+</script>
+
 <script setup lang="ts">
 /**
  * Live Feed Component
@@ -16,11 +23,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { formatCurrency } = useCharts()
-
-const liveFeedTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  hour: '2-digit',
-  minute: '2-digit'
-})
 
 // 格式化時間
 const formatTime = (isoString: string) => {

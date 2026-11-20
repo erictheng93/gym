@@ -126,11 +126,13 @@ export function generateCsv(
 // Helper Functions
 // -----------------------------------------------------------------------------
 
+const CSV_SPECIAL_CHARS = /[",\r\n]/;
+
 /**
  * Escape CSV field value
  */
 function escapeCSVField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+  if (CSV_SPECIAL_CHARS.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -144,7 +146,7 @@ function formatCellValue(value: unknown): string | number | null {
     return '';
   }
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    return value.toISOString().slice(0, 10);
   }
   if (typeof value === 'object') {
     return JSON.stringify(value);

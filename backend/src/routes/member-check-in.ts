@@ -14,6 +14,70 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+const MEMBER_CHECKIN_VERIFY_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  status: members.status,
+  branchId: members.branchId,
+};
+
+const BRANCH_CHECKIN_VERIFY_SELECT = {
+  id: branches.id,
+  name: branches.name,
+  tenantId: branches.tenantId,
+};
+
+const CONTRACT_PLAN_CHECKIN_SELECT = {
+  contract: {
+    id: contracts.id,
+    contractNo: contracts.contractNo,
+    remainingCounts: contracts.remainingCounts,
+    endDate: contracts.endDate,
+  },
+  plan: {
+    planType: membershipPlans.planType,
+  },
+};
+
+const CHECK_IN_EXISTING_SELECT = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+};
+
+const CHECK_IN_INSERT_RETURNING = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+};
+
+const CHECK_IN_HISTORY_COUNT_SELECT = {
+  total: sql<number>`count(*)`,
+};
+
+const CHECK_IN_HISTORY_LIST_SELECT = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+  checkInType: checkIns.checkInType,
+  checkInMethod: checkIns.checkInMethod,
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+  contractId: checkIns.contractId,
+};
+
+const CHECK_IN_TODAY_SELECT = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+  checkInType: checkIns.checkInType,
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+};
+
+const CHECK_IN_STATS_BRANCH_SELECT = {
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+  count: sql<number>`count(*)`,
+};
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -105,47 +169,24 @@ app.post(
       [existingCheckIn],
     ] = await Promise.all([
       db
-        .select({
-          id: members.id,
-          memberCode: members.memberCode,
-          fullName: members.fullName,
-          status: members.status,
-          branchId: members.branchId,
-        })
+        .select(MEMBER_CHECKIN_VERIFY_SELECT)
         .from(members)
         .where(eq(members.id, memberInfo.id))
         .limit(1),
       db
-        .select({
-          id: branches.id,
-          name: branches.name,
-          tenantId: branches.tenantId,
-        })
+        .select(BRANCH_CHECKIN_VERIFY_SELECT)
         .from(branches)
         .where(eq(branches.id, branchId))
         .limit(1),
       db
-        .select({
-          contract: {
-            id: contracts.id,
-            contractNo: contracts.contractNo,
-            remainingCounts: contracts.remainingCounts,
-            endDate: contracts.endDate,
-          },
-          plan: {
-            planType: membershipPlans.planType,
-          },
-        })
+        .select(CONTRACT_PLAN_CHECKIN_SELECT)
         .from(contracts)
         .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
         .where(and(...contractConditions))
         .orderBy(desc(contracts.endDate))
         .limit(1),
       db
-        .select({
-          id: checkIns.id,
-          checkInTime: checkIns.checkInTime,
-        })
+        .select(CHECK_IN_EXISTING_SELECT)
         .from(checkIns)
         .where(and(
           eq(checkIns.memberId, memberInfo.id),
@@ -241,10 +282,7 @@ app.post(
         checkInType: 'ENTRY',
         checkInMethod: 'QR_CODE',
         checkInTime: new Date(),
-      }).returning({
-        id: checkIns.id,
-        checkInTime: checkIns.checkInTime,
-      }),
+      }).returning(CHECK_IN_INSERT_RETURNING),
       isCountBased
         ? db.update(contracts).set({
             remainingCounts: newRemainingCounts,
@@ -337,19 +375,11 @@ app.get(
     // Concurrently get total count and check-ins with branch info
     const [[{ total }], checkInList] = await Promise.all([
       db
-        .select({ total: sql<number>`count(*)` })
+        .select(CHECK_IN_HISTORY_COUNT_SELECT)
         .from(checkIns)
         .where(and(...conditions)),
       db
-        .select({
-          id: checkIns.id,
-          checkInTime: checkIns.checkInTime,
-          checkInType: checkIns.checkInType,
-          checkInMethod: checkIns.checkInMethod,
-          branchId: checkIns.branchId,
-          branchName: branches.name,
-          contractId: checkIns.contractId,
-        })
+        .select(CHECK_IN_HISTORY_LIST_SELECT)
         .from(checkIns)
         .leftJoin(branches, eq(checkIns.branchId, branches.id))
         .where(and(...conditions))
@@ -404,13 +434,7 @@ app.get('/today', async (c) => {
   }
 
   const todayCheckIns = await db
-    .select({
-      id: checkIns.id,
-      checkInTime: checkIns.checkInTime,
-      checkInType: checkIns.checkInType,
-      branchId: checkIns.branchId,
-      branchName: branches.name,
-    })
+    .select(CHECK_IN_TODAY_SELECT)
     .from(checkIns)
     .leftJoin(branches, eq(checkIns.branchId, branches.id))
     .where(and(...conditions))
@@ -466,11 +490,7 @@ app.get('/stats', async (c) => {
 
     // Most visited branch
     db
-      .select({
-        branchId: checkIns.branchId,
-        branchName: branches.name,
-        count: sql<number>`count(*)`,
-      })
+      .select(CHECK_IN_STATS_BRANCH_SELECT)
       .from(checkIns)
       .leftJoin(branches, eq(checkIns.branchId, branches.id))
       .where(eq(checkIns.memberId, memberInfo.id))

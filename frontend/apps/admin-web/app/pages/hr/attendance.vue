@@ -1,3 +1,32 @@
+<script lang="ts">
+// 格式化器快取
+const attendanceTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+})
+
+const attendanceDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long'
+})
+
+const attendanceTimeOnlyFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false
+})
+
+const attendanceDateShortFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short'
+})
+</script>
+
 <script setup lang="ts">
 /**
  * 考勤打卡頁面
@@ -111,33 +140,6 @@ const fetchLocationInfo = async () => {
     { timeout: 5000, enableHighAccuracy: false }
   )
 }
-
-// 格式化器快取
-const attendanceTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: false
-})
-
-const attendanceDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  weekday: 'long'
-})
-
-const attendanceTimeOnlyFormatter = new Intl.DateTimeFormat('zh-TW', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false
-})
-
-const attendanceDateShortFormatter = new Intl.DateTimeFormat('zh-TW', {
-  month: 'short',
-  day: 'numeric',
-  weekday: 'short'
-})
 
 // 格式化時間
 const formatTime = (date: Date) => attendanceTimeFormatter.format(date)
