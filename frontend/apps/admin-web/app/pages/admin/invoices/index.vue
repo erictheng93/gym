@@ -342,9 +342,11 @@ const formatCurrency = (amount: number | null | undefined) => {
 }
 
 onMounted(() => {
-  loadTenants()
-  loadSubscriptions()
-  loadInvoices()
+  void Promise.all([
+    loadTenants(),
+    loadSubscriptions(),
+    loadInvoices(),
+  ])
 })
 </script>
 

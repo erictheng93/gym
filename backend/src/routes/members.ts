@@ -65,6 +65,40 @@ const COUNT_SELECT = {
   count: sql<number>`count(*)`,
 };
 
+const BRANCH_ID_NAME_SELECT = {
+  id: branches.id,
+  name: branches.name,
+};
+
+const MEMBER_EXPORT_SELECT = {
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  status: members.status,
+  joinDate: members.joinDate,
+  branchId: members.branchId,
+};
+
+const MEMBER_ID_SELECT = {
+  id: members.id,
+};
+
+const MEMBER_BRANCH_SELECT = {
+  id: members.id,
+  branchId: members.branchId,
+};
+
+const MEMBER_CONTRACT_WITH_PLAN_SELECT = {
+  contract: contracts,
+  plan: {
+    id: membershipPlans.id,
+    name: membershipPlans.name,
+    planType: membershipPlans.planType,
+  },
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -177,7 +211,7 @@ app.get('/export', async (c) => {
   const { branchId, status, format = 'csv' } = c.req.query();
 
   const tenantBranches = await db
-    .select({ id: branches.id, name: branches.name })
+    .select(BRANCH_ID_NAME_SELECT)
     .from(branches)
     .where(eq(branches.tenantId, tenantId));
 
@@ -201,16 +235,7 @@ app.get('/export', async (c) => {
   }
 
   const result = await db
-    .select({
-      memberCode: members.memberCode,
-      fullName: members.fullName,
-      phone: members.phone,
-      email: members.email,
-      gender: members.gender,
-      status: members.status,
-      joinDate: members.joinDate,
-      branchId: members.branchId,
-    })
+    .select(MEMBER_EXPORT_SELECT)
     .from(members)
     .where(baseCondition)
     .orderBy(desc(members.createdAt));
@@ -298,7 +323,7 @@ app.post('/', zValidator('json', createMemberSchema), async (c) => {
   }
 
   const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select(COUNT_SELECT)
     .from(members)
     .where(inArray(members.branchId, branchIds));
 
@@ -341,7 +366,7 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
 
   if (!updatedMember) {
     const [existingMember] = await db
-      .select({ id: members.id })
+      .select(MEMBER_ID_SELECT)
       .from(members)
       .where(eq(members.id, id))
       .limit(1);
@@ -368,11 +393,11 @@ app.delete('/:id', async (c) => {
     .update(members)
     .set({ status: 'SUSPENDED', updatedAt: new Date() })
     .where(and(eq(members.id, id), inArray(members.branchId, branchIds)))
-    .returning({ id: members.id });
+    .returning(MEMBER_ID_SELECT);
 
   if (!updatedMember) {
     const [existingMember] = await db
-      .select({ id: members.id })
+      .select(MEMBER_ID_SELECT)
       .from(members)
       .where(eq(members.id, id))
       .limit(1);
@@ -393,20 +418,13 @@ app.get('/:id/contracts', async (c) => {
 
   const [[member], branchIds, result] = await Promise.all([
     db
-      .select({ id: members.id, branchId: members.branchId })
+      .select(MEMBER_BRANCH_SELECT)
       .from(members)
       .where(eq(members.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select({
-        contract: contracts,
-        plan: {
-          id: membershipPlans.id,
-          name: membershipPlans.name,
-          planType: membershipPlans.planType,
-        },
-      })
+      .select(MEMBER_CONTRACT_WITH_PLAN_SELECT)
       .from(contracts)
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
       .where(eq(contracts.memberId, id))

@@ -42,6 +42,17 @@ const ATTENDANCE_PATCH_SELECT = {
   checkIn: attendances.checkIn,
 };
 
+const ATTENDANCE_INSERT_RETURNING = {
+  id: attendances.id,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  branchId: attendances.branchId,
+};
+
+const ATTENDANCE_ID_RETURNING = {
+  id: attendances.id,
+};
+
 const ATTENDANCE_COUNT_SELECT = { count: sql<number>`count(*)` };
 
 app.use('*', authMiddleware, requireAuth);
@@ -286,12 +297,7 @@ app.post('/', zValidator('json', createSchema), async (c) => {
       branchId: data.branch_id,
       checkIn: checkInTime,
     })
-    .returning({
-      id: attendances.id,
-      employeeId: attendances.employeeId,
-      checkIn: attendances.checkIn,
-      branchId: attendances.branchId,
-    });
+    .returning(ATTENDANCE_INSERT_RETURNING);
 
   return c.json({
     success: true,
@@ -367,7 +373,7 @@ app.delete('/:id', async (c) => {
   const [deleted] = await db
     .delete(attendances)
     .where(eq(attendances.id, id))
-    .returning({ id: attendances.id });
+    .returning(ATTENDANCE_ID_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '找不到考勤記錄' }, 404);

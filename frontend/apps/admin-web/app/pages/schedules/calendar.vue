@@ -393,8 +393,10 @@ function getShiftColor(shiftId: string): string {
   return shiftMap.value.get(shiftId)?.color || shiftColors[0]!
 }
 
+const selectedDatesSet = computed(() => new Set(selectedDates.value))
+
 function isDateSelected(date: string): boolean {
-  return selectedDates.value.includes(date)
+  return selectedDatesSet.value.has(date)
 }
 
 function toggleDateSelection(date: string) {

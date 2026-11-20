@@ -16,6 +16,65 @@ import { memberJwtService } from '../services/member-jwt.js';
 const app = new Hono<{ Variables: MemberVariables }>();
 
 // -----------------------------------------------------------------------------
+// Hoisted Query Projections
+// -----------------------------------------------------------------------------
+
+const SOCIAL_ACCOUNT_MEMBER_SELECT = {
+  id: memberSocialAccounts.id,
+  memberId: memberSocialAccounts.memberId,
+};
+
+const MEMBER_OAUTH_DETAIL_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  branchId: members.branchId,
+  tenantId: members.tenantId,
+  status: members.status,
+};
+
+const BRANCH_OAUTH_SELECT = {
+  tenantId: branches.tenantId,
+  name: branches.name,
+};
+
+const SOCIAL_ACCOUNT_ID_SELECT = {
+  id: memberSocialAccounts.id,
+};
+
+const MEMBER_PHONE_SELECT = {
+  phone: members.phone,
+};
+
+let cachedProviders: Array<{ provider: string; enabled: boolean; name: string }> | null = null;
+function getAvailableProviders() {
+  if (cachedProviders && process.env.NODE_ENV !== 'test') {
+    return cachedProviders;
+  }
+  const list = [
+    {
+      provider: 'google',
+      enabled: !!process.env.GOOGLE_CLIENT_ID,
+      name: 'Google',
+    },
+    {
+      provider: 'line',
+      enabled: !!process.env.LINE_CHANNEL_ID,
+      name: 'LINE',
+    },
+    {
+      provider: 'apple',
+      enabled: !!process.env.APPLE_CLIENT_ID,
+      name: 'Apple',
+    },
+  ].filter(p => p.enabled);
+  if (process.env.NODE_ENV !== 'test') {
+    cachedProviders = list;
+  }
+  return list;
+}
+
+// -----------------------------------------------------------------------------
 // OAuth Provider Configuration
 // -----------------------------------------------------------------------------
 
@@ -355,10 +414,7 @@ app.post(
 
     // Find existing social account
     const [existingSocial] = await db
-      .select({
-        id: memberSocialAccounts.id,
-        memberId: memberSocialAccounts.memberId,
-      })
+      .select(SOCIAL_ACCOUNT_MEMBER_SELECT)
       .from(memberSocialAccounts)
       .where(and(
         eq(memberSocialAccounts.provider, provider),
@@ -382,14 +438,7 @@ app.post(
 
       // Get member
       const [member] = await db
-        .select({
-          id: members.id,
-          memberCode: members.memberCode,
-          fullName: members.fullName,
-          branchId: members.branchId,
-          tenantId: members.tenantId,
-          status: members.status,
-        })
+        .select(MEMBER_OAUTH_DETAIL_SELECT)
         .from(members)
         .where(eq(members.id, existingSocial.memberId))
         .limit(1);
@@ -412,7 +461,7 @@ app.post(
 
       // Get branch for tenantId
       const [branch] = await db
-        .select({ tenantId: branches.tenantId, name: branches.name })
+        .select(BRANCH_OAUTH_SELECT)
         .from(branches)
         .where(eq(branches.id, member.branchId))
         .limit(1);
@@ -446,14 +495,7 @@ app.post(
     // Try to find member by email
     if (userInfo.email) {
       const [memberByEmail] = await db
-        .select({
-          id: members.id,
-          memberCode: members.memberCode,
-          fullName: members.fullName,
-          branchId: members.branchId,
-          tenantId: members.tenantId,
-          status: members.status,
-        })
+        .select(MEMBER_OAUTH_DETAIL_SELECT)
         .from(members)
         .where(eq(members.email, userInfo.email))
         .limit(1);
@@ -485,7 +527,7 @@ app.post(
 
         // Get branch for tenantId
         const [branch] = await db
-          .select({ tenantId: branches.tenantId, name: branches.name })
+          .select(BRANCH_OAUTH_SELECT)
           .from(branches)
           .where(eq(branches.id, memberByEmail.branchId))
           .limit(1);
@@ -581,10 +623,7 @@ app.post(
 
     // Check if this social account is already linked to another member
     const [existingSocial] = await db
-      .select({
-        id: memberSocialAccounts.id,
-        memberId: memberSocialAccounts.memberId,
-      })
+      .select(SOCIAL_ACCOUNT_MEMBER_SELECT)
       .from(memberSocialAccounts)
       .where(and(
         eq(memberSocialAccounts.provider, provider),
@@ -612,7 +651,7 @@ app.post(
 
     // Check if member already has this provider linked
     const [existingForMember] = await db
-      .select({ id: memberSocialAccounts.id })
+      .select(SOCIAL_ACCOUNT_ID_SELECT)
       .from(memberSocialAccounts)
       .where(and(
         eq(memberSocialAccounts.memberId, memberInfo.id),
@@ -671,7 +710,7 @@ app.delete(
 
     // Find the social account
     const [socialAccount] = await db
-      .select({ id: memberSocialAccounts.id })
+      .select(SOCIAL_ACCOUNT_ID_SELECT)
       .from(memberSocialAccounts)
       .where(and(
         eq(memberSocialAccounts.memberId, memberInfo.id),
@@ -690,14 +729,14 @@ app.delete(
     // Check if member has other login methods
     // (at least one: password, OTP via phone, or another social account)
     const socialAccounts = await db
-      .select({ id: memberSocialAccounts.id })
+      .select(SOCIAL_ACCOUNT_ID_SELECT)
       .from(memberSocialAccounts)
       .where(eq(memberSocialAccounts.memberId, memberInfo.id));
 
     if (socialAccounts.length <= 1) {
       // Check if member has phone for OTP
       const [member] = await db
-        .select({ phone: members.phone })
+        .select(MEMBER_PHONE_SELECT)
         .from(members)
         .where(eq(members.id, memberInfo.id))
         .limit(1);
@@ -728,28 +767,10 @@ app.delete(
 // -----------------------------------------------------------------------------
 
 app.get('/providers', async (c) => {
-  const providers = [
-    {
-      provider: 'google',
-      enabled: !!process.env.GOOGLE_CLIENT_ID,
-      name: 'Google',
-    },
-    {
-      provider: 'line',
-      enabled: !!process.env.LINE_CHANNEL_ID,
-      name: 'LINE',
-    },
-    {
-      provider: 'apple',
-      enabled: !!process.env.APPLE_CLIENT_ID,
-      name: 'Apple',
-    },
-  ];
-
   return c.json({
     success: true,
     data: {
-      providers: providers.filter(p => p.enabled),
+      providers: getAvailableProviders(),
     },
   });
 });
