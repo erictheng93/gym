@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, checkIns, members, contracts, branches, employees, membershipPlans } from '../db/index.js';
-import { eq, and, sql, desc, gte, lte } from 'drizzle-orm';
+import { eq, and, sql, desc, gte, lte, gt } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -122,15 +122,16 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const user = c.get('user')!;
   const data = c.req.valid('json');
 
-  // Verify branch belongs to tenant via cache
-  const tenantBranchIds = await getTenantBranchIds(tenantId);
-  if (!tenantBranchIds.includes(data.branchId)) {
-    return c.json({ success: false, error: '無效的分店' }, 400);
-  }
-
-  // Concurrently verify member exists and check active contract
+  // Calculate today bounds
   const today = new Date().toISOString().split('T')[0];
-  const [[member], [activeContractResult]] = await Promise.all([
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  // Concurrently verify tenant branch, member exists, check active contract, and check if already checked in
+  const [tenantBranchIds, [member], [activeContractResult], [existingCheckIn]] = await Promise.all([
+    getTenantBranchIds(tenantId),
     db
       .select()
       .from(members)
@@ -152,7 +153,23 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
         )
       )
       .limit(1),
+    db
+      .select()
+      .from(checkIns)
+      .where(
+        and(
+          eq(checkIns.memberId, data.memberId),
+          eq(checkIns.branchId, data.branchId),
+          gte(checkIns.checkInTime, todayStart),
+          lte(checkIns.checkInTime, todayEnd)
+        )
+      )
+      .limit(1),
   ]);
+
+  if (!tenantBranchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
+  }
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
@@ -168,25 +185,6 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       data: { member, hasActiveContract: false },
     }, 400);
   }
-
-  // Check if already checked in today at this branch
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-
-  const [existingCheckIn] = await db
-    .select()
-    .from(checkIns)
-    .where(
-      and(
-        eq(checkIns.memberId, data.memberId),
-        eq(checkIns.branchId, data.branchId),
-        gte(checkIns.checkInTime, todayStart),
-        lte(checkIns.checkInTime, todayEnd)
-      )
-    )
-    .limit(1);
 
   if (existingCheckIn) {
     return c.json({
@@ -211,15 +209,15 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     notes: data.notes,
   }).returning();
 
-  // Deduct session for COUNT_BASED contracts
+  // Deduct session for COUNT_BASED contracts atomically
   if (activePlan?.planType === 'COUNT_BASED' && activeContract) {
-    const remainingCounts = activeContract.remainingCounts ?? 0;
-    if (remainingCounts > 0) {
-      await db.update(contracts).set({
-        remainingCounts: remainingCounts - 1,
+    await db
+      .update(contracts)
+      .set({
+        remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,
         updatedAt: new Date(),
-      }).where(eq(contracts.id, activeContract.id));
-    }
+      })
+      .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)));
   }
 
   return c.json({
@@ -294,26 +292,28 @@ app.get('/stats/today', async (c) => {
     conditions.push(eq(checkIns.branchId, branchId));
   }
 
-  const [stats] = await db
-    .select({
-      total: sql<number>`count(*)`,
-      uniqueMembers: sql<number>`count(distinct ${checkIns.memberId})`,
-    })
-    .from(checkIns)
-    .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(and(...conditions));
+  const [[stats], hourlyStats] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        uniqueMembers: sql<number>`count(distinct ${checkIns.memberId})`,
+      })
+      .from(checkIns)
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(and(...conditions)),
 
-  // Hourly breakdown
-  const hourlyStats = await db
-    .select({
-      hour: sql<number>`extract(hour from ${checkIns.checkInTime})`,
-      count: sql<number>`count(*)`,
-    })
-    .from(checkIns)
-    .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(and(...conditions))
-    .groupBy(sql`extract(hour from ${checkIns.checkInTime})`)
-    .orderBy(sql`extract(hour from ${checkIns.checkInTime})`);
+    // Hourly breakdown
+    db
+      .select({
+        hour: sql<number>`extract(hour from ${checkIns.checkInTime})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(checkIns)
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(and(...conditions))
+      .groupBy(sql`extract(hour from ${checkIns.checkInTime})`)
+      .orderBy(sql`extract(hour from ${checkIns.checkInTime})`),
+  ]);
 
   return c.json({
     success: true,

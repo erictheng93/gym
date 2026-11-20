@@ -195,14 +195,8 @@ app.patch('/:id', zValidator('json', updateLeadSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
-    .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
   }
 
@@ -215,7 +209,15 @@ app.patch('/:id', zValidator('json', updateLeadSchema), async (c) => {
     updateData.expectedBudget = data.expectedBudget ? String(data.expectedBudget) : null;
   }
 
-  const [updated] = await db.update(leads).set(updateData).where(eq(leads.id, id)).returning();
+  const [updated] = await db
+    .update(leads)
+    .set(updateData)
+    .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
+    .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '潛在客戶不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -228,12 +230,19 @@ app.post('/:id/convert', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [lead] = await db
-    .select({ lead: leads, branch: branches })
-    .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
-    .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  const [[lead], [lastMember]] = await Promise.all([
+    db
+      .select({ lead: leads, branch: branches })
+      .from(leads)
+      .innerJoin(branches, eq(leads.branchId, branches.id))
+      .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
+      .limit(1),
+    db
+      .select({ memberCode: members.memberCode })
+      .from(members)
+      .orderBy(desc(members.createdAt))
+      .limit(1),
+  ]);
 
   if (!lead) {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
@@ -242,13 +251,6 @@ app.post('/:id/convert', async (c) => {
   if (lead.lead.leadStatus === 'CONVERTED') {
     return c.json({ success: false, error: '此潛在客戶已轉換' }, 400);
   }
-
-  // Generate member code
-  const [lastMember] = await db
-    .select({ memberCode: members.memberCode })
-    .from(members)
-    .orderBy(desc(members.createdAt))
-    .limit(1);
 
   const lastNum = lastMember?.memberCode ? parseInt(lastMember.memberCode.slice(1)) : 0;
   const memberCode = `M${String(lastNum + 1).padStart(6, '0')}`;
@@ -293,18 +295,19 @@ app.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(leads)
-    .innerJoin(branches, eq(leads.branchId, branches.id))
-    .where(and(eq(leads.id, id), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
   }
 
-  await db.delete(leads).where(eq(leads.id, id));
+  const [deleted] = await db
+    .delete(leads)
+    .where(and(eq(leads.id, id), inArray(leads.branchId, branchIds)))
+    .returning({ id: leads.id });
+
+  if (!deleted) {
+    return c.json({ success: false, error: '潛在客戶不存在' }, 404);
+  }
 
   return c.json({ success: true, message: '潛在客戶已刪除' });
 });

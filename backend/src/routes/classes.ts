@@ -89,7 +89,7 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [[classItem], branchIds] = await Promise.all([
+  const [[classItem], branchIds, schedules] = await Promise.all([
     db
       .select({
         class: classes,
@@ -108,6 +108,11 @@ app.get('/:id', async (c) => {
       .where(eq(classes.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(classSchedules)
+      .where(eq(classSchedules.classId, id))
+      .orderBy(classSchedules.dayOfWeek, classSchedules.startTime),
   ]);
 
   if (!classItem) {
@@ -117,12 +122,6 @@ app.get('/:id', async (c) => {
   if (!branchIds.includes(classItem.class.branchId)) {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
-
-  const schedules = await db
-    .select()
-    .from(classSchedules)
-    .where(eq(classSchedules.classId, id))
-    .orderBy(classSchedules.dayOfWeek, classSchedules.startTime);
 
   return c.json({
     success: true,
@@ -193,13 +192,31 @@ app.get('/:id/sessions', async (c) => {
     return d.toISOString().split('T')[0];
   })();
 
-  const [[classItem], branchIds] = await Promise.all([
+  const [[classItem], branchIds, sessions] = await Promise.all([
     db
       .select()
       .from(classes)
       .where(eq(classes.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
+    db
+      .select({
+        session: classSessions,
+        instructor: {
+          id: employees.id,
+          fullName: employees.fullName,
+        },
+      })
+      .from(classSessions)
+      .leftJoin(employees, eq(classSessions.instructorId, employees.id))
+      .where(
+        and(
+          eq(classSessions.classId, id),
+          gte(classSessions.sessionDate, startDate),
+          lte(classSessions.sessionDate, endDate)
+        )
+      )
+      .orderBy(classSessions.sessionDate, classSessions.startTime),
   ]);
 
   if (!classItem) {
@@ -209,25 +226,6 @@ app.get('/:id/sessions', async (c) => {
   if (!branchIds.includes(classItem.branchId)) {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
-
-  const sessions = await db
-    .select({
-      session: classSessions,
-      instructor: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(classSessions)
-    .leftJoin(employees, eq(classSessions.instructorId, employees.id))
-    .where(
-      and(
-        eq(classSessions.classId, id),
-        gte(classSessions.sessionDate, startDate),
-        lte(classSessions.sessionDate, endDate)
-      )
-    )
-    .orderBy(classSessions.sessionDate, classSessions.startTime);
 
   return c.json({
     success: true,
@@ -242,16 +240,18 @@ app.post('/schedules', zValidator('json', createScheduleSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const tenantBranchIds = await getTenantBranchIds(tenantId);
+  const [tenantBranchIds, [classItem]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, data.classId))
+      .limit(1),
+  ]);
+
   if (!tenantBranchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
-
-  const [classItem] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, data.classId))
-    .limit(1);
 
   if (!classItem || classItem.branchId !== data.branchId) {
     return c.json({ success: false, error: '無效的課程' }, 400);
