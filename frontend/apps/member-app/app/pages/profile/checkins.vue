@@ -70,12 +70,18 @@ onMounted(() => {
   fetchCheckins()
 })
 
+// Cached Intl formatters
+const checkinMonthDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+const checkinWeekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
+const checkinDateKeyFormatter = new Intl.DateTimeFormat('zh-TW')
+
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr)
   return {
-    date: date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }),
-    time: date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
-    weekday: date.toLocaleDateString('zh-TW', { weekday: 'short' })
+    date: checkinMonthDayFormatter.format(date),
+    time: checkinTimeFormatter.format(date),
+    weekday: checkinWeekdayFormatter.format(date),
   }
 }
 
@@ -93,7 +99,7 @@ const groupedCheckins = computed(() => {
   const groups: Record<string, Checkin[]> = {}
 
   checkins.value.forEach(checkin => {
-    const dateKey = new Date(checkin.check_time).toLocaleDateString('zh-TW')
+    const dateKey = checkinDateKeyFormatter.format(new Date(checkin.check_time))
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }

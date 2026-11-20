@@ -156,12 +156,12 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({ id: members.id, status: members.status })
       .from(members)
       .where(eq(members.id, data.memberId))
       .limit(1),
     db
-      .select()
+      .select({ id: bookings.id })
       .from(bookings)
       .where(
         and(
@@ -289,7 +289,7 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
         updatedAt: new Date(),
       }).where(eq(bookings.id, id)),
       db
-        .select()
+        .select({ id: bookings.id })
         .from(bookings)
         .where(
           and(

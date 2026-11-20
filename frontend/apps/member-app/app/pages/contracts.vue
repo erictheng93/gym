@@ -48,9 +48,12 @@ onMounted(() => {
   fetchContracts()
 })
 
+// Cached Intl formatter
+const contractDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  return contractDateFormatter.format(new Date(dateStr))
 }
 
 const statusLabels: Record<string, string> = {

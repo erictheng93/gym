@@ -170,11 +170,13 @@ const handleLogout = async () => {
   }
 }
 
+// Cached Intl formatter
+const profileDateFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })
+
 // 格式化日期
 const formatDate = (dateStr: string | null | undefined) => {
   if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })
+  return profileDateFormatter.format(new Date(dateStr))
 }
 
 // 格式化性別
