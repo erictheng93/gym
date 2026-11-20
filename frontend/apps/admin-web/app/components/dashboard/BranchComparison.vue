@@ -22,27 +22,30 @@ const { formatCurrency } = useCharts()
 const branchData = computed(() => {
   if (!props.kpis) return []
 
-  const revenueMap = new Map(
-    props.kpis.revenue.by_branch.map(b => [b.branch_id, b])
-  )
-  const memberMap = new Map(
-    props.kpis.members.by_branch.map(b => [b.branch_id, b])
-  )
-  const checkinMap = new Map(
-    props.kpis.operations.by_branch.map(b => [b.branch_id, b])
-  )
-  const targetMap = new Map(
-    (props.targets || []).map(t => [t.branch_id, t])
-  )
+  const memberMap = new Map<string, (typeof props.kpis.members.by_branch)[0]>()
+  for (const b of props.kpis.members.by_branch) {
+    memberMap.set(b.branch_id, b)
+  }
 
-  // 使用營收數據作為基準
+  const checkinMap = new Map<string, (typeof props.kpis.operations.by_branch)[0]>()
+  for (const b of props.kpis.operations.by_branch) {
+    checkinMap.set(b.branch_id, b)
+  }
+
+  const targetMap = new Map<string, RevenueTarget>()
+  if (props.targets) {
+    for (const t of props.targets) {
+      targetMap.set(t.branch_id, t)
+    }
+  }
+
+  // 使用營收數據作為基準 (branch 即為該分店之營收資料)
   return props.kpis.revenue.by_branch.map(branch => {
-    const revenue = revenueMap.get(branch.branch_id)
     const members = memberMap.get(branch.branch_id)
     const checkins = checkinMap.get(branch.branch_id)
     const target = targetMap.get(branch.branch_id)
 
-    const mtdRevenue = parseFloat(revenue?.revenue as any) || 0
+    const mtdRevenue = parseFloat(branch.revenue as any) || 0
     const targetAmount = target?.target_amount || 0
     const achievement = targetAmount > 0 ? (mtdRevenue / targetAmount) * 100 : 0
 
@@ -50,7 +53,7 @@ const branchData = computed(() => {
       branch_id: branch.branch_id,
       branch_name: branch.branch_name,
       revenue: mtdRevenue,
-      transactions: revenue?.transactions || 0,
+      transactions: branch.transactions || 0,
       members: members?.total || 0,
       active_members: members?.active || 0,
       checkins: checkins?.today_checkins || 0,
@@ -60,21 +63,23 @@ const branchData = computed(() => {
   }).sort((a, b) => b.revenue - a.revenue)
 })
 
-// 計算總計
+// 計算總計 (避免每次累加建立新物件)
 const totals = computed(() => {
-  return branchData.value.reduce((acc, branch) => ({
-    revenue: acc.revenue + branch.revenue,
-    transactions: acc.transactions + branch.transactions,
-    members: acc.members + branch.members,
-    active_members: acc.active_members + branch.active_members,
-    checkins: acc.checkins + branch.checkins
-  }), {
+  const acc = {
     revenue: 0,
     transactions: 0,
     members: 0,
     active_members: 0,
     checkins: 0
-  })
+  }
+  for (const branch of branchData.value) {
+    acc.revenue += branch.revenue
+    acc.transactions += branch.transactions
+    acc.members += branch.members
+    acc.active_members += branch.active_members
+    acc.checkins += branch.checkins
+  }
+  return acc
 })
 
 const getAchievementClass = (achievement: string) => {

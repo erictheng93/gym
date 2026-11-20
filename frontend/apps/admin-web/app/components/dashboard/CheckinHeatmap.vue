@@ -5,6 +5,8 @@
  */
 import { DAY_OF_WEEK_NAMES } from '@gym-nexus/shared'
 
+const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i}`)
+
 interface Props {
   data?: number[][] // 7x24 matrix
   loading?: boolean
@@ -17,12 +19,21 @@ const props = withDefaults(defineProps<Props>(), {
 const { getHeatmapColor } = useCharts()
 
 const dayLabels = DAY_OF_WEEK_NAMES
-const hourLabels = Array.from({ length: 24 }, (_, i) => `${i}`)
+const hourLabels = HOUR_LABELS
 
-// 計算最大值
+// 計算最大值 (避免 flat() 與 spread 陣列配置)
 const maxValue = computed(() => {
   if (!props.data) return 0
-  return Math.max(...props.data.flat())
+  let max = 0
+  for (let i = 0; i < props.data.length; i++) {
+    const row = props.data[i]
+    if (row) {
+      for (let j = 0; j < row.length; j++) {
+        if (row[j] > max) max = row[j]
+      }
+    }
+  }
+  return max
 })
 
 // 獲取單元格顏色

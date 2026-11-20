@@ -10,6 +10,61 @@ import { generateExcel, generateCsv, membersColumns, translateStatus, translateG
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const MEMBER_RETURNING = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  idNumber: members.idNumber,
+  address: members.address,
+  emergencyContact: members.emergencyContact,
+  emergencyPhone: members.emergencyPhone,
+  branchId: members.branchId,
+  salesPersonId: members.salesPersonId,
+  status: members.status,
+  joinDate: members.joinDate,
+  tags: members.tags,
+  notes: members.notes,
+  avatar: members.avatar,
+  height: members.height,
+  createdAt: members.createdAt,
+  updatedAt: members.updatedAt,
+  tenantId: members.tenantId,
+};
+
+const MEMBER_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+  memberId: contracts.memberId,
+  planId: contracts.planId,
+  branchId: contracts.branchId,
+  salesPersonId: contracts.salesPersonId,
+  status: contracts.status,
+  signDate: contracts.signDate,
+  startDate: contracts.startDate,
+  originalEndDate: contracts.originalEndDate,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  totalAmount: contracts.totalAmount,
+  paidAmount: contracts.paidAmount,
+  paymentStatus: contracts.paymentStatus,
+  digitalSignature: contracts.digitalSignature,
+  contractPdf: contracts.contractPdf,
+  termsAccepted: contracts.termsAccepted,
+  notes: contracts.notes,
+  createdBy: contracts.createdBy,
+  createdAt: contracts.createdAt,
+  updatedAt: contracts.updatedAt,
+  tenantId: contracts.tenantId,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -87,11 +142,11 @@ app.get('/', zValidator('query', querySchema), async (c) => {
 
   const [[countResult], result] = await Promise.all([
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(members)
       .where(baseCondition),
     db
-      .select()
+      .select(MEMBER_RETURNING)
       .from(members)
       .where(baseCondition)
       .orderBy(orderBy)
@@ -204,13 +259,13 @@ app.get('/:id', async (c) => {
 
   const [[member], branchIds, memberContracts] = await Promise.all([
     db
-      .select()
+      .select(MEMBER_RETURNING)
       .from(members)
       .where(eq(members.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select(MEMBER_CONTRACT_SELECT)
       .from(contracts)
       .where(eq(contracts.memberId, id))
       .orderBy(desc(contracts.createdAt)),
@@ -232,31 +287,6 @@ app.get('/:id', async (c) => {
     },
   });
 });
-
-const MEMBER_RETURNING = {
-  id: members.id,
-  memberCode: members.memberCode,
-  fullName: members.fullName,
-  phone: members.phone,
-  email: members.email,
-  gender: members.gender,
-  birthday: members.birthday,
-  idNumber: members.idNumber,
-  address: members.address,
-  emergencyContact: members.emergencyContact,
-  emergencyPhone: members.emergencyPhone,
-  branchId: members.branchId,
-  salesPersonId: members.salesPersonId,
-  status: members.status,
-  joinDate: members.joinDate,
-  tags: members.tags,
-  notes: members.notes,
-  avatar: members.avatar,
-  height: members.height,
-  createdAt: members.createdAt,
-  updatedAt: members.updatedAt,
-  tenantId: members.tenantId,
-};
 
 app.post('/', zValidator('json', createMemberSchema), async (c) => {
   const tenantId = c.get('tenantId')!;

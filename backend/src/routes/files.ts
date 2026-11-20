@@ -50,7 +50,7 @@ app.get('/', async (c) => {
   }
 
   const allFiles = await db
-    .select()
+    .select(FILE_RETURNING)
     .from(files)
     .where(and(...conditions))
     .orderBy(desc(files.createdAt))
@@ -82,7 +82,7 @@ app.get('/:id', async (c) => {
   const { id } = c.req.param();
 
   const [file] = await db
-    .select()
+    .select(FILE_RETURNING)
     .from(files)
     .where(
       and(

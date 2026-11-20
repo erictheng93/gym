@@ -17,6 +17,29 @@ interface MemberRFM {
   segment: RFMSegment;
 }
 
+const ALL_ACTIVE_MEMBERS_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+  branchId: members.branchId,
+  tenantId: members.tenantId,
+  tags: members.tags,
+};
+
+const RECENCY_AGG_SELECT = {
+  memberId: checkIns.memberId,
+  lastTime: max(checkIns.checkInTime),
+};
+
+const FREQUENCY_AGG_SELECT = {
+  memberId: checkIns.memberId,
+  count: count(),
+};
+
+const MONETARY_AGG_SELECT = {
+  memberId: contracts.memberId,
+  total: sum(payments.amount),
+};
+
 /**
  * Calculate RFM scores and segments for all members
  */
@@ -25,8 +48,6 @@ export async function runRFMSegmentation() {
 
   try {
     const today = new Date();
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(today.getDate() - 30);
     const ninetyDaysAgo = new Date(today);
     ninetyDaysAgo.setDate(today.getDate() - 90);
     const oneYearAgo = new Date(today);
@@ -34,57 +55,75 @@ export async function runRFMSegmentation() {
 
     // Get all active members
     const allMembers = await db
-      .select({
-        id: members.id,
-        fullName: members.fullName,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-      })
+      .select(ALL_ACTIVE_MEMBERS_SELECT)
       .from(members)
       .where(eq(members.status, 'ACTIVE'));
 
     console.log(`[RFM] Analyzing ${allMembers.length} members...`);
 
+    if (allMembers.length === 0) {
+      return {
+        totalMembers: 0,
+        segmentCounts: {} as Record<RFMSegment, number>,
+      };
+    }
+
+    // Batch aggregate Recency, Frequency, and Monetary metrics across all members
+    const [recencyRows, frequencyRows, monetaryRows] = await Promise.all([
+      db
+        .select(RECENCY_AGG_SELECT)
+        .from(checkIns)
+        .groupBy(checkIns.memberId),
+      db
+        .select(FREQUENCY_AGG_SELECT)
+        .from(checkIns)
+        .where(gte(checkIns.checkInTime, ninetyDaysAgo))
+        .groupBy(checkIns.memberId),
+      db
+        .select(MONETARY_AGG_SELECT)
+        .from(payments)
+        .innerJoin(contracts, eq(payments.contractId, contracts.id))
+        .where(
+          and(
+            eq(payments.type, 'INCOME'),
+            gte(payments.paymentDate, oneYearAgo)
+          )
+        )
+        .groupBy(contracts.memberId),
+    ]);
+
+    const recencyMap = new Map<string, Date>();
+    for (const r of recencyRows) {
+      if (r.memberId && r.lastTime) {
+        recencyMap.set(r.memberId, new Date(r.lastTime));
+      }
+    }
+
+    const frequencyMap = new Map<string, number>();
+    for (const f of frequencyRows) {
+      if (f.memberId) {
+        frequencyMap.set(f.memberId, Number(f.count || 0));
+      }
+    }
+
+    const monetaryMap = new Map<string, number>();
+    for (const m of monetaryRows) {
+      if (m.memberId) {
+        monetaryMap.set(m.memberId, Number(m.total || 0));
+      }
+    }
+
     const rfmData: MemberRFM[] = [];
 
     for (const member of allMembers) {
       try {
-        // Recency: Days since last check-in
-        const [lastCheckIn] = await db
-          .select({ lastTime: max(checkIns.checkInTime) })
-          .from(checkIns)
-          .where(eq(checkIns.memberId, member.id));
-
-        const lastCheckInDate = lastCheckIn?.lastTime;
+        const lastCheckInDate = recencyMap.get(member.id);
         const recency = lastCheckInDate
-          ? Math.floor((today.getTime() - new Date(lastCheckInDate).getTime()) / (1000 * 60 * 60 * 24))
-          : 999; // Never checked in
+          ? Math.floor((today.getTime() - lastCheckInDate.getTime()) / (1000 * 60 * 60 * 24))
+          : 999;
 
-        // Frequency: Check-ins in last 90 days
-        const [frequencyResult] = await db
-          .select({ count: count() })
-          .from(checkIns)
-          .where(
-            and(
-              eq(checkIns.memberId, member.id),
-              gte(checkIns.checkInTime, ninetyDaysAgo)
-            )
-          );
-        const frequency = Number(frequencyResult?.count || 0);
-
-        // Monetary: Total payments in last year
-        const [monetaryResult] = await db
-          .select({ total: sum(payments.amount) })
-          .from(payments)
-          .leftJoin(contracts, eq(payments.contractId, contracts.id))
-          .where(
-            and(
-              eq(contracts.memberId, member.id),
-              eq(payments.type, 'INCOME'),
-              gte(payments.paymentDate, oneYearAgo)
-            )
-          );
-        const monetary = Number(monetaryResult?.total || 0);
+        const frequency = frequencyMap.get(member.id) || 0;
+        const monetary = monetaryMap.get(member.id) || 0;
 
         // Calculate segment based on RFM scores
         const segment = calculateSegment(recency, frequency, monetary);
@@ -97,18 +136,24 @@ export async function runRFMSegmentation() {
           segment,
         });
 
-        // Update member tags with segment
-        const existingTags = member.tenantId ? await getMemberTags(member.id) : [];
-        const updatedTags = updateRFMTag(existingTags, segment);
+        // Update member tags with segment only if changed
+        if (member.tenantId) {
+          const existingTags = Array.isArray(member.tags) ? (member.tags as string[]) : [];
+          const updatedTags = updateRFMTag(existingTags, segment);
+          const tagsChanged =
+            existingTags.length !== updatedTags.length ||
+            existingTags.some((t, i) => t !== updatedTags[i]);
 
-        await db
-          .update(members)
-          .set({
-            tags: updatedTags,
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, member.id));
-
+          if (tagsChanged) {
+            await db
+              .update(members)
+              .set({
+                tags: updatedTags,
+                updatedAt: new Date(),
+              })
+              .where(eq(members.id, member.id));
+          }
+        }
       } catch (error) {
         console.error(`[RFM] Failed to analyze member ${member.id}:`, error);
       }
@@ -160,19 +205,6 @@ function calculateSegment(recency: number, frequency: number, monetary: number):
   return avgScore >= 3 ? 'POTENTIAL' : 'HIBERNATING';
 }
 
-/**
- * Get member's current tags
- */
-async function getMemberTags(memberId: string): Promise<string[]> {
-  const [member] = await db
-    .select({ tags: members.tags })
-    .from(members)
-    .where(eq(members.id, memberId));
-
-  if (!member?.tags) return [];
-  if (Array.isArray(member.tags)) return member.tags as string[];
-  return [];
-}
 
 /**
  * Update RFM tag in member tags

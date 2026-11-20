@@ -32,6 +32,23 @@ const LESSON_PLAN_SELECT = {
   tenantId: lessonPlans.tenantId,
 };
 
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const SESSION_INSTRUCTOR_SELECT = {
+  instructorId: classSessions.instructorId,
+};
+
+const PLAN_RETURNING_SELECT = {
+  id: lessonPlans.id,
+  title: lessonPlans.title,
+};
+
+const ID_RETURNING_SELECT = {
+  id: lessonPlans.id,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -117,14 +134,14 @@ app.get('/', async (c) => {
   // Get plans and total count in parallel
   const [plansData, [countResult]] = await Promise.all([
     db
-      .select()
+      .select(LESSON_PLAN_SELECT)
       .from(lessonPlans)
       .where(and(...conditions))
       .orderBy(desc(lessonPlans.createdAt))
       .limit(limitNum)
       .offset(offsetNum),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(lessonPlans)
       .where(and(...conditions)),
   ]);
@@ -334,7 +351,7 @@ app.post(
     // If linking to session, verify ownership
     if (data.session_id) {
       const [session] = await db
-        .select({ instructorId: classSessions.instructorId })
+        .select(SESSION_INSTRUCTOR_SELECT)
         .from(classSessions)
         .where(eq(classSessions.id, data.session_id))
         .limit(1);
@@ -366,10 +383,7 @@ app.post(
         sessionId: data.session_id,
         tenantId: coach.tenantId || null,
       })
-      .returning({
-        id: lessonPlans.id,
-        title: lessonPlans.title,
-      });
+      .returning(PLAN_RETURNING_SELECT);
 
     return c.json({
       success: true,
@@ -397,7 +411,7 @@ app.patch(
     // If linking to session, verify ownership
     if (data.session_id) {
       const [session] = await db
-        .select({ instructorId: classSessions.instructorId })
+        .select(SESSION_INSTRUCTOR_SELECT)
         .from(classSessions)
         .where(eq(classSessions.id, data.session_id))
         .limit(1);
@@ -438,7 +452,7 @@ app.patch(
           eq(lessonPlans.coachId, coach.id)
         )
       )
-      .returning({ id: lessonPlans.id });
+      .returning(ID_RETURNING_SELECT);
 
     if (!updatedPlan) {
       return c.json({
@@ -502,7 +516,7 @@ app.post(
 
     // Get source plan (own or shared template)
     const [sourcePlan] = await db
-      .select()
+      .select(LESSON_PLAN_SELECT)
       .from(lessonPlans)
       .where(
         and(
@@ -529,7 +543,7 @@ app.post(
     // If linking to session, verify ownership
     if (session_id) {
       const [session] = await db
-        .select({ instructorId: classSessions.instructorId })
+        .select(SESSION_INSTRUCTOR_SELECT)
         .from(classSessions)
         .where(eq(classSessions.id, session_id))
         .limit(1);
@@ -561,10 +575,7 @@ app.post(
         sessionId: session_id || null,
         tenantId: coach.tenantId || null,
       })
-      .returning({
-        id: lessonPlans.id,
-        title: lessonPlans.title,
-      });
+      .returning(PLAN_RETURNING_SELECT);
 
     return c.json({
       success: true,
