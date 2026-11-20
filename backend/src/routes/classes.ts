@@ -147,6 +147,43 @@ app.get('/:id', async (c) => {
   });
 });
 
+const CLASS_RETURNING = {
+  id: classes.id,
+  status: classes.status,
+  createdAt: classes.createdAt,
+  updatedAt: classes.updatedAt,
+  name: classes.name,
+  description: classes.description,
+  durationMinutes: classes.durationMinutes,
+  maxCapacity: classes.maxCapacity,
+  instructorId: classes.instructorId,
+  branchId: classes.branchId,
+  category: classes.category,
+  difficultyLevel: classes.difficultyLevel,
+  imageUrl: classes.imageUrl,
+  isActive: classes.isActive,
+  requiresCount: classes.requiresCount,
+  countDeduction: classes.countDeduction,
+};
+
+const CLASS_SCHEDULE_RETURNING = {
+  id: classSchedules.id,
+  status: classSchedules.status,
+  createdAt: classSchedules.createdAt,
+  updatedAt: classSchedules.updatedAt,
+  classId: classSchedules.classId,
+  branchId: classSchedules.branchId,
+  instructorId: classSchedules.instructorId,
+  dayOfWeek: classSchedules.dayOfWeek,
+  startTime: classSchedules.startTime,
+  endTime: classSchedules.endTime,
+  room: classSchedules.room,
+  maxCapacity: classSchedules.maxCapacity,
+  isRecurring: classSchedules.isRecurring,
+  validFrom: classSchedules.validFrom,
+  validUntil: classSchedules.validUntil,
+};
+
 app.post('/', zValidator('json', createClassSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
@@ -156,7 +193,7 @@ app.post('/', zValidator('json', createClassSchema), async (c) => {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
-  const [newClass] = await db.insert(classes).values(data).returning();
+  const [newClass] = await db.insert(classes).values(data).returning(CLASS_RETURNING);
 
   return c.json({ success: true, data: newClass }, 201);
 });
@@ -182,7 +219,7 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
       updatedAt: new Date(),
     })
     .where(and(eq(classes.id, id), inArray(classes.branchId, branchIds)))
-    .returning();
+    .returning(CLASS_RETURNING);
 
   if (!updatedClass) {
     const [exists] = await db.select({ id: classes.id }).from(classes).where(eq(classes.id, id)).limit(1);
@@ -270,7 +307,7 @@ app.post('/schedules', zValidator('json', createScheduleSchema), async (c) => {
     return c.json({ success: false, error: '無效的課程' }, 400);
   }
 
-  const [newSchedule] = await db.insert(classSchedules).values(data).returning();
+  const [newSchedule] = await db.insert(classSchedules).values(data).returning(CLASS_SCHEDULE_RETURNING);
 
   return c.json({ success: true, data: newSchedule }, 201);
 });

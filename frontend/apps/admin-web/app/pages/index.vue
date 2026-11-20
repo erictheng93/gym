@@ -128,6 +128,15 @@ const formatDate = (dateStr: string) => {
   return dashboardDateFormatter.format(new Date(dateStr))
 }
 
+const dashboardHeaderDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
+const todayFormatted = computed(() => dashboardHeaderDateFormatter.format(new Date()))
+
 const formatCurrency = (amount: number) => {
   return dashboardCurrencyFormatter.format(amount)
 }
@@ -146,7 +155,7 @@ const getStatusBadge = (status: string) => {
         <p class="text-title-3 text-secondary">{{ PAGES.DASHBOARD.WELCOME }}</p>
       </div>
       <div class="header-date">
-        <p class="text-callout text-tertiary">{{ new Date().toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</p>
+        <p class="text-callout text-tertiary">{{ todayFormatted }}</p>
       </div>
     </header>
 
