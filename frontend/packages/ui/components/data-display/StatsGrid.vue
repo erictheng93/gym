@@ -148,13 +148,20 @@ const getIconPaths = (iconName: string | undefined) => {
 .stat-card:nth-child(4) { animation-delay: 0.25s; }
 
 .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-lg);
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 0 var(--color-border-specular);
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.06);
 }
 
 .stat-default .stat-icon {
@@ -163,41 +170,50 @@ const getIconPaths = (iconName: string | undefined) => {
 }
 
 .stat-success .stat-icon {
-  background: rgba(52, 199, 89, 0.15);
+  background: var(--color-success-light, rgba(16, 185, 129, 0.15));
   color: var(--color-success);
 }
 
 .stat-warning .stat-icon {
-  background: rgba(255, 159, 10, 0.15);
+  background: var(--color-warning-light, rgba(245, 158, 11, 0.15));
   color: var(--color-warning);
 }
 
 .stat-error .stat-icon {
-  background: rgba(255, 59, 48, 0.15);
+  background: var(--color-error-light, rgba(239, 68, 68, 0.15));
   color: var(--color-error);
 }
 
 .stat-info .stat-icon {
-  background: rgba(0, 122, 255, 0.15);
-  color: #007aff;
+  background: rgba(14, 165, 233, 0.15);
+  color: #0284c7;
+}
+
+[data-theme="dark"] .stat-info .stat-icon {
+  color: #38bdf8;
 }
 
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 2px;
 }
 
 .stat-number {
+  font-family: var(--font-display);
   font-size: 32px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
 }
 
 .stat-label {
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--color-text-secondary);
+  letter-spacing: -0.01em;
 }
 
 @keyframes statAppear {

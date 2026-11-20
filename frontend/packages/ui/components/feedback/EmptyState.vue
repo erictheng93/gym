@@ -184,23 +184,26 @@ const currentIcon = computed(() => icons[props.icon] ?? icons.inbox ?? { viewBox
 
 <template>
   <div class="empty-state">
-    <div class="empty-icon">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="48"
-        height="48"
-        :viewBox="currentIcon.viewBox"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path v-for="(d, i) in currentIcon.paths" :key="i" :d="d" />
-      </svg>
+    <div class="empty-icon-wrapper">
+      <div class="empty-icon-glow" />
+      <div class="empty-icon">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="40"
+          height="40"
+          :viewBox="currentIcon.viewBox"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path v-for="(d, i) in currentIcon.paths" :key="i" :d="d" />
+        </svg>
+      </div>
     </div>
-    <h3 class="text-title-3">{{ title }}</h3>
-    <p v-if="description" class="text-secondary">{{ description }}</p>
+    <h3 class="empty-title">{{ title }}</h3>
+    <p v-if="description" class="empty-desc">{{ description }}</p>
     <slot />
     <NuxtLink v-if="actionTo && actionLabel" :to="actionTo" class="btn btn-primary mt-lg">
       {{ actionLabel }}
@@ -217,28 +220,74 @@ const currentIcon = computed(() => icons[props.icon] ?? icons.inbox ?? { viewBox
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--space-3xl);
+  padding: var(--space-3xl) var(--space-xl);
   text-align: center;
 }
 
-.empty-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-tertiary);
+.empty-icon-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-xl);
 }
 
-.empty-state h3 {
-  margin-bottom: var(--space-xs);
+.empty-icon-glow {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: var(--color-accent-glow);
+  filter: blur(18px);
+  opacity: 0.35;
+  animation: glowBreathe 3s ease-in-out infinite alternate;
 }
 
-.empty-state p {
+.empty-icon {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-2xl);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: transform var(--duration-normal) var(--ease-spring);
+}
+
+.empty-state:hover .empty-icon {
+  transform: translateY(-2px);
+  color: var(--color-accent);
+}
+
+.empty-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.empty-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
   margin: 0;
-  max-width: 300px;
+  max-width: 340px;
+}
+
+@keyframes glowBreathe {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.25;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0.45;
+  }
 }
 </style>
