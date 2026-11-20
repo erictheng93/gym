@@ -356,10 +356,7 @@ const triggerShake = () => {
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-text-primary);
   animation: titleAppear 0.8s var(--ease-out) backwards;
   animation-delay: 0.2s;
 }

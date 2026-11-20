@@ -63,7 +63,7 @@ const hrModules = [
     description: '設定員工上下班時間與加班規則',
     to: '/hr/schedules',
     icon: 'schedule',
-    gradient: 'from-purple-500 to-pink-400'
+    gradient: 'from-emerald-500 to-teal-400'
   },
   {
     title: '月度考勤報表',
@@ -77,7 +77,7 @@ const hrModules = [
     description: '管理所有員工資料與檔案',
     to: '/hr/employees',
     icon: 'users',
-    gradient: 'from-indigo-500 to-blue-400'
+    gradient: 'from-sky-500 to-cyan-400'
   },
   {
     title: '職位管理',

@@ -565,7 +565,7 @@ const handleDelete = async () => {
   padding: var(--space-xl);
   margin: var(--space-lg);
   text-align: center;
-  animation: modalIn 0.3s var(--ease-spring);
+  animation: modalIn 0.3s var(--ease-out);
 }
 
 @keyframes modalIn {

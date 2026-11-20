@@ -207,24 +207,28 @@ const hasReview = computed(() => props.booking.has_review || false)
 }
 
 .booking-card.success {
-  border-left: 4px solid var(--color-primary);
+  border-color: rgba(16, 185, 129, 0.4);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, var(--color-surface) 100%);
 }
 
 .booking-card.warning {
-  border-left: 4px solid var(--color-warning);
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, var(--color-surface) 100%);
 }
 
 .booking-card.error {
-  border-left: 4px solid var(--color-error);
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, var(--color-surface) 100%);
 }
 
 .booking-card.primary {
-  border-left: 4px solid #3b82f6;
+  border-color: rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, var(--color-surface) 100%);
 }
 
 .booking-card.muted {
   opacity: 0.6;
-  border-left: 4px solid var(--color-text-tertiary);
+  border-color: var(--color-border);
 }
 
 .booking-date {

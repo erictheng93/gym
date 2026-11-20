@@ -687,7 +687,7 @@ const summaryStats = computed(() => {
   max-height: 80vh;
   overflow-y: auto;
   padding: var(--space-xl);
-  animation: modalIn 0.3s var(--ease-spring);
+  animation: modalIn 0.3s var(--ease-out);
 }
 
 .modal-large {

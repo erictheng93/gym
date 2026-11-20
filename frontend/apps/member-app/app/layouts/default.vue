@@ -242,7 +242,7 @@ const navItems = [
   border-radius: 20px;
   color: #8e8e93; /* iOS inactive gray */
   text-decoration: none;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   -webkit-tap-highlight-color: transparent;
   position: relative;
 }
@@ -268,7 +268,7 @@ const navItems = [
   justify-content: center;
   width: 24px;
   height: 24px;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .nav-item.active .nav-icon {

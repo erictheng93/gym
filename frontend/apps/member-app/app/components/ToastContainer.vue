@@ -138,7 +138,7 @@ const getIcon = (type: string) => {
 
 /* Animations */
 .toast-enter-active {
-  animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .toast-leave-active {
