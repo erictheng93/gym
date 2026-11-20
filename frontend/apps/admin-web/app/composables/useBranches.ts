@@ -3,35 +3,46 @@ import type { Branch, Employee } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
+let inFlightBranchesPromise: Promise<void> | null = null
+
 export const useBranches = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
   const branches = useState<Branch[]>('branches', () => [])
   const isLoading = useState('branches_loading', () => false)
 
-  const fetchBranches = async (includeArchived = false) => {
-    isLoading.value = true
-    try {
-      const filter: Record<string, unknown> = {}
-      if (!includeArchived) {
-        filter.status = 'active'
-      }
-
-      const { data } = await readItems<Branch>('branches', {
-        filter,
-        sort: 'name',
-        sortOrder: 'asc'
-      })
-      branches.value = data
-    } catch (error) {
-      handleError(error, {
-        context: 'useBranches.fetchBranches',
-        customMessage: MESSAGES.ERRORS.BRANCH_FETCH_FAILED
-      })
-      branches.value = []
-    } finally {
-      isLoading.value = false
+  const fetchBranches = async (includeArchived = false, force = false) => {
+    if (!force && inFlightBranchesPromise) {
+      return inFlightBranchesPromise
     }
+
+    inFlightBranchesPromise = (async () => {
+      isLoading.value = true
+      try {
+        const filter: Record<string, unknown> = {}
+        if (!includeArchived) {
+          filter.status = 'active'
+        }
+
+        const { data } = await readItems<Branch>('branches', {
+          filter,
+          sort: 'name',
+          sortOrder: 'asc'
+        })
+        branches.value = data
+      } catch (error) {
+        handleError(error, {
+          context: 'useBranches.fetchBranches',
+          customMessage: MESSAGES.ERRORS.BRANCH_FETCH_FAILED
+        })
+        branches.value = []
+      } finally {
+        isLoading.value = false
+        inFlightBranchesPromise = null
+      }
+    })()
+
+    return inFlightBranchesPromise
   }
 
   const fetchBranch = async (id: string) => {

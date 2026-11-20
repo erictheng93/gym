@@ -5,6 +5,7 @@ import { db, bookings, classSessions, classes, members, contracts, branches, BOO
 import { eq, and, sql, desc, or, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -30,12 +31,7 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
@@ -57,43 +53,44 @@ app.get('/', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .where(whereCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .where(whereCondition),
+    db
+      .select({
+        booking: bookings,
+        session: {
+          id: classSessions.id,
+          sessionDate: classSessions.sessionDate,
+          startTime: classSessions.startTime,
+          endTime: classSessions.endTime,
+          sessionStatus: classSessions.sessionStatus,
+        },
+        class: {
+          id: classes.id,
+          name: classes.name,
+          category: classes.category,
+        },
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(whereCondition)
+      .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      booking: bookings,
-      session: {
-        id: classSessions.id,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-        endTime: classSessions.endTime,
-        sessionStatus: classSessions.sessionStatus,
-      },
-      class: {
-        id: classes.id,
-        name: classes.name,
-        category: classes.category,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(whereCondition)
-    .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -111,31 +108,28 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [booking] = await db
-    .select({
-      booking: bookings,
-      session: classSessions,
-      class: classes,
-      member: members,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(eq(bookings.id, id))
-    .limit(1);
+  const [[booking], branchIds] = await Promise.all([
+    db
+      .select({
+        booking: bookings,
+        session: classSessions,
+        class: classes,
+        member: members,
+      })
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(eq(bookings.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!booking) {
     return c.json({ success: false, error: '預約不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, booking.session.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '無權限存取此預約' }, 403);
   }
 
@@ -154,23 +148,20 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [session] = await db
-    .select()
-    .from(classSessions)
-    .where(eq(classSessions.id, data.sessionId))
-    .limit(1);
+  const [[session], branchIds] = await Promise.all([
+    db
+      .select()
+      .from(classSessions)
+      .where(eq(classSessions.id, data.sessionId))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+  ]);
 
   if (!session) {
     return c.json({ success: false, error: '課程場次不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, session.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(session.branchId)) {
     return c.json({ success: false, error: '無權限預約此課程' }, 403);
   }
 

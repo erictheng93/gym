@@ -100,27 +100,35 @@ app.get('/', async (c) => {
   // For muscle_groups and equipment, we need to use JSON containment
   // This is a simplified approach - in production you might want GIN indexes
 
-  // Get materials
-  let materialsData = await db
-    .select({
-      id: teachingMaterials.id,
-      type: teachingMaterials.type,
-      category: teachingMaterials.category,
-      name: teachingMaterials.name,
-      description: teachingMaterials.description,
-      fileId: teachingMaterials.fileId,
-      videoUrl: teachingMaterials.videoUrl,
-      thumbnailUrl: teachingMaterials.thumbnailUrl,
-      muscleGroups: teachingMaterials.muscleGroups,
-      equipment: teachingMaterials.equipment,
-      difficulty: teachingMaterials.difficulty,
-      createdAt: teachingMaterials.createdAt,
-    })
-    .from(teachingMaterials)
-    .where(and(...conditions))
-    .orderBy(teachingMaterials.category, teachingMaterials.name)
-    .limit(limitNum)
-    .offset(offsetNum);
+  // Get materials and total count in parallel
+  const [initialMaterialsData, [countResult]] = await Promise.all([
+    db
+      .select({
+        id: teachingMaterials.id,
+        type: teachingMaterials.type,
+        category: teachingMaterials.category,
+        name: teachingMaterials.name,
+        description: teachingMaterials.description,
+        fileId: teachingMaterials.fileId,
+        videoUrl: teachingMaterials.videoUrl,
+        thumbnailUrl: teachingMaterials.thumbnailUrl,
+        muscleGroups: teachingMaterials.muscleGroups,
+        equipment: teachingMaterials.equipment,
+        difficulty: teachingMaterials.difficulty,
+        createdAt: teachingMaterials.createdAt,
+      })
+      .from(teachingMaterials)
+      .where(and(...conditions))
+      .orderBy(teachingMaterials.category, teachingMaterials.name)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(teachingMaterials)
+      .where(and(...conditions)),
+  ]);
+
+  let materialsData = initialMaterialsData;
 
   // Filter by muscle_groups if provided
   if (muscle_groups) {
@@ -139,12 +147,6 @@ app.get('/', async (c) => {
       return targetEquipment.some(e => equip.includes(e));
     });
   }
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(teachingMaterials)
-    .where(and(...conditions));
 
   return c.json({
     success: true,

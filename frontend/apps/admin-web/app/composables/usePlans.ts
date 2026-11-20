@@ -3,6 +3,8 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import type { MembershipPlan } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
+let inFlightPlansPromise: Promise<void> | null = null
+
 export const usePlans = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
@@ -12,29 +14,38 @@ export const usePlans = () => {
   const fetchPlans = async (options?: {
     status?: string
     planType?: string
-  }) => {
-    isLoading.value = true
-    const { status, planType } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-      if (status && status !== '') filter.status = status
-      if (planType && planType !== '') filter.plan_type = planType
-
-      const { data } = await readItems<MembershipPlan>('membership-plans', {
-        filter,
-        sort: 'price'
-      })
-      plans.value = data
-    } catch (error) {
-      handleError(error, {
-        context: 'usePlans.fetchPlans',
-        customMessage: MESSAGES.ERRORS.PLAN_FETCH_FAILED
-      })
-      plans.value = []
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    if (!force && inFlightPlansPromise) {
+      return inFlightPlansPromise
     }
+
+    inFlightPlansPromise = (async () => {
+      isLoading.value = true
+      const { status, planType } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+        if (status && status !== '') filter.status = status
+        if (planType && planType !== '') filter.plan_type = planType
+
+        const { data } = await readItems<MembershipPlan>('membership-plans', {
+          filter,
+          sort: 'price'
+        })
+        plans.value = data
+      } catch (error) {
+        handleError(error, {
+          context: 'usePlans.fetchPlans',
+          customMessage: MESSAGES.ERRORS.PLAN_FETCH_FAILED
+        })
+        plans.value = []
+      } finally {
+        isLoading.value = false
+        inFlightPlansPromise = null
+      }
+    })()
+
+    return inFlightPlansPromise
   }
 
   const getPlan = async (id: string) => {

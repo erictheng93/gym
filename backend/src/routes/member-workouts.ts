@@ -72,20 +72,20 @@ app.get(
       conditions.push(lte(workoutLogs.date, endDate));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(workoutLogs.id) })
-      .from(workoutLogs)
-      .where(and(...conditions));
-
-    // Get workouts
-    const workouts = await db
-      .select()
-      .from(workoutLogs)
-      .where(and(...conditions))
-      .orderBy(desc(workoutLogs.date))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and workouts
+    const [[{ total }], workouts] = await Promise.all([
+      db
+        .select({ total: count(workoutLogs.id) })
+        .from(workoutLogs)
+        .where(and(...conditions)),
+      db
+        .select()
+        .from(workoutLogs)
+        .where(and(...conditions))
+        .orderBy(desc(workoutLogs.date))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,
@@ -130,19 +130,22 @@ app.post(
       notes: data.notes,
     }).returning();
 
+    const workoutData = {
+      id: workout.id,
+      date: workout.date,
+      duration: workout.duration,
+      calories: workout.calories,
+      exercises: workout.exercises,
+      notes: workout.notes,
+      createdAt: workout.createdAt,
+    };
+
     return c.json({
       success: true,
       message: '運動紀錄已建立',
       data: {
-        workout: {
-          id: workout.id,
-          date: workout.date,
-          duration: workout.duration,
-          calories: workout.calories,
-          exercises: workout.exercises,
-          notes: workout.notes,
-          createdAt: workout.createdAt,
-        },
+        ...workoutData,
+        workout: workoutData,
       },
     }, 201);
   }
@@ -173,18 +176,21 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
+  const workoutData = {
+    id: workout.id,
+    date: workout.date,
+    duration: workout.duration,
+    calories: workout.calories,
+    exercises: workout.exercises,
+    notes: workout.notes,
+    createdAt: workout.createdAt,
+  };
+
   return c.json({
     success: true,
     data: {
-      workout: {
-        id: workout.id,
-        date: workout.date,
-        duration: workout.duration,
-        calories: workout.calories,
-        exercises: workout.exercises,
-        notes: workout.notes,
-        createdAt: workout.createdAt,
-      },
+      ...workoutData,
+      workout: workoutData,
     },
   });
 });
@@ -225,18 +231,21 @@ app.put(
       .where(eq(workoutLogs.id, workoutId))
       .returning();
 
+    const workoutData = {
+      id: workout.id,
+      date: workout.date,
+      duration: workout.duration,
+      calories: workout.calories,
+      exercises: workout.exercises,
+      notes: workout.notes,
+    };
+
     return c.json({
       success: true,
       message: '運動紀錄已更新',
       data: {
-        workout: {
-          id: workout.id,
-          date: workout.date,
-          duration: workout.duration,
-          calories: workout.calories,
-          exercises: workout.exercises,
-          notes: workout.notes,
-        },
+        ...workoutData,
+        workout: workoutData,
       },
     });
   }
@@ -288,27 +297,27 @@ app.get('/stats/summary', async (c) => {
   startDate.setDate(startDate.getDate() - parseInt(period));
   const startDateStr = startDate.toISOString().split('T')[0];
 
-  // Get stats for period
-  const [stats] = await db
-    .select({
-      totalWorkouts: count(workoutLogs.id),
-      totalDuration: sum(workoutLogs.duration),
-      totalCalories: sum(workoutLogs.calories),
-      avgDuration: avg(workoutLogs.duration),
-    })
-    .from(workoutLogs)
-    .where(and(
-      eq(workoutLogs.memberId, memberInfo.id),
-      gte(workoutLogs.date, startDateStr),
-    ));
-
-  // Calculate streak
-  const recentWorkouts = await db
-    .select({ date: workoutLogs.date })
-    .from(workoutLogs)
-    .where(eq(workoutLogs.memberId, memberInfo.id))
-    .orderBy(desc(workoutLogs.date))
-    .limit(60);
+  // Concurrently get stats for period and recent workouts for streak
+  const [[stats], recentWorkouts] = await Promise.all([
+    db
+      .select({
+        totalWorkouts: count(workoutLogs.id),
+        totalDuration: sum(workoutLogs.duration),
+        totalCalories: sum(workoutLogs.calories),
+        avgDuration: avg(workoutLogs.duration),
+      })
+      .from(workoutLogs)
+      .where(and(
+        eq(workoutLogs.memberId, memberInfo.id),
+        gte(workoutLogs.date, startDateStr),
+      )),
+    db
+      .select({ date: workoutLogs.date })
+      .from(workoutLogs)
+      .where(eq(workoutLogs.memberId, memberInfo.id))
+      .orderBy(desc(workoutLogs.date))
+      .limit(60),
+  ]);
 
   let currentStreak = 0;
   let maxStreak = 0;

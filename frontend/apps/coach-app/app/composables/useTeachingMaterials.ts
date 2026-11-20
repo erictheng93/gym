@@ -5,6 +5,7 @@
  */
 
 import type { TeachingMaterial } from '../types/coach'
+import { deduplicateRequest } from '../utils/debounce'
 
 interface MaterialsResponse {
   success: boolean
@@ -61,16 +62,19 @@ export const useTeachingMaterials = () => {
     offset?: number
   }): Promise<void> => {
     loading.value = true
+    const dedupKey = `coach:teaching-materials:${JSON.stringify(params || {})}`
     try {
-      const response = await $fetch<MaterialsResponse>(`${apiUrl}/api/coach/teaching-materials`, {
-        headers: getAuthHeader(),
-        query: params,
-      })
+      await deduplicateRequest(dedupKey, async () => {
+        const response = await $fetch<MaterialsResponse>(`${apiUrl}/api/coach/teaching-materials`, {
+          headers: getAuthHeader(),
+          query: params,
+        })
 
-      if (response.success) {
-        materials.value = response.data
-        total.value = response.meta.total
-      }
+        if (response.success) {
+          materials.value = response.data
+          total.value = response.meta.total
+        }
+      })
     } catch (error) {
       console.error('Failed to fetch materials:', error)
       materials.value = []
@@ -84,60 +88,66 @@ export const useTeachingMaterials = () => {
    * Fetch categories grouped by type
    */
   const fetchCategories = async (): Promise<void> => {
-    try {
-      const response = await $fetch<CategoriesResponse>(
-        `${apiUrl}/api/coach/teaching-materials/categories`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    return deduplicateRequest('coach:material-categories', async () => {
+      try {
+        const response = await $fetch<CategoriesResponse>(
+          `${apiUrl}/api/coach/teaching-materials/categories`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      if (response.success) {
-        categoriesByType.value = response.data
+        if (response.success) {
+          categoriesByType.value = response.data
+        }
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
       }
-    } catch (error) {
-      console.error('Failed to fetch categories:', error)
-    }
+    })
   }
 
   /**
    * Fetch muscle groups
    */
   const fetchMuscleGroups = async (): Promise<void> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: string[] }>(
-        `${apiUrl}/api/coach/teaching-materials/muscle-groups`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    return deduplicateRequest('coach:muscle-groups', async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: string[] }>(
+          `${apiUrl}/api/coach/teaching-materials/muscle-groups`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      if (response.success) {
-        muscleGroups.value = response.data
+        if (response.success) {
+          muscleGroups.value = response.data
+        }
+      } catch (error) {
+        console.error('Failed to fetch muscle groups:', error)
       }
-    } catch (error) {
-      console.error('Failed to fetch muscle groups:', error)
-    }
+    })
   }
 
   /**
    * Fetch equipment types
    */
   const fetchEquipment = async (): Promise<void> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: string[] }>(
-        `${apiUrl}/api/coach/teaching-materials/equipment`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    return deduplicateRequest('coach:equipment-types', async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: string[] }>(
+          `${apiUrl}/api/coach/teaching-materials/equipment`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      if (response.success) {
-        equipment.value = response.data
+        if (response.success) {
+          equipment.value = response.data
+        }
+      } catch (error) {
+        console.error('Failed to fetch equipment:', error)
       }
-    } catch (error) {
-      console.error('Failed to fetch equipment:', error)
-    }
+    })
   }
 
   /**
@@ -171,19 +181,21 @@ export const useTeachingMaterials = () => {
    * Get material details
    */
   const getMaterial = async (id: string): Promise<MaterialDetailResponse['data'] | null> => {
-    try {
-      const response = await $fetch<MaterialDetailResponse>(
-        `${apiUrl}/api/coach/teaching-materials/${id}`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    return deduplicateRequest(`coach:teaching-material:${id}`, async () => {
+      try {
+        const response = await $fetch<MaterialDetailResponse>(
+          `${apiUrl}/api/coach/teaching-materials/${id}`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      return response.success ? response.data : null
-    } catch (error) {
-      console.error('Failed to fetch material:', error)
-      return null
-    }
+        return response.success ? response.data : null
+      } catch (error) {
+        console.error('Failed to fetch material:', error)
+        return null
+      }
+    })
   }
 
   /**

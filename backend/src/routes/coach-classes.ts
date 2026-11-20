@@ -71,38 +71,38 @@ app.get('/', async (c) => {
     conditions.push(eq(classSessions.sessionStatus, status as 'SCHEDULED' | 'CANCELLED' | 'COMPLETED'));
   }
 
-  // Get sessions with class info
-  const sessionsData = await db
-    .select({
-      id: classSessions.id,
-      classId: classSessions.classId,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      endTime: classSessions.endTime,
-      room: classSessions.room,
-      maxCapacity: classSessions.maxCapacity,
-      currentCount: classSessions.currentCount,
-      waitlistCount: classSessions.waitlistCount,
-      sessionStatus: classSessions.sessionStatus,
-      cancelledReason: classSessions.cancelledReason,
-      cancelledAt: classSessions.cancelledAt,
-      className: classes.name,
-      classCategory: classes.category,
-      classDuration: classes.durationMinutes,
-      branchId: classSessions.branchId,
-    })
-    .from(classSessions)
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(and(...conditions))
-    .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(classSessions)
-    .where(and(...conditions));
+  // Get sessions with class info and total count in parallel
+  const [sessionsData, [countResult]] = await Promise.all([
+    db
+      .select({
+        id: classSessions.id,
+        classId: classSessions.classId,
+        sessionDate: classSessions.sessionDate,
+        startTime: classSessions.startTime,
+        endTime: classSessions.endTime,
+        room: classSessions.room,
+        maxCapacity: classSessions.maxCapacity,
+        currentCount: classSessions.currentCount,
+        waitlistCount: classSessions.waitlistCount,
+        sessionStatus: classSessions.sessionStatus,
+        cancelledReason: classSessions.cancelledReason,
+        cancelledAt: classSessions.cancelledAt,
+        className: classes.name,
+        classCategory: classes.category,
+        classDuration: classes.durationMinutes,
+        branchId: classSessions.branchId,
+      })
+      .from(classSessions)
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(and(...conditions))
+      .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(classSessions)
+      .where(and(...conditions)),
+  ]);
 
   // Get bookings for each session
   const sessionIds = sessionsData.map(s => s.id);

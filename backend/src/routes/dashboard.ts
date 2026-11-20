@@ -3,6 +3,7 @@ import { db, members, contracts, payments, checkIns, branches, classSessions } f
 import { eq, and, sql, gte, lte, count, sum, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -22,17 +23,8 @@ app.get('/overview', async (c) => {
   lastMonthEndDate.setHours(23, 59, 59, 999);
 
   // Get branch IDs for tenant
-  const branchConditions = [eq(branches.tenantId, tenantId)];
-  if (branchId) {
-    branchConditions.push(eq(branches.id, branchId));
-  }
-
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(and(...branchConditions));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const allTenantBranchIds = await getTenantBranchIds(tenantId);
+  const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
 
   if (branchIds.length === 0) {
     return c.json({
@@ -46,105 +38,121 @@ app.get('/overview', async (c) => {
     });
   }
 
-  // Member stats
-  const [memberStats] = await db
-    .select({
-      total: count(),
-      active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
-    })
-    .from(members)
-    .where(inArray(members.branchId, branchIds));
-
-  const [newMembersThisMonth] = await db
-    .select({ count: count() })
-    .from(members)
-    .where(
-      and(
-        inArray(members.branchId, branchIds),
-        gte(members.createdAt, monthStartDate)
-      )
-    );
-
-  // Contract stats
-  const [contractStats] = await db
-    .select({
-      active: count(),
-    })
-    .from(contracts)
-    .where(
-      and(
-        inArray(contracts.branchId, branchIds),
-        eq(contracts.status, 'ACTIVE')
-      )
-    );
-
-  // Contracts expiring in 7 days
+  // Precalculate date boundaries
   const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const [expiringContracts] = await db
-    .select({ count: count() })
-    .from(contracts)
-    .where(
-      and(
-        inArray(contracts.branchId, branchIds),
-        eq(contracts.status, 'ACTIVE'),
-        gte(contracts.endDate, todayStr),
-        lte(contracts.endDate, sevenDaysFromNow)
-      )
-    );
+  const todayStart = new Date(today);
+  todayStart.setHours(0, 0, 0, 0);
 
-  // Revenue stats
-  const [thisMonthRevenue] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(
-      and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, monthStartDate)
-      )
-    );
+  // Concurrently fetch all 8 overview metrics in parallel
+  const [
+    [memberStats],
+    [newMembersThisMonth],
+    [contractStats],
+    [expiringContracts],
+    [thisMonthRevenue],
+    [lastMonthRevenue],
+    [todayCheckIns],
+    [monthCheckIns],
+  ] = await Promise.all([
+    // Member stats
+    db
+      .select({
+        total: count(),
+        active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
+      })
+      .from(members)
+      .where(inArray(members.branchId, branchIds)),
 
-  const [lastMonthRevenue] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(
-      and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, lastMonthStartDate),
-        lte(payments.paymentDate, lastMonthEndDate)
-      )
-    );
+    // New members this month
+    db
+      .select({ count: count() })
+      .from(members)
+      .where(
+        and(
+          inArray(members.branchId, branchIds),
+          gte(members.createdAt, monthStartDate)
+        )
+      ),
+
+    // Contract stats
+    db
+      .select({
+        active: count(),
+      })
+      .from(contracts)
+      .where(
+        and(
+          inArray(contracts.branchId, branchIds),
+          eq(contracts.status, 'ACTIVE')
+        )
+      ),
+
+    // Contracts expiring in 7 days
+    db
+      .select({ count: count() })
+      .from(contracts)
+      .where(
+        and(
+          inArray(contracts.branchId, branchIds),
+          eq(contracts.status, 'ACTIVE'),
+          gte(contracts.endDate, todayStr),
+          lte(contracts.endDate, sevenDaysFromNow)
+        )
+      ),
+
+    // Revenue stats this month
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, monthStartDate)
+        )
+      ),
+
+    // Revenue stats last month
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(
+        and(
+          inArray(payments.branchId, branchIds),
+          eq(payments.type, 'INCOME'),
+          gte(payments.paymentDate, lastMonthStartDate),
+          lte(payments.paymentDate, lastMonthEndDate)
+        )
+      ),
+
+    // Check-in stats today
+    db
+      .select({ count: count() })
+      .from(checkIns)
+      .where(
+        and(
+          inArray(checkIns.branchId, branchIds),
+          gte(checkIns.checkInTime, todayStart)
+        )
+      ),
+
+    // Check-in stats this month
+    db
+      .select({ count: count() })
+      .from(checkIns)
+      .where(
+        and(
+          inArray(checkIns.branchId, branchIds),
+          gte(checkIns.checkInTime, monthStartDate)
+        )
+      ),
+  ]);
 
   const thisMonthTotal = Number(thisMonthRevenue?.total || 0);
   const lastMonthTotal = Number(lastMonthRevenue?.total || 0);
   const revenueGrowth = lastMonthTotal > 0
     ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100).toFixed(1)
     : '0.0';
-
-  // Check-in stats
-  const todayStart = new Date(today);
-  todayStart.setHours(0, 0, 0, 0);
-
-  const [todayCheckIns] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(
-      and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, todayStart)
-      )
-    );
-
-  const [monthCheckIns] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(
-      and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, monthStartDate)
-      )
-    );
 
   return c.json({
     success: true,
@@ -177,17 +185,8 @@ app.get('/revenue-trend', async (c) => {
   const branchId = c.req.query('branchId');
   const period = c.req.query('period') || 'daily'; // 'daily' or 'monthly'
 
-  const branchConditions = [eq(branches.tenantId, tenantId)];
-  if (branchId) {
-    branchConditions.push(eq(branches.id, branchId));
-  }
-
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(and(...branchConditions));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const allTenantBranchIds = await getTenantBranchIds(tenantId);
+  const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });

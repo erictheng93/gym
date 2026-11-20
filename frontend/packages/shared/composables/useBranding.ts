@@ -11,6 +11,7 @@ import { DEFAULT_BRANDING, getFullBrandName, getAppColors } from '../utils/brand
 // Global state for branding
 const brandingState = ref<TenantBranding | null>(null);
 const isLoaded = ref(false);
+const inFlightBrandingRequests = new Map<string, Promise<TenantBranding>>();
 
 /**
  * Declare global window property for SSR injection
@@ -81,27 +82,40 @@ export function useBranding(appType: AppType = 'admin') {
   }
 
   /**
-   * Fetch branding from API
+   * Fetch branding from API (with in-flight request deduplication)
    */
   async function fetchBranding(apiBaseUrl: string, slug?: string) {
-    try {
-      const url = slug
-        ? `${apiBaseUrl}/api/public/branding?slug=${encodeURIComponent(slug)}`
-        : `${apiBaseUrl}/api/public/branding`;
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        brandingState.value = data.data;
-        return data.data as TenantBranding;
-      }
-
-      return DEFAULT_BRANDING;
-    } catch (error) {
-      console.error('[useBranding] Failed to fetch branding:', error);
-      return DEFAULT_BRANDING;
+    const cacheKey = `${apiBaseUrl}::${slug || ''}`;
+    const existingPromise = inFlightBrandingRequests.get(cacheKey);
+    if (existingPromise) {
+      return existingPromise;
     }
+
+    const fetchPromise = (async () => {
+      try {
+        const url = slug
+          ? `${apiBaseUrl}/api/public/branding?slug=${encodeURIComponent(slug)}`
+          : `${apiBaseUrl}/api/public/branding`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          brandingState.value = data.data;
+          return data.data as TenantBranding;
+        }
+
+        return DEFAULT_BRANDING;
+      } catch (error) {
+        console.error('[useBranding] Failed to fetch branding:', error);
+        return DEFAULT_BRANDING;
+      } finally {
+        inFlightBrandingRequests.delete(cacheKey);
+      }
+    })();
+
+    inFlightBrandingRequests.set(cacheKey, fetchPromise);
+    return fetchPromise;
   }
 
   return {

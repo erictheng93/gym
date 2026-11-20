@@ -5,6 +5,7 @@ import { db, payments, contracts, members, branches } from '../db/index.js';
 import { eq, and, sql, desc, sum, inArray, gte, lte } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, paymentsColumns, translatePaymentMethod, translatePaymentType } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
@@ -31,12 +32,7 @@ app.get('/', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
@@ -58,33 +54,34 @@ app.get('/', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(payments)
-    .where(whereCondition);
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(payments)
+      .where(whereCondition),
+    db
+      .select({
+        payment: payments,
+        member: {
+          id: members.id,
+          fullName: members.fullName,
+          memberCode: members.memberCode,
+        },
+        contract: {
+          id: contracts.id,
+          contractNo: contracts.contractNo,
+        },
+      })
+      .from(payments)
+      .leftJoin(members, eq(payments.memberId, members.id))
+      .leftJoin(contracts, eq(payments.contractId, contracts.id))
+      .where(whereCondition)
+      .orderBy(desc(payments.createdAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      payment: payments,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-    })
-    .from(payments)
-    .leftJoin(members, eq(payments.memberId, members.id))
-    .leftJoin(contracts, eq(payments.contractId, contracts.id))
-    .where(whereCondition)
-    .orderBy(desc(payments.createdAt))
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -103,12 +100,7 @@ app.get('/summary', async (c) => {
   const startDate = c.req.query('startDate');
   const endDate = c.req.query('endDate');
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({
@@ -133,20 +125,20 @@ app.get('/summary', async (c) => {
 
   const whereCondition = and(...conditions);
 
-  const [incomeResult] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(and(whereCondition, eq(payments.type, 'INCOME')));
-
-  const [refundResult] = await db
-    .select({ total: sum(payments.amount) })
-    .from(payments)
-    .where(and(whereCondition, eq(payments.type, 'REFUND')));
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(payments)
-    .where(whereCondition);
+  const [[incomeResult], [refundResult], [countResult]] = await Promise.all([
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(and(whereCondition, eq(payments.type, 'INCOME'))),
+    db
+      .select({ total: sum(payments.amount) })
+      .from(payments)
+      .where(and(whereCondition, eq(payments.type, 'REFUND'))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(payments)
+      .where(whereCondition),
+  ]);
 
   const totalIncome = Number(incomeResult?.total || 0);
   const totalRefund = Number(refundResult?.total || 0);
@@ -170,12 +162,7 @@ app.get('/export', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { branchId, startDate, endDate, format = 'csv' } = c.req.query();
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     const result = generateCsv(paymentsColumns, []);

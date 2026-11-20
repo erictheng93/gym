@@ -5,6 +5,7 @@
  */
 
 import type { LessonPlan, Exercise } from '../types/coach'
+import { deduplicateRequest } from '../utils/debounce'
 
 interface LessonPlansResponse {
   success: boolean
@@ -50,16 +51,19 @@ export const useLessonPlans = () => {
     offset?: number
   }): Promise<void> => {
     loading.value = true
+    const dedupKey = `coach:lesson-plans:${JSON.stringify(params || {})}`
     try {
-      const response = await $fetch<LessonPlansResponse>(`${apiUrl}/api/coach/lesson-plans`, {
-        headers: getAuthHeader(),
-        query: params,
-      })
+      await deduplicateRequest(dedupKey, async () => {
+        const response = await $fetch<LessonPlansResponse>(`${apiUrl}/api/coach/lesson-plans`, {
+          headers: getAuthHeader(),
+          query: params,
+        })
 
-      if (response.success) {
-        plans.value = response.data
-        total.value = response.meta.total
-      }
+        if (response.success) {
+          plans.value = response.data
+          total.value = response.meta.total
+        }
+      })
     } catch (error) {
       console.error('Failed to fetch lesson plans:', error)
       plans.value = []
@@ -79,16 +83,19 @@ export const useLessonPlans = () => {
     offset?: number
   }): Promise<void> => {
     loading.value = true
+    const dedupKey = `coach:lesson-plan-templates:${JSON.stringify(params || {})}`
     try {
-      const response = await $fetch<TemplatesResponse>(`${apiUrl}/api/coach/lesson-plans/templates`, {
-        headers: getAuthHeader(),
-        query: params,
-      })
+      await deduplicateRequest(dedupKey, async () => {
+        const response = await $fetch<TemplatesResponse>(`${apiUrl}/api/coach/lesson-plans/templates`, {
+          headers: getAuthHeader(),
+          query: params,
+        })
 
-      if (response.success) {
-        templates.value = response.data
-        categories.value = response.categories || []
-      }
+        if (response.success) {
+          templates.value = response.data
+          categories.value = response.categories || []
+        }
+      })
     } catch (error) {
       console.error('Failed to fetch templates:', error)
       templates.value = []
@@ -101,19 +108,21 @@ export const useLessonPlans = () => {
    * Get lesson plan details
    */
   const getPlan = async (id: string): Promise<LessonPlan | null> => {
-    try {
-      const response = await $fetch<LessonPlanResponse>(
-        `${apiUrl}/api/coach/lesson-plans/${id}`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    return deduplicateRequest(`coach:lesson-plan:${id}`, async () => {
+      try {
+        const response = await $fetch<LessonPlanResponse>(
+          `${apiUrl}/api/coach/lesson-plans/${id}`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      return response.success ? response.data : null
-    } catch (error) {
-      console.error('Failed to fetch lesson plan:', error)
-      return null
-    }
+        return response.success ? response.data : null
+      } catch (error) {
+        console.error('Failed to fetch lesson plan:', error)
+        return null
+      }
+    })
   }
 
   /**

@@ -5,6 +5,7 @@ import { db, notifications, branches, members, employees } from '../db/index.js'
 import { eq, and, sql, desc, isNull, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -51,35 +52,34 @@ app.get('/', async (c) => {
     );
   }
 
-  const result = await db
-    .select({
-      notification: notifications,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions));
+  const [result, [countResult], [unreadCount]] = await Promise.all([
+    db
+      .select({
+        notification: notifications,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+      })
+      .from(notifications)
+      .innerJoin(branches, eq(notifications.branchId, branches.id))
+      .where(and(...conditions))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .innerJoin(branches, eq(notifications.branchId, branches.id))
+      .where(and(...conditions)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .innerJoin(branches, eq(notifications.branchId, branches.id))
+      .where(and(...conditions, isNull(notifications.readAt))),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  // Get unread count
-  const [unreadCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(notifications)
-    .innerJoin(branches, eq(notifications.branchId, branches.id))
-    .where(and(...conditions, isNull(notifications.readAt)));
 
   return c.json({
     success: true,
@@ -146,13 +146,8 @@ app.post('/', zValidator('json', createNotificationSchema), async (c) => {
   const data = c.req.valid('json');
 
   // Verify branch
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 

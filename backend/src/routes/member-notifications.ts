@@ -304,32 +304,32 @@ app.get(
       conditions.push(eq(notifications.notificationType, type));
     }
 
-    // Get total count
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(notifications)
-      .where(and(...conditions));
-
-    // Get notifications
-    const notificationList = await db
-      .select({
-        id: notifications.id,
-        type: notifications.notificationType,
-        title: notifications.title,
-        message: notifications.message,
-        data: notifications.data,
-        isRead: notifications.isRead,
-        readAt: notifications.readAt,
-        priority: notifications.priority,
-        createdAt: notifications.createdAt,
-        referenceType: notifications.referenceType,
-        referenceId: notifications.referenceId,
-      })
-      .from(notifications)
-      .where(and(...conditions))
-      .orderBy(desc(notifications.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and notifications
+    const [[{ count }], notificationList] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(notifications)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: notifications.id,
+          type: notifications.notificationType,
+          title: notifications.title,
+          message: notifications.message,
+          data: notifications.data,
+          isRead: notifications.isRead,
+          readAt: notifications.readAt,
+          priority: notifications.priority,
+          createdAt: notifications.createdAt,
+          referenceType: notifications.referenceType,
+          referenceId: notifications.referenceId,
+        })
+        .from(notifications)
+        .where(and(...conditions))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

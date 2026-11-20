@@ -4,6 +4,25 @@ import { eq } from 'drizzle-orm';
 import { DEFAULT_BRANDING, mergeBranding } from '../types/branding.js';
 import type { TenantBranding } from '../types/branding.js';
 
+interface BrandingCacheEntry {
+  branding: TenantBranding;
+  expiresAt: number;
+}
+
+const brandingCache = new Map<string, BrandingCacheEntry>();
+const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Invalidate branding cache for a specific tenant slug or all tenants
+ */
+export function invalidateBrandingCache(slug?: string): void {
+  if (slug) {
+    brandingCache.delete(slug);
+  } else {
+    brandingCache.clear();
+  }
+}
+
 const app = new Hono();
 
 /**
@@ -22,9 +41,20 @@ app.get('/', async (c) => {
 
   // If no slug provided, return default branding
   if (!slug) {
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
     return c.json({
       success: true,
       data: DEFAULT_BRANDING
+    });
+  }
+
+  // Check in-memory cache
+  const cached = brandingCache.get(slug);
+  if (cached && cached.expiresAt > Date.now()) {
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    return c.json({
+      success: true,
+      data: cached.branding
     });
   }
 
@@ -43,6 +73,7 @@ app.get('/', async (c) => {
 
     // If tenant not found, return default branding
     if (!tenant) {
+      c.header('Cache-Control', 'public, max-age=60');
       return c.json({
         success: true,
         data: DEFAULT_BRANDING
@@ -56,7 +87,14 @@ app.get('/', async (c) => {
     // Merge with defaults
     const branding = mergeBranding(brandingData || {});
 
+    // Cache the result
+    brandingCache.set(slug, {
+      branding,
+      expiresAt: Date.now() + BRANDING_CACHE_TTL_MS
+    });
+
     // Return branding configuration
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
     return c.json({
       success: true,
       data: branding

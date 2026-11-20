@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { performanceReviews, kpiTemplates, employees, jobTitles, branches } from '../db/schema.js';
 import { authMiddleware, requireAuth } from '../middleware/index.js';
@@ -79,7 +79,7 @@ app.get('/reviews', async (c) => {
       .where(whereClause),
   ]);
 
-  // Fetch employee and reviewer details
+  // Fetch employee and reviewer details with joined job title and branch
   const employeeIds = [...new Set([
     ...reviews.map(r => r.employee_id),
     ...reviews.filter(r => r.reviewer_id).map(r => r.reviewer_id as string),
@@ -92,34 +92,23 @@ app.get('/reviews', async (c) => {
         employee_code: employees.employeeCode,
         job_title_id: employees.jobTitleId,
         branch_id: employees.branchId,
+        job_title_name: jobTitles.name,
+        branch_name: branches.name,
       })
         .from(employees)
-        .where(sql`${employees.id} IN ${employeeIds}`)
+        .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+        .leftJoin(branches, eq(employees.branchId, branches.id))
+        .where(inArray(employees.id, employeeIds))
     : [];
 
-  // Fetch job titles and branches
-  const jobTitleIds = [...new Set(employeeDetails.filter(e => e.job_title_id).map(e => e.job_title_id as string))];
-  const branchIds = [...new Set(employeeDetails.filter(e => e.branch_id).map(e => e.branch_id as string))];
-
-  const [jobTitlesList, branchesList] = await Promise.all([
-    jobTitleIds.length > 0
-      ? db.select({ id: jobTitles.id, name: jobTitles.name })
-          .from(jobTitles)
-          .where(sql`${jobTitles.id} IN ${jobTitleIds}`)
-      : [],
-    branchIds.length > 0
-      ? db.select({ id: branches.id, name: branches.name })
-          .from(branches)
-          .where(sql`${branches.id} IN ${branchIds}`)
-      : [],
-  ]);
-
-  const jobTitleMap = new Map(jobTitlesList.map(jt => [jt.id, jt]));
-  const branchMap = new Map(branchesList.map(b => [b.id, b]));
   const employeeMap = new Map(employeeDetails.map(e => [e.id, {
-    ...e,
-    job_title: e.job_title_id ? jobTitleMap.get(e.job_title_id) : undefined,
-    branch: e.branch_id ? branchMap.get(e.branch_id) : undefined,
+    id: e.id,
+    full_name: e.full_name,
+    employee_code: e.employee_code,
+    job_title_id: e.job_title_id,
+    branch_id: e.branch_id,
+    job_title: e.job_title_id && e.job_title_name ? { id: e.job_title_id, name: e.job_title_name } : undefined,
+    branch: e.branch_id && e.branch_name ? { id: e.branch_id, name: e.branch_name } : undefined,
   }]));
 
   const enrichedReviews = reviews.map(r => ({
@@ -164,7 +153,7 @@ app.get('/reviews/:id', async (c) => {
     return c.json({ success: false, error: '找不到績效考核記錄' }, 404);
   }
 
-  // Fetch employee details
+  // Fetch employee details with joined job title and branch
   const employeeIds = [review[0].employee_id];
   if (review[0].reviewer_id) employeeIds.push(review[0].reviewer_id);
 
@@ -174,32 +163,22 @@ app.get('/reviews/:id', async (c) => {
     employee_code: employees.employeeCode,
     job_title_id: employees.jobTitleId,
     branch_id: employees.branchId,
+    job_title_name: jobTitles.name,
+    branch_name: branches.name,
   })
     .from(employees)
-    .where(sql`${employees.id} IN ${employeeIds}`);
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .where(inArray(employees.id, employeeIds));
 
-  const jobTitleIds = [...new Set(employeeDetails.filter(e => e.job_title_id).map(e => e.job_title_id as string))];
-  const branchIds = [...new Set(employeeDetails.filter(e => e.branch_id).map(e => e.branch_id as string))];
-
-  const [jobTitlesList, branchesList] = await Promise.all([
-    jobTitleIds.length > 0
-      ? db.select({ id: jobTitles.id, name: jobTitles.name })
-          .from(jobTitles)
-          .where(sql`${jobTitles.id} IN ${jobTitleIds}`)
-      : [],
-    branchIds.length > 0
-      ? db.select({ id: branches.id, name: branches.name })
-          .from(branches)
-          .where(sql`${branches.id} IN ${branchIds}`)
-      : [],
-  ]);
-
-  const jobTitleMap = new Map(jobTitlesList.map(jt => [jt.id, jt]));
-  const branchMap = new Map(branchesList.map(b => [b.id, b]));
   const employeeMap = new Map(employeeDetails.map(e => [e.id, {
-    ...e,
-    job_title: e.job_title_id ? jobTitleMap.get(e.job_title_id) : undefined,
-    branch: e.branch_id ? branchMap.get(e.branch_id) : undefined,
+    id: e.id,
+    full_name: e.full_name,
+    employee_code: e.employee_code,
+    job_title_id: e.job_title_id,
+    branch_id: e.branch_id,
+    job_title: e.job_title_id && e.job_title_name ? { id: e.job_title_id, name: e.job_title_name } : undefined,
+    branch: e.branch_id && e.branch_name ? { id: e.branch_id, name: e.branch_name } : undefined,
   }]));
 
   const enrichedReview = {
