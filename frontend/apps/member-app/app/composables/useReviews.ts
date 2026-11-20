@@ -240,6 +240,9 @@ export const useReviews = () => {
     return labels[rating] || ''
   }
 
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+
   /**
    * Format review date
    */
@@ -253,7 +256,7 @@ export const useReviews = () => {
     if (diffDays === 1) return '昨天'
     if (diffDays < 7) return `${diffDays} 天前`
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} 週前`
-    return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+    return reviewDateFormatter.format(date)
   }
 
   return {

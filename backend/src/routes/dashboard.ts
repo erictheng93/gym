@@ -43,41 +43,28 @@ app.get('/overview', async (c) => {
   const todayStart = new Date(today);
   todayStart.setHours(0, 0, 0, 0);
 
-  // Concurrently fetch all 8 overview metrics in parallel
+  // Concurrently fetch all overview metrics in 4 consolidated single-table queries
   const [
     [memberStats],
-    [newMembersThisMonth],
     [contractStats],
-    [expiringContracts],
-    [thisMonthRevenue],
-    [lastMonthRevenue],
-    [todayCheckIns],
-    [monthCheckIns],
+    [revenueStats],
+    [checkInStats],
   ] = await Promise.all([
-    // Member stats
+    // Member stats (total, active, and new this month in a single scan)
     db
       .select({
         total: count(),
         active: sql<number>`count(*) filter (where ${members.status} = 'ACTIVE')`,
+        newThisMonth: sql<number>`count(*) filter (where ${members.createdAt} >= ${monthStartDate.toISOString()}::timestamptz)`,
       })
       .from(members)
       .where(inArray(members.branchId, branchIds)),
 
-    // New members this month
-    db
-      .select({ count: count() })
-      .from(members)
-      .where(
-        and(
-          inArray(members.branchId, branchIds),
-          gte(members.createdAt, monthStartDate)
-        )
-      ),
-
-    // Contract stats
+    // Contract stats (active and expiring soon in a single scan)
     db
       .select({
         active: count(),
+        expiringSoon: sql<number>`count(*) filter (where ${contracts.endDate} >= ${todayStr} and ${contracts.endDate} <= ${sevenDaysFromNow})`,
       })
       .from(contracts)
       .where(
@@ -87,58 +74,27 @@ app.get('/overview', async (c) => {
         )
       ),
 
-    // Contracts expiring in 7 days
+    // Revenue stats (this month and last month in a single scan)
     db
-      .select({ count: count() })
-      .from(contracts)
-      .where(
-        and(
-          inArray(contracts.branchId, branchIds),
-          eq(contracts.status, 'ACTIVE'),
-          gte(contracts.endDate, todayStr),
-          lte(contracts.endDate, sevenDaysFromNow)
-        )
-      ),
-
-    // Revenue stats this month
-    db
-      .select({ total: sum(payments.amount) })
+      .select({
+        thisMonth: sql<string>`COALESCE(SUM(CASE WHEN ${payments.paymentDate} >= ${monthStartDate.toISOString()}::timestamptz THEN ${payments.amount} ELSE 0 END), 0)`,
+        lastMonth: sql<string>`COALESCE(SUM(CASE WHEN ${payments.paymentDate} >= ${lastMonthStartDate.toISOString()}::timestamptz AND ${payments.paymentDate} <= ${lastMonthEndDate.toISOString()}::timestamptz THEN ${payments.amount} ELSE 0 END), 0)`,
+      })
       .from(payments)
       .where(
         and(
           inArray(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
-          gte(payments.paymentDate, monthStartDate)
+          gte(payments.paymentDate, lastMonthStartDate)
         )
       ),
 
-    // Revenue stats last month
+    // Check-in stats (this month and today in a single scan)
     db
-      .select({ total: sum(payments.amount) })
-      .from(payments)
-      .where(
-        and(
-          inArray(payments.branchId, branchIds),
-          eq(payments.type, 'INCOME'),
-          gte(payments.paymentDate, lastMonthStartDate),
-          lte(payments.paymentDate, lastMonthEndDate)
-        )
-      ),
-
-    // Check-in stats today
-    db
-      .select({ count: count() })
-      .from(checkIns)
-      .where(
-        and(
-          inArray(checkIns.branchId, branchIds),
-          gte(checkIns.checkInTime, todayStart)
-        )
-      ),
-
-    // Check-in stats this month
-    db
-      .select({ count: count() })
+      .select({
+        month: count(),
+        today: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${todayStart.toISOString()}::timestamptz)`,
+      })
       .from(checkIns)
       .where(
         and(
@@ -148,8 +104,8 @@ app.get('/overview', async (c) => {
       ),
   ]);
 
-  const thisMonthTotal = Number(thisMonthRevenue?.total || 0);
-  const lastMonthTotal = Number(lastMonthRevenue?.total || 0);
+  const thisMonthTotal = Number(revenueStats?.thisMonth || 0);
+  const lastMonthTotal = Number(revenueStats?.lastMonth || 0);
   const revenueGrowth = lastMonthTotal > 0
     ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100).toFixed(1)
     : '0.0';
@@ -160,11 +116,11 @@ app.get('/overview', async (c) => {
       members: {
         total: Number(memberStats?.total || 0),
         active: Number(memberStats?.active || 0),
-        newThisMonth: Number(newMembersThisMonth?.count || 0),
+        newThisMonth: Number(memberStats?.newThisMonth || 0),
       },
       contracts: {
         active: Number(contractStats?.active || 0),
-        expiringSoon: Number(expiringContracts?.count || 0),
+        expiringSoon: Number(contractStats?.expiringSoon || 0),
       },
       revenue: {
         thisMonth: thisMonthTotal,
@@ -172,8 +128,8 @@ app.get('/overview', async (c) => {
         growth: parseFloat(revenueGrowth),
       },
       checkIns: {
-        today: Number(todayCheckIns?.count || 0),
-        thisMonth: Number(monthCheckIns?.count || 0),
+        today: Number(checkInStats?.today || 0),
+        thisMonth: Number(checkInStats?.month || 0),
       },
     },
   });

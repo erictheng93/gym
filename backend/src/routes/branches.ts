@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, branches, employees, members } from '../db/index.js';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, count } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { invalidateTenantBranchesCache } from '../utils/tenant-cache.js';
@@ -26,23 +26,48 @@ const updateBranchSchema = createBranchSchema.partial();
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
 
-  const result = await db
-    .select({
-      branch: branches,
-      employeeCount: sql<number>`(SELECT COUNT(*) FROM employees WHERE employees.branch_id = ${branches.id} AND employees.status = 'ACTIVE')`,
-      memberCount: sql<number>`(SELECT COUNT(*) FROM members WHERE members.branch_id = ${branches.id} AND members.status = 'ACTIVE')`,
-    })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId))
-    .orderBy(desc(branches.type), branches.name);
+  const [tenantBranches, employeeCounts, memberCounts] = await Promise.all([
+    db
+      .select()
+      .from(branches)
+      .where(eq(branches.tenantId, tenantId))
+      .orderBy(desc(branches.type), branches.name),
+    db
+      .select({
+        branchId: employees.branchId,
+        count: count(),
+      })
+      .from(employees)
+      .innerJoin(branches, eq(employees.branchId, branches.id))
+      .where(and(eq(branches.tenantId, tenantId), eq(employees.status, 'ACTIVE')))
+      .groupBy(employees.branchId),
+    db
+      .select({
+        branchId: members.branchId,
+        count: count(),
+      })
+      .from(members)
+      .innerJoin(branches, eq(members.branchId, branches.id))
+      .where(and(eq(branches.tenantId, tenantId), eq(members.status, 'ACTIVE')))
+      .groupBy(members.branchId),
+  ]);
+
+  const empMap = new Map<string, number>();
+  for (const ec of employeeCounts) {
+    if (ec.branchId) empMap.set(ec.branchId, Number(ec.count));
+  }
+  const memMap = new Map<string, number>();
+  for (const mc of memberCounts) {
+    if (mc.branchId) memMap.set(mc.branchId, Number(mc.count));
+  }
 
   return c.json({
     success: true,
-    data: result.map(r => ({
-      ...r.branch,
+    data: tenantBranches.map(branch => ({
+      ...branch,
       stats: {
-        employeeCount: Number(r.employeeCount),
-        memberCount: Number(r.memberCount),
+        employeeCount: empMap.get(branch.id) || 0,
+        memberCount: memMap.get(branch.id) || 0,
       },
     })),
   });

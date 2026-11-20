@@ -254,18 +254,20 @@ export const useIssues = () => {
     return issue.status === 'SUBMITTED'
   }
 
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const issueDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
   /**
    * Format date for display
    */
   const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return issueDateFormatter.format(new Date(dateStr))
   }
 
   /**

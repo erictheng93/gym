@@ -247,16 +247,18 @@ export const useMeasurements = () => {
     }
   }
 
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const measurementDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
   /**
    * Format measurement date for display
    */
   const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return measurementDateFormatter.format(new Date(dateStr))
   }
 
   /**
