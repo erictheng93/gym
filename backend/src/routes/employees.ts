@@ -84,7 +84,7 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [[employee], branchIds] = await Promise.all([
+  const [[employee], branchIds, recentAttendances] = await Promise.all([
     db
       .select({
         employee: employees,
@@ -104,6 +104,13 @@ app.get('/:id', async (c) => {
       .where(eq(employees.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
+    db
+      .select()
+      .from(attendances)
+      .where(eq(attendances.employeeId, id))
+      .orderBy(desc(attendances.createdAt))
+      .limit(30)
+      .catch(() => [] as typeof attendances.$inferSelect[]),
   ]);
 
   if (!employee) {
@@ -112,18 +119,6 @@ app.get('/:id', async (c) => {
 
   if (!employee.employee.branchId || !branchIds.includes(employee.employee.branchId)) {
     return c.json({ success: false, error: '無權限存取此員工' }, 403);
-  }
-
-  let recentAttendances: typeof attendances.$inferSelect[] = [];
-  try {
-    recentAttendances = await db
-      .select()
-      .from(attendances)
-      .where(eq(attendances.employeeId, id))
-      .orderBy(desc(attendances.createdAt))
-      .limit(30);
-  } catch {
-    // Ignore attendance fetch errors
   }
 
   return c.json({
@@ -171,27 +166,13 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [[employee], branchIds] = await Promise.all([
-    db
-      .select()
-      .from(employees)
-      .where(eq(employees.id, id))
-      .limit(1),
-    getTenantBranchIds(tenantId),
-  ]);
-
-  if (!employee) {
-    return c.json({ success: false, error: '員工不存在' }, 404);
-  }
-
-  if (!employee.branchId || !branchIds.includes(employee.branchId)) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '無權限修改此員工' }, 403);
   }
 
-  if (data.branchId) {
-    if (!branchIds.includes(data.branchId)) {
-      return c.json({ success: false, error: '無效的分店' }, 400);
-    }
+  if (data.branchId && !branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   // Build update data, excluding null values for non-nullable fields
@@ -211,8 +192,21 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const [updatedEmployee] = await db
     .update(employees)
     .set(updateData)
-    .where(eq(employees.id, id))
+    .where(and(eq(employees.id, id), inArray(employees.branchId, branchIds)))
     .returning();
+
+  if (!updatedEmployee) {
+    const [existingEmployee] = await db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(eq(employees.id, id))
+      .limit(1);
+
+    if (!existingEmployee) {
+      return c.json({ success: false, error: '員工不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限修改此員工' }, 403);
+  }
 
   return c.json({ success: true, data: updatedEmployee });
 });
@@ -221,39 +215,38 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [employee] = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.id, id))
-    .limit(1);
-
-  if (!employee) {
-    return c.json({ success: false, error: '員工不存在' }, 404);
-  }
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, employee.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '無權限刪除此員工' }, 403);
   }
 
-  await db
+  const [resignedEmployee] = await db
     .update(employees)
     .set({
       status: 'RESIGNED',
       updatedAt: new Date(),
     })
-    .where(eq(employees.id, id));
+    .where(and(eq(employees.id, id), inArray(employees.branchId, branchIds)))
+    .returning({ id: employees.id, userId: employees.userId });
 
-  if (employee.userId) {
+  if (!resignedEmployee) {
+    const [existingEmployee] = await db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(eq(employees.id, id))
+      .limit(1);
+
+    if (!existingEmployee) {
+      return c.json({ success: false, error: '員工不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限刪除此員工' }, 403);
+  }
+
+  if (resignedEmployee.userId) {
     await db.update(users).set({
       isActive: false,
       updatedAt: new Date(),
-    }).where(eq(users.id, employee.userId));
+    }).where(eq(users.id, resignedEmployee.userId));
   }
 
   return c.json({ success: true, message: '員工已封存' });

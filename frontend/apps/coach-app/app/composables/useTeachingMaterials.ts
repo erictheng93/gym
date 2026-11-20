@@ -161,20 +161,23 @@ export const useTeachingMaterials = () => {
     types?: string
     limit?: number
   }): Promise<TeachingMaterial[]> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: TeachingMaterial[] }>(
-        `${apiUrl}/api/coach/teaching-materials/search`,
-        {
-          headers: getAuthHeader(),
-          query: params,
-        }
-      )
+    const dedupKey = `coach:teaching-materials:search:${JSON.stringify(params || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: TeachingMaterial[] }>(
+          `${apiUrl}/api/coach/teaching-materials/search`,
+          {
+            headers: getAuthHeader(),
+            query: params,
+          }
+        )
 
-      return response.success ? response.data : []
-    } catch (error) {
-      console.error('Failed to search materials:', error)
-      return []
-    }
+        return response.success ? response.data : []
+      } catch (error) {
+        console.error('Failed to search materials:', error)
+        return []
+      }
+    })
   }
 
   /**

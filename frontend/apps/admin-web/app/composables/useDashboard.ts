@@ -149,6 +149,11 @@ export interface RevenueTarget {
   target_amount: number
 }
 
+// In-flight deduplication maps
+const inFlightKPIs = new Map<string, Promise<DashboardKPIs | null>>()
+const inFlightContractAlerts = new Map<string, Promise<ContractAlertsResponse | null>>()
+const inFlightRevenueTargets = new Map<string, Promise<RevenueTarget[]>>()
+
 // ============================================
 // Composable
 // ============================================
@@ -181,11 +186,6 @@ export const useDashboard = () => {
       }
     })
   }
-
-  // In-flight deduplication maps
-  const inFlightKPIs = new Map<string, Promise<DashboardKPIs | null>>()
-  const inFlightContractAlerts = new Map<string, Promise<ContractAlertsResponse | null>>()
-  const inFlightRevenueTargets = new Map<string, Promise<RevenueTarget[]>>()
 
   /**
    * 獲取 Dashboard KPIs
