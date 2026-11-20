@@ -34,7 +34,10 @@ app.get('/', async (c) => {
   const page = Number(c.req.query('page')) || 1;
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
-  const status = c.req.query('status');
+  const status = c.req.query('status') || c.req.query('contract_status') || c.req.query('contractStatus');
+  const memberId = c.req.query('memberId') || c.req.query('member_id');
+  const branchId = c.req.query('branchId') || c.req.query('branch_id');
+  const search = c.req.query('search');
   const sortOrder = c.req.query('sortOrder') || 'desc';
 
   const tenantBranches = await db
@@ -45,7 +48,7 @@ app.get('/', async (c) => {
   const branchIds = tenantBranches.map(b => b.id);
 
   if (branchIds.length === 0) {
-    return c.json({ success: true, data: [], meta: { total: 0, page, limit }, pagination: { total: 0, page, limit, totalPages: 0 } });
+    return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 }, pagination: { total: 0, page, limit, totalPages: 0 } });
   }
 
   // Build where conditions
@@ -53,6 +56,17 @@ app.get('/', async (c) => {
   if (status) {
     // Case-insensitive status comparison
     conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
+  }
+  if (memberId) {
+    conditions.push(eq(contracts.memberId, memberId));
+  }
+  if (branchId) {
+    conditions.push(eq(contracts.branchId, branchId));
+  }
+  if (search) {
+    conditions.push(
+      sql`(${contracts.contractNo} ILIKE ${'%' + search + '%'} OR ${contracts.memberId} IN (SELECT id FROM ${members} WHERE ${members.fullName} ILIKE ${'%' + search + '%'}))`
+    );
   }
 
   const [countResult] = await db
@@ -65,7 +79,7 @@ app.get('/', async (c) => {
   // Determine sort order
   const orderFn = sortOrder === 'asc' ? asc(contracts.createdAt) : desc(contracts.createdAt);
 
-  const result = await db
+  const rows = await db
     .select({
       contract: contracts,
       member: {
@@ -86,6 +100,38 @@ app.get('/', async (c) => {
     .orderBy(orderFn)
     .limit(limit)
     .offset(offset);
+
+  const result = rows.map(({ contract, member, plan }) => ({
+    ...contract,
+    contract,
+    member: member ? {
+      ...member,
+      full_name: member.fullName,
+      member_code: member.memberCode,
+    } : null,
+    plan: plan ? {
+      ...plan,
+      name: plan.name,
+    } : null,
+    plan_id: plan ? {
+      id: plan.id,
+      name: plan.name,
+    } : null,
+    member_id: member ? {
+      id: member.id,
+      full_name: member.fullName,
+      member_code: member.memberCode,
+    } : null,
+    contract_no: contract.contractNo,
+    contract_status: contract.status,
+    contractStatus: contract.status,
+    start_date: contract.startDate,
+    end_date: contract.endDate,
+    total_amount: contract.totalAmount,
+    paid_amount: contract.paidAmount,
+    payment_status: contract.status === 'ACTIVE' ? 'PAID' : 'PENDING',
+    paymentStatus: contract.status === 'ACTIVE' ? 'PAID' : 'PENDING',
+  }));
 
   return c.json({
     success: true,
@@ -203,6 +249,9 @@ app.get('/:id', async (c) => {
         name: membershipPlans.name,
         planType: membershipPlans.planType,
         price: membershipPlans.price,
+        allowPause: membershipPlans.allowPause,
+        allowTransfer: membershipPlans.allowTransfer,
+        durationMonths: membershipPlans.durationMonths,
       },
     })
     .from(contracts)
@@ -240,7 +289,30 @@ app.get('/:id', async (c) => {
   return c.json({
     success: true,
     data: {
-      ...contract,
+      ...contract.contract,
+      contract: contract.contract,
+      member: contract.member ? {
+        ...contract.member,
+        full_name: contract.member.fullName,
+        member_code: contract.member.memberCode,
+      } : null,
+      plan: contract.plan ? {
+        ...contract.plan,
+        allow_pause: contract.plan.allowPause,
+        allow_transfer: contract.plan.allowTransfer,
+        duration_months: contract.plan.durationMonths,
+      } : null,
+      contract_no: contract.contract.contractNo,
+      contract_status: contract.contract.status,
+      contractStatus: contract.contract.status,
+      start_date: contract.contract.startDate,
+      end_date: contract.contract.endDate,
+      total_amount: contract.contract.totalAmount,
+      paid_amount: contract.contract.paidAmount,
+      branch_id: contract.contract.branchId,
+      member_id: contract.contract.memberId,
+      plan_id: contract.contract.planId,
+      sales_person_id: contract.contract.salesPersonId,
       logs,
       payments: contractPayments,
     },

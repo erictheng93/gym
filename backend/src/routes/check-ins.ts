@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, checkIns, members, contracts, branches, employees, membershipPlans } from '../db/index.js';
-import { eq, and, sql, desc, gte, lte } from 'drizzle-orm';
+import { eq, and, sql, desc, gte, lte, gt } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
@@ -13,7 +13,7 @@ app.use('*', requireTenant);
 
 const createCheckInSchema = z.object({
   memberId: z.string().uuid(),
-  branchId: z.string().uuid(),
+  branchId: z.string().uuid().optional(),
   contractId: z.string().uuid().optional(),
   checkInType: z.enum(['ENTRY', 'CLASS', 'FACILITY']).optional().default('ENTRY'),
   notes: z.string().optional(),
@@ -121,11 +121,34 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const user = c.get('user')!;
   const data = c.req.valid('json');
 
+  let branchId = data.branchId;
+  if (!branchId) {
+    const [m] = await db
+      .select({ branchId: members.branchId })
+      .from(members)
+      .where(eq(members.id, data.memberId))
+      .limit(1);
+    if (m?.branchId) {
+      branchId = m.branchId;
+    } else {
+      const [firstBranch] = await db
+        .select({ id: branches.id })
+        .from(branches)
+        .where(eq(branches.tenantId, tenantId))
+        .limit(1);
+      branchId = firstBranch?.id;
+    }
+  }
+
+  if (!branchId) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
+  }
+
   // Verify branch belongs to tenant
   const [branch] = await db
     .select()
     .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
+    .where(and(eq(branches.id, branchId), eq(branches.tenantId, tenantId)))
     .limit(1);
 
   if (!branch) {
@@ -185,7 +208,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     .where(
       and(
         eq(checkIns.memberId, data.memberId),
-        eq(checkIns.branchId, data.branchId),
+        eq(checkIns.branchId, branchId),
         gte(checkIns.checkInTime, todayStart),
         lte(checkIns.checkInTime, todayEnd)
       )
@@ -204,27 +227,40 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     });
   }
 
+  // Deduct session for COUNT_BASED contracts atomically
+  if (activePlan?.planType === 'COUNT_BASED' && activeContract) {
+    const updatedContract = await db
+      .update(contracts)
+      .set({
+        remainingCounts: sql`${contracts.remainingCounts} - 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(contracts.id, activeContract.id),
+          gt(contracts.remainingCounts, 0)
+        )
+      )
+      .returning();
+
+    if (!updatedContract.length) {
+      return c.json({
+        success: false,
+        error: '合約剩餘次數不足',
+      }, 400);
+    }
+  }
+
   // Create check-in
   const [newCheckIn] = await db.insert(checkIns).values({
     memberId: data.memberId,
-    branchId: data.branchId,
+    branchId: branchId,
     contractId: data.contractId || activeContract?.id,
     checkInType: data.checkInType,
     checkInTime: new Date(),
     processedById: user.employeeId,
     notes: data.notes,
   }).returning();
-
-  // Deduct session for COUNT_BASED contracts
-  if (activePlan?.planType === 'COUNT_BASED' && activeContract) {
-    const remainingCounts = activeContract.remainingCounts ?? 0;
-    if (remainingCounts > 0) {
-      await db.update(contracts).set({
-        remainingCounts: remainingCounts - 1,
-        updatedAt: new Date(),
-      }).where(eq(contracts.id, activeContract.id));
-    }
-  }
 
   return c.json({
     success: true,
