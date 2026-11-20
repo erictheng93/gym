@@ -148,17 +148,21 @@ const loadContract = async () => {
 
 onMounted(loadContract)
 
+const contractDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
+const contractCurrencyFormatter = new Intl.NumberFormat('zh-TW')
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  return contractDateFormatter.format(new Date(dateStr))
 }
 
 const formatCurrency = (amount: number | null) => {
-  return `NT$ ${(amount || 0).toLocaleString()}`
+  return `NT$ ${contractCurrencyFormatter.format(amount || 0)}`
 }
 
 const getStatusBadge = (status: string) => {

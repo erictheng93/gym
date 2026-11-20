@@ -143,6 +143,32 @@ const weekStats = computed(() => {
   }
 })
 
+const classesByDay = computed(() => {
+  const map = new Map<string, ClassBooking[]>()
+  if (!schedule.value?.classes) return map
+  for (const c of schedule.value.classes) {
+    const classDate = new Date(c.scheduled_at).toISOString().split('T')[0]!
+    const list = map.get(classDate)
+    if (list) {
+      list.push(c)
+    } else {
+      map.set(classDate, [c])
+    }
+  }
+  return map
+})
+
+const weekMonthFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short' })
+const dayHeaderFormatter = new Intl.DateTimeFormat('zh-TW', {
+  weekday: 'short',
+  month: 'numeric',
+  day: 'numeric',
+})
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 function getMonday(date: Date): Date {
   const d = new Date(date)
   const day = d.getDay()
@@ -175,8 +201,8 @@ function formatWeekRange(start: Date) {
   const end = new Date(start)
   end.setDate(start.getDate() + 6)
 
-  const startMonth = start.toLocaleDateString('zh-TW', { month: 'short' })
-  const endMonth = end.toLocaleDateString('zh-TW', { month: 'short' })
+  const startMonth = weekMonthFormatter.format(start)
+  const endMonth = weekMonthFormatter.format(end)
 
   if (startMonth === endMonth) {
     return `${startMonth} ${start.getDate()} - ${end.getDate()}日`
@@ -191,12 +217,7 @@ function formatWeekLabel(start: Date) {
 }
 
 function formatDayHeader(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', {
-    weekday: 'short',
-    month: 'numeric',
-    day: 'numeric',
-  })
+  return dayHeaderFormatter.format(new Date(dateStr))
 }
 
 function isToday(dateStr: string) {
@@ -204,22 +225,15 @@ function isToday(dateStr: string) {
 }
 
 function getClassesForDay(dateStr: string): ClassBooking[] {
-  if (!schedule.value?.classes) return []
-  return schedule.value.classes.filter(c => {
-    const classDate = new Date(c.scheduled_at).toISOString().split('T')[0]!
-    return classDate === dateStr
-  })
+  return classesByDay.value.get(dateStr) || []
 }
 
 function getClassCount(dateStr: string) {
-  return getClassesForDay(dateStr).length
+  return classesByDay.value.get(dateStr)?.length || 0
 }
 
 function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return timeFormatter.format(new Date(dateStr))
 }
 
 function getStatusBarClass(status: string) {
