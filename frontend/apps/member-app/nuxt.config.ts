@@ -233,5 +233,32 @@ export default defineNuxtConfig({
         }
       }
     }
+  },
+
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            if (id.includes('node_modules/vue') ||
+                id.includes('node_modules/@vue') ||
+                id.includes('node_modules/vue-router') ||
+                id.includes('node_modules/nuxt')) {
+              return 'vue-core'
+            }
+            if (id.includes('node_modules/qrcode')) {
+              return 'qrcode-vendor'
+            }
+            if (id.includes('node_modules/@sentry')) {
+              return 'sentry-vendor'
+            }
+            if (id.includes('node_modules/zod')) {
+              return 'zod-vendor'
+            }
+          }
+        }
+      },
+      chunkSizeWarningLimit: 550
+    }
   }
 })

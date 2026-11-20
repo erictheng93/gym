@@ -52,31 +52,31 @@ app.get('/revenue', async (c) => {
     conditions.push(eq(payments.branchId, branchId));
   }
 
-  const [totalResult] = await db
-    .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)` })
-    .from(payments)
-    .where(and(...conditions));
-
-  const byBranch = await db
-    .select({
-      branchId: payments.branchId,
-      branchName: branches.name,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
-    .from(payments)
-    .innerJoin(branches, eq(payments.branchId, branches.id))
-    .where(and(...conditions))
-    .groupBy(payments.branchId, branches.name);
-
-  const byDay = await db
-    .select({
-      date: sql<string>`DATE(${payments.paymentDate})`,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
-    .from(payments)
-    .where(and(...conditions))
-    .groupBy(sql`DATE(${payments.paymentDate})`)
-    .orderBy(sql`DATE(${payments.paymentDate})`);
+  const [[totalResult], byBranch, byDay] = await Promise.all([
+    db
+      .select({ total: sql<number>`COALESCE(SUM(${payments.amount}), 0)` })
+      .from(payments)
+      .where(and(...conditions)),
+    db
+      .select({
+        branchId: payments.branchId,
+        branchName: branches.name,
+        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+      })
+      .from(payments)
+      .innerJoin(branches, eq(payments.branchId, branches.id))
+      .where(and(...conditions))
+      .groupBy(payments.branchId, branches.name),
+    db
+      .select({
+        date: sql<string>`DATE(${payments.paymentDate})`,
+        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+      })
+      .from(payments)
+      .where(and(...conditions))
+      .groupBy(sql`DATE(${payments.paymentDate})`)
+      .orderBy(sql`DATE(${payments.paymentDate})`),
+  ]);
 
   return c.json({
     success: true,
@@ -117,23 +117,24 @@ app.get('/member-growth', async (c) => {
     conditions.push(eq(members.branchId, branchId));
   }
 
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(members)
-    .where(and(...conditions, eq(members.status, 'ACTIVE')));
-
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
 
-  const byMonth = await db
-    .select({
-      month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
-      count: count(),
-    })
-    .from(members)
-    .where(and(...conditions, gte(members.createdAt, startDate)))
-    .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
-    .orderBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`);
+  const [[totalResult], byMonth] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(members)
+      .where(and(...conditions, eq(members.status, 'ACTIVE'))),
+    db
+      .select({
+        month: sql<string>`TO_CHAR(${members.createdAt}, 'YYYY-MM')`,
+        count: count(),
+      })
+      .from(members)
+      .where(and(...conditions, gte(members.createdAt, startDate)))
+      .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
+      .orderBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`),
+  ]);
 
   return c.json({
     success: true,
@@ -239,32 +240,32 @@ app.get('/member-activity', async (c) => {
     conditions.push(eq(checkIns.branchId, branchId));
   }
 
-  const [totalResult] = await db
-    .select({ count: count() })
-    .from(checkIns)
-    .where(and(...conditions));
-
-  const byBranch = await db
-    .select({
-      branchId: checkIns.branchId,
-      branchName: branches.name,
-      count: count(),
-      uniqueMembers: sql<number>`COUNT(DISTINCT ${checkIns.memberId})`,
-    })
-    .from(checkIns)
-    .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(and(...conditions))
-    .groupBy(checkIns.branchId, branches.name);
-
-  const byDay = await db
-    .select({
-      date: sql<string>`DATE(${checkIns.checkInTime})`,
-      count: count(),
-    })
-    .from(checkIns)
-    .where(and(...conditions))
-    .groupBy(sql`DATE(${checkIns.checkInTime})`)
-    .orderBy(sql`DATE(${checkIns.checkInTime})`);
+  const [[totalResult], byBranch, byDay] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(checkIns)
+      .where(and(...conditions)),
+    db
+      .select({
+        branchId: checkIns.branchId,
+        branchName: branches.name,
+        count: count(),
+        uniqueMembers: sql<number>`COUNT(DISTINCT ${checkIns.memberId})`,
+      })
+      .from(checkIns)
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(and(...conditions))
+      .groupBy(checkIns.branchId, branches.name),
+    db
+      .select({
+        date: sql<string>`DATE(${checkIns.checkInTime})`,
+        count: count(),
+      })
+      .from(checkIns)
+      .where(and(...conditions))
+      .groupBy(sql`DATE(${checkIns.checkInTime})`)
+      .orderBy(sql`DATE(${checkIns.checkInTime})`),
+  ]);
 
   return c.json({
     success: true,
@@ -713,8 +714,8 @@ app.get('/branch-performance', async (c) => {
     });
   }
 
-  // Fetch current period data for all branches
-  const [currentRevenue, currentMembers, currentCheckIns, currentContracts] = await Promise.all([
+  // Fetch current period (and previous period if compareWithPrevious) data concurrently
+  const currentQueries = [
     // Revenue by branch
     db.select({
       branchId: payments.branchId,
@@ -766,53 +767,67 @@ app.get('/branch-performance', async (c) => {
       eq(contracts.status, 'ACTIVE')
     ))
     .groupBy(contracts.branchId),
+  ] as const;
+
+  const previousQueries = compareWithPrevious ? [
+    db.select({
+      branchId: payments.branchId,
+      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+    })
+    .from(payments)
+    .where(and(
+      inArray(payments.branchId, branchIds),
+      eq(payments.type, 'INCOME'),
+      gte(payments.paymentDate, previousStart),
+      lte(payments.paymentDate, previousEnd)
+    ))
+    .groupBy(payments.branchId),
+
+    db.select({
+      branchId: members.branchId,
+      count: count(),
+    })
+    .from(members)
+    .where(and(
+      inArray(members.branchId, branchIds),
+      gte(members.createdAt, previousStart),
+      lte(members.createdAt, previousEnd)
+    ))
+    .groupBy(members.branchId),
+
+    db.select({
+      branchId: checkIns.branchId,
+      count: count(),
+    })
+    .from(checkIns)
+    .where(and(
+      inArray(checkIns.branchId, branchIds),
+      gte(checkIns.checkInTime, previousStart),
+      lte(checkIns.checkInTime, previousEnd)
+    ))
+    .groupBy(checkIns.branchId),
+  ] as const : null;
+
+  const [
+    currentRevenue,
+    currentMembers,
+    currentCheckIns,
+    currentContracts,
+    prevRevenueRes,
+    prevMembersRes,
+    prevCheckInsRes,
+  ] = await Promise.all([
+    ...currentQueries,
+    ...(previousQueries ? previousQueries : [
+      Promise.resolve([]),
+      Promise.resolve([]),
+      Promise.resolve([]),
+    ]),
   ]);
 
-  // Fetch previous period data if needed
-  let previousRevenue: typeof currentRevenue = [];
-  let previousMembers: typeof currentMembers = [];
-  let previousCheckIns: typeof currentCheckIns = [];
-
-  if (compareWithPrevious) {
-    [previousRevenue, previousMembers, previousCheckIns] = await Promise.all([
-      db.select({
-        branchId: payments.branchId,
-        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-      })
-      .from(payments)
-      .where(and(
-        inArray(payments.branchId, branchIds),
-        eq(payments.type, 'INCOME'),
-        gte(payments.paymentDate, previousStart),
-        lte(payments.paymentDate, previousEnd)
-      ))
-      .groupBy(payments.branchId),
-
-      db.select({
-        branchId: members.branchId,
-        count: count(),
-      })
-      .from(members)
-      .where(and(
-        inArray(members.branchId, branchIds),
-        gte(members.createdAt, previousStart),
-        lte(members.createdAt, previousEnd)
-      ))
-      .groupBy(members.branchId),
-
-      db.select({
-        branchId: checkIns.branchId,
-        count: count(),
-      })
-      .from(checkIns)
-      .where(and(
-        inArray(checkIns.branchId, branchIds),
-        gte(checkIns.checkInTime, previousStart),
-        lte(checkIns.checkInTime, previousEnd)
-      ))
-      .groupBy(checkIns.branchId),
-    ]);
-  }
+  const previousRevenue = prevRevenueRes as typeof currentRevenue;
+  const previousMembers = prevMembersRes as typeof currentMembers;
+  const previousCheckIns = prevCheckInsRes as typeof currentCheckIns;
 
   // Build branch data map
   const branchMap = new Map<string, {
