@@ -157,6 +157,32 @@ app.get('/:id', async (c) => {
   });
 });
 
+const NOTIFICATION_RETURNING = {
+  id: notifications.id,
+  status: notifications.status,
+  createdAt: notifications.createdAt,
+  updatedAt: notifications.updatedAt,
+  notificationType: notifications.notificationType,
+  type: notifications.type,
+  title: notifications.title,
+  message: notifications.message,
+  data: notifications.data,
+  referenceType: notifications.referenceType,
+  referenceId: notifications.referenceId,
+  branchId: notifications.branchId,
+  targetUserId: notifications.targetUserId,
+  targetMemberId: notifications.targetMemberId,
+  targetEmployeeId: notifications.targetEmployeeId,
+  recipientType: notifications.recipientType,
+  recipientId: notifications.recipientId,
+  priority: notifications.priority,
+  isRead: notifications.isRead,
+  readStatus: notifications.readStatus,
+  readAt: notifications.readAt,
+  expiresAt: notifications.expiresAt,
+  tenantId: notifications.tenantId,
+};
+
 // Create notification
 app.post('/', zValidator('json', createNotificationSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -171,7 +197,7 @@ app.post('/', zValidator('json', createNotificationSchema), async (c) => {
   const [newNotification] = await db.insert(notifications).values({
     ...data,
     expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
-  }).returning();
+  }).returning(NOTIFICATION_RETURNING);
 
   return c.json({
     success: true,

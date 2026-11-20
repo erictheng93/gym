@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, contracts, contractLogs, members, membershipPlans, branches, payments } from '../db/index.js';
+import { db, contracts, contractLogs, members, membershipPlans, payments } from '../db/index.js';
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';

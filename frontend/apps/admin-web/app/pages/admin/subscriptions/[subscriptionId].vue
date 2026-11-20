@@ -270,51 +270,69 @@ const cancelSubscription = async () => {
   }
 }
 
-const getPlanLabel = (planType) => {
-  const labels = {
-    starter: 'Starter',
-    professional: 'Professional',
-    enterprise: 'Enterprise'
-  }
-  return labels[planType] || planType
+const PLAN_LABELS: Record<string, string> = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise'
 }
 
-const getStatusLabel = (status) => {
-  const labels = {
-    active: '活跃',
-    canceled: '已取消',
-    past_due: '逾期'
-  }
-  return labels[status] || status
+const STATUS_LABELS: Record<string, string> = {
+  active: '活跃',
+  canceled: '已取消',
+  past_due: '逾期'
 }
 
-const getInvoiceStatusLabel = (status) => {
-  const labels = {
-    draft: '草稿',
-    open: '待付款',
-    paid: '已付款',
-    void: '作废',
-    uncollectible: '无法收款'
-  }
-  return labels[status] || status
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: '草稿',
+  open: '待付款',
+  paid: '已付款',
+  void: '作废',
+  uncollectible: '无法收款'
 }
 
-const formatDate = (dateStr) => {
+const subDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const subDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric'
+})
+const subCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD'
+})
+
+const getPlanLabel = (planType: string) => {
+  return PLAN_LABELS[planType] || planType
+}
+
+const getStatusLabel = (status: string) => {
+  return STATUS_LABELS[status] || status
+}
+
+const getInvoiceStatusLabel = (status: string) => {
+  return INVOICE_STATUS_LABELS[status] || status
+}
+
+const formatDate = (dateStr: string | null) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+  return subDateFormatter.format(d)
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: string | null) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-TW')
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+  return subDateTimeFormatter.format(d)
 }
 
-const formatCurrency = (amount) => {
+const formatCurrency = (amount: number | null | undefined) => {
   if (amount === null || amount === undefined) return '-'
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD'
-  }).format(amount)
+  return subCurrencyFormatter.format(amount)
 }
 
 onMounted(async () => {

@@ -64,43 +64,51 @@ const fetchTenantDetails = async () => {
   }
 }
 
+const PLAN_LABEL_MAP: Record<string, string> = {
+  starter: '入門版',
+  professional: '專業版',
+  enterprise: '企業版',
+  custom: '自訂版'
+}
+
+const STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  active: { label: '正常', class: 'badge-success' },
+  trial: { label: '試用中', class: 'badge-warning' },
+  suspended: { label: '已暫停', class: 'badge-error' },
+  cancelled: { label: '已取消', class: 'badge-default' }
+}
+
+const tenantDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const tenantNumberFormatter = new Intl.NumberFormat('zh-TW')
+
 // Plan type helper
 const getPlanLabel = (planType: string) => {
-  const map: Record<string, string> = {
-    starter: '入門版',
-    professional: '專業版',
-    enterprise: '企業版',
-    custom: '自訂版'
-  }
-  return map[planType] || planType
+  return PLAN_LABEL_MAP[planType] || planType
 }
 
 // Status badge helper
 const getStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    active: { label: '正常', class: 'badge-success' },
-    trial: { label: '試用中', class: 'badge-warning' },
-    suspended: { label: '已暫停', class: 'badge-error' },
-    cancelled: { label: '已取消', class: 'badge-default' }
-  }
-  return map[status] || { label: status, class: 'badge-default' }
+  return STATUS_BADGE_MAP[status] || { label: status, class: 'badge-default' }
 }
 
 // Format date
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return tenantDateFormatter.format(d)
 }
 
 // Format number
 const formatNumber = (num: number) => {
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return tenantNumberFormatter.format(num)
 }
 
 // Check if trial is expiring soon

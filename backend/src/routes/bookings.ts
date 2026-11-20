@@ -445,11 +445,11 @@ app.post('/:id/attend', async (c) => {
     const contract = booking.contract;
     const countDeduction = booking.class.countDeduction || 1;
 
-    if (contract?.remainingCounts !== null && contract.remainingCounts < countDeduction) {
+    if (contract && contract.remainingCounts !== null && contract.remainingCounts < countDeduction) {
       return c.json({ success: false, error: '剩餘次數不足' }, 400);
     }
 
-    if (contract?.remainingCounts !== null) {
+    if (contract && contract.remainingCounts !== null) {
       remainingCounts = contract.remainingCounts - countDeduction;
       await Promise.all([
         db.update(contracts).set({

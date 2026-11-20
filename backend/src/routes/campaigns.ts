@@ -137,6 +137,27 @@ app.get('/:id', async (c) => {
   });
 });
 
+const CAMPAIGN_RETURNING = {
+  id: campaigns.id,
+  status: campaigns.status,
+  createdAt: campaigns.createdAt,
+  updatedAt: campaigns.updatedAt,
+  tenantId: campaigns.tenantId,
+  branchId: campaigns.branchId,
+  name: campaigns.name,
+  description: campaigns.description,
+  campaignType: campaigns.campaignType,
+  startDate: campaigns.startDate,
+  endDate: campaigns.endDate,
+  targetAudience: campaigns.targetAudience,
+  budget: campaigns.budget,
+  discountType: campaigns.discountType,
+  discountValue: campaigns.discountValue,
+  isActive: campaigns.isActive,
+  terms: campaigns.terms,
+  createdById: campaigns.createdById,
+};
+
 // Create campaign
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createCampaignSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -162,7 +183,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCampaign
     discountValue: data.discountValue ? String(data.discountValue) : null,
     tenantId,
     createdById: user.employeeId,
-  }).returning();
+  }).returning(CAMPAIGN_RETURNING);
 
   return c.json({
     success: true,
@@ -201,7 +222,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCamp
     .update(campaigns)
     .set(updateData)
     .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
-    .returning();
+    .returning(CAMPAIGN_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '活動不存在' }, 404);

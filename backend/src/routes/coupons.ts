@@ -189,6 +189,39 @@ app.post('/validate', async (c) => {
   });
 });
 
+const COUPON_RETURNING = {
+  id: coupons.id,
+  status: coupons.status,
+  createdAt: coupons.createdAt,
+  updatedAt: coupons.updatedAt,
+  tenantId: coupons.tenantId,
+  branchId: coupons.branchId,
+  campaignId: coupons.campaignId,
+  code: coupons.code,
+  name: coupons.name,
+  description: coupons.description,
+  discountType: coupons.discountType,
+  discountValue: coupons.discountValue,
+  minPurchase: coupons.minPurchase,
+  maxDiscount: coupons.maxDiscount,
+  validFrom: coupons.validFrom,
+  validUntil: coupons.validUntil,
+  usageLimit: coupons.usageLimit,
+  usageLimitPerMember: coupons.usageLimitPerMember,
+  isActive: coupons.isActive,
+  applicablePlans: coupons.applicablePlans,
+};
+
+const COUPON_USAGE_RETURNING = {
+  id: couponUsages.id,
+  createdAt: couponUsages.createdAt,
+  couponId: couponUsages.couponId,
+  memberId: couponUsages.memberId,
+  contractId: couponUsages.contractId,
+  discountAmount: couponUsages.discountAmount,
+  usedAt: couponUsages.usedAt,
+};
+
 // Create coupon
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createCouponSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -217,7 +250,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCouponSc
     minPurchase: data.minPurchase ? String(data.minPurchase) : null,
     maxDiscount: data.maxDiscount ? String(data.maxDiscount) : null,
     tenantId,
-  }).returning();
+  }).returning(COUPON_RETURNING);
 
   return c.json({
     success: true,
@@ -247,7 +280,7 @@ app.post('/:id/use', async (c) => {
     contractId,
     discountAmount: String(discountAmount),
     usedAt: new Date(),
-  }).returning();
+  }).returning(COUPON_USAGE_RETURNING);
 
   return c.json({
     success: true,
@@ -326,7 +359,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateCoup
     .update(coupons)
     .set(updateData)
     .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
-    .returning();
+    .returning(COUPON_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '優惠碼不存在' }, 404);
