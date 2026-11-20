@@ -4,6 +4,7 @@
  */
 
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 
 export interface Review {
   id: string
@@ -70,19 +71,21 @@ export const useReviews = () => {
    * Check if member can review a specific booking
    */
   const checkEligibility = async (bookingId: string): Promise<ReviewEligibility> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: ReviewEligibility }>(
-        `${apiUrl}/api/member/reviews/eligibility/${bookingId}`,
-        { headers: getAuthHeader() }
-      )
-      return response.data
-    } catch {
-      return {
-        can_review: false,
-        reason: '無法確認評價資格',
-        existing_review: null,
+    return deduplicateRequest(`member:review:eligibility:${bookingId}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: ReviewEligibility }>(
+          `${apiUrl}/api/member/reviews/eligibility/${bookingId}`,
+          { headers: getAuthHeader() }
+        )
+        return response.data
+      } catch {
+        return {
+          can_review: false,
+          reason: '無法確認評價資格',
+          existing_review: null,
+        }
       }
-    }
+    })
   }
 
   /**
@@ -167,49 +170,53 @@ export const useReviews = () => {
     classId: string,
     options?: { limit?: number; offset?: number }
   ): Promise<{ reviews: Review[]; summary: ReviewSummary } | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
+    return deduplicateRequest(`member:reviews:class:${classId}:${JSON.stringify(options)}`, async () => {
+      try {
+        const params = new URLSearchParams()
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
 
-      const queryString = params.toString()
-      const url = `${apiUrl}/api/member/reviews/class/${classId}${queryString ? '?' + queryString : ''}`
+        const queryString = params.toString()
+        const url = `${apiUrl}/api/member/reviews/class/${classId}${queryString ? '?' + queryString : ''}`
 
-      const response = await $fetch<ClassReviewsResponse>(url)
+        const response = await $fetch<ClassReviewsResponse>(url)
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**
    * Get member's own reviews
    */
   const fetchMyReviews = async (options?: { limit?: number; offset?: number }) => {
-    isLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
+    return deduplicateRequest(`member:reviews:my:${JSON.stringify(options)}`, async () => {
+      isLoading.value = true
+      try {
+        const params = new URLSearchParams()
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
 
-      const queryString = params.toString()
-      const url = `${apiUrl}/api/member/reviews/my${queryString ? '?' + queryString : ''}`
+        const queryString = params.toString()
+        const url = `${apiUrl}/api/member/reviews/my${queryString ? '?' + queryString : ''}`
 
-      const response = await $fetch<{ success: boolean; data: Review[] }>(
-        url,
-        { headers: getAuthHeader() }
-      )
+        const response = await $fetch<{ success: boolean; data: Review[] }>(
+          url,
+          { headers: getAuthHeader() }
+        )
 
-      if (response.success) {
-        myReviews.value = response.data
+        if (response.success) {
+          myReviews.value = response.data
+        }
+        return response.data
+      } catch {
+        return []
+      } finally {
+        isLoading.value = false
       }
-      return response.data
-    } catch {
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**

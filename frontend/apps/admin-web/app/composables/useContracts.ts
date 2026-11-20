@@ -4,6 +4,8 @@ import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 
+const inFlightContractsMap = new Map<string, Promise<void>>()
+
 export const useContracts = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
@@ -19,37 +21,48 @@ export const useContracts = () => {
     branchId?: string
     status?: string
     search?: string
-  }) => {
-    isLoading.value = true
-    const { page = 1, limit = 20, memberId, branchId, status, search } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-      if (memberId) filter.member_id = memberId
-      if (branchId) filter.branch_id = branchId
-      if (status) filter.contract_status = status
-
-      const { data, total } = await readItems<Contract>('contracts', {
-        page,
-        limit,
-        search,
-        filter,
-        sort: 'date_created',
-        sortOrder: 'desc'
-      })
-
-      contracts.value = data
-      totalCount.value = total
-    } catch (error) {
-      handleError(error, {
-        context: 'useContracts.fetchContracts',
-        customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
-      })
-      contracts.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightContractsMap.has(key)) {
+      return inFlightContractsMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { page = 1, limit = 20, memberId, branchId, status, search } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+        if (memberId) filter.member_id = memberId
+        if (branchId) filter.branch_id = branchId
+        if (status) filter.contract_status = status
+
+        const { data, total } = await readItems<Contract>('contracts', {
+          page,
+          limit,
+          search,
+          filter,
+          sort: 'date_created',
+          sortOrder: 'desc'
+        })
+
+        contracts.value = data
+        totalCount.value = total
+      } catch (error) {
+        handleError(error, {
+          context: 'useContracts.fetchContracts',
+          customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
+        })
+        contracts.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightContractsMap.delete(key)
+      }
+    })()
+
+    inFlightContractsMap.set(key, promise)
+    return promise
   }
 
   const getContract = async (id: string) => {

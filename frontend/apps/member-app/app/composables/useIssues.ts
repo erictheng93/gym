@@ -6,6 +6,7 @@
 import type { IssueType, IssueStatus } from '../schemas/issue.schema'
 import { ISSUE_STATUS_COLORS } from '../schemas/issue.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 
 // Cache settings
 const CACHE_KEY_ISSUES = 'member:issues'
@@ -61,14 +62,41 @@ export const useIssues = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
-
     const cacheKey = `${CACHE_KEY_ISSUES}:${member.value.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+    return deduplicateRequest(cacheKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
+
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Issue[]>(cacheKey)
+          if (cached) {
+            issues.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.status) params.append('status', options.status)
+        if (options?.type) params.append('type', options.type)
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
+
+        const response = await $fetch<IssuesResponse>(`${apiUrl}/api/member/issues?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          issues.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Try cached data on network error
         const cached = await getCache<Issue[]>(cacheKey)
         if (cached) {
           issues.value = cached
@@ -76,35 +104,10 @@ export const useIssues = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.status) params.append('status', options.status)
-      if (options?.type) params.append('type', options.type)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
-
-      const response = await $fetch<IssuesResponse>(`${apiUrl}/api/member/issues?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        issues.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Try cached data on network error
-      const cached = await getCache<Issue[]>(cacheKey)
-      if (cached) {
-        issues.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -113,16 +116,18 @@ export const useIssues = () => {
   const getIssue = async (id: string): Promise<Issue | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Issue }>(
-        `${apiUrl}/api/member/issues/${id}`,
-        { headers: getAuthHeader() }
-      )
+    return deduplicateRequest(`member:issue:${id}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Issue }>(
+          `${apiUrl}/api/member/issues/${id}`,
+          { headers: getAuthHeader() }
+        )
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**

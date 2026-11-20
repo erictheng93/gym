@@ -5,6 +5,7 @@ import { db, checkIns, members, contracts, branches, employees, membershipPlans 
 import { eq, and, sql, desc, gte, lte } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -121,46 +122,41 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const user = c.get('user')!;
   const data = c.req.valid('json');
 
-  // Verify branch belongs to tenant
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  // Verify branch belongs to tenant via cache
+  const tenantBranchIds = await getTenantBranchIds(tenantId);
+  if (!tenantBranchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
-  // Verify member exists
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, data.memberId))
-    .limit(1);
+  // Concurrently verify member exists and check active contract
+  const today = new Date().toISOString().split('T')[0];
+  const [[member], [activeContractResult]] = await Promise.all([
+    db
+      .select()
+      .from(members)
+      .where(eq(members.id, data.memberId))
+      .limit(1),
+    db
+      .select({
+        contract: contracts,
+        plan: membershipPlans,
+      })
+      .from(contracts)
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(
+        and(
+          eq(contracts.memberId, data.memberId),
+          eq(contracts.status, 'ACTIVE'),
+          lte(contracts.startDate, today),
+          gte(contracts.endDate, today)
+        )
+      )
+      .limit(1),
+  ]);
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
-
-  // Check for active contract with plan info
-  const today = new Date().toISOString().split('T')[0];
-  const [activeContractResult] = await db
-    .select({
-      contract: contracts,
-      plan: membershipPlans,
-    })
-    .from(contracts)
-    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(
-      and(
-        eq(contracts.memberId, data.memberId),
-        eq(contracts.status, 'ACTIVE'),
-        lte(contracts.startDate, today),
-        gte(contracts.endDate, today)
-      )
-    )
-    .limit(1);
 
   const activeContract = activeContractResult?.contract;
   const activePlan = activeContractResult?.plan;

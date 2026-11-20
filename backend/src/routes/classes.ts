@@ -242,13 +242,8 @@ app.post('/schedules', zValidator('json', createScheduleSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const tenantBranchIds = await getTenantBranchIds(tenantId);
+  if (!tenantBranchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 

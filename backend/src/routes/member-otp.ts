@@ -83,10 +83,10 @@ function generateOtp(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
-  return c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-         c.req.header('x-real-ip') ||
-         'unknown';
+function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+         c.req.header('x-real-ip');
+  return ip || undefined;
 }
 
 // Store request body for rate limiter

@@ -86,6 +86,8 @@ interface ContractApiResponse {
   }
 }
 
+const inFlightTodayCheckinsMap = new Map<string, Promise<void>>()
+
 export const useCheckin = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl || 'http://localhost:8056'
@@ -106,51 +108,62 @@ export const useCheckin = () => {
   }
 
   // Fetch today's check-in records
-  const fetchTodayCheckins = async (branchId?: string) => {
-    isLoading.value = true
-    const { start, end } = getTodayRange()
+  const fetchTodayCheckins = async (branchId?: string, force = false) => {
+    const key = branchId || '__all__'
+    if (!force && inFlightTodayCheckinsMap.has(key)) {
+      return inFlightTodayCheckinsMap.get(key)
+    }
 
-    try {
-      // Build query params for the check-ins API
-      const params = new URLSearchParams()
-      params.append('startDate', start)
-      params.append('endDate', end)
-      params.append('limit', '50')
-      if (branchId) {
-        params.append('branchId', branchId)
-      }
+    const promise = (async () => {
+      isLoading.value = true
+      const { start, end } = getTodayRange()
 
-      const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-        credentials: 'include'
-      })
+      try {
+        // Build query params for the check-ins API
+        const params = new URLSearchParams()
+        params.append('startDate', start)
+        params.append('endDate', end)
+        params.append('limit', '50')
+        if (branchId) {
+          params.append('branchId', branchId)
+        }
 
-      if (response.success && response.data) {
-        // Map API response to CheckinRecord format
-        todayCheckins.value = response.data.map(checkin => ({
-          id: checkin.id,
-          member: {
-            id: checkin.member.id,
-            full_name: checkin.member.fullName,
-            member_code: checkin.member.memberCode
-          } as Member,
-          time: checkin.checkInTime,
-          branch_id: checkin.branchId
-        }))
-        todayCount.value = response.pagination?.total || response.data.length
-      } else {
+        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
+          credentials: 'include'
+        })
+
+        if (response.success && response.data) {
+          // Map API response to CheckinRecord format
+          todayCheckins.value = response.data.map(checkin => ({
+            id: checkin.id,
+            member: {
+              id: checkin.member.id,
+              full_name: checkin.member.fullName,
+              member_code: checkin.member.memberCode
+            } as Member,
+            time: checkin.checkInTime,
+            branch_id: checkin.branchId
+          }))
+          todayCount.value = response.pagination?.total || response.data.length
+        } else {
+          todayCheckins.value = []
+          todayCount.value = 0
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useCheckin.fetchTodayCheckins',
+          customMessage: '載入今日入場紀錄失敗'
+        })
         todayCheckins.value = []
         todayCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightTodayCheckinsMap.delete(key)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'useCheckin.fetchTodayCheckins',
-        customMessage: '載入今日入場紀錄失敗'
-      })
-      todayCheckins.value = []
-      todayCount.value = 0
-    } finally {
-      isLoading.value = false
-    }
+    })()
+
+    inFlightTodayCheckinsMap.set(key, promise)
+    return promise
   }
 
   // Perform member check-in
