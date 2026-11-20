@@ -68,7 +68,7 @@ app.get('/', async (c) => {
     );
   }
 
-  const [result, [countResult], [unreadCount]] = await Promise.all([
+  const [result, [countResult], unreadCountResult] = await Promise.all([
     db
       .select({
         notification: notifications,
@@ -87,13 +87,16 @@ app.get('/', async (c) => {
       .select({ count: sql<number>`count(*)` })
       .from(notifications)
       .where(and(...conditions)),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(notifications)
-      .where(and(...conditions, isNull(notifications.readAt))),
+    unreadOnly
+      ? Promise.resolve(null)
+      : db
+          .select({ count: sql<number>`count(*)` })
+          .from(notifications)
+          .where(and(...conditions, isNull(notifications.readAt))),
   ]);
 
   const total = Number(countResult?.count || 0);
+  const unreadCount = unreadOnly ? total : Number(unreadCountResult?.[0]?.count || 0);
 
   return c.json({
     success: true,
@@ -107,7 +110,7 @@ app.get('/', async (c) => {
       limit,
       totalPages: Math.ceil(total / limit),
     },
-    unreadCount: Number(unreadCount?.count || 0),
+    unreadCount,
   });
 });
 

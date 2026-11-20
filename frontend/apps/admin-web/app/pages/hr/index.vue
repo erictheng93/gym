@@ -36,6 +36,8 @@ watch(selectedBranch, () => {
   loadDashboardData()
 })
 
+const displayedPendingApprovals = computed(() => pendingApprovals.value.slice(0, 3))
+
 const hrModules = [
   {
     title: PAGES.HR.ATTENDANCE.TITLE,
@@ -259,7 +261,7 @@ const getLeaveTypeLabel = (type: string) => {
 
       <div class="approvals-list">
         <div
-          v-for="(leave, index) in pendingApprovals.slice(0, 3)"
+          v-for="(leave, index) in displayedPendingApprovals"
           :key="leave.id"
           class="approval-card"
           :style="{ animationDelay: `${index * 0.1}s` }"

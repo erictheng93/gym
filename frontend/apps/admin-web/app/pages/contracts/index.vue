@@ -89,6 +89,10 @@ onMounted(async () => {
   await Promise.all([loadContracts(), loadStats(), fetchBranches()])
 })
 
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
+
 // Row click handler
 const handleRowClick = (contract: typeof contracts.value[0]) => {
   navigateTo(`/contracts/${contract.id}`)

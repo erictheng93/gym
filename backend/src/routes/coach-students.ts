@@ -80,6 +80,17 @@ app.get('/', async (c) => {
   }
 
   // Get members with assignment details in a single query + count in parallel
+  const countQuery = (search || status)
+    ? db
+        .select({ count: sql<number>`count(*)` })
+        .from(coachMemberAssignments)
+        .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
+        .where(and(...conditions))
+    : db
+        .select({ count: sql<number>`count(*)` })
+        .from(coachMemberAssignments)
+        .where(and(...conditions));
+
   const [membersData, [countResult]] = await Promise.all([
     db
       .select({
@@ -102,11 +113,7 @@ app.get('/', async (c) => {
       .orderBy(members.fullName)
       .limit(limitNum)
       .offset(offsetNum),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(coachMemberAssignments)
-      .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
-      .where(and(...conditions)),
+    countQuery,
   ]);
 
   if (membersData.length === 0) {
@@ -140,24 +147,28 @@ app.get('/', async (c) => {
       )
     );
 
-  // Group contracts by member
-  const contractsByMember = activeContracts.reduce((acc, c) => {
-    if (!acc[c.memberId]) {
-      acc[c.memberId] = [];
-    }
-    acc[c.memberId].push({
-      plan_name: c.planName,
-      end_date: c.endDate,
-      remaining_counts: c.remainingCounts,
-      status: c.contractStatus,
-    });
-    return acc;
-  }, {} as Record<string, Array<{
+  // Group contracts by member using Map for O(1) lookup
+  const contractsByMember = new Map<string, Array<{
     plan_name: string;
     end_date: string;
     remaining_counts: number | null;
     status: string;
-  }>>);
+  }>>();
+
+  for (let i = 0; i < activeContracts.length; i++) {
+    const ac = activeContracts[i];
+    let memberContracts = contractsByMember.get(ac.memberId);
+    if (!memberContracts) {
+      memberContracts = [];
+      contractsByMember.set(ac.memberId, memberContracts);
+    }
+    memberContracts.push({
+      plan_name: ac.planName,
+      end_date: ac.endDate,
+      remaining_counts: ac.remainingCounts,
+      status: ac.contractStatus,
+    });
+  }
 
   // Format response
   const formattedData = membersData.map(member => ({
@@ -173,7 +184,7 @@ app.get('/', async (c) => {
     join_date: member.joinDate,
     role: member.role || 'PRIMARY',
     assigned_at: member.assignedAt,
-    active_contracts: contractsByMember[member.id] || [],
+    active_contracts: contractsByMember.get(member.id) || [],
   }));
 
   return c.json({
