@@ -148,6 +148,23 @@ app.get('/contract/:contractId', async (c) => {
   });
 });
 
+const CONTRACT_LOG_RETURNING = {
+  id: contractLogs.id,
+  contractId: contractLogs.contractId,
+  logType: contractLogs.logType,
+  startDate: contractLogs.startDate,
+  endDate: contractLogs.endDate,
+  daysAffected: contractLogs.daysAffected,
+  reason: contractLogs.reason,
+  createdByEmployee: contractLogs.createdByEmployee,
+  branchId: contractLogs.branchId,
+  originalMemberId: contractLogs.originalMemberId,
+  targetMemberId: contractLogs.targetMemberId,
+  status: contractLogs.status,
+  dateCreated: contractLogs.dateCreated,
+  tenantId: contractLogs.tenantId,
+};
+
 // Create contract log (usually created automatically by contract operations)
 app.post('/', zValidator('json', createLogSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -181,7 +198,7 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
     targetMemberId: data.targetMemberId,
     createdByEmployee: user.employeeId,
     tenantId,
-  }).returning();
+  }).returning(CONTRACT_LOG_RETURNING);
 
   return c.json({
     success: true,

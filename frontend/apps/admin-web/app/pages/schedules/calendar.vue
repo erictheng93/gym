@@ -340,23 +340,57 @@ function nextMonth() {
   fetchEmployeeShifts()
 }
 
+const EMPTY_ASSIGNMENTS: EmployeeShift[] = []
+
+const assignmentsByDate = computed(() => {
+  const map = new Map<string, EmployeeShift[]>()
+  for (const shift of employeeShifts.value) {
+    const list = map.get(shift.effective_date)
+    if (list) {
+      list.push(shift)
+    } else {
+      map.set(shift.effective_date, [shift])
+    }
+  }
+  return map
+})
+
+const employeeMap = computed(() => {
+  const map = new Map<string, string>()
+  for (const e of employees.value) {
+    map.set(e.id, e.name)
+  }
+  return map
+})
+
+const shiftMap = computed(() => {
+  const map = new Map<string, { name: string; color: string }>()
+  const shifts = availableShifts.value
+  const colorsLen = shiftColors.length
+  for (let i = 0; i < shifts.length; i++) {
+    const s = shifts[i]!
+    map.set(s.id, {
+      name: s.name,
+      color: shiftColors[i % colorsLen]!,
+    })
+  }
+  return map
+})
+
 function getAssignmentsForDate(date: string): EmployeeShift[] {
-  return employeeShifts.value.filter(shift => shift.effective_date === date)
+  return assignmentsByDate.value.get(date) || EMPTY_ASSIGNMENTS
 }
 
 function getEmployeeName(employeeId: string): string {
-  const employee = employees.value.find(e => e.id === employeeId)
-  return employee?.name || '未知'
+  return employeeMap.value.get(employeeId) || '未知'
 }
 
 function getShiftName(shiftId: string): string {
-  const shift = availableShifts.value.find(s => s.id === shiftId)
-  return shift?.name || ''
+  return shiftMap.value.get(shiftId)?.name || ''
 }
 
 function getShiftColor(shiftId: string): string {
-  const index = availableShifts.value.findIndex(s => s.id === shiftId)
-  return shiftColors[index % shiftColors.length]!
+  return shiftMap.value.get(shiftId)?.color || shiftColors[0]!
 }
 
 function isDateSelected(date: string): boolean {
