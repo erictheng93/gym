@@ -1,3 +1,29 @@
+<script lang="ts">
+const roleLabels: Record<string, string> = {
+  admin: '管理員',
+  manager: '經理',
+  coach: '教練',
+  staff: '員工',
+  super_admin: '超級管理員',
+}
+
+const userDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const ROLE_BADGE_CLASSES: Record<string, string> = {
+  admin: 'badge-error',
+  super_admin: 'badge-error',
+  manager: 'badge-warning',
+  coach: 'badge-info',
+  staff: 'badge-default',
+}
+</script>
+
 <script setup lang="ts">
 /**
  * Admin User Management - List Page
@@ -18,15 +44,6 @@ const filterStatus = ref<string>('')
 // Modal state
 const showModal = ref(false)
 const selectedUser = ref<typeof users.value[0] | null>(null)
-
-// Role labels
-const roleLabels: Record<string, string> = {
-  admin: '管理員',
-  manager: '經理',
-  coach: '教練',
-  staff: '員工',
-  super_admin: '超級管理員'
-}
 
 // Fetch users with filters
 const loadUsers = async () => {
@@ -78,23 +95,6 @@ const handleToggleStatus = async (user: any) => {
   if (confirmed) {
     await toggleUserStatus(user.id, !user.isActive)
   }
-}
-
-// 格式化器與靜態標籤快取
-const userDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit'
-})
-
-const ROLE_BADGE_CLASSES: Record<string, string> = {
-  admin: 'badge-error',
-  super_admin: 'badge-error',
-  manager: 'badge-warning',
-  coach: 'badge-info',
-  staff: 'badge-default'
 }
 
 // Format date

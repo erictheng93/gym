@@ -1,3 +1,28 @@
+<script lang="ts">
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: '活躍',
+  INACTIVE: '未啟用',
+  SUSPENDED: '暫停',
+  EXPIRED: '已過期',
+}
+
+const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  TIME_BASED: '期限制',
+  COUNT_BASED: '次數制',
+}
+
+const GENDER_LABELS: Record<string, string> = {
+  M: '男性',
+  F: '女性',
+  OTHER: '其他',
+}
+
+const analyticsDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+})
+</script>
+
 <script setup lang="ts">
 /**
  * Member Analytics Page
@@ -349,29 +374,6 @@ const exportData = async (format: 'csv' | 'pdf' = 'csv') => {
     useToast().error(err.message || '匯出失敗')
   }
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  ACTIVE: '活躍',
-  INACTIVE: '未啟用',
-  SUSPENDED: '暫停',
-  EXPIRED: '已過期'
-}
-
-const CONTRACT_TYPE_LABELS: Record<string, string> = {
-  TIME_BASED: '期限制',
-  COUNT_BASED: '次數制'
-}
-
-const GENDER_LABELS: Record<string, string> = {
-  M: '男性',
-  F: '女性',
-  OTHER: '其他'
-}
-
-const analyticsDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  month: 'short',
-  day: 'numeric'
-})
 
 const getStatusLabel = (status: string) => {
   return STATUS_LABELS[status] || status

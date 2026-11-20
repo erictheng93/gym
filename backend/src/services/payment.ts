@@ -393,21 +393,20 @@ async function processStripeRefund(
 // ECPay Implementation (綠界)
 // -----------------------------------------------------------------------------
 
+function formatECPayDate(d: Date): string {
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 async function processECPayPayment(
   paymentId: string,
   amount: number,
   options: CreatePaymentOptions
 ): Promise<PaymentResult> {
   try {
-    const merchantTradeNo = `GN${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const merchantTradeDate = new Date().toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).replace(/\//g, '/');
+    const randomSuffix = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const merchantTradeNo = `GN${Date.now()}${randomSuffix}`;
+    const merchantTradeDate = formatECPayDate(new Date());
 
     const params: Record<string, string> = {
       MerchantID: config.ecpay.merchantId!,

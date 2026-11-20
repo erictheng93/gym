@@ -160,6 +160,31 @@
   </div>
 </template>
 
+<script>
+const SUBSCRIPTION_PLAN_LABELS = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+}
+
+const SUBSCRIPTION_STATUS_LABELS = {
+  active: '活跃',
+  canceled: '已取消',
+  past_due: '逾期',
+}
+
+const subscriptionDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+})
+
+const subscriptionCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+})
+</script>
+
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useAuth } from '~/composables/useAuth'
@@ -265,29 +290,6 @@ const cancelSubscription = async (subscriptionId) => {
     alert(err.message || '取消失败')
   }
 }
-
-const SUBSCRIPTION_PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter',
-  professional: 'Professional',
-  enterprise: 'Enterprise'
-}
-
-const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
-  active: '活跃',
-  canceled: '已取消',
-  past_due: '逾期'
-}
-
-const subscriptionDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric'
-})
-
-const subscriptionCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
-  style: 'currency',
-  currency: 'TWD'
-})
 
 const getPlanLabel = (planType: string) => SUBSCRIPTION_PLAN_LABELS[planType] || planType
 const getStatusLabel = (status: string) => SUBSCRIPTION_STATUS_LABELS[status] || status

@@ -6,7 +6,8 @@ import { db, members, branches, memberCredentials } from '../db/index.js';
 import { eq, and, gt, or, sql } from 'drizzle-orm';
 import { rateLimiter, memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
-import { memberJwtService, getTokenHash } from '../services/member-jwt.js';
+import crypto from 'crypto';
+import { memberJwtService, getRecoveryTokenHash } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
 
 // =============================================================================
@@ -466,8 +467,8 @@ app.post(
 
     // Only send if member exists and not banned
     if (member && member.status !== 'BANNED') {
-      // Generate reset token
-      const { token, hash: tokenHash } = memberJwtService.generatePasswordResetToken(member.id);
+      // Generate recovery token
+      const { token, hash: tokenHash } = memberJwtService.generateRecoveryToken(member.id);
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       // Save token hash to database
@@ -537,7 +538,7 @@ app.post(
     const { token, password } = c.req.valid('json');
 
     // Verify token
-    const tokenData = memberJwtService.verifyPasswordResetToken(token);
+    const tokenData = memberJwtService.verifyRecoveryToken(token);
 
     if (!tokenData) {
       return c.json({
@@ -565,9 +566,13 @@ app.post(
       }, 400);
     }
 
-    // Verify token hash matches
-    const expectedHash = getTokenHash(tokenData.jti);
-    if (credentials.passwordResetTokenHash !== expectedHash) {
+    // Verify token hash matches using constant-time comparison
+    const expectedHash = getRecoveryTokenHash(tokenData.jti);
+    const storedHash = credentials.passwordResetTokenHash || '';
+    const hashMatches = storedHash.length === expectedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(expectedHash));
+
+    if (!hashMatches) {
       return c.json({
         success: false,
         error: '重設連結無效或已過期',

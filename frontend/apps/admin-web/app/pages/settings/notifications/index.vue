@@ -218,6 +218,17 @@
   </div>
 </template>
 
+<script lang="ts">
+const notificationDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth'
@@ -458,15 +469,6 @@ async function toggleActive() {
     configData.value.is_active = !configData.value.is_active
   }
 }
-
-const notificationDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: 'numeric',
-  second: 'numeric'
-})
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '從未'

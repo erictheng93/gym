@@ -82,6 +82,29 @@ const CLASS_SESSION_SELECT = {
   cancelledBy: classSessions.cancelledBy,
 };
 
+const CLASS_WITH_RELATIONS_SELECT = {
+  class: CLASS_RETURNING,
+  instructor: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const CLASS_SCHEDULE_LIST_SELECT = {
+  id: classSchedules.id,
+  dayOfWeek: classSchedules.dayOfWeek,
+  startTime: classSchedules.startTime,
+  endTime: classSchedules.endTime,
+  room: classSchedules.room,
+  maxCapacity: classSchedules.maxCapacity,
+  isRecurring: classSchedules.isRecurring,
+  status: classSchedules.status,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
@@ -103,17 +126,7 @@ app.get('/', async (c) => {
   const condition = and(branchCondition, eq(classes.status, 'active'));
 
   const result = await db
-    .select({
-      class: CLASS_RETURNING,
-      instructor: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(CLASS_WITH_RELATIONS_SELECT)
     .from(classes)
     .leftJoin(employees, eq(classes.instructorId, employees.id))
     .leftJoin(branches, eq(classes.branchId, branches.id))
@@ -136,17 +149,7 @@ app.get('/:id', async (c) => {
 
   const [[classItem], branchIds, schedules] = await Promise.all([
     db
-      .select({
-        class: CLASS_RETURNING,
-        instructor: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-      })
+      .select(CLASS_WITH_RELATIONS_SELECT)
       .from(classes)
       .leftJoin(employees, eq(classes.instructorId, employees.id))
       .leftJoin(branches, eq(classes.branchId, branches.id))
@@ -154,16 +157,7 @@ app.get('/:id', async (c) => {
       .limit(1),
     getTenantBranchIds(tenantId),
     db
-      .select({
-        id: classSchedules.id,
-        dayOfWeek: classSchedules.dayOfWeek,
-        startTime: classSchedules.startTime,
-        endTime: classSchedules.endTime,
-        room: classSchedules.room,
-        maxCapacity: classSchedules.maxCapacity,
-        isRecurring: classSchedules.isRecurring,
-        status: classSchedules.status,
-      })
+      .select(CLASS_SCHEDULE_LIST_SELECT)
       .from(classSchedules)
       .where(eq(classSchedules.classId, id))
       .orderBy(classSchedules.dayOfWeek, classSchedules.startTime),

@@ -203,6 +203,36 @@
   </div>
 </template>
 
+<script>
+const PLAN_LABELS = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+}
+
+const INVOICE_STATUS_LABELS = {
+  draft: '草稿',
+  open: '待付款',
+  paid: '已付款',
+  void: '作废',
+  uncollectible: '无法收款',
+}
+
+const invoiceDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const invoiceDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+const invoiceCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+})
+</script>
+
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -287,34 +317,6 @@ const markAsPaid = async () => {
     alert(err.message || '操作失败')
   }
 }
-
-const PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter',
-  professional: 'Professional',
-  enterprise: 'Enterprise'
-}
-
-const INVOICE_STATUS_LABELS: Record<string, string> = {
-  draft: '草稿',
-  open: '待付款',
-  paid: '已付款',
-  void: '作废',
-  uncollectible: '无法收款'
-}
-
-const invoiceDateFormatter = new Intl.DateTimeFormat('zh-TW')
-const invoiceDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: 'numeric',
-  second: 'numeric'
-})
-const invoiceCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
-  style: 'currency',
-  currency: 'TWD'
-})
 
 const getPlanLabel = (planType: string) => {
   return PLAN_LABELS[planType] || planType

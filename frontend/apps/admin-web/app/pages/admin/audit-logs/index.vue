@@ -227,6 +227,42 @@
   </div>
 </template>
 
+<script>
+const ACTION_LABELS = {
+  create: '创建',
+  update: '更新',
+  delete: '删除',
+  login: '登录',
+  logout: '登出',
+}
+
+const RESOURCE_LABELS = {
+  members: '会员',
+  contracts: '合约',
+  payments: '支付',
+  employees: '员工',
+  branches: '分店',
+  users: '用户',
+}
+
+const SEVERITY_LABELS = {
+  info: '信息',
+  warning: '警告',
+  error: '错误',
+  critical: '严重',
+}
+
+const auditNumberFormatter = new Intl.NumberFormat('zh-TW')
+const auditDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+</script>
+
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '~/composables/useAuth'
@@ -358,40 +394,6 @@ const changePage = (newPage) => {
     loadLogs()
   }
 }
-
-const ACTION_LABELS: Record<string, string> = {
-  create: '创建',
-  update: '更新',
-  delete: '删除',
-  login: '登录',
-  logout: '登出'
-}
-
-const RESOURCE_LABELS: Record<string, string> = {
-  members: '会员',
-  contracts: '合约',
-  payments: '支付',
-  employees: '员工',
-  branches: '分店',
-  users: '用户'
-}
-
-const SEVERITY_LABELS: Record<string, string> = {
-  info: '信息',
-  warning: '警告',
-  error: '错误',
-  critical: '严重'
-}
-
-const auditNumberFormatter = new Intl.NumberFormat('zh-TW')
-const auditDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: 'numeric',
-  second: 'numeric',
-})
 
 const getActionLabel = (action: string) => ACTION_LABELS[action] || action
 const getResourceLabel = (resourceType: string) => RESOURCE_LABELS[resourceType] || resourceType
