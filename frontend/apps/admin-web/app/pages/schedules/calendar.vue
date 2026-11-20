@@ -554,13 +554,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap');
-
 .calendar-management {
   min-height: 100vh;
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
   padding: 2rem;
-  font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
   color: #e5e5e5;
 }
 
@@ -595,10 +593,7 @@ onMounted(() => {
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #ffffff 0%, #a1a1a1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #ffffff;
   margin: 0;
 }
 

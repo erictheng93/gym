@@ -418,9 +418,9 @@ const getStatusBadge = (status: string) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  animation: statAppear 0.6s var(--ease-spring) backwards;
-  transition: transform var(--duration-normal) var(--ease-spring),
-              box-shadow var(--duration-normal) var(--ease-spring),
+  animation: statAppear 0.6s var(--ease-out) backwards;
+  transition: transform var(--duration-normal) var(--ease-out),
+              box-shadow var(--duration-normal) var(--ease-out),
               border-color var(--duration-normal) ease;
 }
 

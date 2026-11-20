@@ -449,7 +449,7 @@ onUnmounted(() => {
   --radius-xl: 24px;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Font Import - Clash Display */
   font-family: 'Clash Display', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
@@ -502,19 +502,7 @@ onUnmounted(() => {
 }
 
 .bg-pattern {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
-}
-
-:root.theme-light .bg-pattern {
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  display: none;
 }
 
 .bg-glow {
