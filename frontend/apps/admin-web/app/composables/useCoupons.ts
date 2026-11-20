@@ -59,6 +59,7 @@ export interface CouponValidation {
 
 const inFlightCouponsMap = new Map<string, Promise<void>>()
 const inFlightSingleCouponMap = new Map<string, Promise<Coupon | null>>()
+const inFlightCouponUsagesMap = new Map<string, Promise<{ data: CouponUsage[]; total: number }>>()
 
 export const useCoupons = () => {
   const config = useRuntimeConfig()
@@ -247,30 +248,43 @@ export const useCoupons = () => {
    */
   const getCouponUsages = async (
     couponId: string,
-    options?: { page?: number; limit?: number }
+    options?: { page?: number; limit?: number },
+    force = false
   ): Promise<{ data: CouponUsage[]; total: number }> => {
-    const { page = 1, limit = 50 } = options || {}
-    try {
-      const params = new URLSearchParams()
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: CouponUsage[]
-        meta: { total: number }
-      }>(`${apiUrl}/coupons/${couponId}/usages?${params}`)
-
-      return response.success
-        ? { data: response.data, total: response.meta.total }
-        : { data: [], total: 0 }
-    } catch (error) {
-      handleError(error, {
-        context: 'useCoupons.getCouponUsages',
-        customMessage: '取得使用紀錄失敗'
-      })
-      return { data: [], total: 0 }
+    const key = `${couponId}:${JSON.stringify(options || {})}`
+    if (!force && inFlightCouponUsagesMap.has(key)) {
+      return inFlightCouponUsagesMap.get(key)!
     }
+
+    const promise = (async () => {
+      const { page = 1, limit = 50 } = options || {}
+      try {
+        const params = new URLSearchParams()
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: CouponUsage[]
+          meta: { total: number }
+        }>(`${apiUrl}/coupons/${couponId}/usages?${params}`)
+
+        return response.success
+          ? { data: response.data, total: response.meta.total }
+          : { data: [], total: 0 }
+      } catch (error) {
+        handleError(error, {
+          context: 'useCoupons.getCouponUsages',
+          customMessage: '取得使用紀錄失敗'
+        })
+        return { data: [], total: 0 }
+      } finally {
+        inFlightCouponUsagesMap.delete(key)
+      }
+    })()
+
+    inFlightCouponUsagesMap.set(key, promise)
+    return promise
   }
 
   /**
