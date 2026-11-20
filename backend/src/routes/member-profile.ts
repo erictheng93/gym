@@ -85,62 +85,58 @@ app.get('/', async (c) => {
     }, 404);
   }
 
-  // Get branch info
-  const [branch] = await db
-    .select({
-      id: branches.id,
-      name: branches.name,
-      address: branches.address,
-      phone: branches.phone,
-    })
-    .from(branches)
-    .where(eq(branches.id, member.branchId))
-    .limit(1);
-
-  // Get active contracts with plan info
-  const activeContracts = await db
-    .select({
-      id: contracts.id,
-      contractNo: contracts.contractNo,
-      status: contracts.status,
-      startDate: contracts.startDate,
-      endDate: contracts.endDate,
-      originalEndDate: contracts.originalEndDate,
-      remainingCounts: contracts.remainingCounts,
-      totalAmount: contracts.totalAmount,
-      paidAmount: contracts.paidAmount,
-      paymentStatus: contracts.paymentStatus,
-      planId: contracts.planId,
-      planName: membershipPlans.name,
-      planType: membershipPlans.planType,
-      planDurationMonths: membershipPlans.durationMonths,
-      planClassCounts: membershipPlans.classCounts,
-    })
-    .from(contracts)
-    .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(and(
-      eq(contracts.memberId, member.id),
-      inArray(contracts.status, ['ACTIVE', 'PAUSED']),
-    ))
-    .orderBy(desc(contracts.endDate));
-
-  // Get credentials status (has password)
-  const [credentials] = await db
-    .select({ id: memberCredentials.id })
-    .from(memberCredentials)
-    .where(eq(memberCredentials.memberId, member.id))
-    .limit(1);
-
-  // Get linked social accounts
-  const socialAccounts = await db
-    .select({
-      provider: memberSocialAccounts.provider,
-      email: memberSocialAccounts.email,
-      displayName: memberSocialAccounts.displayName,
-      createdAt: memberSocialAccounts.createdAt,
-    })
-    .from(memberSocialAccounts)
-    .where(eq(memberSocialAccounts.memberId, member.id));
+  // Concurrently fetch branch, active contracts, credentials, and social accounts
+  const [[branch], activeContracts, [credentials], socialAccounts] = await Promise.all([
+    db
+      .select({
+        id: branches.id,
+        name: branches.name,
+        address: branches.address,
+        phone: branches.phone,
+      })
+      .from(branches)
+      .where(eq(branches.id, member.branchId))
+      .limit(1),
+    db
+      .select({
+        id: contracts.id,
+        contractNo: contracts.contractNo,
+        status: contracts.status,
+        startDate: contracts.startDate,
+        endDate: contracts.endDate,
+        originalEndDate: contracts.originalEndDate,
+        remainingCounts: contracts.remainingCounts,
+        totalAmount: contracts.totalAmount,
+        paidAmount: contracts.paidAmount,
+        paymentStatus: contracts.paymentStatus,
+        planId: contracts.planId,
+        planName: membershipPlans.name,
+        planType: membershipPlans.planType,
+        planDurationMonths: membershipPlans.durationMonths,
+        planClassCounts: membershipPlans.classCounts,
+      })
+      .from(contracts)
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(and(
+        eq(contracts.memberId, member.id),
+        inArray(contracts.status, ['ACTIVE', 'PAUSED']),
+      ))
+      .orderBy(desc(contracts.endDate)),
+    db
+      .select({ id: memberCredentials.id })
+      .from(memberCredentials)
+      .where(eq(memberCredentials.memberId, member.id))
+      .limit(1),
+    db
+      .select({
+        provider: memberSocialAccounts.provider,
+        email: memberSocialAccounts.email,
+        displayName: memberSocialAccounts.displayName,
+        createdAt: memberSocialAccounts.createdAt,
+      })
+      .from(memberSocialAccounts)
+      .where(eq(memberSocialAccounts.memberId, member.id)),
+  ]);
 
   // Format contracts
   const formattedContracts = activeContracts.map(c => ({

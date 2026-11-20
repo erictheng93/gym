@@ -88,37 +88,38 @@ app.get('/', async (c) => {
     conditions.push(eq(users.isActive, activeFilter === 'true'));
   }
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(and(...conditions));
+  const [[countResult], result] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(and(...conditions)),
+    db
+      .select({
+        user: {
+          id: users.id,
+          email: users.email,
+          role: users.role,
+          isActive: users.isActive,
+          emailVerified: users.emailVerified,
+          lastLoginAt: users.lastLoginAt,
+          createdAt: users.createdAt,
+          employeeId: users.employeeId,
+        },
+        employee: {
+          id: employees.id,
+          fullName: employees.fullName,
+          employeeCode: employees.employeeCode,
+        },
+      })
+      .from(users)
+      .leftJoin(employees, eq(users.employeeId, employees.id))
+      .where(and(...conditions))
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      user: {
-        id: users.id,
-        email: users.email,
-        role: users.role,
-        isActive: users.isActive,
-        emailVerified: users.emailVerified,
-        lastLoginAt: users.lastLoginAt,
-        createdAt: users.createdAt,
-        employeeId: users.employeeId,
-      },
-      employee: {
-        id: employees.id,
-        fullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-      },
-    })
-    .from(users)
-    .leftJoin(employees, eq(users.employeeId, employees.id))
-    .where(and(...conditions))
-    .orderBy(desc(users.createdAt))
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,

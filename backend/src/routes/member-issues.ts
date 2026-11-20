@@ -65,32 +65,32 @@ app.get(
       conditions.push(eq(issueReports.status, status));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(issueReports.id) })
-      .from(issueReports)
-      .where(and(...conditions));
-
-    // Get issues
-    const issues = await db
-      .select({
-        id: issueReports.id,
-        type: issueReports.type,
-        title: issueReports.title,
-        content: issueReports.content,
-        status: issueReports.status,
-        resolution: issueReports.resolution,
-        resolvedAt: issueReports.resolvedAt,
-        createdAt: issueReports.createdAt,
-        branchId: issueReports.branchId,
-        branchName: branches.name,
-      })
-      .from(issueReports)
-      .leftJoin(branches, eq(issueReports.branchId, branches.id))
-      .where(and(...conditions))
-      .orderBy(desc(issueReports.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and issues
+    const [[{ total }], issues] = await Promise.all([
+      db
+        .select({ total: count(issueReports.id) })
+        .from(issueReports)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: issueReports.id,
+          type: issueReports.type,
+          title: issueReports.title,
+          content: issueReports.content,
+          status: issueReports.status,
+          resolution: issueReports.resolution,
+          resolvedAt: issueReports.resolvedAt,
+          createdAt: issueReports.createdAt,
+          branchId: issueReports.branchId,
+          branchName: branches.name,
+        })
+        .from(issueReports)
+        .leftJoin(branches, eq(issueReports.branchId, branches.id))
+        .where(and(...conditions))
+        .orderBy(desc(issueReports.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

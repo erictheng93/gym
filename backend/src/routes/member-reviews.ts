@@ -409,41 +409,41 @@ app.get(
       }, 404);
     }
 
-    // Get review stats
-    const [stats] = await db
-      .select({
-        avgRating: avg(classReviews.rating),
-        totalReviews: count(classReviews.id),
-      })
-      .from(classReviews)
-      .where(and(
-        eq(classReviews.classId, classId),
-        eq(classReviews.status, 'published'),
-        eq(classReviews.isPublic, true),
-      ));
-
-    // Get reviews
-    const reviews = await db
-      .select({
-        id: classReviews.id,
-        rating: classReviews.rating,
-        comment: classReviews.comment,
-        isAnonymous: classReviews.isAnonymous,
-        createdAt: classReviews.createdAt,
-        staffResponse: classReviews.staffResponse,
-        staffResponseAt: classReviews.staffResponseAt,
-        memberFullName: members.fullName,
-      })
-      .from(classReviews)
-      .leftJoin(members, eq(classReviews.memberId, members.id))
-      .where(and(
-        eq(classReviews.classId, classId),
-        eq(classReviews.status, 'published'),
-        eq(classReviews.isPublic, true),
-      ))
-      .orderBy(desc(classReviews.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get review stats and reviews list
+    const [[stats], reviews] = await Promise.all([
+      db
+        .select({
+          avgRating: avg(classReviews.rating),
+          totalReviews: count(classReviews.id),
+        })
+        .from(classReviews)
+        .where(and(
+          eq(classReviews.classId, classId),
+          eq(classReviews.status, 'published'),
+          eq(classReviews.isPublic, true),
+        )),
+      db
+        .select({
+          id: classReviews.id,
+          rating: classReviews.rating,
+          comment: classReviews.comment,
+          isAnonymous: classReviews.isAnonymous,
+          createdAt: classReviews.createdAt,
+          staffResponse: classReviews.staffResponse,
+          staffResponseAt: classReviews.staffResponseAt,
+          memberFullName: members.fullName,
+        })
+        .from(classReviews)
+        .leftJoin(members, eq(classReviews.memberId, members.id))
+        .where(and(
+          eq(classReviews.classId, classId),
+          eq(classReviews.status, 'published'),
+          eq(classReviews.isPublic, true),
+        ))
+        .orderBy(desc(classReviews.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,
@@ -490,36 +490,36 @@ app.get(
     const { page, limit } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(classReviews.id) })
-      .from(classReviews)
-      .where(eq(classReviews.memberId, memberInfo.id));
-
-    // Get reviews
-    const reviews = await db
-      .select({
-        id: classReviews.id,
-        rating: classReviews.rating,
-        comment: classReviews.comment,
-        isAnonymous: classReviews.isAnonymous,
-        status: classReviews.status,
-        createdAt: classReviews.createdAt,
-        updatedAt: classReviews.updatedAt,
-        staffResponse: classReviews.staffResponse,
-        staffResponseAt: classReviews.staffResponseAt,
-        classId: classReviews.classId,
-        className: classes.name,
-        sessionId: classReviews.sessionId,
-        sessionDate: classSessions.sessionDate,
-      })
-      .from(classReviews)
-      .leftJoin(classes, eq(classReviews.classId, classes.id))
-      .leftJoin(classSessions, eq(classReviews.sessionId, classSessions.id))
-      .where(eq(classReviews.memberId, memberInfo.id))
-      .orderBy(desc(classReviews.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and reviews list
+    const [[{ total }], reviews] = await Promise.all([
+      db
+        .select({ total: count(classReviews.id) })
+        .from(classReviews)
+        .where(eq(classReviews.memberId, memberInfo.id)),
+      db
+        .select({
+          id: classReviews.id,
+          rating: classReviews.rating,
+          comment: classReviews.comment,
+          isAnonymous: classReviews.isAnonymous,
+          status: classReviews.status,
+          createdAt: classReviews.createdAt,
+          updatedAt: classReviews.updatedAt,
+          staffResponse: classReviews.staffResponse,
+          staffResponseAt: classReviews.staffResponseAt,
+          classId: classReviews.classId,
+          className: classes.name,
+          sessionId: classReviews.sessionId,
+          sessionDate: classSessions.sessionDate,
+        })
+        .from(classReviews)
+        .leftJoin(classes, eq(classReviews.classId, classes.id))
+        .leftJoin(classSessions, eq(classReviews.sessionId, classSessions.id))
+        .where(eq(classReviews.memberId, memberInfo.id))
+        .orderBy(desc(classReviews.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

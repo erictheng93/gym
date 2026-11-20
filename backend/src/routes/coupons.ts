@@ -53,33 +53,34 @@ app.get('/', async (c) => {
     conditions.push(gte(coupons.validUntil, today));
   }
 
-  const result = await db
-    .select({
-      coupon: coupons,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      campaign: {
-        id: campaigns.id,
-        name: campaigns.name,
-      },
-      usageCount: sql<number>`(
-        SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = ${coupons.id}
-      )`,
-    })
-    .from(coupons)
-    .leftJoin(branches, eq(coupons.branchId, branches.id))
-    .leftJoin(campaigns, eq(coupons.campaignId, campaigns.id))
-    .where(and(...conditions))
-    .orderBy(desc(coupons.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(coupons)
-    .where(and(...conditions));
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select({
+        coupon: coupons,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+        },
+        campaign: {
+          id: campaigns.id,
+          name: campaigns.name,
+        },
+        usageCount: sql<number>`(
+          SELECT COUNT(*) FROM coupon_usages WHERE coupon_id = ${coupons.id}
+        )`,
+      })
+      .from(coupons)
+      .leftJoin(branches, eq(coupons.branchId, branches.id))
+      .leftJoin(campaigns, eq(coupons.campaignId, campaigns.id))
+      .where(and(...conditions))
+      .orderBy(desc(coupons.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(coupons)
+      .where(and(...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 

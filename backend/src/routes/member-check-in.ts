@@ -318,29 +318,29 @@ app.get(
       conditions.push(lte(checkIns.checkInTime, endDateTime));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(checkIns)
-      .where(and(...conditions));
-
-    // Get check-ins with branch info
-    const checkInList = await db
-      .select({
-        id: checkIns.id,
-        checkInTime: checkIns.checkInTime,
-        checkInType: checkIns.checkInType,
-        checkInMethod: checkIns.checkInMethod,
-        branchId: checkIns.branchId,
-        branchName: branches.name,
-        contractId: checkIns.contractId,
-      })
-      .from(checkIns)
-      .leftJoin(branches, eq(checkIns.branchId, branches.id))
-      .where(and(...conditions))
-      .orderBy(desc(checkIns.checkInTime))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and check-ins with branch info
+    const [[{ total }], checkInList] = await Promise.all([
+      db
+        .select({ total: sql<number>`count(*)` })
+        .from(checkIns)
+        .where(and(...conditions)),
+      db
+        .select({
+          id: checkIns.id,
+          checkInTime: checkIns.checkInTime,
+          checkInType: checkIns.checkInType,
+          checkInMethod: checkIns.checkInMethod,
+          branchId: checkIns.branchId,
+          branchName: branches.name,
+          contractId: checkIns.contractId,
+        })
+        .from(checkIns)
+        .leftJoin(branches, eq(checkIns.branchId, branches.id))
+        .where(and(...conditions))
+        .orderBy(desc(checkIns.checkInTime))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

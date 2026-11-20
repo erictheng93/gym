@@ -5,6 +5,7 @@ import { db, members, contracts, branches, membershipPlans } from '../db/index.j
 import { eq, and, or, ilike, sql, desc, asc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, membersColumns, translateStatus, translateGender } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
@@ -46,12 +47,7 @@ app.get('/', zValidator('query', querySchema), async (c) => {
   const { page, limit, search, branchId, status, sortBy, sortOrder } = c.req.valid('query');
   const offset = (page - 1) * limit;
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });

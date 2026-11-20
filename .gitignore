@@ -44,3 +44,6 @@ Gym參考廠商/
 
 # Images
 *.png
+
+# Git worktrees
+.worktrees/
