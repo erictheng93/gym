@@ -74,6 +74,8 @@ const stats = computed(() => {
   }
 })
 
+const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'] as const
+
 // Last 6 months revenue data
 const revenueByMonth = computed(() => {
   if (!revenueReport.value) return []
@@ -96,9 +98,8 @@ const revenueByMonth = computed(() => {
     .slice(-6)
     .map(([key, revenue]) => {
       const [, month] = key.split('-')
-      const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
       return {
-        month: monthNames[parseInt(month!) - 1],
+        month: MONTH_NAMES[parseInt(month!) - 1],
         revenue
       }
     })
@@ -190,8 +191,9 @@ const loadReports = async () => {
   }
 }
 
+const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })
 const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(value)
+  return currencyFormatter.format(value)
 }
 
 const formatPercent = (value: number) => {

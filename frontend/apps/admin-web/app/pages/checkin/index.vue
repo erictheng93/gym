@@ -94,11 +94,18 @@ onUnmounted(() => {
 const filteredMembers = computed(() => {
   if (!searchQuery.value) return []
   const query = searchQuery.value.toLowerCase()
-  return members.value.filter(m =>
-    m.full_name?.toLowerCase().includes(query) ||
-    m.member_code?.toLowerCase().includes(query) ||
-    m.phone?.includes(query)
-  ).slice(0, 5)
+  const results: any[] = []
+  for (const m of members.value) {
+    if (
+      m.full_name?.toLowerCase().includes(query) ||
+      m.member_code?.toLowerCase().includes(query) ||
+      m.phone?.includes(query)
+    ) {
+      results.push(m)
+      if (results.length >= 5) break
+    }
+  }
+  return results
 })
 
 const selectMember = async (member: any) => {
@@ -179,11 +186,18 @@ const performMemberCheckin = async () => {
 const filteredEmployees = computed(() => {
   if (!employeeSearchQuery.value) return []
   const query = employeeSearchQuery.value.toLowerCase()
-  return employees.value.filter(e =>
-    e.full_name?.toLowerCase().includes(query) ||
-    e.employee_code?.toLowerCase().includes(query) ||
-    e.phone?.includes(query)
-  ).slice(0, 5)
+  const results: any[] = []
+  for (const e of employees.value) {
+    if (
+      e.full_name?.toLowerCase().includes(query) ||
+      e.employee_code?.toLowerCase().includes(query) ||
+      e.phone?.includes(query)
+    ) {
+      results.push(e)
+      if (results.length >= 5) break
+    }
+  }
+  return results
 })
 
 const selectEmployee = async (employee: any) => {

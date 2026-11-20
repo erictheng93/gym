@@ -34,20 +34,20 @@ app.get('/revenue', async (c) => {
   const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { total: 0, byBranch: [], byDay: [] } });
   }
 
-  let conditions = [
-    inArray(payments.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(payments.branchId, branchId)
+    : inArray(payments.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.type, 'INCOME'),
   ];
-
-  if (branchId) {
-    conditions.push(eq(payments.branchId, branchId));
-  }
 
   const [byBranch, byDay] = await Promise.all([
     db
@@ -98,15 +98,15 @@ app.get('/member-growth', async (c) => {
 
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { total: 0, byMonth: [] } });
   }
 
-  let conditions = [inArray(members.branchId, branchIds)];
+  const branchCondition = branchId
+    ? eq(members.branchId, branchId)
+    : inArray(members.branchId, branchIds);
 
-  if (branchId) {
-    conditions.push(eq(members.branchId, branchId));
-  }
+  const conditions = [branchCondition];
 
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
@@ -146,7 +146,7 @@ app.get('/contract-expiry', async (c) => {
 
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: [] });
   }
 
@@ -154,16 +154,16 @@ app.get('/contract-expiry', async (c) => {
   const futureDate = new Date();
   futureDate.setDate(today.getDate() + days);
 
-  let conditions = [
-    inArray(contracts.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(contracts.branchId, branchId)
+    : inArray(contracts.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     eq(contracts.status, 'ACTIVE'),
     gte(contracts.endDate, today.toISOString().split('T')[0]),
     lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
   ];
-
-  if (branchId) {
-    conditions.push(eq(contracts.branchId, branchId));
-  }
 
   const expiringContracts = await db
     .select({
@@ -206,21 +206,21 @@ app.get('/member-activity', async (c) => {
   const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     return c.json({ success: true, data: { totalCheckIns: 0, byBranch: [], byDay: [] } });
   }
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  let conditions = [
-    inArray(checkIns.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(checkIns.branchId, branchId)
+    : inArray(checkIns.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(checkIns.checkInTime, startDate),
   ];
-
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
-  }
 
   const [byBranch, byDay] = await Promise.all([
     db
@@ -284,7 +284,7 @@ app.get('/revenue/export', async (c) => {
   const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(revenueColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -294,16 +294,16 @@ app.get('/revenue/export', async (c) => {
     });
   }
 
-  let conditions = [
-    inArray(payments.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(payments.branchId, branchId)
+    : inArray(payments.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.type, 'INCOME'),
   ];
-
-  if (branchId) {
-    conditions.push(eq(payments.branchId, branchId));
-  }
 
   const byDay = await db
     .select({
@@ -363,7 +363,7 @@ app.get('/member-growth/export', async (c) => {
 
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(memberGrowthColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -373,11 +373,11 @@ app.get('/member-growth/export', async (c) => {
     });
   }
 
-  let conditions = [inArray(members.branchId, branchIds)];
+  const branchCondition = branchId
+    ? eq(members.branchId, branchId)
+    : inArray(members.branchId, branchIds);
 
-  if (branchId) {
-    conditions.push(eq(members.branchId, branchId));
-  }
+  const conditions = [branchCondition];
 
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
@@ -436,7 +436,7 @@ app.get('/contract-expiry/export', async (c) => {
 
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(contractExpiryColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -450,20 +450,24 @@ app.get('/contract-expiry/export', async (c) => {
   const futureDate = new Date();
   futureDate.setDate(today.getDate() + days);
 
-  let conditions = [
-    inArray(contracts.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(contracts.branchId, branchId)
+    : inArray(contracts.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     eq(contracts.status, 'ACTIVE'),
     gte(contracts.endDate, today.toISOString().split('T')[0]),
     lte(contracts.endDate, futureDate.toISOString().split('T')[0]),
   ];
 
-  if (branchId) {
-    conditions.push(eq(contracts.branchId, branchId));
-  }
-
   const expiringContracts = await db
     .select({
-      contract: contracts,
+      contract: {
+        contractNo: contracts.contractNo,
+        endDate: contracts.endDate,
+        status: contracts.status,
+      },
       member: {
         id: members.id,
         fullName: members.fullName,
@@ -534,7 +538,7 @@ app.get('/member-activity/export', async (c) => {
   const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
 
-  if (branchIds.length === 0) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
     const result = generateCsv(memberActivityColumns, []);
     return new Response(result.buffer, {
       headers: {
@@ -547,14 +551,14 @@ app.get('/member-activity/export', async (c) => {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  let conditions = [
-    inArray(checkIns.branchId, branchIds),
+  const branchCondition = branchId
+    ? eq(checkIns.branchId, branchId)
+    : inArray(checkIns.branchId, branchIds);
+
+  const conditions = [
+    branchCondition,
     gte(checkIns.checkInTime, startDate),
   ];
-
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
-  }
 
   const byDay = await db
     .select({

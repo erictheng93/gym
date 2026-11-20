@@ -207,14 +207,16 @@ app.get('/todays-classes', async (c) => {
   const branchId = c.req.query('branchId');
   const today = new Date().toISOString().split('T')[0];
 
-  const conditions = [
-    eq(branches.tenantId, tenantId),
-    eq(classSessions.sessionDate, today),
-  ];
+  const allTenantBranchIds = await getTenantBranchIds(tenantId);
+  const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
 
-  if (branchId) {
-    conditions.push(eq(classSessions.branchId, branchId));
+  if (branchIds.length === 0) {
+    return c.json({ success: true, data: [] });
   }
+
+  const branchCondition = branchIds.length === 1
+    ? eq(classSessions.branchId, branchIds[0])
+    : inArray(classSessions.branchId, branchIds);
 
   const sessions = await db
     .select({
@@ -226,7 +228,7 @@ app.get('/todays-classes', async (c) => {
     })
     .from(classSessions)
     .innerJoin(branches, eq(classSessions.branchId, branches.id))
-    .where(and(...conditions))
+    .where(and(branchCondition, eq(classSessions.sessionDate, today)))
     .orderBy(classSessions.startTime);
 
   return c.json({
@@ -250,10 +252,16 @@ app.get('/recent-activities', async (c) => {
   const branchId = c.req.query('branchId');
   const limit = Math.min(Number(c.req.query('limit')) || 10, 50);
 
-  const conditions = [eq(branches.tenantId, tenantId)];
-  if (branchId) {
-    conditions.push(eq(checkIns.branchId, branchId));
+  const allTenantBranchIds = await getTenantBranchIds(tenantId);
+  const branchIds = branchId ? allTenantBranchIds.filter(id => id === branchId) : allTenantBranchIds;
+
+  if (branchIds.length === 0) {
+    return c.json({ success: true, data: [] });
   }
+
+  const branchCondition = branchIds.length === 1
+    ? eq(checkIns.branchId, branchIds[0])
+    : inArray(checkIns.branchId, branchIds);
 
   // Get recent check-ins as activities
   const recentCheckIns = await db
@@ -267,7 +275,7 @@ app.get('/recent-activities', async (c) => {
     .from(checkIns)
     .innerJoin(members, eq(checkIns.memberId, members.id))
     .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(and(...conditions))
+    .where(branchCondition)
     .orderBy(desc(checkIns.checkInTime))
     .limit(limit);
 
