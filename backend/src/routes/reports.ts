@@ -59,6 +59,75 @@ const REPORT_EXPIRING_EXPORT_CONTRACT_SELECT = {
   status: contracts.status,
 };
 
+const REPORT_REVENUE_BY_BRANCH_SELECT = {
+  branchId: payments.branchId,
+  branchName: branches.name,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_REVENUE_BY_DAY_SELECT = {
+  date: sql<string>`DATE(${payments.paymentDate})`,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_BRANCH_REVENUE_SELECT = {
+  branchId: payments.branchId,
+  total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
+};
+
+const REPORT_BRANCH_MEMBERS_COUNT_SELECT = {
+  branchId: members.branchId,
+  count: count(),
+};
+
+const REPORT_BRANCH_CHECKINS_COUNT_SELECT = {
+  branchId: checkIns.branchId,
+  count: count(),
+};
+
+const REPORT_BRANCH_CONTRACTS_COUNT_SELECT = {
+  branchId: contracts.branchId,
+  count: count(),
+};
+
+const REPORT_COACH_COMPLETED_SESSIONS_SELECT = {
+  instructorId: classSessions.instructorId,
+  count: count(),
+};
+
+const REPORT_COACH_STUDENTS_COUNT_SELECT = {
+  coachId: coachMemberAssignments.coachId,
+  count: sql<number>`COUNT(DISTINCT ${coachMemberAssignments.memberId})`,
+};
+
+const REPORT_COACH_REVIEWS_SELECT = {
+  instructorId: classReviews.coachId,
+  avgRating: avg(classReviews.rating),
+  reviewCount: count(),
+};
+
+const REPORT_COACH_BOOKING_STATS_SELECT = {
+  instructorId: classSessions.instructorId,
+  attended: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'ATTENDED')`,
+  noShow: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'NO_SHOW')`,
+};
+
+const REPORT_COACH_NOTES_COUNT_SELECT = {
+  coachId: coachNotes.coachId,
+  count: count(),
+};
+
+const REPORT_COACH_LESSON_PLANS_COUNT_SELECT = {
+  coachId: lessonPlans.coachId,
+  count: count(),
+};
+
+const REPORT_COACH_CLASSES_BY_CATEGORY_SELECT = {
+  instructorId: classSessions.instructorId,
+  category: classes.category,
+  count: count(),
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -92,20 +161,13 @@ app.get('/revenue', async (c) => {
 
   const [byBranch, byDay] = await Promise.all([
     db
-      .select({
-        branchId: payments.branchId,
-        branchName: branches.name,
-        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-      })
+      .select(REPORT_REVENUE_BY_BRANCH_SELECT)
       .from(payments)
       .innerJoin(branches, eq(payments.branchId, branches.id))
       .where(and(...conditions))
       .groupBy(payments.branchId, branches.name),
     db
-      .select({
-        date: sql<string>`DATE(${payments.paymentDate})`,
-        total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-      })
+      .select(REPORT_REVENUE_BY_DAY_SELECT)
       .from(payments)
       .where(and(...conditions))
       .groupBy(sql`DATE(${payments.paymentDate})`)
@@ -709,10 +771,7 @@ app.get('/branch-performance', async (c) => {
     previousCheckIns,
   ] = await Promise.all([
     // Revenue by branch
-    db.select({
-      branchId: payments.branchId,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
       inArray(payments.branchId, branchIds),
@@ -723,10 +782,7 @@ app.get('/branch-performance', async (c) => {
     .groupBy(payments.branchId),
 
     // New members by branch
-    db.select({
-      branchId: members.branchId,
-      count: count(),
-    })
+    db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
     .from(members)
     .where(and(
       inArray(members.branchId, branchIds),
@@ -736,10 +792,7 @@ app.get('/branch-performance', async (c) => {
     .groupBy(members.branchId),
 
     // Check-ins by branch
-    db.select({
-      branchId: checkIns.branchId,
-      count: count(),
-    })
+    db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
     .from(checkIns)
     .where(and(
       inArray(checkIns.branchId, branchIds),
@@ -749,10 +802,7 @@ app.get('/branch-performance', async (c) => {
     .groupBy(checkIns.branchId),
 
     // Active contracts by branch
-    db.select({
-      branchId: contracts.branchId,
-      count: count(),
-    })
+    db.select(REPORT_BRANCH_CONTRACTS_COUNT_SELECT)
     .from(contracts)
     .where(and(
       inArray(contracts.branchId, branchIds),
@@ -762,10 +812,7 @@ app.get('/branch-performance', async (c) => {
 
     // Previous period revenue
     compareWithPrevious
-      ? db.select({
-          branchId: payments.branchId,
-          total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-        })
+      ? db.select(REPORT_BRANCH_REVENUE_SELECT)
         .from(payments)
         .where(and(
           inArray(payments.branchId, branchIds),
@@ -778,10 +825,7 @@ app.get('/branch-performance', async (c) => {
 
     // Previous period new members
     compareWithPrevious
-      ? db.select({
-          branchId: members.branchId,
-          count: count(),
-        })
+      ? db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
         .from(members)
         .where(and(
           inArray(members.branchId, branchIds),
@@ -793,10 +837,7 @@ app.get('/branch-performance', async (c) => {
 
     // Previous period check-ins
     compareWithPrevious
-      ? db.select({
-          branchId: checkIns.branchId,
-          count: count(),
-        })
+      ? db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
         .from(checkIns)
         .where(and(
           inArray(checkIns.branchId, branchIds),
@@ -996,10 +1037,7 @@ app.get('/branch-performance/export', async (c) => {
 
   // Fetch data
   const [currentRevenue, currentMembers, currentCheckIns, currentContracts, previousRevenue] = await Promise.all([
-    db.select({
-      branchId: payments.branchId,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
       inArray(payments.branchId, branchIds),
@@ -1009,25 +1047,22 @@ app.get('/branch-performance/export', async (c) => {
     ))
     .groupBy(payments.branchId),
 
-    db.select({ branchId: members.branchId, count: count() })
+    db.select(REPORT_BRANCH_MEMBERS_COUNT_SELECT)
     .from(members)
     .where(and(inArray(members.branchId, branchIds), gte(members.createdAt, currentStart), lte(members.createdAt, currentEnd)))
     .groupBy(members.branchId),
 
-    db.select({ branchId: checkIns.branchId, count: count() })
+    db.select(REPORT_BRANCH_CHECKINS_COUNT_SELECT)
     .from(checkIns)
     .where(and(inArray(checkIns.branchId, branchIds), gte(checkIns.checkInTime, currentStart), lte(checkIns.checkInTime, currentEnd)))
     .groupBy(checkIns.branchId),
 
-    db.select({ branchId: contracts.branchId, count: count() })
+    db.select(REPORT_BRANCH_CONTRACTS_COUNT_SELECT)
     .from(contracts)
     .where(and(inArray(contracts.branchId, branchIds), eq(contracts.status, 'ACTIVE')))
     .groupBy(contracts.branchId),
 
-    db.select({
-      branchId: payments.branchId,
-      total: sql<number>`COALESCE(SUM(${payments.amount}), 0)`,
-    })
+    db.select(REPORT_BRANCH_REVENUE_SELECT)
     .from(payments)
     .where(and(
       inArray(payments.branchId, branchIds),
@@ -1195,10 +1230,7 @@ app.get('/coach-performance', async (c) => {
     classesByCategory,
   ] = await Promise.all([
     // Classes taught (completed sessions)
-    db.select({
-      instructorId: classSessions.instructorId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_COMPLETED_SESSIONS_SELECT)
     .from(classSessions)
     .where(and(
       isNotNull(classSessions.instructorId),
@@ -1210,10 +1242,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classSessions.instructorId),
 
     // Students count (distinct members assigned to coach)
-    db.select({
-      coachId: coachMemberAssignments.coachId,
-      count: sql<number>`COUNT(DISTINCT ${coachMemberAssignments.memberId})`,
-    })
+    db.select(REPORT_COACH_STUDENTS_COUNT_SELECT)
     .from(coachMemberAssignments)
     .where(and(
       inArray(coachMemberAssignments.coachId, coachIdList),
@@ -1226,11 +1255,7 @@ app.get('/coach-performance', async (c) => {
 
     // Reviews (average rating and count)
     // Use coachId column directly - more reliable than joining through classes
-    db.select({
-      instructorId: classReviews.coachId,
-      avgRating: avg(classReviews.rating),
-      reviewCount: count(),
-    })
+    db.select(REPORT_COACH_REVIEWS_SELECT)
     .from(classReviews)
     .where(and(
       isNotNull(classReviews.coachId),
@@ -1241,11 +1266,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classReviews.coachId),
 
     // Booking stats (attendance rate)
-    db.select({
-      instructorId: classSessions.instructorId,
-      attended: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'ATTENDED')`,
-      noShow: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'NO_SHOW')`,
-    })
+    db.select(REPORT_COACH_BOOKING_STATS_SELECT)
     .from(bookings)
     .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
     .where(and(
@@ -1257,10 +1278,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(classSessions.instructorId),
 
     // Notes created
-    db.select({
-      coachId: coachNotes.coachId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_NOTES_COUNT_SELECT)
     .from(coachNotes)
     .where(and(
       inArray(coachNotes.coachId, coachIdList),
@@ -1270,10 +1288,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(coachNotes.coachId),
 
     // Lesson plans created
-    db.select({
-      coachId: lessonPlans.coachId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_LESSON_PLANS_COUNT_SELECT)
     .from(lessonPlans)
     .where(and(
       inArray(lessonPlans.coachId, coachIdList),
@@ -1283,11 +1298,7 @@ app.get('/coach-performance', async (c) => {
     .groupBy(lessonPlans.coachId),
 
     // Classes by category
-    db.select({
-      instructorId: classSessions.instructorId,
-      category: classes.category,
-      count: count(),
-    })
+    db.select(REPORT_COACH_CLASSES_BY_CATEGORY_SELECT)
     .from(classSessions)
     .innerJoin(classes, eq(classSessions.classId, classes.id))
     .where(and(
@@ -1474,10 +1485,7 @@ app.get('/coach-performance/export', async (c) => {
 
   // Fetch metrics
   const [classesCount, studentsCount, reviewsData, bookingStats] = await Promise.all([
-    db.select({
-      instructorId: classSessions.instructorId,
-      count: count(),
-    })
+    db.select(REPORT_COACH_COMPLETED_SESSIONS_SELECT)
     .from(classSessions)
     .where(and(
       isNotNull(classSessions.instructorId),
@@ -1488,10 +1496,7 @@ app.get('/coach-performance/export', async (c) => {
     ))
     .groupBy(classSessions.instructorId),
 
-    db.select({
-      coachId: coachMemberAssignments.coachId,
-      count: sql<number>`COUNT(DISTINCT ${coachMemberAssignments.memberId})`,
-    })
+    db.select(REPORT_COACH_STUDENTS_COUNT_SELECT)
     .from(coachMemberAssignments)
     .where(and(
       inArray(coachMemberAssignments.coachId, coachIdList),
@@ -1503,11 +1508,7 @@ app.get('/coach-performance/export', async (c) => {
     .groupBy(coachMemberAssignments.coachId),
 
     // Use coachId column directly - more reliable than joining through classes
-    db.select({
-      instructorId: classReviews.coachId,
-      avgRating: avg(classReviews.rating),
-      reviewCount: count(),
-    })
+    db.select(REPORT_COACH_REVIEWS_SELECT)
     .from(classReviews)
     .where(and(
       isNotNull(classReviews.coachId),
@@ -1517,11 +1518,7 @@ app.get('/coach-performance/export', async (c) => {
     ))
     .groupBy(classReviews.coachId),
 
-    db.select({
-      instructorId: classSessions.instructorId,
-      attended: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'ATTENDED')`,
-      noShow: sql<number>`COUNT(*) FILTER (WHERE ${bookings.bookingStatus} = 'NO_SHOW')`,
-    })
+    db.select(REPORT_COACH_BOOKING_STATS_SELECT)
     .from(bookings)
     .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
     .where(and(

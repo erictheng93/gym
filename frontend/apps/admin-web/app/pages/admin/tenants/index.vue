@@ -1,3 +1,25 @@
+<script lang="ts">
+const tenantDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+const TENANT_STATUS_BADGES: Record<string, { label: string; class: string }> = {
+  active: { label: '正常', class: 'badge-success' },
+  trial: { label: '試用中', class: 'badge-warning' },
+  suspended: { label: '已暫停', class: 'badge-error' },
+  cancelled: { label: '已取消', class: 'badge-default' },
+}
+
+const TENANT_PLAN_LABELS: Record<string, string> = {
+  starter: '入門版',
+  professional: '專業版',
+  enterprise: '企業版',
+  custom: '自訂版',
+}
+</script>
+
 <script setup lang="ts">
 /**
  * Admin Tenant Dashboard - MVP
@@ -111,27 +133,6 @@ const filteredTenants = computed(() => {
     }
   })
 })
-
-// 格式化器與靜態標籤快取
-const tenantDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit'
-})
-
-const TENANT_STATUS_BADGES: Record<string, { label: string; class: string }> = {
-  active: { label: '正常', class: 'badge-success' },
-  trial: { label: '試用中', class: 'badge-warning' },
-  suspended: { label: '已暫停', class: 'badge-error' },
-  cancelled: { label: '已取消', class: 'badge-default' }
-}
-
-const TENANT_PLAN_LABELS: Record<string, string> = {
-  starter: '入門版',
-  professional: '專業版',
-  enterprise: '企業版',
-  custom: '自訂版'
-}
 
 // Status badge helper
 const getStatusBadge = (status: string) => {

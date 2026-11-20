@@ -26,6 +26,61 @@ const CHECK_IN_RETURNING = {
   notes: checkIns.notes,
 };
 
+const CHECK_IN_LIST_SELECT = {
+  checkIn: {
+    id: checkIns.id,
+    memberId: checkIns.memberId,
+    branchId: checkIns.branchId,
+    contractId: checkIns.contractId,
+    checkInTime: checkIns.checkInTime,
+    checkInType: checkIns.checkInType,
+    checkInMethod: checkIns.checkInMethod,
+    processedById: checkIns.processedById,
+    notes: checkIns.notes,
+  },
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  processedBy: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+};
+
+const CHECK_IN_DETAIL_SELECT = {
+  checkIn: CHECK_IN_RETURNING,
+  member: {
+    id: members.id,
+    fullName: members.fullName,
+    memberCode: members.memberCode,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  contract: {
+    id: contracts.id,
+    contractNo: contracts.contractNo,
+    contractStatus: contracts.status,
+  },
+};
+
+const CHECK_IN_TODAY_STATS_SELECT = {
+  total: sql<number>`count(*)`,
+  uniqueMembers: sql<number>`count(distinct ${checkIns.memberId})`,
+};
+
+const CHECK_IN_HOURLY_STATS_SELECT = {
+  hour: sql<number>`extract(hour from ${checkIns.checkInTime})`,
+  count: sql<number>`count(*)`,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -88,32 +143,7 @@ app.get('/', async (c) => {
 
     const [result, [countResult]] = await Promise.all([
       db
-        .select({
-          checkIn: {
-            id: checkIns.id,
-            memberId: checkIns.memberId,
-            branchId: checkIns.branchId,
-            contractId: checkIns.contractId,
-            checkInTime: checkIns.checkInTime,
-            checkInType: checkIns.checkInType,
-            checkInMethod: checkIns.checkInMethod,
-            processedById: checkIns.processedById,
-            notes: checkIns.notes,
-          },
-          member: {
-            id: members.id,
-            fullName: members.fullName,
-            memberCode: members.memberCode,
-          },
-          branch: {
-            id: branches.id,
-            name: branches.name,
-          },
-          processedBy: {
-            id: employees.id,
-            fullName: employees.fullName,
-          },
-        })
+        .select(CHECK_IN_LIST_SELECT)
         .from(checkIns)
         .innerJoin(members, eq(checkIns.memberId, members.id))
         .innerJoin(branches, eq(checkIns.branchId, branches.id))
@@ -291,23 +321,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      checkIn: checkIns,
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-        memberCode: members.memberCode,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-        contractStatus: contracts.status,
-      },
-    })
+    .select(CHECK_IN_DETAIL_SELECT)
     .from(checkIns)
     .innerJoin(members, eq(checkIns.memberId, members.id))
     .innerJoin(branches, eq(checkIns.branchId, branches.id))
@@ -372,19 +386,13 @@ app.get('/stats/today', async (c) => {
 
   const [[stats], hourlyStats] = await Promise.all([
     db
-      .select({
-        total: sql<number>`count(*)`,
-        uniqueMembers: sql<number>`count(distinct ${checkIns.memberId})`,
-      })
+      .select(CHECK_IN_TODAY_STATS_SELECT)
       .from(checkIns)
       .where(whereCondition),
 
     // Hourly breakdown
     db
-      .select({
-        hour: sql<number>`extract(hour from ${checkIns.checkInTime})`,
-        count: sql<number>`count(*)`,
-      })
+      .select(CHECK_IN_HOURLY_STATS_SELECT)
       .from(checkIns)
       .where(whereCondition)
       .groupBy(sql`extract(hour from ${checkIns.checkInTime})`)

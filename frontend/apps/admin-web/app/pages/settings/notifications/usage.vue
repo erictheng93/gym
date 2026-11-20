@@ -254,6 +254,45 @@
   </div>
 </template>
 
+<script lang="ts">
+const MESSAGE_TYPE_LABELS: Record<string, string> = {
+  text: '文字',
+  flex: 'Flex Message',
+}
+
+const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  booking_confirmation: '預約確認',
+  booking_reminder_24h: '課程提醒 (24h)',
+  booking_reminder_2h: '課程提醒 (2h)',
+  booking_cancelled: '預約取消',
+  class_cancelled: '課程取消',
+  contract_expiry_7d: '會籍到期 (7天)',
+  contract_expiry_3d: '會籍到期 (3天)',
+  contract_expiry_1d: '會籍到期 (1天)',
+  payment_confirmation: '付款確認',
+  welcome: '歡迎訊息',
+  otp: 'OTP 驗證碼',
+  test: '測試',
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  line: 'LINE',
+  push: '推播',
+  email: 'Email',
+  sms: '簡訊',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  sent: '已發送',
+  delivered: '已送達',
+  failed: '失敗',
+  pending: '待處理',
+}
+
+const usageMonthFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long' })
+const usageDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth'
@@ -405,43 +444,6 @@ async function exportCsv() {
     isExporting.value = false
   }
 }
-
-const MESSAGE_TYPE_LABELS: Record<string, string> = {
-  text: '文字',
-  flex: 'Flex Message',
-}
-
-const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
-  booking_confirmation: '預約確認',
-  booking_reminder_24h: '課程提醒 (24h)',
-  booking_reminder_2h: '課程提醒 (2h)',
-  booking_cancelled: '預約取消',
-  class_cancelled: '課程取消',
-  contract_expiry_7d: '會籍到期 (7天)',
-  contract_expiry_3d: '會籍到期 (3天)',
-  contract_expiry_1d: '會籍到期 (1天)',
-  payment_confirmation: '付款確認',
-  welcome: '歡迎訊息',
-  otp: 'OTP 驗證碼',
-  test: '測試',
-}
-
-const CHANNEL_LABELS: Record<string, string> = {
-  line: 'LINE',
-  push: '推播',
-  email: 'Email',
-  sms: '簡訊',
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  sent: '已發送',
-  delivered: '已送達',
-  failed: '失敗',
-  pending: '待處理',
-}
-
-const usageMonthFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long' })
-const usageDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
 
 function formatPeriod(period: string) {
   if (!period) return '-'

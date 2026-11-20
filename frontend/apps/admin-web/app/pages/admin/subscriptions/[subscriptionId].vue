@@ -177,6 +177,42 @@
   </div>
 </template>
 
+<script>
+const PLAN_LABELS = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+}
+
+const STATUS_LABELS = {
+  active: '活跃',
+  canceled: '已取消',
+  past_due: '逾期',
+}
+
+const INVOICE_STATUS_LABELS = {
+  draft: '草稿',
+  open: '待付款',
+  paid: '已付款',
+  void: '作废',
+  uncollectible: '无法收款',
+}
+
+const subDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const subDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+const subCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+})
+</script>
+
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -269,40 +305,6 @@ const cancelSubscription = async () => {
     alert(err.message || '取消失败')
   }
 }
-
-const PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter',
-  professional: 'Professional',
-  enterprise: 'Enterprise'
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  active: '活跃',
-  canceled: '已取消',
-  past_due: '逾期'
-}
-
-const INVOICE_STATUS_LABELS: Record<string, string> = {
-  draft: '草稿',
-  open: '待付款',
-  paid: '已付款',
-  void: '作废',
-  uncollectible: '无法收款'
-}
-
-const subDateFormatter = new Intl.DateTimeFormat('zh-TW')
-const subDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: 'numeric',
-  second: 'numeric'
-})
-const subCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
-  style: 'currency',
-  currency: 'TWD'
-})
 
 const getPlanLabel = (planType: string) => {
   return PLAN_LABELS[planType] || planType
