@@ -49,8 +49,8 @@ const completeProfileSchema = z.object({
 app.get('/', async (c) => {
   const memberInfo = c.get('member')!;
 
-  // Get full member details
-  const [member] = await db
+  // Get full member details with branch info joined
+  const [memberResult] = await db
     .select({
       id: members.id,
       memberCode: members.memberCode,
@@ -72,12 +72,17 @@ app.get('/', async (c) => {
       avatar: members.avatar,
       height: members.height,
       createdAt: members.createdAt,
+      branch_id: branches.id,
+      branch_name: branches.name,
+      branch_address: branches.address,
+      branch_phone: branches.phone,
     })
     .from(members)
+    .leftJoin(branches, eq(members.branchId, branches.id))
     .where(eq(members.id, memberInfo.id))
     .limit(1);
 
-  if (!member) {
+  if (!memberResult) {
     return c.json({
       success: false,
       error: '會員不存在',
@@ -85,18 +90,8 @@ app.get('/', async (c) => {
     }, 404);
   }
 
-  // Concurrently fetch branch, active contracts, credentials, and social accounts
-  const [[branch], activeContracts, [credentials], socialAccounts] = await Promise.all([
-    db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        address: branches.address,
-        phone: branches.phone,
-      })
-      .from(branches)
-      .where(eq(branches.id, member.branchId))
-      .limit(1),
+  // Concurrently fetch active contracts, credentials, and social accounts
+  const [activeContracts, [credentials], socialAccounts] = await Promise.all([
     db
       .select({
         id: contracts.id,
@@ -118,15 +113,17 @@ app.get('/', async (c) => {
       .from(contracts)
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
       .where(and(
-        eq(contracts.memberId, member.id),
+        eq(contracts.memberId, memberResult.id),
         inArray(contracts.status, ['ACTIVE', 'PAUSED']),
       ))
       .orderBy(desc(contracts.endDate)),
+
     db
       .select({ id: memberCredentials.id })
       .from(memberCredentials)
-      .where(eq(memberCredentials.memberId, member.id))
+      .where(eq(memberCredentials.memberId, memberResult.id))
       .limit(1),
+
     db
       .select({
         provider: memberSocialAccounts.provider,
@@ -135,7 +132,7 @@ app.get('/', async (c) => {
         createdAt: memberSocialAccounts.createdAt,
       })
       .from(memberSocialAccounts)
-      .where(eq(memberSocialAccounts.memberId, member.id)),
+      .where(eq(memberSocialAccounts.memberId, memberResult.id)),
   ]);
 
   // Format contracts
@@ -167,20 +164,20 @@ app.get('/', async (c) => {
     success: true,
     data: {
       member: {
-        id: member.id,
-        memberCode: member.memberCode,
-        fullName: member.fullName,
-        phone: member.phone,
-        email: member.email,
-        gender: member.gender,
-        birthday: member.birthday,
-        address: member.address,
-        emergencyContact: member.emergencyContact,
-        emergencyPhone: member.emergencyPhone,
-        status: member.status,
-        joinDate: member.joinDate,
-        avatar: member.avatar,
-        height: member.height,
+        id: memberResult.id,
+        memberCode: memberResult.memberCode,
+        fullName: memberResult.fullName,
+        phone: memberResult.phone,
+        email: memberResult.email,
+        gender: memberResult.gender,
+        birthday: memberResult.birthday,
+        address: memberResult.address,
+        emergencyContact: memberResult.emergencyContact,
+        emergencyPhone: memberResult.emergencyPhone,
+        status: memberResult.status,
+        joinDate: memberResult.joinDate,
+        avatar: memberResult.avatar,
+        height: memberResult.height,
         hasPassword: !!credentials,
         socialAccounts: socialAccounts.map(sa => ({
           provider: sa.provider,
@@ -189,11 +186,11 @@ app.get('/', async (c) => {
           linkedAt: sa.createdAt,
         })),
       },
-      branch: branch ? {
-        id: branch.id,
-        name: branch.name,
-        address: branch.address,
-        phone: branch.phone,
+      branch: memberResult.branch_id ? {
+        id: memberResult.branch_id,
+        name: memberResult.branch_name,
+        address: memberResult.branch_address,
+        phone: memberResult.branch_phone,
       } : null,
       contracts: formattedContracts,
     },
@@ -211,42 +208,30 @@ app.put(
     const memberInfo = c.get('member')!;
     const updates = c.req.valid('json');
 
-    // Check if email is already taken by another member
-    if (updates.email) {
-      const [existingMember] = await db
-        .select({ id: members.id })
-        .from(members)
-        .where(and(
-          eq(members.email, updates.email),
-        ))
-        .limit(1);
+    // Concurrently check if email or phone is already taken by another member
+    const [existingEmailMembers, existingPhoneMembers] = await Promise.all([
+      updates.email
+        ? db.select({ id: members.id }).from(members).where(eq(members.email, updates.email)).limit(1)
+        : Promise.resolve([]),
+      updates.phone
+        ? db.select({ id: members.id }).from(members).where(eq(members.phone, updates.phone)).limit(1)
+        : Promise.resolve([]),
+    ]);
 
-      if (existingMember && existingMember.id !== memberInfo.id) {
-        return c.json({
-          success: false,
-          error: '此 Email 已被使用',
-          code: 'EMAIL_TAKEN',
-        }, 400);
-      }
+    if (existingEmailMembers[0] && existingEmailMembers[0].id !== memberInfo.id) {
+      return c.json({
+        success: false,
+        error: '此 Email 已被使用',
+        code: 'EMAIL_TAKEN',
+      }, 400);
     }
 
-    // Check if phone is already taken by another member
-    if (updates.phone) {
-      const [existingMember] = await db
-        .select({ id: members.id })
-        .from(members)
-        .where(and(
-          eq(members.phone, updates.phone),
-        ))
-        .limit(1);
-
-      if (existingMember && existingMember.id !== memberInfo.id) {
-        return c.json({
-          success: false,
-          error: '此手機號碼已被使用',
-          code: 'PHONE_TAKEN',
-        }, 400);
-      }
+    if (existingPhoneMembers[0] && existingPhoneMembers[0].id !== memberInfo.id) {
+      return c.json({
+        success: false,
+        error: '此手機號碼已被使用',
+        code: 'PHONE_TAKEN',
+      }, 400);
     }
 
     // Update member

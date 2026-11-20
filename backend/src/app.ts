@@ -155,6 +155,7 @@ app.route('/api/tenant', tenantRoutes);
 app.route('/api/member/otp', memberOtpRoutes);
 app.route('/api/member/auth', memberAuthRoutes);
 app.route('/api/member/me', memberProfileRoutes);
+app.route('/api/member', memberProfileRoutes);
 app.route('/api/member/oauth', memberOAuthRoutes);
 app.route('/api/member/push', memberPushRoutes);
 app.route('/api/member/notifications', memberNotificationsRoutes);

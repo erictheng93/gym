@@ -54,6 +54,7 @@ app.get('/', async (c) => {
   // Determine sort order
   const orderFn = sortOrder === 'asc' ? asc(contracts.createdAt) : desc(contracts.createdAt);
 
+  // Concurrently execute count and paginated query
   const [[countResult], result] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)` })
@@ -247,21 +248,22 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
-  const [member] = await db
-    .select()
-    .from(members)
-    .where(eq(members.id, data.memberId))
-    .limit(1);
+  const [[member], [plan]] = await Promise.all([
+    db
+      .select()
+      .from(members)
+      .where(eq(members.id, data.memberId))
+      .limit(1),
+    db
+      .select()
+      .from(membershipPlans)
+      .where(eq(membershipPlans.id, data.planId))
+      .limit(1),
+  ]);
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
-
-  const [plan] = await db
-    .select()
-    .from(membershipPlans)
-    .where(eq(membershipPlans.id, data.planId))
-    .limit(1);
 
   if (!plan) {
     return c.json({ success: false, error: '會籍方案不存在' }, 404);
