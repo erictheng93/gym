@@ -45,8 +45,11 @@ withDefaults(defineProps<Props>(), {
 }
 
 .stat-number {
+  font-family: var(--font-display);
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
 }
 </style>

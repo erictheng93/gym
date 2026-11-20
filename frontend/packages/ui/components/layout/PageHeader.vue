@@ -117,18 +117,31 @@ const iconPaths: Record<string, string> = {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: var(--space-xl);
-  animation: headerAppear 0.6s var(--ease-out) backwards;
+  animation: headerAppear 0.5s var(--ease-out) backwards;
 }
 
 @keyframes headerAppear {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(-8px);
   }
 }
 
 .header-content h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   margin-bottom: var(--space-xs);
+  color: var(--color-text-primary);
+}
+
+.header-content p {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  margin: 0;
 }
 
 .header-actions {

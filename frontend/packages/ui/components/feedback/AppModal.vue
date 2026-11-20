@@ -88,21 +88,24 @@ const maxWidthMap = {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: var(--space-md);
 }
 
 .modal-container {
   background: var(--color-bg-primary);
-  border-radius: var(--radius-xl);
-  width: 90%;
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--color-border-strong);
+  width: 100%;
   max-height: 90vh;
   overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-xl), inset 0 1px 0 var(--color-border-specular);
   display: flex;
   flex-direction: column;
 }
@@ -125,30 +128,39 @@ const maxWidthMap = {
 }
 
 .modal-title {
+  font-family: var(--font-display);
   font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.025em;
   color: var(--color-text-primary);
   margin: 0;
 }
 
 .modal-close {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-secondary);
-  background: transparent;
-  border: none;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-fast) var(--ease-spring),
+              background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
   flex-shrink: 0;
 }
 
 .modal-close:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg-secondary);
   color: var(--color-text-primary);
+  transform: scale(1.05);
+}
+
+.modal-close:active {
+  transform: scale(0.95);
 }
 
 .modal-body {
@@ -167,33 +179,47 @@ const maxWidthMap = {
   flex-shrink: 0;
 }
 
-/* Transitions */
-.modal-enter-active,
+/* Transitions with Spring Physics */
+.modal-enter-active {
+  transition: opacity 0.25s var(--ease-out);
+}
+
 .modal-leave-active {
-  transition: opacity 0.2s ease-out;
+  transition: opacity 0.2s ease-in;
 }
 
-.modal-enter-active .modal-container,
+.modal-enter-active .modal-container {
+  transition: transform 0.35s var(--ease-spring), opacity 0.25s var(--ease-out);
+}
+
 .modal-leave-active .modal-container {
-  transition: transform 0.3s var(--ease-out), opacity 0.2s ease-out;
+  transition: transform 0.2s ease-in, opacity 0.2s ease-in;
 }
 
-.modal-enter-from,
+.modal-enter-from {
+  opacity: 0;
+}
+
 .modal-leave-to {
   opacity: 0;
 }
 
-.modal-enter-from .modal-container,
+.modal-enter-from .modal-container {
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+}
+
 .modal-leave-to .modal-container {
   opacity: 0;
-  transform: translateY(20px) scale(0.98);
+  transform: translateY(12px) scale(0.97);
 }
 
 /* Responsive */
 @media (max-width: 640px) {
   .modal-container {
-    width: 95%;
-    max-height: 95vh;
+    width: 100%;
+    max-height: 94vh;
+    border-radius: var(--radius-xl);
   }
 
   .modal-header,

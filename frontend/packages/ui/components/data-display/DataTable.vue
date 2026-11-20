@@ -295,14 +295,17 @@ const toggleRowSelect = (row: T, event: Event) => {
 <style scoped>
 .data-table-wrapper {
   overflow: hidden;
-  animation: tableAppear 0.6s var(--ease-out) backwards;
-  animation-delay: 0.2s;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--color-border-specular);
+  animation: tableAppear 0.5s var(--ease-out) backwards;
+  animation-delay: 0.1s;
 }
 
 @keyframes tableAppear {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(12px);
   }
 }
 
@@ -310,16 +313,17 @@ const toggleRowSelect = (row: T, event: Event) => {
 .data-table {
   width: 100%;
   border-collapse: collapse;
+  font-family: var(--font-body);
 }
 
 .data-table th {
   text-align: left;
   padding: var(--space-md) var(--space-lg);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-tertiary);
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-divider);
 }
@@ -328,6 +332,10 @@ const toggleRowSelect = (row: T, event: Event) => {
   padding: var(--space-md) var(--space-lg);
   border-bottom: 1px solid var(--color-divider);
   vertical-align: middle;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .data-table tr:last-child td {
