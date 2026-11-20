@@ -197,18 +197,40 @@ const navItems = [
   padding-bottom: calc(6px + var(--safe-area-bottom));
 }
 
-/* Dark mode glass effect - using class-based theming */
-:root.theme-dark .bottom-nav {
-  background: rgba(29, 29, 31, 0.72);
-  border-top-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 -0.5px 0 rgba(255, 255, 255, 0.04);
+/* Next-Gen Floating Glass Dock */
+.bottom-nav {
+  position: fixed;
+  bottom: calc(12px + var(--safe-area-bottom, 0px));
+  left: 16px;
+  right: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-radius: 28px;
+  z-index: 100;
+
+  /* Frosted glass effect with high saturation */
+  background: rgba(18, 18, 20, 0.82);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+
+  /* Specular rim highlight & elevation */
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.45),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
+
+  padding: 6px 12px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Light mode glass effect */
 :root.theme-light .bottom-nav {
-  background: rgba(249, 249, 249, 0.72);
-  border-top-color: rgba(60, 60, 67, 0.29);
-  box-shadow: 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .nav-item {
@@ -216,33 +238,47 @@ const navItems = [
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 4px 20px;
+  padding: 6px 14px;
+  border-radius: 20px;
   color: #8e8e93; /* iOS inactive gray */
   text-decoration: none;
-  transition: color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+.nav-item:hover {
+  color: var(--color-text, #ffffff);
+  transform: translateY(-2px);
 }
 
 .nav-item.active {
-  color: #007aff; /* iOS Blue - standard tab bar active */
+  color: var(--color-primary, #0071e3);
+  background: rgba(0, 113, 227, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .nav-item:active {
-  opacity: 0.7;
+  transform: scale(0.92);
 }
 
 .nav-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.1);
 }
 
 .nav-label {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Desktop Sidebar - Hidden on mobile, visible on ≥1024px */
@@ -259,10 +295,11 @@ const navItems = [
   .desktop-sidebar {
     display: flex;
     flex-direction: column;
-    width: 240px;
+    width: 260px;
     min-height: 100vh;
-    background: var(--color-surface);
-    border-right: 0.5px solid var(--color-border);
+    background: var(--color-surface, #161618);
+    border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05);
     position: fixed;
     left: 0;
     top: 0;
@@ -272,19 +309,19 @@ const navItems = [
 
   .sidebar-header {
     padding: 24px 20px;
-    border-bottom: 0.5px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
   }
 
   .sidebar-logo {
     font-size: 20px;
     font-weight: 700;
-    color: var(--color-primary);
+    color: var(--color-primary, #0071e3);
     letter-spacing: -0.4px;
   }
 
   .sidebar-nav {
     flex: 1;
-    padding: 12px 8px;
+    padding: 16px 12px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -295,37 +332,43 @@ const navItems = [
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    border-radius: 10px;
-    color: var(--color-text);
+    border-radius: 12px;
+    color: var(--color-text-secondary, #8e8e93);
     text-decoration: none;
-    transition: all 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     -webkit-tap-highlight-color: transparent;
+    border: 1px solid transparent;
   }
 
   .sidebar-item:hover {
-    background: var(--color-surface-secondary);
+    color: var(--color-text, #ffffff);
+    background: var(--color-surface-secondary, rgba(255, 255, 255, 0.04));
+    transform: translateX(2px);
   }
 
   .sidebar-item.active {
-    background: var(--color-primary-light);
-    color: var(--color-primary);
+    background: var(--color-primary-light, rgba(0, 113, 227, 0.12));
+    color: var(--color-primary, #0071e3);
+    border-color: rgba(0, 113, 227, 0.25);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    font-weight: 600;
   }
 
   .sidebar-item.active .sidebar-icon {
-    color: var(--color-primary);
+    color: var(--color-primary, #0071e3);
   }
 
   .sidebar-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     color: var(--color-text-secondary);
   }
 
   .sidebar-label {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 500;
   }
 
@@ -336,17 +379,15 @@ const navItems = [
 
   /* Adjust main content for sidebar */
   .main-content {
-    margin-left: 240px;
-    width: calc(100% - 240px);
-    max-width: 800px;
-    padding-bottom: 40px;
+    margin-left: 260px;
+    width: calc(100% - 260px);
+    max-width: 900px;
+    padding: 32px 24px 48px;
   }
 
   .auth-loading {
-    margin-left: 240px;
-    width: calc(100% - 240px);
+    margin-left: 260px;
+    width: calc(100% - 260px);
   }
 }
-
-/* Sidebar uses CSS variables which are controlled by theme classes */
 </style>

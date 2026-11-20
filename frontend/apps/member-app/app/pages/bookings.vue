@@ -431,36 +431,39 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
-  background-color: var(--color-primary);
-  color: white;
+  padding: 14px 20px;
+  background: rgba(52, 199, 89, 0.16);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+  box-shadow: 0 8px 30px rgba(52, 199, 89, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  color: #34c759;
   border-radius: 16px;
-  margin-bottom: 20px;
-  font-weight: 500;
+  margin: 0 16px 20px;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .slide-down-enter-active,
 .slide-down-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .slide-down-enter-from,
 .slide-down-leave-to {
   opacity: 0;
-  transform: translateY(-20px);
+  transform: translateY(-20px) scale(0.96);
 }
 
-/* iOS Segmented Control */
+/* Executive Capsule Dock Tab Switcher */
 .tab-switcher {
   display: flex;
   margin: 0 16px 24px;
-  background-color: rgba(118, 118, 128, 0.12);
-  padding: 2px;
-  border-radius: 9px;
-}
-
-:root.theme-dark .tab-switcher {
-  background-color: rgba(118, 118, 128, 0.24);
+  background-color: var(--color-surface, rgba(255, 255, 255, 0.05));
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .tab-button {
@@ -468,50 +471,56 @@ const getReviewSessionDate = (booking: Booking | null): string => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: none;
-  border: none;
-  border-radius: 7px;
-  font-size: 13px;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--color-text-secondary, #8e8e93);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   -webkit-tap-highlight-color: transparent;
 }
 
-.tab-button.active {
-  background-color: var(--color-background);
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.04),
-    0 3px 8px rgba(0, 0, 0, 0.12),
-    0 3px 1px rgba(0, 0, 0, 0.04);
+.tab-button:hover {
+  color: var(--color-text, #ffffff);
 }
 
-:root.theme-dark .tab-button.active {
-  background-color: #636366;
-  box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.04),
-    0 3px 8px rgba(0, 0, 0, 0.3);
+.tab-button.active {
+  background: var(--color-surface-active, rgba(255, 255, 255, 0.12));
+  color: var(--color-text, #ffffff);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+}
+
+:root.theme-light .tab-button.active {
+  background: #ffffff;
+  color: var(--color-text, #000000);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .tab-button .badge {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  background-color: #ff3b30;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-primary, #0071e3);
+  box-shadow: 0 2px 6px rgba(0, 113, 227, 0.4);
   color: white;
   font-size: 11px;
-  font-weight: 600;
-  border-radius: 9px;
+  font-weight: 700;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .tab-button.active .badge {
-  background-color: #ff3b30;
+  background: var(--color-primary, #0071e3);
   color: white;
 }
 
