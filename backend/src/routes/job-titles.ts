@@ -59,6 +59,18 @@ app.get('/:id', async (c) => {
   });
 });
 
+const JOB_TITLE_RETURNING = {
+  id: jobTitles.id,
+  createdAt: jobTitles.createdAt,
+  name: jobTitles.name,
+  code: jobTitles.code,
+  description: jobTitles.description,
+  level: jobTitles.level,
+  sort: jobTitles.sort,
+  permissionsConfig: jobTitles.permissionsConfig,
+  tenantId: jobTitles.tenantId,
+};
+
 // Create job title (admin/manager only)
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createJobTitleSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -67,7 +79,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createJobTitle
   const [newJobTitle] = await db.insert(jobTitles).values({
     ...data,
     tenantId,
-  }).returning();
+  }).returning(JOB_TITLE_RETURNING);
 
   return c.json({
     success: true,
@@ -85,7 +97,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobT
     .update(jobTitles)
     .set(data)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .returning();
+    .returning(JOB_TITLE_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '職稱不存在' }, 404);

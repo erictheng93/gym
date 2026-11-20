@@ -125,6 +125,21 @@ app.get('/:id', async (c) => {
   });
 });
 
+const BRANCH_RETURNING = {
+  id: branches.id,
+  status: branches.status,
+  createdAt: branches.createdAt,
+  updatedAt: branches.updatedAt,
+  name: branches.name,
+  code: branches.code,
+  type: branches.type,
+  address: branches.address,
+  phone: branches.phone,
+  taxId: branches.taxId,
+  settings: branches.settings,
+  tenantId: branches.tenantId,
+};
+
 app.post('/', requireRole('super_admin', 'admin'), zValidator('json', createBranchSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
@@ -139,7 +154,7 @@ app.post('/', requireRole('super_admin', 'admin'), zValidator('json', createBran
     ...data,
     code: branchCode,
     tenantId,
-  }).returning();
+  }).returning(BRANCH_RETURNING);
 
   invalidateTenantBranchesCache(tenantId);
 
@@ -158,7 +173,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
       updatedAt: new Date(),
     })
     .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)))
-    .returning();
+    .returning(BRANCH_RETURNING);
 
   if (!updatedBranch) {
     const [existing] = await db

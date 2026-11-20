@@ -102,6 +102,26 @@ app.get('/:id', async (c) => {
   });
 });
 
+const MEMBERSHIP_PLAN_RETURNING = {
+  id: membershipPlans.id,
+  name: membershipPlans.name,
+  code: membershipPlans.code,
+  planType: membershipPlans.planType,
+  description: membershipPlans.description,
+  durationMonths: membershipPlans.durationMonths,
+  classCounts: membershipPlans.classCounts,
+  price: membershipPlans.price,
+  allowPause: membershipPlans.allowPause,
+  maxPauseDays: membershipPlans.maxPauseDays,
+  allowTransfer: membershipPlans.allowTransfer,
+  isActive: membershipPlans.isActive,
+  sort: membershipPlans.sort,
+  createdAt: membershipPlans.createdAt,
+  updatedAt: membershipPlans.updatedAt,
+  tenantId: membershipPlans.tenantId,
+  branchId: membershipPlans.branchId,
+};
+
 // Create membership plan
 app.post('/', requireRole('admin', 'manager'), zValidator('json', createPlanSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -128,7 +148,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createPlanSche
     ...data,
     price: String(data.price),
     tenantId,
-  }).returning();
+  }).returning(MEMBERSHIP_PLAN_RETURNING);
 
   return c.json({
     success: true,
@@ -163,7 +183,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
     .update(membershipPlans)
     .set(updateData)
     .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
-    .returning();
+    .returning(MEMBERSHIP_PLAN_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '方案不存在' }, 404);
