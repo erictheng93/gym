@@ -32,86 +32,131 @@ export async function runRFMSegmentation() {
     const oneYearAgo = new Date(today);
     oneYearAgo.setFullYear(today.getFullYear() - 1);
 
-    // Get all active members
+    // Get all active members with their current tags
     const allMembers = await db
       .select({
         id: members.id,
         fullName: members.fullName,
         branchId: members.branchId,
         tenantId: members.tenantId,
+        tags: members.tags,
       })
       .from(members)
       .where(eq(members.status, 'ACTIVE'));
 
     console.log(`[RFM] Analyzing ${allMembers.length} members...`);
 
+    if (allMembers.length === 0) {
+      return {
+        totalMembers: 0,
+        segmentCounts: {} as Record<RFMSegment, number>,
+      };
+    }
+
+    // Pre-aggregate Recency, Frequency, and Monetary in 3 parallel bulk queries
+    // Eliminates 20,000+ sequential N+1 round-trips
+    const [recencyResults, frequencyResults, monetaryResults] = await Promise.all([
+      // 1. Recency: max check-in time per member
+      db
+        .select({
+          memberId: checkIns.memberId,
+          lastTime: max(checkIns.checkInTime),
+        })
+        .from(checkIns)
+        .groupBy(checkIns.memberId),
+
+      // 2. Frequency: check-ins count in last 90 days per member
+      db
+        .select({
+          memberId: checkIns.memberId,
+          count: count(),
+        })
+        .from(checkIns)
+        .where(gte(checkIns.checkInTime, ninetyDaysAgo))
+        .groupBy(checkIns.memberId),
+
+      // 3. Monetary: total payments in last year per member
+      db
+        .select({
+          memberId: contracts.memberId,
+          total: sum(payments.amount),
+        })
+        .from(payments)
+        .innerJoin(contracts, eq(payments.contractId, contracts.id))
+        .where(
+          and(
+            eq(payments.type, 'INCOME'),
+            gte(payments.paymentDate, oneYearAgo)
+          )
+        )
+        .groupBy(contracts.memberId),
+    ]);
+
+    // Build fast in-memory lookup maps
+    const recencyMap = new Map<string, Date>();
+    for (const row of recencyResults) {
+      if (row.memberId && row.lastTime) {
+        recencyMap.set(row.memberId, new Date(row.lastTime));
+      }
+    }
+
+    const frequencyMap = new Map<string, number>();
+    for (const row of frequencyResults) {
+      if (row.memberId) {
+        frequencyMap.set(row.memberId, Number(row.count || 0));
+      }
+    }
+
+    const monetaryMap = new Map<string, number>();
+    for (const row of monetaryResults) {
+      if (row.memberId) {
+        monetaryMap.set(row.memberId, Number(row.total || 0));
+      }
+    }
+
     const rfmData: MemberRFM[] = [];
+    const updates: Array<{ id: string; tags: string[] }> = [];
 
     for (const member of allMembers) {
-      try {
-        // Recency: Days since last check-in
-        const [lastCheckIn] = await db
-          .select({ lastTime: max(checkIns.checkInTime) })
-          .from(checkIns)
-          .where(eq(checkIns.memberId, member.id));
+      const lastCheckInDate = recencyMap.get(member.id);
+      const recency = lastCheckInDate
+        ? Math.floor((today.getTime() - lastCheckInDate.getTime()) / (1000 * 60 * 60 * 24))
+        : 999; // Never checked in
 
-        const lastCheckInDate = lastCheckIn?.lastTime;
-        const recency = lastCheckInDate
-          ? Math.floor((today.getTime() - new Date(lastCheckInDate).getTime()) / (1000 * 60 * 60 * 24))
-          : 999; // Never checked in
+      const frequency = frequencyMap.get(member.id) || 0;
+      const monetary = monetaryMap.get(member.id) || 0;
 
-        // Frequency: Check-ins in last 90 days
-        const [frequencyResult] = await db
-          .select({ count: count() })
-          .from(checkIns)
-          .where(
-            and(
-              eq(checkIns.memberId, member.id),
-              gte(checkIns.checkInTime, ninetyDaysAgo)
-            )
-          );
-        const frequency = Number(frequencyResult?.count || 0);
+      const segment = calculateSegment(recency, frequency, monetary);
 
-        // Monetary: Total payments in last year
-        const [monetaryResult] = await db
-          .select({ total: sum(payments.amount) })
-          .from(payments)
-          .leftJoin(contracts, eq(payments.contractId, contracts.id))
-          .where(
-            and(
-              eq(contracts.memberId, member.id),
-              eq(payments.type, 'INCOME'),
-              gte(payments.paymentDate, oneYearAgo)
-            )
-          );
-        const monetary = Number(monetaryResult?.total || 0);
+      rfmData.push({
+        memberId: member.id,
+        recency,
+        frequency,
+        monetary,
+        segment,
+      });
 
-        // Calculate segment based on RFM scores
-        const segment = calculateSegment(recency, frequency, monetary);
+      // Prepare updated tags from member's loaded tags
+      const existingTags = Array.isArray(member.tags) ? (member.tags as string[]) : [];
+      const updatedTags = updateRFMTag(existingTags, segment);
+      updates.push({ id: member.id, tags: updatedTags });
+    }
 
-        rfmData.push({
-          memberId: member.id,
-          recency,
-          frequency,
-          monetary,
-          segment,
-        });
-
-        // Update member tags with segment
-        const existingTags = member.tenantId ? await getMemberTags(member.id) : [];
-        const updatedTags = updateRFMTag(existingTags, segment);
-
-        await db
-          .update(members)
-          .set({
-            tags: updatedTags,
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, member.id));
-
-      } catch (error) {
-        console.error(`[RFM] Failed to analyze member ${member.id}:`, error);
-      }
+    // Batch update member tags in chunks of 50 to avoid connection pool exhaustion
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+      const chunk = updates.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((item) =>
+          db
+            .update(members)
+            .set({
+              tags: item.tags,
+              updatedAt: new Date(),
+            })
+            .where(eq(members.id, item.id))
+        )
+      );
     }
 
     // Generate summary statistics

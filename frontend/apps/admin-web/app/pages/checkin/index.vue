@@ -83,7 +83,52 @@ onMounted(async () => {
   }
 })
 
+let searchAbortController: AbortController | null = null
+let searchDebounceTimeout: any = null
+const isSearchingMembers = ref(false)
+
+watch(searchQuery, (newQuery) => {
+  if (searchDebounceTimeout) {
+    clearTimeout(searchDebounceTimeout)
+  }
+
+  const query = newQuery.trim()
+  if (!query) {
+    if (searchAbortController) {
+      searchAbortController.abort()
+      searchAbortController = null
+    }
+    fetchMembers({ limit: 20 })
+    return
+  }
+
+  searchDebounceTimeout = setTimeout(async () => {
+    // Abort previous in-flight search request to prevent out-of-order race conditions
+    if (searchAbortController) {
+      searchAbortController.abort()
+    }
+    searchAbortController = new AbortController()
+
+    try {
+      isSearchingMembers.value = true
+      await fetchMembers({
+        search: query,
+        limit: 20,
+        signal: searchAbortController.signal,
+      })
+    } finally {
+      isSearchingMembers.value = false
+    }
+  }, 250)
+})
+
 onUnmounted(() => {
+  if (searchDebounceTimeout) {
+    clearTimeout(searchDebounceTimeout)
+  }
+  if (searchAbortController) {
+    searchAbortController.abort()
+  }
   stopScanner()
 })
 
@@ -98,7 +143,7 @@ const filteredMembers = computed(() => {
     (m.full_name || m.fullName)?.toLowerCase().includes(query) ||
     (m.member_code || m.memberCode)?.toLowerCase().includes(query) ||
     m.phone?.includes(query)
-  ).slice(0, 5)
+  ).slice(0, 10)
 })
 
 const selectMember = async (member: any) => {
@@ -623,6 +668,9 @@ const todayCountLabel = computed(() => {
                   class="search-input"
                   autofocus
                 />
+                <div v-if="isSearchingMembers" class="search-loading">
+                  <div class="spinner-small"></div>
+                </div>
               </div>
             </div>
 
@@ -1268,6 +1316,28 @@ const todayCountLabel = computed(() => {
 .search-input:focus {
   border-color: var(--color-accent);
   background: var(--color-bg-primary);
+}
+
+.search-loading {
+  position: absolute;
+  right: var(--space-lg);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
+.spinner-small {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Search results */

@@ -19,9 +19,10 @@ export const useMembers = () => {
     search?: string
     branchId?: string
     status?: string
+    signal?: AbortSignal
   }) => {
     isLoading.value = true
-    const { page = 1, limit = 20, search, branchId, status } = options || {}
+    const { page = 1, limit = 20, search, branchId, status, signal } = options || {}
 
     try {
       const result = await readItems<Member>('members', {
@@ -33,12 +34,17 @@ export const useMembers = () => {
           status
         },
         sort: 'dateCreated',
-        sortOrder: 'desc'
+        sortOrder: 'desc',
+        signal,
       })
 
       members.value = result.data
       totalCount.value = result.total
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || signal?.aborted) {
+        // Silently ignore aborted search requests
+        return
+      }
       handleError(error, {
         context: 'useMembers.fetchMembers',
         customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED

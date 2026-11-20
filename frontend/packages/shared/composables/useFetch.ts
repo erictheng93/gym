@@ -18,6 +18,7 @@ export interface FetchOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
   params?: Record<string, string | number | boolean | undefined>
+  signal?: AbortSignal
 }
 
 export function useFetch() {
@@ -28,7 +29,7 @@ export function useFetch() {
     endpoint: string,
     options: FetchOptions = {}
   ): Promise<ApiResponse<T>> => {
-    const { method = 'GET', body, params } = options
+    const { method = 'GET', body, params, signal } = options
 
     let url = `${baseUrl}/api${endpoint}`
 
@@ -52,6 +53,7 @@ export function useFetch() {
       headers: {
         'Content-Type': 'application/json',
       },
+      signal,
     }
 
     if (body && method !== 'GET') {
@@ -77,6 +79,7 @@ export function useFetch() {
       filter?: Record<string, unknown>
       sort?: string
       sortOrder?: 'asc' | 'desc'
+      signal?: AbortSignal
     }
   ): Promise<{ data: T[]; total: number }> => {
     const params: Record<string, string | number | boolean | undefined> = {}
@@ -95,7 +98,7 @@ export function useFetch() {
       }
     }
 
-    const response = await apiFetch<T[]>(`/${collection}`, { params })
+    const response = await apiFetch<T[]>(`/${collection}`, { params, signal: options?.signal })
     return {
       data: response.data || [],
       total: response.pagination?.total || 0

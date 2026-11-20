@@ -239,40 +239,31 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
             }
           }
 
-          // Process in parallel chunks
-          const processRequest = async (request: QueuedRequest) => {
-            const success = await executeRequest(request)
-            if (success) {
-              await removeFromQueue(request.id)
-              return { success: true, id: request.id }
-            } else {
-              await updateRetryCount(request)
-              return { success: false, id: request.id }
-            }
-          }
+          // Sort strictly by timestamp to maintain deterministic FIFO order
+          actionable.sort((a, b) => a.timestamp - b.timestamp)
 
-          for (let i = 0; i < actionable.length; i += concurrency) {
-            const chunk = actionable.slice(i, i + concurrency)
-            const results = await Promise.allSettled(chunk.map(processRequest))
-
-            for (const settledResult of results) {
-              if (settledResult.status === 'fulfilled') {
-                if (settledResult.value.success) {
-                  result.synced++
-                } else {
-                  result.failed++
-                  result.errors.push({
-                    id: settledResult.value.id,
-                    error: '同步失敗，將稍後重試',
-                  })
-                }
+          // Process in sequential FIFO order to guarantee dependent mutations execute in order without race conditions
+          for (const request of actionable) {
+            try {
+              const success = await executeRequest(request)
+              if (success) {
+                await removeFromQueue(request.id)
+                result.synced++
               } else {
+                await updateRetryCount(request)
                 result.failed++
                 result.errors.push({
-                  id: 'unknown',
-                  error: '同步過程發生錯誤',
+                  id: request.id,
+                  error: '同步失敗，將稍後重試',
                 })
               }
+            } catch (err) {
+              await updateRetryCount(request)
+              result.failed++
+              result.errors.push({
+                id: request.id,
+                error: err instanceof Error ? err.message : '同步過程發生錯誤',
+              })
             }
           }
 
