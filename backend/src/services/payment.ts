@@ -197,7 +197,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
       type: 'INCOME',
       notes: description || `Payment via ${gateway}`,
       tenantId: await getTenantIdForBranch(branchId),
-    }).returning();
+    }).returning({ id: payments.id });
 
     // Process payment based on gateway
     let result: PaymentResult;
@@ -236,7 +236,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
 export async function getPaymentStatus(paymentId: string): Promise<PaymentResult> {
   try {
     const [payment] = await db
-      .select()
+      .select({ id: payments.id, type: payments.type })
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);

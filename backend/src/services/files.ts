@@ -60,7 +60,7 @@ class FileService {
         folder: options.folder,
         tenantId: options.tenantId,
         uploadedBy: options.uploadedBy,
-      }).returning();
+      }).returning({ id: files.id });
 
       return {
         id: newFile.id,
@@ -79,7 +79,7 @@ class FileService {
     }
 
     const [file] = await db
-      .select()
+      .select({ storageKey: files.storageKey })
       .from(files)
       .where(eq(files.id, fileId))
       .limit(1);
@@ -109,7 +109,7 @@ class FileService {
     }
 
     const [file] = await db
-      .select()
+      .select({ storageKey: files.storageKey })
       .from(files)
       .where(eq(files.id, fileId))
       .limit(1);

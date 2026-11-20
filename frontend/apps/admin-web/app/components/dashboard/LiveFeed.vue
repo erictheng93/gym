@@ -17,13 +17,17 @@ const props = withDefaults(defineProps<Props>(), {
 
 const { formatCurrency } = useCharts()
 
+const liveFeedTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 // 格式化時間
 const formatTime = (isoString: string) => {
+  if (!isoString) return '--'
   const date = new Date(isoString)
-  return date.toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  if (Number.isNaN(date.getTime())) return '--'
+  return liveFeedTimeFormatter.format(date)
 }
 
 // 最後更新時間

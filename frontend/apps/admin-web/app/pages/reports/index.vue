@@ -196,6 +196,17 @@ const formatCurrency = (value: number) => {
   return currencyFormatter.format(value)
 }
 
+const numberFormatter = new Intl.NumberFormat('zh-TW')
+const formatNumber = (value: number) => {
+  return numberFormatter.format(value)
+}
+
+const PERIOD_TABS = [
+  { value: 'week', label: MESSAGES.TIME.THIS_WEEK },
+  { value: 'month', label: MESSAGES.TIME.THIS_MONTH },
+  { value: 'year', label: MESSAGES.TIME.THIS_YEAR },
+]
+
 const formatPercent = (value: number) => {
   const prefix = value > 0 ? '+' : ''
   return `${prefix}${value.toFixed(1)}%`
@@ -234,7 +245,7 @@ onMounted(async () => {
         </select>
         <div class="period-tabs">
           <button
-            v-for="period in [{ value: 'week', label: MESSAGES.TIME.THIS_WEEK }, { value: 'month', label: MESSAGES.TIME.THIS_MONTH }, { value: 'year', label: MESSAGES.TIME.THIS_YEAR }]"
+            v-for="period in PERIOD_TABS"
             :key="period.value"
             :class="{ active: selectedPeriod === period.value }"
             @click="selectedPeriod = period.value"
@@ -303,7 +314,7 @@ onMounted(async () => {
             {{ formatPercent(stats.checkinsChange) }}
           </span>
         </div>
-        <div class="metric-value">{{ stats.checkins.toLocaleString() }}</div>
+        <div class="metric-value">{{ formatNumber(stats.checkins) }}</div>
         <div class="metric-label">{{ PAGES.REPORTS.CHECKINS }}</div>
       </div>
     </div>
