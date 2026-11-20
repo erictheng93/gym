@@ -126,6 +126,30 @@ function getMonday(date: Date): Date {
   d.setHours(0, 0, 0, 0)
   return d
 }
+
+const STATUS_BAR_CLASSES: Record<string, string> = {
+  BOOKED: 'bar-blue',
+  COMPLETED: 'bar-green',
+  MEMBER_CANCELLED: 'bar-gray',
+  COACH_CANCELLED: 'bar-gray',
+  NO_SHOW: 'bar-red',
+}
+
+const STATUS_CLASSES: Record<string, string> = {
+  BOOKED: 'status-blue',
+  COMPLETED: 'status-green',
+  MEMBER_CANCELLED: 'status-gray',
+  COACH_CANCELLED: 'status-gray',
+  NO_SHOW: 'status-red',
+}
+
+const STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '待上課',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
 </script>
 
 <script setup lang="ts">
@@ -224,30 +248,6 @@ function formatWeekLabel(start: Date) {
   const end = new Date(start)
   end.setDate(start.getDate() + 6)
   return `${start.getMonth() + 1}/${start.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`
-}
-
-const STATUS_BAR_CLASSES: Record<string, string> = {
-  BOOKED: 'bar-blue',
-  COMPLETED: 'bar-green',
-  MEMBER_CANCELLED: 'bar-gray',
-  COACH_CANCELLED: 'bar-gray',
-  NO_SHOW: 'bar-red',
-}
-
-const STATUS_CLASSES: Record<string, string> = {
-  BOOKED: 'status-blue',
-  COMPLETED: 'status-green',
-  MEMBER_CANCELLED: 'status-gray',
-  COACH_CANCELLED: 'status-gray',
-  NO_SHOW: 'status-red',
-}
-
-const STATUS_TEXTS: Record<string, string> = {
-  BOOKED: '待上課',
-  COMPLETED: '已完成',
-  MEMBER_CANCELLED: '學員取消',
-  COACH_CANCELLED: '教練取消',
-  NO_SHOW: '未到',
 }
 
 function formatDayHeader(dateStr: string) {

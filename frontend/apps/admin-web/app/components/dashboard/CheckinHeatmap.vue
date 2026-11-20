@@ -1,11 +1,13 @@
+<script lang="ts">
+const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i}`)
+</script>
+
 <script setup lang="ts">
 /**
  * Checkin Heatmap Component
  * 24x7 打卡熱力圖
  */
 import { DAY_OF_WEEK_NAMES } from '@gym-nexus/shared'
-
-const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i}`)
 
 interface Props {
   data?: number[][] // 7x24 matrix
@@ -47,7 +49,7 @@ const getCellTooltip = (day: number, hour: number) => {
   return `${dayLabels[day]} ${hour}:00 - ${value} 次打卡`
 }
 
-// 找出尖峰時段
+// 找出尖峰時段 (避免巢狀 forEach 閉包配置)
 const peakInfo = computed(() => {
   if (!props.data) return null
 
@@ -55,15 +57,20 @@ const peakInfo = computed(() => {
   let peakDay = 0
   let peakHour = 0
 
-  props.data.forEach((dayData, day) => {
-    dayData.forEach((count, hour) => {
-      if (count > maxVal) {
-        maxVal = count
-        peakDay = day
-        peakHour = hour
+  const data = props.data
+  for (let day = 0; day < data.length; day++) {
+    const row = data[day]
+    if (row) {
+      for (let hour = 0; hour < row.length; hour++) {
+        const count = row[hour]!
+        if (count > maxVal) {
+          maxVal = count
+          peakDay = day
+          peakHour = hour
+        }
       }
-    })
-  })
+    }
+  }
 
   return {
     day: dayLabels[peakDay],

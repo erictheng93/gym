@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, contracts, contractLogs, members, membershipPlans, payments } from '../db/index.js';
+import { db, contracts, contractLogs, members, membershipPlans, payments, CONTRACT_STATUS } from '../db/index.js';
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
@@ -172,11 +172,15 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit }, pagination: { total: 0, page, limit, totalPages: 0 } });
   }
 
+  const branchCondition = branchIds.length === 1
+    ? eq(contracts.branchId, branchIds[0])
+    : inArray(contracts.branchId, branchIds);
+
   // Build where conditions
-  const conditions = [inArray(contracts.branchId, branchIds)];
+  const conditions = [branchCondition];
   if (status) {
-    // Case-insensitive status comparison
-    conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
+    // Case-insensitive status comparison using index-friendly uppercase normalization
+    conditions.push(eq(contracts.status, status.toUpperCase() as typeof CONTRACT_STATUS[number]));
   }
 
   // Determine sort order
@@ -229,10 +233,14 @@ app.get('/export', async (c) => {
     });
   }
 
-  const conditions = [inArray(contracts.branchId, branchIds)];
+  const branchCondition = branchIds.length === 1
+    ? eq(contracts.branchId, branchIds[0])
+    : inArray(contracts.branchId, branchIds);
+
+  const conditions = [branchCondition];
   if (status) {
-    // Case-insensitive status comparison
-    conditions.push(sql`lower(${contracts.status}) = lower(${status})`);
+    // Case-insensitive status comparison using index-friendly uppercase normalization
+    conditions.push(eq(contracts.status, status.toUpperCase() as typeof CONTRACT_STATUS[number]));
   }
 
   const result = await db
@@ -243,17 +251,21 @@ app.get('/export', async (c) => {
     .where(and(...conditions))
     .orderBy(desc(contracts.createdAt));
 
-  const exportData = result.map(r => ({
-    contractNo: r.contract.contractNo || '',
-    memberName: r.member?.fullName || '',
-    memberCode: r.member?.memberCode || '',
-    planName: r.plan?.name || '',
-    status: translateStatus(r.contract.status),
-    startDate: r.contract.startDate || '',
-    endDate: r.contract.endDate || '',
-    totalAmount: parseFloat(r.contract.totalAmount || '0'),
-    paymentStatus: translateStatus(r.contract.paymentStatus),
-  }));
+  const exportData = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i]!;
+    exportData[i] = {
+      contractNo: r.contract.contractNo || '',
+      memberName: r.member?.fullName || '',
+      memberCode: r.member?.memberCode || '',
+      planName: r.plan?.name || '',
+      status: translateStatus(r.contract.status),
+      startDate: r.contract.startDate || '',
+      endDate: r.contract.endDate || '',
+      totalAmount: parseFloat(r.contract.totalAmount || '0'),
+      paymentStatus: translateStatus(r.contract.paymentStatus),
+    };
+  }
 
   const filename = `合約列表_${new Date().toISOString().slice(0, 10)}`;
 

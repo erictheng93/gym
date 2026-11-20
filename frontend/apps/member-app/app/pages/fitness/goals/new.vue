@@ -1,11 +1,26 @@
+<script lang="ts">
+import { GOAL_TYPES } from '../../../schemas/goal.schema'
+import type { GoalType } from '../../../schemas/goal.schema'
+
+// Goal types for selection
+const goalTypes = Object.entries(GOAL_TYPES).map(([value, label]) => ({
+  value: value as GoalType,
+  label,
+}))
+
+const UNIT_SUGGESTIONS: Record<string, string[]> = {
+  WEIGHT_LOSS: ['kg', '公斤'],
+  MUSCLE_GAIN: ['kg', '公斤'],
+  BODY_SHAPE: ['%', 'cm'],
+}
+const EMPTY_UNITS: string[] = []
+</script>
+
 <script setup lang="ts">
 /**
  * New Goal Page
  * Create a new fitness goal
  */
-import { GOAL_TYPES } from '../../../schemas/goal.schema'
-import type { GoalType } from '../../../schemas/goal.schema'
-
 definePageMeta({
   middleware: 'auth',
 })
@@ -26,24 +41,9 @@ const form = reactive({
 const isSubmitting = ref(false)
 const errors = reactive<Record<string, string>>({})
 
-// Goal types for selection
-const goalTypes = Object.entries(GOAL_TYPES).map(([value, label]) => ({
-  value: value as GoalType,
-  label,
-}))
-
 // Unit suggestions based on goal type
 const unitSuggestions = computed(() => {
-  switch (form.goal_type) {
-    case 'WEIGHT_LOSS':
-      return ['kg', '公斤']
-    case 'MUSCLE_GAIN':
-      return ['kg', '公斤']
-    case 'BODY_SHAPE':
-      return ['%', 'cm']
-    default:
-      return []
-  }
+  return form.goal_type ? (UNIT_SUGGESTIONS[form.goal_type] || EMPTY_UNITS) : EMPTY_UNITS
 })
 
 // Submit handler
