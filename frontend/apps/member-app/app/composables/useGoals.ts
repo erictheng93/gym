@@ -110,15 +110,17 @@ export const useGoals = () => {
   const getGoal = async (id: string): Promise<Goal | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Goal }>(`${apiUrl}/api/member/goals/${id}`, {
-        headers: getAuthHeader(),
-      })
+    return deduplicateRequest(`member:goal:${id}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Goal }>(`${apiUrl}/api/member/goals/${id}`, {
+          headers: getAuthHeader(),
+        })
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**

@@ -194,32 +194,65 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Get session details
-  const [session] = await db
-    .select({
-      id: classSessions.id,
-      classId: classSessions.classId,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      endTime: classSessions.endTime,
-      room: classSessions.room,
-      maxCapacity: classSessions.maxCapacity,
-      currentCount: classSessions.currentCount,
-      waitlistCount: classSessions.waitlistCount,
-      sessionStatus: classSessions.sessionStatus,
-      cancelledReason: classSessions.cancelledReason,
-      cancelledAt: classSessions.cancelledAt,
-      instructorId: classSessions.instructorId,
-      className: classes.name,
-      classCategory: classes.category,
-      classDuration: classes.durationMinutes,
-      classDescription: classes.description,
-      branchId: classSessions.branchId,
-    })
-    .from(classSessions)
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(eq(classSessions.id, id))
-    .limit(1);
+  // Concurrently fetch session, bookings with member details, and lesson plan
+  const [[session], bookingsData, [lessonPlan]] = await Promise.all([
+    db
+      .select({
+        id: classSessions.id,
+        classId: classSessions.classId,
+        sessionDate: classSessions.sessionDate,
+        startTime: classSessions.startTime,
+        endTime: classSessions.endTime,
+        room: classSessions.room,
+        maxCapacity: classSessions.maxCapacity,
+        currentCount: classSessions.currentCount,
+        waitlistCount: classSessions.waitlistCount,
+        sessionStatus: classSessions.sessionStatus,
+        cancelledReason: classSessions.cancelledReason,
+        cancelledAt: classSessions.cancelledAt,
+        instructorId: classSessions.instructorId,
+        className: classes.name,
+        classCategory: classes.category,
+        classDuration: classes.durationMinutes,
+        classDescription: classes.description,
+        branchId: classSessions.branchId,
+      })
+      .from(classSessions)
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(eq(classSessions.id, id))
+      .limit(1),
+    db
+      .select({
+        id: bookings.id,
+        memberId: bookings.memberId,
+        memberName: members.fullName,
+        memberCode: members.memberCode,
+        memberPhone: members.phone,
+        memberEmail: members.email,
+        bookingStatus: bookings.bookingStatus,
+        bookedAt: bookings.bookedAt,
+        attendedAt: bookings.attendedAt,
+        cancelledAt: bookings.cancelledAt,
+        cancelReason: bookings.cancelReason,
+        contractId: bookings.contractId,
+      })
+      .from(bookings)
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(eq(bookings.sessionId, id))
+      .orderBy(bookings.bookedAt),
+    db
+      .select({
+        id: lessonPlans.id,
+        title: lessonPlans.title,
+        objectives: lessonPlans.objectives,
+        warmupExercises: lessonPlans.warmupExercises,
+        mainExercises: lessonPlans.mainExercises,
+        cooldownExercises: lessonPlans.cooldownExercises,
+      })
+      .from(lessonPlans)
+      .where(eq(lessonPlans.sessionId, id))
+      .limit(1),
+  ]);
 
   if (!session) {
     return c.json({
@@ -237,27 +270,6 @@ app.get('/:id', async (c) => {
       code: 'FORBIDDEN',
     }, 403);
   }
-
-  // Get all bookings with member details
-  const bookingsData = await db
-    .select({
-      id: bookings.id,
-      memberId: bookings.memberId,
-      memberName: members.fullName,
-      memberCode: members.memberCode,
-      memberPhone: members.phone,
-      memberEmail: members.email,
-      bookingStatus: bookings.bookingStatus,
-      bookedAt: bookings.bookedAt,
-      attendedAt: bookings.attendedAt,
-      cancelledAt: bookings.cancelledAt,
-      cancelReason: bookings.cancelReason,
-      contractId: bookings.contractId,
-    })
-    .from(bookings)
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(eq(bookings.sessionId, id))
-    .orderBy(bookings.bookedAt);
 
   // Get class records for attended bookings
   const bookingIds = bookingsData.map(b => b.id);
@@ -290,20 +302,6 @@ app.get('/:id', async (c) => {
       return acc;
     }, {} as typeof recordsMap);
   }
-
-  // Get lesson plan if linked
-  const [lessonPlan] = await db
-    .select({
-      id: lessonPlans.id,
-      title: lessonPlans.title,
-      objectives: lessonPlans.objectives,
-      warmupExercises: lessonPlans.warmupExercises,
-      mainExercises: lessonPlans.mainExercises,
-      cooldownExercises: lessonPlans.cooldownExercises,
-    })
-    .from(lessonPlans)
-    .where(eq(lessonPlans.sessionId, id))
-    .limit(1);
 
   // Format response
   const formattedBookings = bookingsData.map(b => ({

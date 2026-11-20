@@ -204,14 +204,42 @@ export const useClasses = () => {
     endDate?: string
     limit?: number
   }) => {
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `member:upcomingSessions:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    const cacheKey = `${CACHE_KEY_SESSIONS}:${JSON.stringify(options || {})}`
+      const cacheKey = `${CACHE_KEY_SESSIONS}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<ClassSession[]>(cacheKey)
+          if (cached) {
+            upcomingSessions.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.branchId) params.append('branch_id', options.branchId)
+        if (options?.startDate) params.append('start_date', options.startDate)
+        if (options?.endDate) params.append('end_date', options.endDate)
+        if (options?.limit) params.append('limit', String(options.limit))
+
+        const response = await $fetch<SessionsResponse>(`${apiUrl}/api/member/classes/sessions?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          upcomingSessions.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Network error fallback to cache
         const cached = await getCache<ClassSession[]>(cacheKey)
         if (cached) {
           upcomingSessions.value = cached
@@ -219,50 +247,27 @@ export const useClasses = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.branchId) params.append('branch_id', options.branchId)
-      if (options?.startDate) params.append('start_date', options.startDate)
-      if (options?.endDate) params.append('end_date', options.endDate)
-      if (options?.limit) params.append('limit', String(options.limit))
-
-      const response = await $fetch<SessionsResponse>(`${apiUrl}/api/member/classes/sessions?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        upcomingSessions.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Network error fallback to cache
-      const cached = await getCache<ClassSession[]>(cacheKey)
-      if (cached) {
-        upcomingSessions.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
    * Get a single session by ID
    */
   const getSession = async (sessionId: string): Promise<ClassSession | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: ClassSession }>(
-        `${apiUrl}/api/member/classes/sessions/${sessionId}`,
-        { headers: getAuthHeader() }
-      )
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+    return deduplicateRequest(`member:session:${sessionId}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: ClassSession }>(
+          `${apiUrl}/api/member/classes/sessions/${sessionId}`,
+          { headers: getAuthHeader() }
+        )
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**

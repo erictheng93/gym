@@ -78,6 +78,9 @@ export interface LeadAnalytics {
   }>
 }
 
+const inFlightLeadsMap = new Map<string, Promise<void>>()
+const inFlightSingleLeadMap = new Map<string, Promise<Lead | null>>()
+
 export const useLeads = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -101,56 +104,78 @@ export const useLeads = () => {
     search?: string
     page?: number
     limit?: number
-  }) => {
-    isLoading.value = true
-    const { status, source, assignedTo, branchId, search, page = 1, limit = 20 } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      if (status) params.append('status', status)
-      if (source) params.append('source', source)
-      if (assignedTo) params.append('assigned_to', assignedTo)
-      if (branchId) params.append('branch_id', branchId)
-      if (search) params.append('search', search)
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: Lead[]
-        meta: { total: number }
-      }>(`${apiUrl}/leads?${params}`)
-
-      if (response.success) {
-        leads.value = response.data
-        totalCount.value = response.meta.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'useLeads.fetchLeads',
-        customMessage: '取得潛在客戶列表失敗'
-      })
-      leads.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightLeadsMap.has(key)) {
+      return inFlightLeadsMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { status, source, assignedTo, branchId, search, page = 1, limit = 20 } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        if (status) params.append('status', status)
+        if (source) params.append('source', source)
+        if (assignedTo) params.append('assigned_to', assignedTo)
+        if (branchId) params.append('branch_id', branchId)
+        if (search) params.append('search', search)
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: Lead[]
+          meta: { total: number }
+        }>(`${apiUrl}/leads?${params}`)
+
+        if (response.success) {
+          leads.value = response.data
+          totalCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useLeads.fetchLeads',
+          customMessage: '取得潛在客戶列表失敗'
+        })
+        leads.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightLeadsMap.delete(key)
+      }
+    })()
+
+    inFlightLeadsMap.set(key, promise)
+    return promise
   }
 
   /**
    * Get single lead with activities
    */
-  const getLead = async (id: string): Promise<Lead | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: Lead }>(`${apiUrl}/leads/${id}`)
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useLeads.getLead',
-        customMessage: '取得潛在客戶詳情失敗'
-      })
-      return null
+  const getLead = async (id: string, force = false): Promise<Lead | null> => {
+    if (!force && inFlightSingleLeadMap.has(id)) {
+      return inFlightSingleLeadMap.get(id)!
     }
+
+    const promise = (async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Lead }>(`${apiUrl}/leads/${id}`)
+        return response.success ? response.data : null
+      } catch (error) {
+        handleError(error, {
+          context: 'useLeads.getLead',
+          customMessage: '取得潛在客戶詳情失敗'
+        })
+        return null
+      } finally {
+        inFlightSingleLeadMap.delete(id)
+      }
+    })()
+
+    inFlightSingleLeadMap.set(id, promise)
+    return promise
   }
 
   /**

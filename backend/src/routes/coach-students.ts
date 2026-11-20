@@ -55,45 +55,18 @@ app.get('/', async (c) => {
   const limitNum = Math.min(parseInt(limit), 100);
   const offsetNum = parseInt(offset);
 
-  // Build conditions for assignments
-  const assignmentConditions = [
+  // Build conditions for assignments and members joined
+  const conditions = [
     eq(coachMemberAssignments.coachId, coach.id),
     sql`${coachMemberAssignments.unassignedAt} IS NULL`,
   ];
 
   if (role) {
-    assignmentConditions.push(eq(coachMemberAssignments.role, role as 'PRIMARY' | 'SECONDARY'));
+    conditions.push(eq(coachMemberAssignments.role, role as 'PRIMARY' | 'SECONDARY'));
   }
-
-  // Get assigned member IDs
-  const assignments = await db
-    .select({
-      memberId: coachMemberAssignments.memberId,
-      role: coachMemberAssignments.role,
-      assignedAt: coachMemberAssignments.assignedAt,
-    })
-    .from(coachMemberAssignments)
-    .where(and(...assignmentConditions));
-
-  const memberIds = assignments.map(a => a.memberId);
-
-  if (memberIds.length === 0) {
-    return c.json({
-      success: true,
-      data: [],
-      meta: {
-        total: 0,
-        limit: limitNum,
-        offset: offsetNum,
-      },
-    });
-  }
-
-  // Build member conditions
-  const memberConditions = [inArray(members.id, memberIds)];
 
   if (search) {
-    memberConditions.push(
+    conditions.push(
       or(
         like(members.fullName, `%${search}%`),
         like(members.memberCode, `%${search}%`),
@@ -103,10 +76,10 @@ app.get('/', async (c) => {
   }
 
   if (status) {
-    memberConditions.push(eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'));
+    conditions.push(eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'));
   }
 
-  // Get members
+  // Get members with assignment details in a single query + count in parallel
   const [membersData, [countResult]] = await Promise.all([
     db
       .select({
@@ -120,46 +93,52 @@ app.get('/', async (c) => {
         status: members.status,
         avatar: members.avatar,
         joinDate: members.joinDate,
+        role: coachMemberAssignments.role,
+        assignedAt: coachMemberAssignments.assignedAt,
       })
-      .from(members)
-      .where(and(...memberConditions))
+      .from(coachMemberAssignments)
+      .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
+      .where(and(...conditions))
       .orderBy(members.fullName)
       .limit(limitNum)
       .offset(offsetNum),
     db
       .select({ count: sql<number>`count(*)` })
-      .from(members)
-      .where(and(...memberConditions)),
+      .from(coachMemberAssignments)
+      .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
+      .where(and(...conditions)),
   ]);
+
+  if (membersData.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      meta: {
+        total: Number(countResult?.count || 0),
+        limit: limitNum,
+        offset: offsetNum,
+      },
+    });
+  }
 
   // Get active contracts for each member
   const memberIdsForContracts = membersData.map(m => m.id);
-  let activeContracts: Array<{
-    memberId: string;
-    planName: string;
-    endDate: string;
-    remainingCounts: number | null;
-    contractStatus: string;
-  }> = [];
-
-  if (memberIdsForContracts.length > 0) {
-    activeContracts = await db
-      .select({
-        memberId: contracts.memberId,
-        planName: membershipPlans.name,
-        endDate: contracts.endDate,
-        remainingCounts: contracts.remainingCounts,
-        contractStatus: contracts.status,
-      })
-      .from(contracts)
-      .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-      .where(
-        and(
-          inArray(contracts.memberId, memberIdsForContracts),
-          eq(contracts.status, 'ACTIVE')
-        )
-      );
-  }
+  const activeContracts = await db
+    .select({
+      memberId: contracts.memberId,
+      planName: membershipPlans.name,
+      endDate: contracts.endDate,
+      remainingCounts: contracts.remainingCounts,
+      contractStatus: contracts.status,
+    })
+    .from(contracts)
+    .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+    .where(
+      and(
+        inArray(contracts.memberId, memberIdsForContracts),
+        eq(contracts.status, 'ACTIVE')
+      )
+    );
 
   // Group contracts by member
   const contractsByMember = activeContracts.reduce((acc, c) => {
@@ -180,15 +159,6 @@ app.get('/', async (c) => {
     status: string;
   }>>);
 
-  // Get assignment roles
-  const rolesByMember = assignments.reduce((acc, a) => {
-    acc[a.memberId] = {
-      role: a.role,
-      assigned_at: a.assignedAt,
-    };
-    return acc;
-  }, {} as Record<string, { role: string; assigned_at: Date | null }>);
-
   // Format response
   const formattedData = membersData.map(member => ({
     id: member.id,
@@ -201,8 +171,8 @@ app.get('/', async (c) => {
     status: member.status,
     avatar: member.avatar,
     join_date: member.joinDate,
-    role: rolesByMember[member.id]?.role || 'PRIMARY',
-    assigned_at: rolesByMember[member.id]?.assigned_at,
+    role: member.role || 'PRIMARY',
+    assigned_at: member.assignedAt,
     active_contracts: contractsByMember[member.id] || [],
   }));
 
