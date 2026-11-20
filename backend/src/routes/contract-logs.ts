@@ -42,6 +42,28 @@ const CONTRACT_LOG_SELECT = {
 
 const CONTRACT_LOG_RETURNING = CONTRACT_LOG_SELECT;
 
+const CONTRACT_LOG_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+};
+
+const CONTRACT_LOG_MEMBER_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+};
+
+const CONTRACT_LOG_EMPLOYEE_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+};
+
+const CONTRACT_LOG_WITH_RELATIONS_SELECT = {
+  log: CONTRACT_LOG_SELECT,
+  contract: CONTRACT_LOG_CONTRACT_SELECT,
+  member: CONTRACT_LOG_MEMBER_SELECT,
+  createdBy: CONTRACT_LOG_EMPLOYEE_SELECT,
+};
+
 // List contract logs
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -78,21 +100,7 @@ app.get('/', async (c) => {
   // Get logs with contract and member info
   const [result, [countResult]] = await Promise.all([
     db
-      .select({
-        log: CONTRACT_LOG_SELECT,
-        contract: {
-          id: contracts.id,
-          contractNo: contracts.contractNo,
-        },
-        member: {
-          id: members.id,
-          fullName: members.fullName,
-        },
-        createdBy: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-      })
+      .select(CONTRACT_LOG_WITH_RELATIONS_SELECT)
       .from(contractLogs)
       .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
       .innerJoin(members, eq(contracts.memberId, members.id))
@@ -214,21 +222,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      log: contractLogs,
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
+    .select(CONTRACT_LOG_WITH_RELATIONS_SELECT)
     .from(contractLogs)
     .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
     .innerJoin(members, eq(contracts.memberId, members.id))

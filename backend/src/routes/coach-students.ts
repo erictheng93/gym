@@ -28,6 +28,49 @@ const app = new Hono<{ Variables: CoachVariables }>();
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
+const COACH_STUDENT_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  status: members.status,
+  avatar: members.avatar,
+  joinDate: members.joinDate,
+  role: coachMemberAssignments.role,
+  assignedAt: coachMemberAssignments.assignedAt,
+};
+
+const COACH_STUDENT_CONTRACT_SELECT = {
+  memberId: contracts.memberId,
+  planName: membershipPlans.name,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  contractStatus: contracts.status,
+};
+
+const COACH_STUDENT_DETAIL_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  status: members.status,
+  avatar: members.avatar,
+  joinDate: members.joinDate,
+  address: members.address,
+  emergencyContact: members.emergencyContact,
+  emergencyPhone: members.emergencyPhone,
+  height: members.height,
+  notes: members.notes,
+  role: coachMemberAssignments.role,
+  assignedAt: coachMemberAssignments.assignedAt,
+};
+
 // -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
@@ -93,20 +136,7 @@ app.get('/', async (c) => {
 
   const [membersData, [countResult]] = await Promise.all([
     db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        fullName: members.fullName,
-        phone: members.phone,
-        email: members.email,
-        gender: members.gender,
-        birthday: members.birthday,
-        status: members.status,
-        avatar: members.avatar,
-        joinDate: members.joinDate,
-        role: coachMemberAssignments.role,
-        assignedAt: coachMemberAssignments.assignedAt,
-      })
+      .select(COACH_STUDENT_SELECT)
       .from(coachMemberAssignments)
       .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
       .where(and(...conditions))
@@ -131,13 +161,7 @@ app.get('/', async (c) => {
   // Get active contracts for each member
   const memberIdsForContracts = membersData.map(m => m.id);
   const activeContracts = await db
-    .select({
-      memberId: contracts.memberId,
-      planName: membershipPlans.name,
-      endDate: contracts.endDate,
-      remainingCounts: contracts.remainingCounts,
-      contractStatus: contracts.status,
-    })
+    .select(COACH_STUDENT_CONTRACT_SELECT)
     .from(contracts)
     .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
     .where(
@@ -208,25 +232,7 @@ app.get('/:id', async (c) => {
 
   // Verify assignment and get member details in a single query
   const [member] = await db
-    .select({
-      id: members.id,
-      memberCode: members.memberCode,
-      fullName: members.fullName,
-      phone: members.phone,
-      email: members.email,
-      gender: members.gender,
-      birthday: members.birthday,
-      status: members.status,
-      avatar: members.avatar,
-      joinDate: members.joinDate,
-      address: members.address,
-      emergencyContact: members.emergencyContact,
-      emergencyPhone: members.emergencyPhone,
-      height: members.height,
-      notes: members.notes,
-      role: coachMemberAssignments.role,
-      assignedAt: coachMemberAssignments.assignedAt,
-    })
+    .select(COACH_STUDENT_DETAIL_SELECT)
     .from(coachMemberAssignments)
     .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
     .where(

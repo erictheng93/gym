@@ -127,6 +127,19 @@
   </div>
 </template>
 
+<script lang="ts">
+const weekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
+const dateLabelFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+})
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth',
@@ -142,16 +155,6 @@ const offset = ref(0)
 const limit = 20
 
 // Generate week days for date strip
-const weekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
-const dateLabelFormatter = new Intl.DateTimeFormat('zh-TW', {
-  month: 'long',
-  day: 'numeric',
-  weekday: 'long',
-})
-const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  hour: '2-digit',
-  minute: '2-digit',
-})
 
 const weekDays = computed(() => {
   const today = new Date()

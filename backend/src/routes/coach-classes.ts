@@ -26,6 +26,38 @@ const app = new Hono<{ Variables: CoachVariables }>();
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
+const COACH_SESSION_BOOKING_SELECT = {
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  memberName: members.fullName,
+  memberCode: members.memberCode,
+  bookingStatus: bookings.bookingStatus,
+};
+
+const COACH_SESSION_DETAIL_BOOKING_SELECT = {
+  id: bookings.id,
+  memberId: bookings.memberId,
+  memberName: members.fullName,
+  memberCode: members.memberCode,
+  memberPhone: members.phone,
+  memberEmail: members.email,
+  bookingStatus: bookings.bookingStatus,
+  bookedAt: bookings.bookedAt,
+  attendedAt: bookings.attendedAt,
+  cancelledAt: bookings.cancelledAt,
+  cancelReason: bookings.cancelReason,
+  contractId: bookings.contractId,
+};
+
+const COACH_SESSION_LESSON_PLAN_SELECT = {
+  id: lessonPlans.id,
+  title: lessonPlans.title,
+  objectives: lessonPlans.objectives,
+  warmupExercises: lessonPlans.warmupExercises,
+  mainExercises: lessonPlans.mainExercises,
+  cooldownExercises: lessonPlans.cooldownExercises,
+};
+
 // -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
@@ -117,13 +149,7 @@ app.get('/', async (c) => {
 
   if (sessionIds.length > 0) {
     bookingsData = await db
-      .select({
-        sessionId: bookings.sessionId,
-        memberId: bookings.memberId,
-        memberName: members.fullName,
-        memberCode: members.memberCode,
-        bookingStatus: bookings.bookingStatus,
-      })
+      .select(COACH_SESSION_BOOKING_SELECT)
       .from(bookings)
       .innerJoin(members, eq(bookings.memberId, members.id))
       .where(
@@ -222,33 +248,13 @@ app.get('/:id', async (c) => {
       .where(eq(classSessions.id, id))
       .limit(1),
     db
-      .select({
-        id: bookings.id,
-        memberId: bookings.memberId,
-        memberName: members.fullName,
-        memberCode: members.memberCode,
-        memberPhone: members.phone,
-        memberEmail: members.email,
-        bookingStatus: bookings.bookingStatus,
-        bookedAt: bookings.bookedAt,
-        attendedAt: bookings.attendedAt,
-        cancelledAt: bookings.cancelledAt,
-        cancelReason: bookings.cancelReason,
-        contractId: bookings.contractId,
-      })
+      .select(COACH_SESSION_DETAIL_BOOKING_SELECT)
       .from(bookings)
       .innerJoin(members, eq(bookings.memberId, members.id))
       .where(eq(bookings.sessionId, id))
       .orderBy(bookings.bookedAt),
     db
-      .select({
-        id: lessonPlans.id,
-        title: lessonPlans.title,
-        objectives: lessonPlans.objectives,
-        warmupExercises: lessonPlans.warmupExercises,
-        mainExercises: lessonPlans.mainExercises,
-        cooldownExercises: lessonPlans.cooldownExercises,
-      })
+      .select(COACH_SESSION_LESSON_PLAN_SELECT)
       .from(lessonPlans)
       .where(eq(lessonPlans.sessionId, id))
       .limit(1),

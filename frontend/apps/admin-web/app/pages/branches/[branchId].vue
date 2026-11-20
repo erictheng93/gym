@@ -1,3 +1,13 @@
+<script lang="ts">
+const branchDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
 import type { Branch, Employee } from '~/types/schema'
@@ -37,14 +47,6 @@ const loadBranch = async () => {
 }
 
 onMounted(loadBranch)
-
-const branchDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-})
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'

@@ -48,6 +48,43 @@ const KPI_TEMPLATE_RETURNING = {
   updatedAt: kpiTemplates.updatedAt,
 };
 
+const PERFORMANCE_REVIEW_SELECT = {
+  id: performanceReviews.id,
+  employee_id: performanceReviews.employeeId,
+  reviewer_id: performanceReviews.reviewerId,
+  review_period: performanceReviews.reviewPeriod,
+  review_type: performanceReviews.reviewType,
+  kpi_data: performanceReviews.kpiData,
+  score: performanceReviews.overallScore,
+  comments: performanceReviews.reviewerComments,
+  improvement_plan: performanceReviews.improvementPlan,
+  status: performanceReviews.status,
+  reviewed_at: performanceReviews.reviewedAt,
+  date_created: performanceReviews.createdAt,
+};
+
+const REVIEW_EMPLOYEE_SELECT = {
+  id: employees.id,
+  full_name: employees.fullName,
+  employee_code: employees.employeeCode,
+  job_title_id: employees.jobTitleId,
+  branch_id: employees.branchId,
+  job_title_name: jobTitles.name,
+  branch_name: branches.name,
+};
+
+const KPI_TEMPLATE_SELECT = {
+  id: kpiTemplates.id,
+  name: kpiTemplates.name,
+  description: kpiTemplates.description,
+  job_title_id: kpiTemplates.jobTitleId,
+  review_type: kpiTemplates.reviewType,
+  kpis: kpiTemplates.kpis,
+  is_default: kpiTemplates.isDefault,
+  is_active: kpiTemplates.isActive,
+  date_created: kpiTemplates.createdAt,
+};
+
 // -----------------------------------------------------------------------------
 // GET /reviews - List performance reviews with filters
 // -----------------------------------------------------------------------------
@@ -88,20 +125,7 @@ app.get('/reviews', async (c) => {
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [reviews, countResult] = await Promise.all([
-    db.select({
-      id: performanceReviews.id,
-      employee_id: performanceReviews.employeeId,
-      reviewer_id: performanceReviews.reviewerId,
-      review_period: performanceReviews.reviewPeriod,
-      review_type: performanceReviews.reviewType,
-      kpi_data: performanceReviews.kpiData,
-      score: performanceReviews.overallScore,
-      comments: performanceReviews.reviewerComments,
-      improvement_plan: performanceReviews.improvementPlan,
-      status: performanceReviews.status,
-      reviewed_at: performanceReviews.reviewedAt,
-      date_created: performanceReviews.createdAt,
-    })
+    db.select(PERFORMANCE_REVIEW_SELECT)
       .from(performanceReviews)
       .where(whereClause)
       .orderBy(desc(performanceReviews.createdAt))
@@ -119,15 +143,7 @@ app.get('/reviews', async (c) => {
   ])];
 
   const employeeDetails = employeeIds.length > 0
-    ? await db.select({
-        id: employees.id,
-        full_name: employees.fullName,
-        employee_code: employees.employeeCode,
-        job_title_id: employees.jobTitleId,
-        branch_id: employees.branchId,
-        job_title_name: jobTitles.name,
-        branch_name: branches.name,
-      })
+    ? await db.select(REVIEW_EMPLOYEE_SELECT)
         .from(employees)
         .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
         .leftJoin(branches, eq(employees.branchId, branches.id))
@@ -164,20 +180,7 @@ app.get('/reviews', async (c) => {
 app.get('/reviews/:id', async (c) => {
   const id = c.req.param('id');
 
-  const review = await db.select({
-    id: performanceReviews.id,
-    employee_id: performanceReviews.employeeId,
-    reviewer_id: performanceReviews.reviewerId,
-    review_period: performanceReviews.reviewPeriod,
-    review_type: performanceReviews.reviewType,
-    kpi_data: performanceReviews.kpiData,
-    score: performanceReviews.overallScore,
-    comments: performanceReviews.reviewerComments,
-    improvement_plan: performanceReviews.improvementPlan,
-    status: performanceReviews.status,
-    reviewed_at: performanceReviews.reviewedAt,
-    date_created: performanceReviews.createdAt,
-  })
+  const review = await db.select(PERFORMANCE_REVIEW_SELECT)
     .from(performanceReviews)
     .where(eq(performanceReviews.id, id))
     .limit(1);
@@ -190,15 +193,7 @@ app.get('/reviews/:id', async (c) => {
   const employeeIds = [review[0].employee_id];
   if (review[0].reviewer_id) employeeIds.push(review[0].reviewer_id);
 
-  const employeeDetails = await db.select({
-    id: employees.id,
-    full_name: employees.fullName,
-    employee_code: employees.employeeCode,
-    job_title_id: employees.jobTitleId,
-    branch_id: employees.branchId,
-    job_title_name: jobTitles.name,
-    branch_name: branches.name,
-  })
+  const employeeDetails = await db.select(REVIEW_EMPLOYEE_SELECT)
     .from(employees)
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .leftJoin(branches, eq(employees.branchId, branches.id))
@@ -422,17 +417,7 @@ app.post('/reviews/:id/reject', async (c) => {
 // -----------------------------------------------------------------------------
 
 app.get('/kpi-templates', async (c) => {
-  const templates = await db.select({
-    id: kpiTemplates.id,
-    name: kpiTemplates.name,
-    description: kpiTemplates.description,
-    job_title_id: kpiTemplates.jobTitleId,
-    review_type: kpiTemplates.reviewType,
-    kpis: kpiTemplates.kpis,
-    is_default: kpiTemplates.isDefault,
-    is_active: kpiTemplates.isActive,
-    date_created: kpiTemplates.createdAt,
-  })
+  const templates = await db.select(KPI_TEMPLATE_SELECT)
     .from(kpiTemplates)
     .where(eq(kpiTemplates.isActive, true))
     .orderBy(desc(kpiTemplates.createdAt));

@@ -1,3 +1,7 @@
+<script lang="ts">
+const paymentNumberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
 // Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
@@ -129,8 +133,6 @@ const handleSubmit = async () => {
     isSubmitting.value = false
   }
 }
-
-const paymentNumberFormatter = new Intl.NumberFormat('zh-TW')
 
 const formatCurrency = (amount: number) => {
   return `NT$ ${paymentNumberFormatter.format(amount)}`

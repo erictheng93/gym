@@ -203,6 +203,20 @@
   </div>
 </template>
 
+<script lang="ts">
+const dateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+})
+
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+</script>
+
 <script setup lang="ts">
 import type { ClassBooking } from '~/types/coach'
 
@@ -234,18 +248,6 @@ const getInitials = (name: string) => {
   }
   return ((parts[0] ?? '').charAt(0) + (parts[parts.length - 1] ?? '').charAt(0)).toUpperCase()
 }
-
-const dateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  weekday: 'long',
-})
-
-const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  hour: '2-digit',
-  minute: '2-digit',
-})
 
 const formatDate = (date: Date) => {
   return dateFormatter.format(date)

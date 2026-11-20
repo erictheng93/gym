@@ -8,6 +8,40 @@ import type { AuthVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const ATTENDANCE_LIST_SELECT = {
+  id: attendances.id,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  checkOut: attendances.checkOut,
+  workHours: attendances.workHours,
+  branchId: attendances.branchId,
+  locationIp: attendances.locationIp,
+  locationGps: attendances.locationGps,
+  employeeFullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const ATTENDANCE_DETAIL_SELECT = {
+  id: attendances.id,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  checkOut: attendances.checkOut,
+  workHours: attendances.workHours,
+  branchId: attendances.branchId,
+  locationIp: attendances.locationIp,
+  locationGps: attendances.locationGps,
+  employeeFullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+};
+
+const ATTENDANCE_PATCH_SELECT = {
+  id: attendances.id,
+  checkIn: attendances.checkIn,
+};
+
 app.use('*', authMiddleware, requireAuth);
 
 // -----------------------------------------------------------------------------
@@ -66,20 +100,7 @@ app.get('/', async (c) => {
 
   const [records, countResult] = await Promise.all([
     db
-      .select({
-        id: attendances.id,
-        employeeId: attendances.employeeId,
-        checkIn: attendances.checkIn,
-        checkOut: attendances.checkOut,
-        workHours: attendances.workHours,
-        branchId: attendances.branchId,
-        locationIp: attendances.locationIp,
-        locationGps: attendances.locationGps,
-        employeeFullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        branchName: branches.name,
-        jobTitleName: jobTitles.name,
-      })
+      .select(ATTENDANCE_LIST_SELECT)
       .from(attendances)
       .innerJoin(employees, eq(attendances.employeeId, employees.id))
       .leftJoin(branches, eq(attendances.branchId, branches.id))
@@ -180,19 +201,7 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
 
   const [record] = await db
-    .select({
-      id: attendances.id,
-      employeeId: attendances.employeeId,
-      checkIn: attendances.checkIn,
-      checkOut: attendances.checkOut,
-      workHours: attendances.workHours,
-      branchId: attendances.branchId,
-      locationIp: attendances.locationIp,
-      locationGps: attendances.locationGps,
-      employeeFullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchName: branches.name,
-    })
+    .select(ATTENDANCE_DETAIL_SELECT)
     .from(attendances)
     .innerJoin(employees, eq(attendances.employeeId, employees.id))
     .leftJoin(branches, eq(attendances.branchId, branches.id))
@@ -308,10 +317,7 @@ app.patch('/:id', zValidator('json', updateSchema), async (c) => {
   const data = c.req.valid('json');
 
   const [existing] = await db
-    .select({
-      id: attendances.id,
-      checkIn: attendances.checkIn,
-    })
+    .select(ATTENDANCE_PATCH_SELECT)
     .from(attendances)
     .where(eq(attendances.id, id))
     .limit(1);

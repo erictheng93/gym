@@ -106,6 +106,28 @@
   </div>
 </template>
 
+<script lang="ts">
+const weekMonthFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short' })
+const dayHeaderFormatter = new Intl.DateTimeFormat('zh-TW', {
+  weekday: 'short',
+  month: 'numeric',
+  day: 'numeric',
+})
+const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+function getMonday(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+</script>
+
 <script setup lang="ts">
 import type { ClassBooking } from '~/types/coach'
 
@@ -157,26 +179,6 @@ const classesByDay = computed(() => {
   }
   return map
 })
-
-const weekMonthFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short' })
-const dayHeaderFormatter = new Intl.DateTimeFormat('zh-TW', {
-  weekday: 'short',
-  month: 'numeric',
-  day: 'numeric',
-})
-const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
-function getMonday(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
 
 function previousWeek() {
   const newDate = new Date(currentWeekStart.value)
