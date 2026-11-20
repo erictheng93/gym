@@ -4,6 +4,7 @@ import type { MembershipPlan } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 
 let inFlightPlansPromise: Promise<void> | null = null
+const inFlightSinglePlanMap = new Map<string, Promise<MembershipPlan | null>>()
 
 export const usePlans = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
@@ -49,16 +50,26 @@ export const usePlans = () => {
   }
 
   const getPlan = async (id: string) => {
-    try {
-      const data = await readItem<MembershipPlan>('membership-plans', id)
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'usePlans.getPlan',
-        customMessage: MESSAGES.ERRORS.PLAN_FETCH_FAILED
-      })
-      return null
-    }
+    const existing = inFlightSinglePlanMap.get(id)
+    if (existing) return existing
+
+    const promise = (async () => {
+      try {
+        const data = await readItem<MembershipPlan>('membership-plans', id)
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'usePlans.getPlan',
+          customMessage: MESSAGES.ERRORS.PLAN_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightSinglePlanMap.delete(id)
+      }
+    })()
+
+    inFlightSinglePlanMap.set(id, promise)
+    return promise
   }
 
   const createPlan = async (plan: Partial<MembershipPlan>) => {

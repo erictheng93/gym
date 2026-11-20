@@ -75,6 +75,10 @@ export interface PayrollSummary {
   }
 }
 
+const inFlightSalaryRecordsMap = new Map<string, Promise<void>>()
+const inFlightSingleSalaryRecordMap = new Map<string, Promise<void>>()
+const inFlightPromotionsMap = new Map<string, Promise<void>>()
+
 export const usePayroll = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -100,61 +104,82 @@ export const usePayroll = () => {
     branch_id?: string
     page?: number
     limit?: number
-  }) => {
-    isLoading.value = true
-    const { page = 1, limit = 20, ...filters } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value)
-      })
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: SalaryRecord[]
-        meta: { total: number }
-      }>(`${apiUrl}/payroll/salary-records?${params}`)
-
-      if (response.success) {
-        salaryRecords.value = response.data
-        totalCount.value = response.meta.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePayroll.fetchSalaryRecords',
-        customMessage: '取得薪資紀錄失敗'
-      })
-      salaryRecords.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force) {
+      const existing = inFlightSalaryRecordsMap.get(key)
+      if (existing) return existing
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { page = 1, limit = 20, ...filters } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) params.append(key, value)
+        })
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: SalaryRecord[]
+          meta: { total: number }
+        }>(`${apiUrl}/payroll/salary-records?${params}`)
+
+        if (response.success) {
+          salaryRecords.value = response.data
+          totalCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePayroll.fetchSalaryRecords',
+          customMessage: '取得薪資紀錄失敗'
+        })
+        salaryRecords.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightSalaryRecordsMap.delete(key)
+      }
+    })()
+
+    inFlightSalaryRecordsMap.set(key, promise)
+    return promise
   }
 
   /**
    * Fetch single salary record
    */
   const fetchSalaryRecord = async (id: string) => {
-    isLoading.value = true
-    try {
-      const response = await $fetch<{ success: boolean; data: SalaryRecord }>(
-        `${apiUrl}/payroll/salary-records/${id}`
-      )
-      if (response.success) {
-        currentSalaryRecord.value = response.data
+    const existing = inFlightSingleSalaryRecordMap.get(id)
+    if (existing) return existing
+
+    const promise = (async () => {
+      isLoading.value = true
+      try {
+        const response = await $fetch<{ success: boolean; data: SalaryRecord }>(
+          `${apiUrl}/payroll/salary-records/${id}`
+        )
+        if (response.success) {
+          currentSalaryRecord.value = response.data
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePayroll.fetchSalaryRecord',
+          customMessage: '取得薪資詳情失敗'
+        })
+        currentSalaryRecord.value = null
+      } finally {
+        isLoading.value = false
+        inFlightSingleSalaryRecordMap.delete(id)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePayroll.fetchSalaryRecord',
-        customMessage: '取得薪資詳情失敗'
-      })
-      currentSalaryRecord.value = null
-    } finally {
-      isLoading.value = false
-    }
+    })()
+
+    inFlightSingleSalaryRecordMap.set(id, promise)
+    return promise
   }
 
   /**
@@ -277,38 +302,50 @@ export const usePayroll = () => {
     type?: string
     page?: number
     limit?: number
-  }) => {
-    isPromotionLoading.value = true
-    const { page = 1, limit = 20, ...filters } = options || {}
-
-    try {
-      const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value)
-      })
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
-
-      const response = await $fetch<{
-        success: boolean
-        data: PromotionRecord[]
-        meta: { total: number }
-      }>(`${apiUrl}/payroll/promotions?${params}`)
-
-      if (response.success) {
-        promotions.value = response.data
-        promotionCount.value = response.meta.total
-      }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePayroll.fetchPromotions',
-        customMessage: '取得異動紀錄失敗'
-      })
-      promotions.value = []
-      promotionCount.value = 0
-    } finally {
-      isPromotionLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force) {
+      const existing = inFlightPromotionsMap.get(key)
+      if (existing) return existing
     }
+
+    const promise = (async () => {
+      isPromotionLoading.value = true
+      const { page = 1, limit = 20, ...filters } = options || {}
+
+      try {
+        const params = new URLSearchParams()
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) params.append(key, value)
+        })
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
+
+        const response = await $fetch<{
+          success: boolean
+          data: PromotionRecord[]
+          meta: { total: number }
+        }>(`${apiUrl}/payroll/promotions?${params}`)
+
+        if (response.success) {
+          promotions.value = response.data
+          promotionCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePayroll.fetchPromotions',
+          customMessage: '取得異動紀錄失敗'
+        })
+        promotions.value = []
+        promotionCount.value = 0
+      } finally {
+        isPromotionLoading.value = false
+        inFlightPromotionsMap.delete(key)
+      }
+    })()
+
+    inFlightPromotionsMap.set(key, promise)
+    return promise
   }
 
   /**

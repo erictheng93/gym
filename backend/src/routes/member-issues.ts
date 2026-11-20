@@ -263,43 +263,48 @@ app.put(
     const issueId = c.req.param('id');
     const updates = c.req.valid('json');
 
-    // Verify ownership and status
-    const [existing] = await db
-      .select({
-        id: issueReports.id,
-        status: issueReports.status,
-      })
-      .from(issueReports)
-      .where(and(
-        eq(issueReports.id, issueId),
-        eq(issueReports.memberId, memberInfo.id),
-      ))
-      .limit(1);
-
-    if (!existing) {
-      return c.json({
-        success: false,
-        error: '問題回報不存在',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
-    if (existing.status !== 'SUBMITTED') {
-      return c.json({
-        success: false,
-        error: '問題已在處理中，無法修改',
-        code: 'CANNOT_EDIT',
-      }, 400);
-    }
-
+    // Fast-path atomic update (ownership and status = SUBMITTED)
     const [issue] = await db
       .update(issueReports)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(issueReports.id, issueId))
+      .where(and(
+        eq(issueReports.id, issueId),
+        eq(issueReports.memberId, memberInfo.id),
+        eq(issueReports.status, 'SUBMITTED'),
+      ))
       .returning();
+
+    if (!issue) {
+      // Discriminate between 404 (not found) and 400 (cannot edit)
+      const [existing] = await db
+        .select({
+          id: issueReports.id,
+          status: issueReports.status,
+        })
+        .from(issueReports)
+        .where(and(
+          eq(issueReports.id, issueId),
+          eq(issueReports.memberId, memberInfo.id),
+        ))
+        .limit(1);
+
+      if (!existing) {
+        return c.json({
+          success: false,
+          error: '問題回報不存在',
+          code: 'NOT_FOUND',
+        }, 404);
+      }
+
+      return c.json({
+        success: false,
+        error: '問題已在處理中，無法修改',
+        code: 'CANNOT_EDIT',
+      }, 400);
+    }
 
     return c.json({
       success: true,

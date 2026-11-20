@@ -48,6 +48,9 @@ export interface MonthlyAttendanceStats {
   totalLateMinutes: number
 }
 
+const inFlightTodaySummaryMap = new Map<string, Promise<TodayAttendanceSummary>>()
+const inFlightTodayAttendancesMap = new Map<string, Promise<void>>()
+
 export const useAttendance = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
 
@@ -69,44 +72,54 @@ export const useAttendance = () => {
 
   // Fetch today's attendance records
   const fetchTodayAttendances = async (branchId?: string) => {
-    isLoading.value = true
-    const today = getTodayDate()
+    const key = branchId || 'all'
+    const existing = inFlightTodayAttendancesMap.get(key)
+    if (existing) return existing
 
-    try {
-      const filter: Record<string, unknown> = {
-        attendance_date: today
+    const promise = (async () => {
+      isLoading.value = true
+      const today = getTodayDate()
+
+      try {
+        const filter: Record<string, unknown> = {
+          attendance_date: today
+        }
+
+        if (branchId) {
+          filter.branch_id = branchId
+        }
+
+        const result = await readItems<Attendance>('attendances', {
+          filter,
+          sort: 'check_in',
+          sortOrder: 'desc',
+          limit: 50
+        })
+
+        todayAttendances.value = result.data.map((att): AttendanceRecord => ({
+          id: att.id,
+          employee: att.employee as Employee,
+          check_in: att.check_in || null,
+          check_out: att.check_out || null,
+          attendance_date: (att.attendance_date || today) as string,
+          check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
+          attendance_status: (att.attendance_status as AttendanceRecord['attendance_status']) || 'PRESENT',
+          late_minutes: att.late_minutes || 0,
+          early_leave_minutes: att.early_leave_minutes || 0,
+          work_hours: att.work_hours || null,
+          notes: att.notes || undefined
+        }))
+        todayCount.value = result.total
+      } catch (error) {
+        console.error('Failed to fetch today attendances:', error)
+      } finally {
+        isLoading.value = false
+        inFlightTodayAttendancesMap.delete(key)
       }
+    })()
 
-      if (branchId) {
-        filter.branch_id = branchId
-      }
-
-      const result = await readItems<Attendance>('attendances', {
-        filter,
-        sort: 'check_in',
-        sortOrder: 'desc',
-        limit: 50
-      })
-
-      todayAttendances.value = result.data.map((att): AttendanceRecord => ({
-        id: att.id,
-        employee: att.employee as Employee,
-        check_in: att.check_in || null,
-        check_out: att.check_out || null,
-        attendance_date: (att.attendance_date || today) as string,
-        check_type: (att.check_type as AttendanceRecord['check_type']) || 'REGULAR',
-        attendance_status: (att.attendance_status as AttendanceRecord['attendance_status']) || 'PRESENT',
-        late_minutes: att.late_minutes || 0,
-        early_leave_minutes: att.early_leave_minutes || 0,
-        work_hours: att.work_hours || null,
-        notes: att.notes || undefined
-      }))
-      todayCount.value = result.total
-    } catch (error) {
-      console.error('Failed to fetch today attendances:', error)
-    } finally {
-      isLoading.value = false
-    }
+    inFlightTodayAttendancesMap.set(key, promise)
+    return promise
   }
 
   // Check if employee has checked in today
@@ -346,67 +359,77 @@ export const useAttendance = () => {
    * 取得今日全員考勤概況（Dashboard 用）
    */
   const fetchTodayAttendanceSummary = async (branchId?: string): Promise<TodayAttendanceSummary> => {
-    const today = getTodayDate()
+    const key = branchId || 'all'
+    const existing = inFlightTodaySummaryMap.get(key)
+    if (existing) return existing
 
-    try {
-      // Get total active employees
-      const employeeFilter: Record<string, unknown> = { employment_status: 'ACTIVE' }
-      if (branchId) employeeFilter.branch_id = branchId
+    const promise = (async () => {
+      const today = getTodayDate()
 
-      const employeesResult = await readItems<Employee>('employees', {
-        filter: employeeFilter,
-        limit: 1000
-      })
-      const totalEmployees = employeesResult.total
+      try {
+        // Parallelize fetching employees, attendances, and leave requests
+        const employeeFilter: Record<string, unknown> = { employment_status: 'ACTIVE' }
+        if (branchId) employeeFilter.branch_id = branchId
 
-      // Get today's attendances
-      const attendanceFilter: Record<string, unknown> = { attendance_date: today }
-      if (branchId) attendanceFilter.branch_id = branchId
+        const attendanceFilter: Record<string, unknown> = { attendance_date: today }
+        if (branchId) attendanceFilter.branch_id = branchId
 
-      const attendanceResult = await readItems<Attendance>('attendances', {
-        filter: attendanceFilter,
-        limit: 1000
-      })
-      const attendances = attendanceResult.data
+        const [employeesResult, attendanceResult, leaveResult] = await Promise.all([
+          readItems<Employee>('employees', {
+            filter: employeeFilter,
+            limit: 1000
+          }),
+          readItems<Attendance>('attendances', {
+            filter: attendanceFilter,
+            limit: 1000
+          }),
+          readItems<{ id: string }>('leave_requests', {
+            filter: {
+              leave_status: 'APPROVED',
+              start_date_lte: today,
+              end_date_gte: today
+            },
+            limit: 1000
+          }),
+        ])
 
-      // Get approved leaves for today
-      const leaveResult = await readItems<{ id: string }>('leave_requests', {
-        filter: {
-          leave_status: 'APPROVED',
-          start_date_lte: today,
-          end_date_gte: today
-        },
-        limit: 1000
-      })
-      const onLeave = leaveResult.total
+        const totalEmployees = employeesResult.total
+        const attendances = attendanceResult.data
+        const onLeave = leaveResult.total
 
-      const checkedIn = attendances.filter(a => a.check_in).length
-      const checkedOut = attendances.filter(a => a.check_out).length
-      const late = attendances.filter(a => a.attendance_status === 'LATE').length
-      const notCheckedIn = totalEmployees - checkedIn - onLeave
+        const checkedIn = attendances.filter(a => a.check_in).length
+        const checkedOut = attendances.filter(a => a.check_out).length
+        const late = attendances.filter(a => a.attendance_status === 'LATE').length
+        const notCheckedIn = totalEmployees - checkedIn - onLeave
 
-      const summary: TodayAttendanceSummary = {
-        totalEmployees,
-        checkedIn,
-        notCheckedIn: Math.max(0, notCheckedIn),
-        checkedOut,
-        late,
-        onLeave
+        const summary: TodayAttendanceSummary = {
+          totalEmployees,
+          checkedIn,
+          notCheckedIn: Math.max(0, notCheckedIn),
+          checkedOut,
+          late,
+          onLeave
+        }
+
+        todayAttendanceSummary.value = summary
+        return summary
+      } catch (error) {
+        console.error('Failed to fetch today attendance summary:', error)
+        return {
+          totalEmployees: 0,
+          checkedIn: 0,
+          notCheckedIn: 0,
+          checkedOut: 0,
+          late: 0,
+          onLeave: 0
+        }
+      } finally {
+        inFlightTodaySummaryMap.delete(key)
       }
+    })()
 
-      todayAttendanceSummary.value = summary
-      return summary
-    } catch (error) {
-      console.error('Failed to fetch today attendance summary:', error)
-      return {
-        totalEmployees: 0,
-        checkedIn: 0,
-        notCheckedIn: 0,
-        checkedOut: 0,
-        late: 0,
-        onLeave: 0
-      }
-    }
+    inFlightTodaySummaryMap.set(key, promise)
+    return promise
   }
 
   /**

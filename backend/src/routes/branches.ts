@@ -52,21 +52,12 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(eq(branches.id, id))
-    .limit(1);
-
-  if (!branch) {
-    return c.json({ success: false, error: '分店不存在' }, 404);
-  }
-
-  if (branch.tenantId !== tenantId) {
-    return c.json({ success: false, error: '無權限存取此分店' }, 403);
-  }
-
-  const [branchEmployees, [memberCount]] = await Promise.all([
+  const [[branch], branchEmployees, [memberCount]] = await Promise.all([
+    db
+      .select()
+      .from(branches)
+      .where(eq(branches.id, id))
+      .limit(1),
     db
       .select()
       .from(employees)
@@ -77,6 +68,14 @@ app.get('/:id', async (c) => {
       .from(members)
       .where(eq(members.branchId, id)),
   ]);
+
+  if (!branch) {
+    return c.json({ success: false, error: '分店不存在' }, 404);
+  }
+
+  if (branch.tenantId !== tenantId) {
+    return c.json({ success: false, error: '無權限存取此分店' }, 403);
+  }
 
   return c.json({
     success: true,
@@ -149,11 +148,17 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(eq(branches.id, id))
-    .limit(1);
+  const [[branch], [employeeCount]] = await Promise.all([
+    db
+      .select()
+      .from(branches)
+      .where(eq(branches.id, id))
+      .limit(1),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(employees)
+      .where(eq(employees.branchId, id)),
+  ]);
 
   if (!branch) {
     return c.json({ success: false, error: '分店不存在' }, 404);
@@ -166,11 +171,6 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
   if (branch.type === 'HEADQUARTER') {
     return c.json({ success: false, error: '無法刪除總店' }, 400);
   }
-
-  const [employeeCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(employees)
-    .where(eq(employees.branchId, id));
 
   if (Number(employeeCount?.count || 0) > 0) {
     return c.json({ success: false, error: '此分店仍有員工，請先轉移員工' }, 400);

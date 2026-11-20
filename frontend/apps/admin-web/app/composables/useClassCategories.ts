@@ -8,6 +8,11 @@ import { MESSAGES } from '~/constants'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
+const inFlightCategoriesMap = new Map<string, Promise<void>>()
+let inFlightRootCategoriesPromise: Promise<ClassCategory[]> | null = null
+let inFlightCategoryTreePromise: Promise<ClassCategory[]> | null = null
+const inFlightSingleCategoryMap = new Map<string, Promise<ClassCategory | null>>()
+
 export const useClassCategories = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
@@ -24,123 +29,165 @@ export const useClassCategories = () => {
     search?: string
     limit?: number
     page?: number
-  }) => {
-    isLoading.value = true
-    const { parentId, isActive, search, limit = 100, page = 1 } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-
-      // 篩選父類別
-      if (parentId === null) {
-        filter.parent_id_null = true
-      } else if (parentId) {
-        filter.parent_id = parentId
-      }
-
-      // 篩選啟用狀態
-      if (isActive !== undefined) {
-        filter.is_active = isActive
-      }
-
-      const { data, total } = await readItems<ClassCategory>('class_categories', {
-        page,
-        limit,
-        search,
-        filter,
-        sort: 'sort'
-      })
-
-      categories.value = data
-      totalCount.value = total
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassCategories.fetchCategories',
-        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
-      })
-      categories.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force) {
+      const existing = inFlightCategoriesMap.get(key)
+      if (existing) return existing
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { parentId, isActive, search, limit = 100, page = 1 } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+
+        // 篩選父類別
+        if (parentId === null) {
+          filter.parent_id_null = true
+        } else if (parentId) {
+          filter.parent_id = parentId
+        }
+
+        // 篩選啟用狀態
+        if (isActive !== undefined) {
+          filter.is_active = isActive
+        }
+
+        const { data, total } = await readItems<ClassCategory>('class_categories', {
+          page,
+          limit,
+          search,
+          filter,
+          sort: 'sort'
+        })
+
+        categories.value = data
+        totalCount.value = total
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassCategories.fetchCategories',
+          customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+        })
+        categories.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightCategoriesMap.delete(key)
+      }
+    })()
+
+    inFlightCategoriesMap.set(key, promise)
+    return promise
   }
 
   /**
    * 獲取所有根類別（用於樹狀選擇器）
    */
-  const fetchRootCategories = async () => {
-    try {
-      const { data } = await readItems<ClassCategory>('class_categories', {
-        filter: {
-          parent_id_null: true,
-          is_active: true
-        },
-        sort: 'sort'
-      })
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassCategories.fetchRootCategories',
-        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
-      })
-      return []
+  const fetchRootCategories = async (force = false) => {
+    if (!force && inFlightRootCategoriesPromise) {
+      return inFlightRootCategoriesPromise
     }
+
+    inFlightRootCategoriesPromise = (async () => {
+      try {
+        const { data } = await readItems<ClassCategory>('class_categories', {
+          filter: {
+            parent_id_null: true,
+            is_active: true
+          },
+          sort: 'sort'
+        })
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassCategories.fetchRootCategories',
+          customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+        })
+        return []
+      } finally {
+        inFlightRootCategoriesPromise = null
+      }
+    })()
+
+    return inFlightRootCategoriesPromise
   }
 
   /**
    * 獲取類別樹（包含子類別）
    */
-  const fetchCategoryTree = async () => {
-    try {
-      const { data } = await readItems<ClassCategory>('class_categories', {
-        filter: {
-          is_active: true,
-          status: 'published'
-        },
-        limit: 1000,
-        sort: 'sort'
-      })
-
-      // 建構樹狀結構
-      const items = data
-      const rootItems = items.filter(item => !item.parent_id)
-
-      const buildTree = (parentId: string | null): ClassCategory[] => {
-        return items
-          .filter(item => item.parent_id === parentId)
-          .map(item => ({
-            ...item,
-            children: buildTree(item.id)
-          }))
-      }
-
-      return rootItems.map(item => ({
-        ...item,
-        children: buildTree(item.id)
-      }))
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassCategories.fetchCategoryTree',
-        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
-      })
-      return []
+  const fetchCategoryTree = async (force = false) => {
+    if (!force && inFlightCategoryTreePromise) {
+      return inFlightCategoryTreePromise
     }
+
+    inFlightCategoryTreePromise = (async () => {
+      try {
+        const { data } = await readItems<ClassCategory>('class_categories', {
+          filter: {
+            is_active: true,
+            status: 'published'
+          },
+          limit: 1000,
+          sort: 'sort'
+        })
+
+        // 建構樹狀結構
+        const items = data
+        const rootItems = items.filter(item => !item.parent_id)
+
+        const buildTree = (parentId: string | null): ClassCategory[] => {
+          return items
+            .filter(item => item.parent_id === parentId)
+            .map(item => ({
+              ...item,
+              children: buildTree(item.id)
+            }))
+        }
+
+        return rootItems.map(item => ({
+          ...item,
+          children: buildTree(item.id)
+        }))
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassCategories.fetchCategoryTree',
+          customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+        })
+        return []
+      } finally {
+        inFlightCategoryTreePromise = null
+      }
+    })()
+
+    return inFlightCategoryTreePromise
   }
 
   /**
    * 獲取單一類別
    */
   const getCategory = async (id: string) => {
-    try {
-      const data = await readItem<ClassCategory>('class_categories', id)
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassCategories.getCategory',
-        customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
-      })
-      return null
-    }
+    const existing = inFlightSingleCategoryMap.get(id)
+    if (existing) return existing
+
+    const promise = (async () => {
+      try {
+        const data = await readItem<ClassCategory>('class_categories', id)
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassCategories.getCategory',
+          customMessage: MESSAGES.ERRORS.CATEGORY_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightSingleCategoryMap.delete(id)
+      }
+    })()
+
+    inFlightSingleCategoryMap.set(id, promise)
+    return promise
   }
 
   /**
