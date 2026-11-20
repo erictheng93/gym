@@ -136,25 +136,22 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const measurementId = c.req.param('id');
 
-  // Verify ownership
-  const [existing] = await db
-    .select({ id: bodyMeasurements.id })
-    .from(bodyMeasurements)
+  // Atomic delete with ownership check
+  const [deleted] = await db
+    .delete(bodyMeasurements)
     .where(and(
       eq(bodyMeasurements.id, measurementId),
       eq(bodyMeasurements.memberId, memberInfo.id),
     ))
-    .limit(1);
+    .returning({ id: bodyMeasurements.id });
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({
       success: false,
       error: '記錄不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  await db.delete(bodyMeasurements).where(eq(bodyMeasurements.id, measurementId));
 
   return c.json({
     success: true,
@@ -202,7 +199,13 @@ app.get('/progress', async (c) => {
       ))
       .orderBy(asc(bodyMeasurements.date)),
     db
-      .select()
+      .select({
+        date: bodyMeasurements.date,
+        weight: bodyMeasurements.weight,
+        bodyFat: bodyMeasurements.bodyFat,
+        muscleMass: bodyMeasurements.muscleMass,
+        bmi: bodyMeasurements.bmi,
+      })
       .from(bodyMeasurements)
       .where(eq(bodyMeasurements.memberId, memberInfo.id))
       .orderBy(desc(bodyMeasurements.date))

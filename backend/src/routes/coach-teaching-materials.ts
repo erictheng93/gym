@@ -386,11 +386,17 @@ app.get('/search', async (c) => {
 app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
-
-  // Get material
-  const [material] = await db
-    .select()
+  // Get material and file info in a single query
+  const [result] = await db
+    .select({
+      material: teachingMaterials,
+      fileId: files.id,
+      filename: files.filename,
+      mimeType: files.mimeType,
+      size: files.size,
+    })
     .from(teachingMaterials)
+    .leftJoin(files, eq(teachingMaterials.fileId, files.id))
     .where(
       and(
         eq(teachingMaterials.id, id),
@@ -399,7 +405,7 @@ app.get('/:id', async (c) => {
     )
     .limit(1);
 
-  if (!material) {
+  if (!result) {
     return c.json({
       success: false,
       error: '找不到教學資源',
@@ -407,29 +413,13 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
-  // Get file info if linked
-  let fileInfo = null;
-  if (material.fileId) {
-    const [file] = await db
-      .select({
-        id: files.id,
-        filename: files.filename,
-        mimeType: files.mimeType,
-        size: files.size,
-      })
-      .from(files)
-      .where(eq(files.id, material.fileId))
-      .limit(1);
-
-    if (file) {
-      fileInfo = {
-        id: file.id,
-        filename: file.filename,
-        mime_type: file.mimeType,
-        size: file.size,
-      };
-    }
-  }
+  const { material } = result;
+  const fileInfo = result.fileId ? {
+    id: result.fileId,
+    filename: result.filename,
+    mime_type: result.mimeType,
+    size: result.size,
+  } : null;
 
   // Get related materials (same muscle groups or category)
   const muscleGroups = material.muscleGroups as string[] || [];
@@ -619,34 +609,29 @@ app.delete('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Verify material exists and belongs to tenant
-  const [existingMaterial] = await db
-    .select()
-    .from(teachingMaterials)
+  // Atomic soft delete with tenant check
+  const [deletedMaterial] = await db
+    .update(teachingMaterials)
+    .set({
+      isActive: false,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(teachingMaterials.id, id),
-        eq(teachingMaterials.tenantId, coach.tenantId)
+        eq(teachingMaterials.tenantId, coach.tenantId),
+        eq(teachingMaterials.isActive, true)
       )
     )
-    .limit(1);
+    .returning({ id: teachingMaterials.id });
 
-  if (!existingMaterial) {
+  if (!deletedMaterial) {
     return c.json({
       success: false,
       error: '找不到教學資源',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  // Soft delete (set isActive to false)
-  await db
-    .update(teachingMaterials)
-    .set({
-      isActive: false,
-      updatedAt: new Date(),
-    })
-    .where(eq(teachingMaterials.id, id));
 
   return c.json({
     success: true,

@@ -5,6 +5,7 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 
 const inFlightContractsMap = new Map<string, Promise<void>>()
+const inFlightSingleContractMap = new Map<string, Promise<Contract | null>>()
 
 export const useContracts = () => {
   const { readItems, readItem, createItem, updateItem } = useFetch()
@@ -65,17 +66,28 @@ export const useContracts = () => {
     return promise
   }
 
-  const getContract = async (id: string) => {
-    try {
-      const data = await readItem<Contract>('contracts', id)
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useContracts.getContract',
-        customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
-      })
-      return null
+  const getContract = async (id: string, force = false): Promise<Contract | null> => {
+    if (!force && inFlightSingleContractMap.has(id)) {
+      return inFlightSingleContractMap.get(id)!
     }
+
+    const promise = (async () => {
+      try {
+        const data = await readItem<Contract>('contracts', id)
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useContracts.getContract',
+          customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightSingleContractMap.delete(id)
+      }
+    })()
+
+    inFlightSingleContractMap.set(id, promise)
+    return promise
   }
 
   const createContract = async (contract: Partial<Contract>) => {

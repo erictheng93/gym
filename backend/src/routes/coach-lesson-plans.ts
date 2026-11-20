@@ -223,10 +223,17 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Get plan (own or shared template)
-  const [plan] = await db
-    .select()
+  // Get plan (own or shared template) and linked session in a single query
+  const [result] = await db
+    .select({
+      plan: lessonPlans,
+      sessionId: classSessions.id,
+      sessionDate: classSessions.sessionDate,
+      startTime: classSessions.startTime,
+      sessionStatus: classSessions.sessionStatus,
+    })
     .from(lessonPlans)
+    .leftJoin(classSessions, eq(lessonPlans.sessionId, classSessions.id))
     .where(
       and(
         eq(lessonPlans.id, id),
@@ -241,7 +248,7 @@ app.get('/:id', async (c) => {
     )
     .limit(1);
 
-  if (!plan) {
+  if (!result) {
     return c.json({
       success: false,
       error: '找不到教案',
@@ -249,29 +256,13 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
-  // Get linked session if any
-  let sessionInfo = null;
-  if (plan.sessionId) {
-    const [session] = await db
-      .select({
-        id: classSessions.id,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-        sessionStatus: classSessions.sessionStatus,
-      })
-      .from(classSessions)
-      .where(eq(classSessions.id, plan.sessionId))
-      .limit(1);
-
-    if (session) {
-      sessionInfo = {
-        id: session.id,
-        date: session.sessionDate,
-        start_time: session.startTime,
-        status: session.sessionStatus,
-      };
-    }
-  }
+  const { plan } = result;
+  const sessionInfo = result.sessionId ? {
+    id: result.sessionId,
+    date: result.sessionDate,
+    start_time: result.startTime,
+    status: result.sessionStatus,
+  } : null;
 
   return c.json({
     success: true,
@@ -442,30 +433,24 @@ app.delete('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Verify ownership
-  const [existingPlan] = await db
-    .select()
-    .from(lessonPlans)
+  // Atomic delete with ownership check
+  const [deletedPlan] = await db
+    .delete(lessonPlans)
     .where(
       and(
         eq(lessonPlans.id, id),
         eq(lessonPlans.coachId, coach.id)
       )
     )
-    .limit(1);
+    .returning({ id: lessonPlans.id });
 
-  if (!existingPlan) {
+  if (!deletedPlan) {
     return c.json({
       success: false,
       error: '找不到教案或無權刪除',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  // Delete plan
-  await db
-    .delete(lessonPlans)
-    .where(eq(lessonPlans.id, id));
 
   return c.json({
     success: true,
