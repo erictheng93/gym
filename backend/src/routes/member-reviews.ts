@@ -176,23 +176,30 @@ app.post(
     const memberInfo = c.get('member')!;
     const { bookingId, rating, comment, isAnonymous } = c.req.valid('json');
 
-    // Verify eligibility (same logic as eligibility endpoint)
-    const [booking] = await db
-      .select({
-        id: bookings.id,
-        memberId: bookings.memberId,
-        sessionId: bookings.sessionId,
-        bookingStatus: bookings.bookingStatus,
-        classId: classSessions.classId,
-        sessionStatus: classSessions.sessionStatus,
-        sessionDate: classSessions.sessionDate,
-        tenantId: classes.branchId, // Will get actual tenantId from class
-      })
-      .from(bookings)
-      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-      .innerJoin(classes, eq(classSessions.classId, classes.id))
-      .where(eq(bookings.id, bookingId))
-      .limit(1);
+    // Concurrently verify eligibility and check for existing review
+    const [[booking], [existingReview]] = await Promise.all([
+      db
+        .select({
+          id: bookings.id,
+          memberId: bookings.memberId,
+          sessionId: bookings.sessionId,
+          bookingStatus: bookings.bookingStatus,
+          classId: classSessions.classId,
+          sessionStatus: classSessions.sessionStatus,
+          sessionDate: classSessions.sessionDate,
+          tenantId: classes.branchId, // Will get actual tenantId from class
+        })
+        .from(bookings)
+        .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+        .innerJoin(classes, eq(classSessions.classId, classes.id))
+        .where(eq(bookings.id, bookingId))
+        .limit(1),
+      db
+        .select({ id: classReviews.id })
+        .from(classReviews)
+        .where(eq(classReviews.bookingId, bookingId))
+        .limit(1),
+    ]);
 
     if (!booking) {
       return c.json({
@@ -217,13 +224,6 @@ app.post(
         code: 'NOT_ATTENDED',
       }, 400);
     }
-
-    // Check for existing review
-    const [existingReview] = await db
-      .select({ id: classReviews.id })
-      .from(classReviews)
-      .where(eq(classReviews.bookingId, bookingId))
-      .limit(1);
 
     if (existingReview) {
       return c.json({

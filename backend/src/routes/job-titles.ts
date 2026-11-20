@@ -81,19 +81,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobT
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(jobTitles)
+  const [updated] = await db
+    .update(jobTitles)
+    .set(data)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .limit(1);
+    .returning();
 
-  if (!existing) {
+  if (!updated) {
     return c.json({ success: false, error: '職稱不存在' }, 404);
   }
-
-  const [updated] = await db.update(jobTitles).set({
-    ...data,
-  }).where(eq(jobTitles.id, id)).returning();
 
   return c.json({
     success: true,
@@ -106,17 +102,14 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(jobTitles)
+  const [deleted] = await db
+    .delete(jobTitles)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .limit(1);
+    .returning();
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '職稱不存在' }, 404);
   }
-
-  await db.delete(jobTitles).where(eq(jobTitles.id, id));
 
   return c.json({ success: true, message: '職稱已刪除' });
 });

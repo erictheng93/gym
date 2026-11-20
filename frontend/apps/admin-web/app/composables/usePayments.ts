@@ -6,6 +6,7 @@ import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 
 const inFlightPaymentsMap = new Map<string, Promise<void>>()
 const inFlightSinglePaymentMap = new Map<string, Promise<Payment | null>>()
+const inFlightPaymentStatsMap = new Map<string, Promise<any>>()
 
 export const usePayments = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
@@ -145,59 +146,70 @@ export const usePayments = () => {
 
   // 統計資料
   const getPaymentStats = async (branchId?: string, startDate?: string, endDate?: string) => {
+    const flightKey = `${branchId || ''}_${startDate || ''}_${endDate || ''}`
+    const existing = inFlightPaymentStatsMap.get(flightKey)
+    if (existing) return existing
+
     const defaultStats = {
       income: { count: 0, amount: 0 },
       refund: { count: 0, amount: 0 },
       netAmount: 0
     }
 
-    try {
-      const baseFilter: Record<string, unknown> = {}
-      if (branchId) baseFilter.branch_id = branchId
-      if (startDate) baseFilter.start_date = startDate
-      if (endDate) baseFilter.end_date = endDate
+    const promise = (async () => {
+      try {
+        const baseFilter: Record<string, unknown> = {}
+        if (branchId) baseFilter.branch_id = branchId
+        if (startDate) baseFilter.start_date = startDate
+        if (endDate) baseFilter.end_date = endDate
 
-      // Fetch income and refund payments in parallel
-      const [incomeResult, refundResult] = await Promise.all([
-        readItems<Payment>('payments', {
-          limit: 1000, // Get all for aggregation
-          filter: {
-            ...baseFilter,
-            payment_type: 'INCOME'
-          }
-        }),
-        readItems<Payment>('payments', {
-          limit: 1000, // Get all for aggregation
-          filter: {
-            ...baseFilter,
-            payment_type: 'REFUND'
-          }
+        // Fetch income and refund payments in parallel
+        const [incomeResult, refundResult] = await Promise.all([
+          readItems<Payment>('payments', {
+            limit: 1000, // Get all for aggregation
+            filter: {
+              ...baseFilter,
+              payment_type: 'INCOME'
+            }
+          }),
+          readItems<Payment>('payments', {
+            limit: 1000, // Get all for aggregation
+            filter: {
+              ...baseFilter,
+              payment_type: 'REFUND'
+            }
+          })
+        ])
+
+        // Calculate totals from the returned data
+        const incomeAmount = incomeResult.data.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+        const refundAmount = refundResult.data.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+
+        return {
+          income: {
+            count: incomeResult.total,
+            amount: incomeAmount
+          },
+          refund: {
+            count: refundResult.total,
+            amount: refundAmount
+          },
+          netAmount: incomeAmount - refundAmount
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePayments.getPaymentStats',
+          customMessage: MESSAGES.ERRORS.PAYMENT_FETCH_FAILED,
+          showToast: false
         })
-      ])
-
-      // Calculate totals from the returned data
-      const incomeAmount = incomeResult.data.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-      const refundAmount = refundResult.data.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-
-      return {
-        income: {
-          count: incomeResult.total,
-          amount: incomeAmount
-        },
-        refund: {
-          count: refundResult.total,
-          amount: refundAmount
-        },
-        netAmount: incomeAmount - refundAmount
+        return defaultStats
+      } finally {
+        inFlightPaymentStatsMap.delete(flightKey)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePayments.getPaymentStats',
-        customMessage: MESSAGES.ERRORS.PAYMENT_FETCH_FAILED,
-        showToast: false
-      })
-      return defaultStats
-    }
+    })()
+
+    inFlightPaymentStatsMap.set(flightKey, promise)
+    return promise
   }
 
   return {

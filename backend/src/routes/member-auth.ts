@@ -123,28 +123,40 @@ app.post(
   async (c) => {
     const { email, password } = c.req.valid('json');
 
-    // Find member by email
-    const [member] = await db
+    // Find member, credentials, and branch info in a single joined query
+    const [result] = await db
       .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        email: members.email,
-        fullName: members.fullName,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-        status: members.status,
+        member: {
+          id: members.id,
+          memberCode: members.memberCode,
+          email: members.email,
+          fullName: members.fullName,
+          branchId: members.branchId,
+          tenantId: members.tenantId,
+          status: members.status,
+        },
+        credentials: memberCredentials,
+        branch: {
+          id: branches.id,
+          name: branches.name,
+          tenantId: branches.tenantId,
+        },
       })
       .from(members)
+      .leftJoin(memberCredentials, eq(members.id, memberCredentials.memberId))
+      .leftJoin(branches, eq(members.branchId, branches.id))
       .where(eq(members.email, email))
       .limit(1);
 
-    if (!member) {
+    if (!result || !result.member) {
       return c.json({
         success: false,
         error: 'Email 或密碼錯誤',
         code: 'INVALID_CREDENTIALS',
       }, 401);
     }
+
+    const { member, credentials, branch } = result;
 
     if (member.status === 'BANNED') {
       return c.json({
@@ -153,13 +165,6 @@ app.post(
         code: 'MEMBER_BANNED',
       }, 403);
     }
-
-    // Get credentials
-    const [credentials] = await db
-      .select()
-      .from(memberCredentials)
-      .where(eq(memberCredentials.memberId, member.id))
-      .limit(1);
 
     if (!credentials) {
       return c.json({
@@ -230,17 +235,6 @@ app.post(
         updatedAt: new Date(),
       })
       .where(eq(memberCredentials.id, credentials.id));
-
-    // Get branch info
-    const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
-      .from(branches)
-      .where(eq(branches.id, member.branchId))
-      .limit(1);
 
     // Generate tokens
     const tokens = memberJwtService.generateTokens({

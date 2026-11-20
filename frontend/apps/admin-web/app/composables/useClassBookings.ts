@@ -19,6 +19,9 @@ export const BOOKING_STATUS_LABELS: Record<string, { label: string; color: strin
 // In-flight request deduplication maps
 const inFlightBookingsMap = new Map<string, Promise<void>>()
 const inFlightSingleBookingMap = new Map<string, Promise<Booking | null>>()
+const inFlightMemberBookingsMap = new Map<string, Promise<Booking[]>>()
+const inFlightSessionBookingsMap = new Map<string, Promise<Booking[]>>()
+const inFlightBookingStatsMap = new Map<string, Promise<{ confirmed: number; waitlist: number; cancelled: number; attended: number; noShow: number }>>()
 
 export const useClassBookings = () => {
   const { readItems, readItem, updateItem } = useFetch()
@@ -247,56 +250,77 @@ export const useClassBookings = () => {
     memberId: string,
     options?: { upcoming?: boolean; limit?: number }
   ): Promise<Booking[]> => {
-    const { upcoming = true, limit = 10 } = options || {}
+    const key = `${memberId}_${JSON.stringify(options || {})}`
+    const existing = inFlightMemberBookingsMap.get(key)
+    if (existing) return existing
 
-    try {
-      const filter: Record<string, unknown> = {
-        member_id: memberId,
-        booking_status: 'CONFIRMED,WAITLIST'
+    const promise = (async () => {
+      const { upcoming = true, limit = 10 } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {
+          member_id: memberId,
+          booking_status: 'CONFIRMED,WAITLIST'
+        }
+
+        // 只顯示未來的課程
+        if (upcoming) {
+          filter.upcoming = true
+        }
+
+        const { data } = await readItems<Booking>('bookings', {
+          filter,
+          limit,
+          sort: 'session_date'
+        })
+
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassBookings.getMemberBookings',
+          showToast: false
+        })
+        return []
+      } finally {
+        inFlightMemberBookingsMap.delete(key)
       }
+    })()
 
-      // 只顯示未來的課程
-      if (upcoming) {
-        filter.upcoming = true
-      }
-
-      const { data } = await readItems<Booking>('bookings', {
-        filter,
-        limit,
-        sort: 'session_date'
-      })
-
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.getMemberBookings',
-        showToast: false
-      })
-      return []
-    }
+    inFlightMemberBookingsMap.set(key, promise)
+    return promise
   }
 
   /**
    * 獲取場次的預約列表
    */
   const getSessionBookings = async (sessionId: string): Promise<Booking[]> => {
-    try {
-      const { data } = await readItems<Booking>('bookings', {
-        filter: {
-          session_id: sessionId,
-          exclude_cancelled: true
-        },
-        sort: 'booked_at'
-      })
+    const existing = inFlightSessionBookingsMap.get(sessionId)
+    if (existing) return existing
 
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.getSessionBookings',
-        showToast: false
-      })
-      return []
-    }
+    const promise = (async () => {
+      try {
+        const { data } = await readItems<Booking>('bookings', {
+          filter: {
+            session_id: sessionId,
+            exclude_cancelled: true
+          },
+          sort: 'booked_at'
+        })
+
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassBookings.getSessionBookings',
+          showToast: false
+        })
+        return []
+      } finally {
+        inFlightSessionBookingsMap.delete(sessionId)
+      }
+    })()
+
+    inFlightSessionBookingsMap.set(sessionId, promise)
+    return promise
   }
 
   /**
@@ -308,52 +332,63 @@ export const useClassBookings = () => {
     startDate?: string
     endDate?: string
   }) => {
-    const { sessionId, branchId, startDate, endDate } = options || {}
+    const key = JSON.stringify(options || {})
+    const existing = inFlightBookingStatsMap.get(key)
+    if (existing) return existing
 
-    try {
-      const baseFilter: Record<string, unknown> = {}
-      if (sessionId) baseFilter.session_id = sessionId
-      if (branchId) baseFilter.branch_id = branchId
-      if (startDate) baseFilter.start_date = startDate
-      if (endDate) baseFilter.end_date = endDate
+    const promise = (async () => {
+      const { sessionId, branchId, startDate, endDate } = options || {}
 
-      const [confirmed, waitlist, cancelled, attended, noShow] = await Promise.all([
-        readItems<Booking>('bookings', {
-          filter: { ...baseFilter, booking_status: 'CONFIRMED' },
-          limit: 1
-        }),
-        readItems<Booking>('bookings', {
-          filter: { ...baseFilter, booking_status: 'WAITLIST' },
-          limit: 1
-        }),
-        readItems<Booking>('bookings', {
-          filter: { ...baseFilter, booking_status: 'CANCELLED' },
-          limit: 1
-        }),
-        readItems<Booking>('bookings', {
-          filter: { ...baseFilter, booking_status: 'ATTENDED' },
-          limit: 1
-        }),
-        readItems<Booking>('bookings', {
-          filter: { ...baseFilter, booking_status: 'NO_SHOW' },
-          limit: 1
+      try {
+        const baseFilter: Record<string, unknown> = {}
+        if (sessionId) baseFilter.session_id = sessionId
+        if (branchId) baseFilter.branch_id = branchId
+        if (startDate) baseFilter.start_date = startDate
+        if (endDate) baseFilter.end_date = endDate
+
+        const [confirmed, waitlist, cancelled, attended, noShow] = await Promise.all([
+          readItems<Booking>('bookings', {
+            filter: { ...baseFilter, booking_status: 'CONFIRMED' },
+            limit: 1
+          }),
+          readItems<Booking>('bookings', {
+            filter: { ...baseFilter, booking_status: 'WAITLIST' },
+            limit: 1
+          }),
+          readItems<Booking>('bookings', {
+            filter: { ...baseFilter, booking_status: 'CANCELLED' },
+            limit: 1
+          }),
+          readItems<Booking>('bookings', {
+            filter: { ...baseFilter, booking_status: 'ATTENDED' },
+            limit: 1
+          }),
+          readItems<Booking>('bookings', {
+            filter: { ...baseFilter, booking_status: 'NO_SHOW' },
+            limit: 1
+          })
+        ])
+
+        return {
+          confirmed: confirmed.total,
+          waitlist: waitlist.total,
+          cancelled: cancelled.total,
+          attended: attended.total,
+          noShow: noShow.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useClassBookings.getBookingStats',
+          showToast: false
         })
-      ])
-
-      return {
-        confirmed: confirmed.total,
-        waitlist: waitlist.total,
-        cancelled: cancelled.total,
-        attended: attended.total,
-        noShow: noShow.total
+        return { confirmed: 0, waitlist: 0, cancelled: 0, attended: 0, noShow: 0 }
+      } finally {
+        inFlightBookingStatsMap.delete(key)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.getBookingStats',
-        showToast: false
-      })
-      return { confirmed: 0, waitlist: 0, cancelled: 0, attended: 0, noShow: 0 }
-    }
+    })()
+
+    inFlightBookingStatsMap.set(key, promise)
+    return promise
   }
 
   return {
