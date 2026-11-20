@@ -361,7 +361,7 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
     db
       .select(COUNT_SELECT)
       .from(contracts)
-      .where(inArray(contracts.branchId, branchIds)),
+      .where(branchIds.length === 1 ? eq(contracts.branchId, branchIds[0]) : inArray(contracts.branchId, branchIds)),
   ]);
 
   if (!member) {

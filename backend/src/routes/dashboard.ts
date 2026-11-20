@@ -228,12 +228,18 @@ app.get('/revenue-trend', async (c) => {
       .groupBy(sql`to_char(${payments.paymentDate}, 'YYYY-MM')`)
       .orderBy(sql`to_char(${payments.paymentDate}, 'YYYY-MM')`);
 
-    return c.json({
-      success: true,
-      data: result.map(r => ({
+    const data = new Array(result.length);
+    for (let i = 0; i < result.length; i++) {
+      const r = result[i];
+      data[i] = {
         period: r.month,
         amount: Number(r.total || 0),
-      })),
+      };
+    }
+
+    return c.json({
+      success: true,
+      data,
     });
   }
 
@@ -251,12 +257,18 @@ app.get('/revenue-trend', async (c) => {
     .groupBy(sql`${payments.paymentDate}::date`)
     .orderBy(sql`${payments.paymentDate}::date`);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       period: r.date,
       amount: Number(r.total || 0),
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 
@@ -273,23 +285,25 @@ app.get('/todays-classes', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  const branchCondition = branchIds.length === 1
-    ? eq(classSessions.branchId, branchIds[0])
-    : inArray(classSessions.branchId, branchIds);
-
   const sessions = await db
     .select(DASHBOARD_TODAYS_CLASSES_SELECT)
     .from(classSessions)
     .innerJoin(branches, eq(classSessions.branchId, branches.id))
-    .where(and(branchCondition, eq(classSessions.sessionDate, today)))
+    .where(and(buildBranchFilter(classSessions.branchId, branchIds), eq(classSessions.sessionDate, today)))
     .orderBy(classSessions.startTime);
+
+  const data = new Array(sessions.length);
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    data[i] = {
+      ...s.session,
+      branch: s.branch,
+    };
+  }
 
   return c.json({
     success: true,
-    data: sessions.map(s => ({
-      ...s.session,
-      branch: s.branch,
-    })),
+    data,
   });
 });
 
@@ -312,28 +326,30 @@ app.get('/recent-activities', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  const branchCondition = branchIds.length === 1
-    ? eq(checkIns.branchId, branchIds[0])
-    : inArray(checkIns.branchId, branchIds);
-
   // Get recent check-ins as activities
   const recentCheckIns = await db
     .select(DASHBOARD_RECENT_ACTIVITIES_SELECT)
     .from(checkIns)
     .innerJoin(members, eq(checkIns.memberId, members.id))
     .innerJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(branchCondition)
+    .where(buildBranchFilter(checkIns.branchId, branchIds))
     .orderBy(desc(checkIns.checkInTime))
     .limit(limit);
 
-  return c.json({
-    success: true,
-    data: recentCheckIns.map(a => ({
+  const data = new Array(recentCheckIns.length);
+  for (let i = 0; i < recentCheckIns.length; i++) {
+    const a = recentCheckIns[i];
+    data[i] = {
       id: a.id,
       type: a.type,
       timestamp: a.timestamp,
       description: `${a.memberName} 入場 - ${a.branchName}`,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 

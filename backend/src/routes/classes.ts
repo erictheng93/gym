@@ -138,7 +138,7 @@ app.get('/', async (c) => {
 
   const branchCondition = branchId
     ? eq(classes.branchId, branchId)
-    : inArray(classes.branchId, branchIds);
+    : (branchIds.length === 1 ? eq(classes.branchId, branchIds[0]) : inArray(classes.branchId, branchIds));
 
   const condition = and(branchCondition, eq(classes.status, 'active'));
 
@@ -150,13 +150,19 @@ app.get('/', async (c) => {
     .where(condition)
     .orderBy(classes.name);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.class,
       instructor: r.instructor,
       branch: r.branch,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 
@@ -245,13 +251,14 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(classes.branchId, branchIds[0]) : inArray(classes.branchId, branchIds);
   const [updatedClass] = await db
     .update(classes)
     .set({
       ...data,
       updatedAt: new Date(),
     })
-    .where(and(eq(classes.id, id), inArray(classes.branchId, branchIds)))
+    .where(and(eq(classes.id, id), branchCondition))
     .returning(CLASS_RETURNING);
 
   if (!updatedClass) {
@@ -301,12 +308,18 @@ app.get('/:id/sessions', async (c) => {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
 
-  return c.json({
-    success: true,
-    data: sessions.map(s => ({
+  const data = new Array(sessions.length);
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    data[i] = {
       ...s.session,
       instructor: s.instructor,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 

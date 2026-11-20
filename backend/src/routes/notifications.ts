@@ -87,7 +87,11 @@ app.get('/', async (c) => {
     });
   }
 
-  const conditions = [inArray(notifications.branchId, targetBranchIds)];
+  const branchCondition = targetBranchIds.length === 1
+    ? eq(notifications.branchId, targetBranchIds[0])
+    : inArray(notifications.branchId, targetBranchIds);
+
+  const conditions = [branchCondition];
 
   if (unreadOnly) {
     conditions.push(isNull(notifications.readAt));
@@ -124,12 +128,18 @@ app.get('/', async (c) => {
   const total = Number(countResult?.count || 0);
   const unreadCount = unreadOnly ? total : Number(unreadCountResult?.[0]?.count || 0);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.notification,
       branch: r.branch,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
     pagination: {
       total,
       page,
@@ -227,13 +237,14 @@ app.post('/:id/read', async (c) => {
     return c.json({ success: false, error: '通知不存在' }, 404);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(notifications.branchId, branchIds[0]) : inArray(notifications.branchId, branchIds);
   const [updated] = await db
     .update(notifications)
     .set({
       readAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(and(eq(notifications.id, id), inArray(notifications.branchId, branchIds)))
+    .where(and(eq(notifications.id, id), branchCondition))
     .returning(NOTIFICATION_ID_RETURNING);
 
   if (!updated) {
@@ -265,8 +276,12 @@ app.post('/read-all', async (c) => {
     });
   }
 
+  const branchCondition = targetBranchIds.length === 1
+    ? eq(notifications.branchId, targetBranchIds[0])
+    : inArray(notifications.branchId, targetBranchIds);
+
   const conditions = [
-    inArray(notifications.branchId, targetBranchIds),
+    branchCondition,
     isNull(notifications.readAt),
   ];
 
@@ -302,9 +317,10 @@ app.delete('/:id', async (c) => {
     return c.json({ success: false, error: '通知不存在' }, 404);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(notifications.branchId, branchIds[0]) : inArray(notifications.branchId, branchIds);
   const [deleted] = await db
     .delete(notifications)
-    .where(and(eq(notifications.id, id), inArray(notifications.branchId, branchIds)))
+    .where(and(eq(notifications.id, id), branchCondition))
     .returning(NOTIFICATION_ID_RETURNING);
 
   if (!deleted) {
@@ -336,8 +352,12 @@ app.get('/count/unread', async (c) => {
     });
   }
 
+  const branchCondition = targetBranchIds.length === 1
+    ? eq(notifications.branchId, targetBranchIds[0])
+    : inArray(notifications.branchId, targetBranchIds);
+
   const conditions = [
-    inArray(notifications.branchId, targetBranchIds),
+    branchCondition,
     isNull(notifications.readAt),
   ];
 

@@ -1,10 +1,31 @@
+<script lang="ts">
+import { PAGES, MESSAGES } from '~/constants'
+
+// Status options
+const statusOptions = [
+  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
+  { value: 'true', label: PAGES.CLASSES.ENABLED },
+  { value: 'false', label: PAGES.CLASSES.DISABLED }
+]
+
+// Table columns configuration
+const columns = [
+  { key: 'name', label: PAGES.CLASSES.NAME, slot: 'class' },
+  { key: 'class_category', label: PAGES.CLASSES.CATEGORY, slot: 'category', hideOnMobile: true },
+  { key: 'duration_minutes', label: PAGES.CLASSES.DURATION, slot: 'duration' },
+  { key: 'difficulty_level', label: PAGES.CLASSES.DIFFICULTY, slot: 'difficulty', hideOnMobile: true },
+  { key: 'branch.name', label: PAGES.CLASSES.BRANCH, hideOnMobile: true },
+  { key: 'is_active', label: PAGES.CLASSES.STATUS, slot: 'status' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 課程管理頁面
  *
  * 課程定義列表與管理
  */
-import { PAGES, MESSAGES, PAGINATION, TIMING } from '~/constants'
+import { PAGINATION, TIMING } from '~/constants'
 import { getDifficultyBadge } from '@gym-nexus/shared'
 
 definePageMeta({
@@ -27,23 +48,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-// Status options
-const statusOptions = [
-  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
-  { value: 'true', label: PAGES.CLASSES.ENABLED },
-  { value: 'false', label: PAGES.CLASSES.DISABLED }
-]
-
-// Table columns configuration
-const columns = [
-  { key: 'name', label: PAGES.CLASSES.NAME, slot: 'class' },
-  { key: 'class_category', label: PAGES.CLASSES.CATEGORY, slot: 'category', hideOnMobile: true },
-  { key: 'duration_minutes', label: PAGES.CLASSES.DURATION, slot: 'duration' },
-  { key: 'difficulty_level', label: PAGES.CLASSES.DIFFICULTY, slot: 'difficulty', hideOnMobile: true },
-  { key: 'branch.name', label: PAGES.CLASSES.BRANCH, hideOnMobile: true },
-  { key: 'is_active', label: PAGES.CLASSES.STATUS, slot: 'status' }
-]
 
 // Load classes with current filters
 const loadClasses = async () => {
