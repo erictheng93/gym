@@ -19,6 +19,28 @@ type OtpVariables = {
 
 const app = new Hono<{ Variables: OtpVariables }>();
 
+const OTP_VERIFY_SELECT = {
+  id: otpTokens.id,
+  code: otpTokens.code,
+  attempts: otpTokens.attempts,
+  maxAttempts: otpTokens.maxAttempts,
+};
+
+const MEMBER_OTP_AUTH_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  branchId: members.branchId,
+  tenantId: members.tenantId,
+  fullName: members.fullName,
+  status: members.status,
+};
+
+const BRANCH_OTP_AUTH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+  tenantId: branches.tenantId,
+};
+
 // -----------------------------------------------------------------------------
 // Rate Limiters
 // -----------------------------------------------------------------------------
@@ -263,7 +285,7 @@ app.post(
 
     // Find valid OTP
     const [otp] = await db
-      .select()
+      .select(OTP_VERIFY_SELECT)
       .from(otpTokens)
       .where(and(
         or(
@@ -331,14 +353,7 @@ app.post(
       : eq(members.email, identifier);
 
     const [member] = await db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-        fullName: members.fullName,
-        status: members.status,
-      })
+      .select(MEMBER_OTP_AUTH_SELECT)
       .from(members)
       .where(whereClause)
       .limit(1);
@@ -361,11 +376,7 @@ app.post(
 
     // Get branch info
     const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
+      .select(BRANCH_OTP_AUTH_SELECT)
       .from(branches)
       .where(eq(branches.id, member.branchId))
       .limit(1);

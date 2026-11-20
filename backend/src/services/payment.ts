@@ -230,13 +230,44 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
   }
 }
 
+const PAYMENT_STATUS_SELECT = {
+  id: payments.id,
+  type: payments.type,
+};
+
+const PAYMENT_REFUND_SELECT = {
+  id: payments.id,
+  type: payments.type,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  contractId: payments.contractId,
+  memberId: payments.memberId,
+  branchId: payments.branchId,
+  tenantId: payments.tenantId,
+};
+
+type PaymentRefundInfo = {
+  id: string;
+  type: string;
+  amount: string;
+  paymentMethod: string;
+  contractId: string | null;
+  memberId: string;
+  branchId: string;
+  tenantId: string | null;
+};
+
+const BRANCH_TENANT_SELECT = {
+  tenantId: branches.tenantId,
+};
+
 /**
  * Get payment status
  */
 export async function getPaymentStatus(paymentId: string): Promise<PaymentResult> {
   try {
     const [payment] = await db
-      .select({ id: payments.id, type: payments.type })
+      .select(PAYMENT_STATUS_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);
@@ -267,7 +298,7 @@ export async function processRefund(options: RefundOptions): Promise<RefundResul
 
   try {
     const [payment] = await db
-      .select()
+      .select(PAYMENT_REFUND_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);
@@ -374,7 +405,7 @@ async function processStripePayment(
 }
 
 async function processStripeRefund(
-  payment: typeof payments.$inferSelect,
+  payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
@@ -475,7 +506,7 @@ function buildECPayForm(params: Record<string, string>): string {
 }
 
 async function processECPayRefund(
-  payment: typeof payments.$inferSelect,
+  payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
@@ -563,7 +594,7 @@ function generateLinePaySignature(uri: string, body: string, nonce: string): str
 }
 
 async function processLinePayRefund(
-  payment: typeof payments.$inferSelect,
+  payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
@@ -689,7 +720,7 @@ function paymentMethodToGateway(method: string | null): PaymentGateway {
 async function getTenantIdForBranch(branchId: string): Promise<string | null> {
   try {
     const [branch] = await db
-      .select({ tenantId: branches.tenantId })
+      .select(BRANCH_TENANT_SELECT)
       .from(branches)
       .where(eq(branches.id, branchId))
       .limit(1);

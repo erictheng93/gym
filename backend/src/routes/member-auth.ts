@@ -33,6 +33,16 @@ const ARGON2_OPTIONS = {
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
+const CREDENTIALS_HASH_SELECT = {
+  id: memberCredentials.id,
+  passwordHash: memberCredentials.passwordHash,
+};
+
+const CREDENTIALS_RESET_SELECT = {
+  id: memberCredentials.id,
+  passwordResetTokenHash: memberCredentials.passwordResetTokenHash,
+};
+
 // -----------------------------------------------------------------------------
 // Rate Limiters
 // -----------------------------------------------------------------------------
@@ -399,7 +409,7 @@ app.post(
 
     // Get current credentials
     const [credentials] = await db
-      .select()
+      .select(CREDENTIALS_HASH_SELECT)
       .from(memberCredentials)
       .where(eq(memberCredentials.memberId, member.id))
       .limit(1);
@@ -550,7 +560,7 @@ app.post(
 
     // Get member credentials
     const [credentials] = await db
-      .select()
+      .select(CREDENTIALS_RESET_SELECT)
       .from(memberCredentials)
       .where(and(
         eq(memberCredentials.memberId, tokenData.memberId),

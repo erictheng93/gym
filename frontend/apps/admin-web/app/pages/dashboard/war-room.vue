@@ -1,3 +1,12 @@
+<script lang="ts">
+const PERIOD_OPTIONS = [
+  { value: 'today', label: '今日' },
+  { value: 'week', label: '本週' },
+  { value: 'month', label: '本月' },
+  { value: 'year', label: '今年' }
+] as const
+</script>
+
 <script setup lang="ts">
 /**
  * War Room Dashboard
@@ -39,12 +48,7 @@ const isHeadquarter = computed(() => {
 })
 
 // 期間選項
-const periodOptions = [
-  { value: 'today', label: '今日' },
-  { value: 'week', label: '本週' },
-  { value: 'month', label: '本月' },
-  { value: 'year', label: '今年' }
-]
+const periodOptions = PERIOD_OPTIONS
 
 // 載入數據
 const loadData = async () => {

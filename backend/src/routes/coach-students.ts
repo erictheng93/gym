@@ -71,6 +71,23 @@ const COACH_STUDENT_DETAIL_SELECT = {
   assignedAt: coachMemberAssignments.assignedAt,
 };
 
+const ASSIGNMENT_EXISTS_SELECT = {
+  id: coachMemberAssignments.id,
+};
+
+const COACH_NOTE_SELECT = {
+  id: coachNotes.id,
+  noteType: coachNotes.noteType,
+  content: coachNotes.content,
+  isPrivate: coachNotes.isPrivate,
+  createdAt: coachNotes.createdAt,
+  updatedAt: coachNotes.updatedAt,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
 // -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
@@ -461,7 +478,7 @@ app.get('/:id/notes', async (c) => {
 
   // Verify assignment
   const [assignment] = await db
-    .select()
+    .select(ASSIGNMENT_EXISTS_SELECT)
     .from(coachMemberAssignments)
     .where(
       and(
@@ -493,14 +510,14 @@ app.get('/:id/notes', async (c) => {
   // Concurrently get notes and total count
   const [notesData, [countResult]] = await Promise.all([
     db
-      .select()
+      .select(COACH_NOTE_SELECT)
       .from(coachNotes)
       .where(and(...conditions))
       .orderBy(desc(coachNotes.createdAt))
       .limit(limitNum)
       .offset(offsetNum),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(coachNotes)
       .where(and(...conditions)),
   ]);
@@ -537,7 +554,7 @@ app.post(
 
     // Verify assignment
     const [assignment] = await db
-      .select()
+      .select(ASSIGNMENT_EXISTS_SELECT)
       .from(coachMemberAssignments)
       .where(
         and(

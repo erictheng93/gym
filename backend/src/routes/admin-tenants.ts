@@ -6,6 +6,62 @@ import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const TENANT_LIST_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+  slug: tenants.slug,
+  email: tenants.email,
+  planType: tenants.planType,
+  tenantStatus: tenants.tenantStatus,
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxBranches: tenants.maxBranches,
+  trialEndsAt: tenants.trialEndsAt,
+  createdAt: tenants.createdAt,
+};
+
+const TENANT_DETAIL_SELECT = {
+  id: tenants.id,
+  status: tenants.status,
+  createdAt: tenants.createdAt,
+  updatedAt: tenants.updatedAt,
+  name: tenants.name,
+  slug: tenants.slug,
+  email: tenants.email,
+  phone: tenants.phone,
+  planType: tenants.planType,
+  maxBranches: tenants.maxBranches,
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxStorageMb: tenants.maxStorageMb,
+  tenantStatus: tenants.tenantStatus,
+  trialEndsAt: tenants.trialEndsAt,
+  billingCycle: tenants.billingCycle,
+  nextBillingDate: tenants.nextBillingDate,
+  monthlyPrice: tenants.monthlyPrice,
+  settings: tenants.settings,
+  createdBy: tenants.createdBy,
+};
+
+const MEMBER_TENANT_COUNT_SELECT = {
+  tenantId: members.tenantId,
+  count: count(),
+};
+
+const EMPLOYEE_TENANT_COUNT_SELECT = {
+  tenantId: employees.tenantId,
+  count: count(),
+};
+
+const BRANCH_TENANT_COUNT_SELECT = {
+  tenantId: branches.tenantId,
+  count: count(),
+};
+
+const COUNT_SELECT = {
+  count: count(),
+};
+
 // All routes require authentication (super admin only in production)
 app.use('*', requireAuth);
 
@@ -18,40 +74,19 @@ app.get('/', async (c) => {
     // Fetch all tenants and aggregated usage counts in parallel to eliminate N+1 queries
     const [tenantList, memberCounts, employeeCounts, branchCounts] = await Promise.all([
       db
-        .select({
-          id: tenants.id,
-          name: tenants.name,
-          slug: tenants.slug,
-          email: tenants.email,
-          planType: tenants.planType,
-          tenantStatus: tenants.tenantStatus,
-          maxMembers: tenants.maxMembers,
-          maxEmployees: tenants.maxEmployees,
-          maxBranches: tenants.maxBranches,
-          trialEndsAt: tenants.trialEndsAt,
-          createdAt: tenants.createdAt,
-        })
+        .select(TENANT_LIST_SELECT)
         .from(tenants)
         .orderBy(asc(tenants.name)),
       db
-        .select({
-          tenantId: members.tenantId,
-          count: count(),
-        })
+        .select(MEMBER_TENANT_COUNT_SELECT)
         .from(members)
         .groupBy(members.tenantId),
       db
-        .select({
-          tenantId: employees.tenantId,
-          count: count(),
-        })
+        .select(EMPLOYEE_TENANT_COUNT_SELECT)
         .from(employees)
         .groupBy(employees.tenantId),
       db
-        .select({
-          tenantId: branches.tenantId,
-          count: count(),
-        })
+        .select(BRANCH_TENANT_COUNT_SELECT)
         .from(branches)
         .groupBy(branches.tenantId),
     ]);
@@ -151,20 +186,20 @@ app.get('/:id', async (c) => {
     // Fetch tenant and usage counts in parallel
     const [[tenant], memberRows, employeeRows, branchRows] = await Promise.all([
       db
-        .select()
+        .select(TENANT_DETAIL_SELECT)
         .from(tenants)
         .where(eq(tenants.id, tenantId))
         .limit(1),
       db
-        .select({ count: count() })
+        .select(COUNT_SELECT)
         .from(members)
         .where(eq(members.tenantId, tenantId)),
       db
-        .select({ count: count() })
+        .select(COUNT_SELECT)
         .from(employees)
         .where(eq(employees.tenantId, tenantId)),
       db
-        .select({ count: count() })
+        .select(COUNT_SELECT)
         .from(branches)
         .where(eq(branches.tenantId, tenantId)),
     ]);

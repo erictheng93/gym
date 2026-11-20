@@ -29,10 +29,16 @@ const chartData = computed(() => {
   }
 
   const branches = props.kpis.revenue.by_branch
-  return {
-    labels: branches.map(b => b.branch_name),
-    data: branches.map(b => parseFloat(b.revenue as any) || 0)
+  const labels: string[] = []
+  const data: number[] = []
+  for (let i = 0; i < branches.length; i++) {
+    const b = branches[i]
+    if (b) {
+      labels.push(b.branch_name)
+      data.push(parseFloat(b.revenue as any) || 0)
+    }
   }
+  return { labels, data }
 })
 
 // 渲染圖表
