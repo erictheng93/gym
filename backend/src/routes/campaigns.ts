@@ -29,6 +29,8 @@ const createCampaignSchema = z.object({
 
 const updateCampaignSchema = createCampaignSchema.partial();
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
 const CAMPAIGN_SELECT = {
   id: campaigns.id,
   status: campaigns.status,
@@ -52,6 +54,20 @@ const CAMPAIGN_SELECT = {
 
 const CAMPAIGN_RETURNING = CAMPAIGN_SELECT;
 
+const CAMPAIGN_JOIN_SELECT = {
+  campaign: CAMPAIGN_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  createdBy: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+};
+
+const CAMPAIGN_DELETE_RETURNING = { id: campaigns.id };
+
 // List campaigns
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -69,7 +85,7 @@ app.get('/', async (c) => {
   }
 
   if (activeOnly) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().slice(0, 10);
     conditions.push(eq(campaigns.isActive, true));
     conditions.push(lte(campaigns.startDate, today));
     conditions.push(gte(campaigns.endDate, today));
@@ -81,17 +97,7 @@ app.get('/', async (c) => {
 
   const [result, [countResult]] = await Promise.all([
     db
-      .select({
-        campaign: CAMPAIGN_SELECT,
-        branch: {
-          id: branches.id,
-          name: branches.name,
-        },
-        createdBy: {
-          id: employees.id,
-          fullName: employees.fullName,
-        },
-      })
+      .select(CAMPAIGN_JOIN_SELECT)
       .from(campaigns)
       .leftJoin(branches, eq(campaigns.branchId, branches.id))
       .leftJoin(employees, eq(campaigns.createdById, employees.id))
@@ -100,7 +106,7 @@ app.get('/', async (c) => {
       .limit(limit)
       .offset(offset),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(campaigns)
       .where(and(...conditions)),
   ]);
@@ -129,17 +135,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      campaign: CAMPAIGN_SELECT,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
+    .select(CAMPAIGN_JOIN_SELECT)
     .from(campaigns)
     .leftJoin(branches, eq(campaigns.branchId, branches.id))
     .leftJoin(employees, eq(campaigns.createdById, employees.id))
@@ -244,7 +240,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const [deleted] = await db
     .delete(campaigns)
     .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
-    .returning({ id: campaigns.id });
+    .returning(CAMPAIGN_DELETE_RETURNING);
 
   if (!deleted) {
     return c.json({ success: false, error: '活動不存在' }, 404);
@@ -257,7 +253,7 @@ app.delete('/:id', requireRole('admin'), async (c) => {
 app.get('/active/list', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   const conditions = [
     eq(campaigns.tenantId, tenantId),
@@ -271,7 +267,7 @@ app.get('/active/list', async (c) => {
   }
 
   const result = await db
-    .select()
+    .select(CAMPAIGN_SELECT)
     .from(campaigns)
     .where(and(...conditions))
     .orderBy(campaigns.endDate);

@@ -14,6 +14,47 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+const GOAL_COUNT_SELECT = { total: count(memberGoals.id) };
+
+const MEMBER_GOAL_SELECT = {
+  id: memberGoals.id,
+  goalType: memberGoals.goalType,
+  targetValue: memberGoals.targetValue,
+  currentValue: memberGoals.currentValue,
+  startDate: memberGoals.startDate,
+  targetDate: memberGoals.targetDate,
+  status: memberGoals.status,
+  notes: memberGoals.notes,
+  createdAt: memberGoals.createdAt,
+  updatedAt: memberGoals.updatedAt,
+};
+
+const MEMBER_GOAL_INSERT_RETURNING = {
+  id: memberGoals.id,
+  goalType: memberGoals.goalType,
+  targetValue: memberGoals.targetValue,
+  currentValue: memberGoals.currentValue,
+  startDate: memberGoals.startDate,
+  targetDate: memberGoals.targetDate,
+  status: memberGoals.status,
+  notes: memberGoals.notes,
+  createdAt: memberGoals.createdAt,
+};
+
+const MEMBER_GOAL_UPDATE_RETURNING = {
+  id: memberGoals.id,
+  goalType: memberGoals.goalType,
+  targetValue: memberGoals.targetValue,
+  currentValue: memberGoals.currentValue,
+  startDate: memberGoals.startDate,
+  targetDate: memberGoals.targetDate,
+  status: memberGoals.status,
+  notes: memberGoals.notes,
+  updatedAt: memberGoals.updatedAt,
+};
+
+const GOAL_DELETE_RETURNING = { id: memberGoals.id };
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -71,22 +112,11 @@ app.get(
     // Concurrently get total count and goals
     const [[{ total }], goals] = await Promise.all([
       db
-        .select({ total: count(memberGoals.id) })
+        .select(GOAL_COUNT_SELECT)
         .from(memberGoals)
         .where(and(...conditions)),
       db
-        .select({
-          id: memberGoals.id,
-          goalType: memberGoals.goalType,
-          targetValue: memberGoals.targetValue,
-          currentValue: memberGoals.currentValue,
-          startDate: memberGoals.startDate,
-          targetDate: memberGoals.targetDate,
-          status: memberGoals.status,
-          notes: memberGoals.notes,
-          createdAt: memberGoals.createdAt,
-          updatedAt: memberGoals.updatedAt,
-        })
+        .select(MEMBER_GOAL_SELECT)
         .from(memberGoals)
         .where(and(...conditions))
         .orderBy(desc(memberGoals.createdAt))
@@ -140,17 +170,7 @@ app.post(
       targetDate: data.targetDate,
       notes: data.notes,
       status: 'IN_PROGRESS',
-    }).returning({
-      id: memberGoals.id,
-      goalType: memberGoals.goalType,
-      targetValue: memberGoals.targetValue,
-      currentValue: memberGoals.currentValue,
-      startDate: memberGoals.startDate,
-      targetDate: memberGoals.targetDate,
-      status: memberGoals.status,
-      notes: memberGoals.notes,
-      createdAt: memberGoals.createdAt,
-    });
+    }).returning(MEMBER_GOAL_INSERT_RETURNING);
 
     return c.json({
       success: true,
@@ -181,18 +201,7 @@ app.get('/:id', async (c) => {
   const goalId = c.req.param('id');
 
   const [goal] = await db
-    .select({
-      id: memberGoals.id,
-      goalType: memberGoals.goalType,
-      targetValue: memberGoals.targetValue,
-      currentValue: memberGoals.currentValue,
-      startDate: memberGoals.startDate,
-      targetDate: memberGoals.targetDate,
-      status: memberGoals.status,
-      notes: memberGoals.notes,
-      createdAt: memberGoals.createdAt,
-      updatedAt: memberGoals.updatedAt,
-    })
+    .select(MEMBER_GOAL_SELECT)
     .from(memberGoals)
     .where(and(
       eq(memberGoals.id, goalId),
@@ -250,17 +259,7 @@ app.put(
         eq(memberGoals.id, goalId),
         eq(memberGoals.memberId, memberInfo.id),
       ))
-      .returning({
-        id: memberGoals.id,
-        goalType: memberGoals.goalType,
-        targetValue: memberGoals.targetValue,
-        currentValue: memberGoals.currentValue,
-        startDate: memberGoals.startDate,
-        targetDate: memberGoals.targetDate,
-        status: memberGoals.status,
-        notes: memberGoals.notes,
-        updatedAt: memberGoals.updatedAt,
-      });
+      .returning(MEMBER_GOAL_UPDATE_RETURNING);
 
     if (!goal) {
       return c.json({
@@ -305,7 +304,7 @@ app.delete('/:id', async (c) => {
       eq(memberGoals.id, goalId),
       eq(memberGoals.memberId, memberInfo.id),
     ))
-    .returning({ id: memberGoals.id });
+    .returning(GOAL_DELETE_RETURNING);
 
   if (!deleted) {
     return c.json({

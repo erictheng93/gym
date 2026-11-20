@@ -14,6 +14,38 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+const COUNT_TOTAL_SELECT = { total: count(workoutLogs.id) };
+
+const WORKOUT_LOG_SELECT = {
+  id: workoutLogs.id,
+  date: workoutLogs.date,
+  duration: workoutLogs.duration,
+  calories: workoutLogs.calories,
+  exercises: workoutLogs.exercises,
+  notes: workoutLogs.notes,
+  createdAt: workoutLogs.createdAt,
+};
+
+const WORKOUT_LOG_UPDATE_RETURNING = {
+  id: workoutLogs.id,
+  date: workoutLogs.date,
+  duration: workoutLogs.duration,
+  calories: workoutLogs.calories,
+  exercises: workoutLogs.exercises,
+  notes: workoutLogs.notes,
+};
+
+const WORKOUT_DELETE_RETURNING = { id: workoutLogs.id };
+
+const WORKOUT_STATS_SELECT = {
+  totalWorkouts: count(workoutLogs.id),
+  totalDuration: sum(workoutLogs.duration),
+  totalCalories: sum(workoutLogs.calories),
+  avgDuration: avg(workoutLogs.duration),
+};
+
+const WORKOUT_RECENT_DATE_SELECT = { date: workoutLogs.date };
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -75,19 +107,11 @@ app.get(
     // Concurrently get total count and workouts
     const [[{ total }], workouts] = await Promise.all([
       db
-        .select({ total: count(workoutLogs.id) })
+        .select(COUNT_TOTAL_SELECT)
         .from(workoutLogs)
         .where(and(...conditions)),
       db
-        .select({
-          id: workoutLogs.id,
-          date: workoutLogs.date,
-          duration: workoutLogs.duration,
-          calories: workoutLogs.calories,
-          exercises: workoutLogs.exercises,
-          notes: workoutLogs.notes,
-          createdAt: workoutLogs.createdAt,
-        })
+        .select(WORKOUT_LOG_SELECT)
         .from(workoutLogs)
         .where(and(...conditions))
         .orderBy(desc(workoutLogs.date))
@@ -136,15 +160,7 @@ app.post(
       calories: data.calories,
       exercises: data.exercises,
       notes: data.notes,
-    }).returning({
-      id: workoutLogs.id,
-      date: workoutLogs.date,
-      duration: workoutLogs.duration,
-      calories: workoutLogs.calories,
-      exercises: workoutLogs.exercises,
-      notes: workoutLogs.notes,
-      createdAt: workoutLogs.createdAt,
-    });
+    }).returning(WORKOUT_LOG_SELECT);
 
     const workoutData = {
       id: workout.id,
@@ -176,15 +192,7 @@ app.get('/:id', async (c) => {
   const workoutId = c.req.param('id');
 
   const [workout] = await db
-    .select({
-      id: workoutLogs.id,
-      date: workoutLogs.date,
-      duration: workoutLogs.duration,
-      calories: workoutLogs.calories,
-      exercises: workoutLogs.exercises,
-      notes: workoutLogs.notes,
-      createdAt: workoutLogs.createdAt,
-    })
+    .select(WORKOUT_LOG_SELECT)
     .from(workoutLogs)
     .where(and(
       eq(workoutLogs.id, workoutId),
@@ -239,14 +247,7 @@ app.put(
         eq(workoutLogs.id, workoutId),
         eq(workoutLogs.memberId, memberInfo.id),
       ))
-      .returning({
-        id: workoutLogs.id,
-        date: workoutLogs.date,
-        duration: workoutLogs.duration,
-        calories: workoutLogs.calories,
-        exercises: workoutLogs.exercises,
-        notes: workoutLogs.notes,
-      });
+      .returning(WORKOUT_LOG_UPDATE_RETURNING);
 
     if (!workout) {
       return c.json({
@@ -291,7 +292,7 @@ app.delete('/:id', async (c) => {
       eq(workoutLogs.id, workoutId),
       eq(workoutLogs.memberId, memberInfo.id),
     ))
-    .returning({ id: workoutLogs.id });
+    .returning(WORKOUT_DELETE_RETURNING);
 
   if (!deleted) {
     return c.json({
@@ -317,24 +318,19 @@ app.get('/stats/summary', async (c) => {
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - parseInt(period));
-  const startDateStr = startDate.toISOString().split('T')[0];
+  const startDateStr = startDate.toISOString().slice(0, 10);
 
   // Concurrently get stats for period and recent workouts for streak
   const [[stats], recentWorkouts] = await Promise.all([
     db
-      .select({
-        totalWorkouts: count(workoutLogs.id),
-        totalDuration: sum(workoutLogs.duration),
-        totalCalories: sum(workoutLogs.calories),
-        avgDuration: avg(workoutLogs.duration),
-      })
+      .select(WORKOUT_STATS_SELECT)
       .from(workoutLogs)
       .where(and(
         eq(workoutLogs.memberId, memberInfo.id),
         gte(workoutLogs.date, startDateStr),
       )),
     db
-      .select({ date: workoutLogs.date })
+      .select(WORKOUT_RECENT_DATE_SELECT)
       .from(workoutLogs)
       .where(eq(workoutLogs.memberId, memberInfo.id))
       .orderBy(desc(workoutLogs.date))

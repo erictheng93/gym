@@ -1,3 +1,36 @@
+<script lang="ts">
+const STATUS_OPTIONS = [
+  { value: '', label: '全部狀態' },
+  { value: 'ACTIVE', label: '啟用中' },
+  { value: 'INACTIVE', label: '已停用' },
+  { value: 'EXPIRED', label: '已過期' }
+]
+
+const COUPON_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW')
+const COUPON_NUMBER_FORMATTER = new Intl.NumberFormat('zh-TW')
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return COUPON_DATE_FORMATTER.format(new Date(dateStr))
+}
+
+const formatDiscount = (coupon: { discount_type: string; discount_value: number }) => {
+  if (coupon.discount_type === 'PERCENTAGE') {
+    return `${coupon.discount_value}% 折扣`
+  }
+  return `折 NT$ ${COUPON_NUMBER_FORMATTER.format(coupon.discount_value)}`
+}
+
+const COLUMNS = [
+  { key: 'code', label: '代碼', slot: 'code' },
+  { key: 'name', label: '名稱' },
+  { key: 'discount', label: '折扣', slot: 'discount' },
+  { key: 'usage', label: '使用狀況', slot: 'usage' },
+  { key: 'validity', label: '有效期間', slot: 'validity', hideOnMobile: true },
+  { key: 'status', label: '狀態', slot: 'status' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 優惠券管理頁面
@@ -28,13 +61,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'ACTIVE', label: '啟用中' },
-  { value: 'INACTIVE', label: '已停用' },
-  { value: 'EXPIRED', label: '已過期' }
-]
 
 // Load coupons
 const loadCoupons = async () => {
@@ -95,34 +121,6 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
     toast.error('停用失敗')
   }
 }
-
-// 格式化器快取
-const couponDateFormatter = new Intl.DateTimeFormat('zh-TW')
-const couponNumberFormatter = new Intl.NumberFormat('zh-TW')
-
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return couponDateFormatter.format(new Date(dateStr))
-}
-
-// Format discount value
-const formatDiscount = (coupon: typeof coupons.value[0]) => {
-  if (coupon.discount_type === 'PERCENTAGE') {
-    return `${coupon.discount_value}% 折扣`
-  }
-  return `折 NT$ ${couponNumberFormatter.format(coupon.discount_value)}`
-}
-
-// Table columns
-const columns = [
-  { key: 'code', label: '代碼', slot: 'code' },
-  { key: 'name', label: '名稱' },
-  { key: 'discount', label: '折扣', slot: 'discount' },
-  { key: 'usage', label: '使用狀況', slot: 'usage' },
-  { key: 'validity', label: '有效期間', slot: 'validity', hideOnMobile: true },
-  { key: 'status', label: '狀態', slot: 'status' }
-]
 </script>
 
 <template>
@@ -149,7 +147,7 @@ const columns = [
       </template>
       <template #filters>
         <select v-model="selectedStatus" class="input filter-select">
-          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -162,7 +160,7 @@ const columns = [
     <!-- Data Table -->
     <DataTable
       :data="coupons"
-      :columns="columns"
+      :columns="COLUMNS"
       :loading="isLoading"
       :loading-message="MESSAGES.ACTIONS.LOADING"
       empty-title="暫無優惠券"

@@ -1,3 +1,39 @@
+<script lang="ts">
+const COUPON_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const COUPON_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const COUPON_CURRENCY_FORMATTER = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  minimumFractionDigits: 0
+})
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return COUPON_DATE_FORMATTER.format(new Date(dateStr))
+}
+
+const formatDateTime = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return COUPON_DATE_TIME_FORMATTER.format(new Date(dateStr))
+}
+
+const formatCurrency = (amount: number) => {
+  return COUPON_CURRENCY_FORMATTER.format(amount)
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 優惠券詳情頁面
@@ -45,42 +81,6 @@ const loadCoupon = async () => {
 }
 
 onMounted(loadCoupon)
-
-// Format date
-const couponDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-})
-
-const couponDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-})
-
-const couponCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
-  style: 'currency',
-  currency: 'TWD',
-  minimumFractionDigits: 0
-})
-
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return couponDateFormatter.format(new Date(dateStr))
-}
-
-const formatDateTime = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return couponDateTimeFormatter.format(new Date(dateStr))
-}
-
-// Format currency
-const formatCurrency = (amount: number) => {
-  return couponCurrencyFormatter.format(amount)
-}
 
 // Format discount
 const formatDiscount = computed(() => {
