@@ -142,6 +142,26 @@ app.get('/:id', async (c) => {
   });
 });
 
+const EMPLOYEE_RETURNING = {
+  id: employees.id,
+  userId: employees.userId,
+  branchId: employees.branchId,
+  jobTitleId: employees.jobTitleId,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  phone: employees.phone,
+  email: employees.email,
+  status: employees.status,
+  employmentType: employees.employmentType,
+  hireDate: employees.hireDate,
+  resignDate: employees.resignDate,
+  basicSalary: employees.basicSalary,
+  customPermissions: employees.customPermissions,
+  createdAt: employees.createdAt,
+  updatedAt: employees.updatedAt,
+  tenantId: employees.tenantId,
+};
+
 app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json', createEmployeeSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
@@ -166,7 +186,7 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
     hireDate: data.hireDate || new Date().toISOString().split('T')[0],
     basicSalary: data.basicSalary ? String(data.basicSalary) : null,
     tenantId,
-  }).returning();
+  }).returning(EMPLOYEE_RETURNING);
 
   return c.json({ success: true, data: newEmployee }, 201);
 });
@@ -203,7 +223,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     .update(employees)
     .set(updateData)
     .where(and(eq(employees.id, id), inArray(employees.branchId, branchIds)))
-    .returning();
+    .returning(EMPLOYEE_RETURNING);
 
   if (!updatedEmployee) {
     const [existingEmployee] = await db

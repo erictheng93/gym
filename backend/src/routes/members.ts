@@ -233,6 +233,31 @@ app.get('/:id', async (c) => {
   });
 });
 
+const MEMBER_RETURNING = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  idNumber: members.idNumber,
+  address: members.address,
+  emergencyContact: members.emergencyContact,
+  emergencyPhone: members.emergencyPhone,
+  branchId: members.branchId,
+  salesPersonId: members.salesPersonId,
+  status: members.status,
+  joinDate: members.joinDate,
+  tags: members.tags,
+  notes: members.notes,
+  avatar: members.avatar,
+  height: members.height,
+  createdAt: members.createdAt,
+  updatedAt: members.updatedAt,
+  tenantId: members.tenantId,
+};
+
 app.post('/', zValidator('json', createMemberSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
@@ -256,7 +281,7 @@ app.post('/', zValidator('json', createMemberSchema), async (c) => {
     memberCode,
     joinDate: data.joinDate || new Date().toISOString().split('T')[0],
     tenantId,
-  }).returning();
+  }).returning(MEMBER_RETURNING);
 
   return c.json({ success: true, data: newMember }, 201);
 });
@@ -282,7 +307,7 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
       updatedAt: new Date(),
     })
     .where(and(eq(members.id, id), inArray(members.branchId, branchIds)))
-    .returning();
+    .returning(MEMBER_RETURNING);
 
   if (!updatedMember) {
     const [existingMember] = await db

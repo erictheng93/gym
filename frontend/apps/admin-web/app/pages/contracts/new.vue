@@ -109,13 +109,23 @@ const prevStep = () => {
   }
 }
 
-const formatDate = (dateStr: string | undefined) => {
+const contractDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const contractNumberFormatter = new Intl.NumberFormat('zh-TW')
+
+const formatDate = (dateStr: string | undefined | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  const d = new Date(unref(dateStr) as any)
+  if (Number.isNaN(d.getTime())) return '—'
+  return contractDateFormatter.format(d)
+}
+
+const formatNumber = (num: number | undefined | null) => {
+  return contractNumberFormatter.format(num ?? 0)
 }
 
 const handleSubmit = async () => {
@@ -231,7 +241,7 @@ const handleSubmit = async () => {
               <select v-model="form.plan_id" class="input" :class="{ 'input-error': errors.plan_id }">
                 <option value="">{{ PAGES.CONTRACTS.SELECT_PLAN_PLACEHOLDER }}</option>
                 <option v-for="plan in plans" :key="plan.id" :value="plan.id">
-                  {{ plan.name }} - NT$ {{ plan.price.toLocaleString() }}
+                  {{ plan.name }} - NT$ {{ formatNumber(plan.price) }}
                 </option>
               </select>
               <span v-if="errors.plan_id" class="error-text">{{ errors.plan_id }}</span>
@@ -363,7 +373,7 @@ const handleSubmit = async () => {
           <!-- Total Amount Display -->
           <div class="total-amount-card">
             <span class="total-label">{{ PAGES.CONTRACTS.TOTAL_AMOUNT }}</span>
-            <span class="total-value">NT$ {{ form.total_amount.toLocaleString() }}</span>
+            <span class="total-value">NT$ {{ formatNumber(form.total_amount) }}</span>
           </div>
         </section>
 
@@ -390,7 +400,7 @@ const handleSubmit = async () => {
               <h4>{{ PAGES.CONTRACTS.CONTRACT_TERMS }}</h4>
               <ul>
                 <li>本合約自 {{ formatDate(form.start_date) }} 起生效，至 {{ formatDate(calculatedEndDate) }} 止。</li>
-                <li>合約金額為 NT$ {{ form.total_amount.toLocaleString() }}。</li>
+                <li>合約金額為 NT$ {{ formatNumber(form.total_amount) }}。</li>
                 <li v-if="selectedPlan?.allow_pause">{{ PAGES.CONTRACTS.PAUSE_HINT }}</li>
                 <li v-if="selectedPlan?.allow_transfer">本方案允許轉讓給其他會員。</li>
                 <li>{{ PAGES.CONTRACTS.SIGN_LEGAL_NOTE }}</li>

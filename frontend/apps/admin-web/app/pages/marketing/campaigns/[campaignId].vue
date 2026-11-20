@@ -50,29 +50,37 @@ onMounted(async () => {
   }
 })
 
+const campaignDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const campaignCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
 // Format date
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  return campaignDateFormatter.format(new Date(dateStr))
 }
 
 // Format currency
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount)
+  return campaignCurrencyFormatter.format(amount)
 }
 
 // Status options
-const statusOptions = [
+const statusOptions = Object.freeze([
   { value: 'DRAFT', label: '草稿' },
   { value: 'SCHEDULED', label: '已排程' },
   { value: 'ACTIVE', label: '進行中' },
   { value: 'PAUSED', label: '已暫停' },
   { value: 'ENDED', label: '已結束' }
-]
+])
 
 // Save edits
 const saveEdits = async () => {
