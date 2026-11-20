@@ -33,10 +33,41 @@ app.use(helmet())
 
 // CORS
 app.use(cors({
-  origin: config.corsOrigins,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const normalized = origin.replace(/\/$/, '');
+    if (config.corsOrigins.includes(normalized)) return callback(null, true);
+    // Allow any localhost/127.0.0.1/0.0.0.0 on any port in development
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(normalized)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Webhook-Signature', 'X-Webhook-Timestamp']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'Origin',
+    'X-Requested-With',
+    'X-API-Key',
+    'X-Branch-Id',
+    'X-Tenant-Id',
+    'X-Coach-Token',
+    'X-Member-Token',
+    'X-CSRF-Token',
+    'X-Request-Id',
+    'X-Webhook-Signature',
+    'X-Webhook-Timestamp'
+  ],
+  exposedHeaders: [
+    'Content-Disposition',
+    'Content-Length',
+    'X-Total-Count',
+    'X-Request-Id'
+  ],
+  maxAge: 86400
 }))
 
 // Rate limiting

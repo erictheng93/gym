@@ -66,13 +66,35 @@ fn build_app(state: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(AllowOrigin::mirror_request())
                 .allow_credentials(AllowCredentials::yes())
-                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                    Method::HEAD,
+                ])
                 .allow_headers([
                     header::AUTHORIZATION,
                     header::CONTENT_TYPE,
                     header::ACCEPT,
+                    header::ORIGIN,
                     HeaderName::from_static("x-member-token"),
-                ]),
+                    HeaderName::from_static("x-coach-token"),
+                    HeaderName::from_static("x-branch-id"),
+                    HeaderName::from_static("x-tenant-id"),
+                    HeaderName::from_static("x-csrf-token"),
+                    HeaderName::from_static("x-request-id"),
+                    HeaderName::from_static("x-requested-with"),
+                ])
+                .expose_headers([
+                    header::CONTENT_DISPOSITION,
+                    header::CONTENT_LENGTH,
+                    HeaderName::from_static("x-total-count"),
+                    HeaderName::from_static("x-request-id"),
+                ])
+                .max_age(std::time::Duration::from_secs(86400)),
         )
         .layer(TraceLayer::new_for_http())
 }

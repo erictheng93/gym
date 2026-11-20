@@ -46,7 +46,14 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
   const { email, password } = c.req.valid('json');
 
   const [user] = await db
-    .select()
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      passwordHash: users.passwordHash,
+      employeeId: users.employeeId,
+      tenantId: users.tenantId,
+    })
     .from(users)
     .where(and(eq(users.email, email.toLowerCase()), eq(users.isActive, true)))
     .limit(1);
@@ -152,7 +159,7 @@ app.post('/change-password', requireAuth, zValidator('json', changePasswordSchem
   }
 
   const [dbUser] = await db
-    .select()
+    .select({ passwordHash: users.passwordHash })
     .from(users)
     .where(eq(users.id, user.id))
     .limit(1);

@@ -85,7 +85,7 @@ const formatDateTime = (dateStr: string) => {
   }
 }
 
-const verificationLabels: Record<string, string> = {
+const VERIFICATION_LABELS: Record<string, string> = {
   BARCODE: '條碼',
   QR_CODE: 'QR Code',
   MANUAL: '人工',
@@ -93,6 +93,8 @@ const verificationLabels: Record<string, string> = {
   FINGERPRINT: '指紋',
   BATCH: '批次簽到'
 }
+
+const verificationLabels = VERIFICATION_LABELS
 
 // Group checkins by date
 const groupedCheckins = computed(() => {

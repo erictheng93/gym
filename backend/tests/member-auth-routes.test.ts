@@ -251,6 +251,60 @@ describe('Member Auth Routes', () => {
       expect(data.data.member.id).toBe(TEST_MEMBER_ID);
     });
 
+    it('POST /login should succeed with phone number and valid password', async () => {
+      if (!dbAvailable) return;
+
+      const res = await app.request('/api/member/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: '0912345678',
+          password: TEST_MEMBER_PASSWORD,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.member.id).toBe(TEST_MEMBER_ID);
+    });
+
+    it('POST /login should succeed with formatted dashed phone number', async () => {
+      if (!dbAvailable) return;
+
+      const res = await app.request('/api/member/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: '0912-345-678',
+          password: TEST_MEMBER_PASSWORD,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.member.id).toBe(TEST_MEMBER_ID);
+    });
+
+    it('POST /login should succeed with member code and valid password', async () => {
+      if (!dbAvailable) return;
+
+      const res = await app.request('/api/member/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: 'M000001',
+          password: TEST_MEMBER_PASSWORD,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.member.id).toBe(TEST_MEMBER_ID);
+    });
+
     it('POST /login should reject wrong password', async () => {
       if (!dbAvailable) return;
 

@@ -48,6 +48,21 @@ onMounted(() => {
   fetchContracts()
 })
 
+// Hoisted label mappings
+const CONTRACT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: '草稿',
+  ACTIVE: '有效',
+  PAUSED: '暫停中',
+  EXPIRED: '已到期',
+  TERMINATED: '已終止'
+}
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  UNPAID: '未付款',
+  PARTIAL: '部分付款',
+  PAID: '已付清'
+}
+
 // Cached Intl formatter
 const contractDateFormatter = new Intl.DateTimeFormat('zh-TW')
 
@@ -56,19 +71,28 @@ const formatDate = (dateStr: string | null) => {
   return contractDateFormatter.format(new Date(dateStr))
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: '草稿',
-  ACTIVE: '有效',
-  PAUSED: '暫停中',
-  EXPIRED: '已到期',
-  TERMINATED: '已終止'
+const statusLabels = CONTRACT_STATUS_LABELS
+const paymentLabels = PAYMENT_STATUS_LABELS
+
+let successMessageTimer: ReturnType<typeof setTimeout> | null = null
+
+const showSuccess = (msg: string) => {
+  successMessage.value = msg
+  if (successMessageTimer) {
+    clearTimeout(successMessageTimer)
+  }
+  successMessageTimer = setTimeout(() => {
+    successMessage.value = ''
+    successMessageTimer = null
+  }, 3000)
 }
 
-const paymentLabels: Record<string, string> = {
-  UNPAID: '未付款',
-  PARTIAL: '部分付款',
-  PAID: '已付清'
-}
+onBeforeUnmount(() => {
+  if (successMessageTimer) {
+    clearTimeout(successMessageTimer)
+    successMessageTimer = null
+  }
+})
 
 // Open pause modal
 const openPauseModal = (contract: Contract) => {
@@ -110,14 +134,9 @@ const submitPause = async () => {
     })
 
     if (response.success) {
-      successMessage.value = response.message
+      showSuccess(response.message)
       closePauseModal()
       await fetchContracts()
-
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        successMessage.value = ''
-      }, 3000)
     } else {
       errorMessage.value = response.message || '操作失敗'
     }
@@ -158,13 +177,8 @@ const resumeContract = async (contract: Contract) => {
     })
 
     if (response.success) {
-      successMessage.value = response.message
+      showSuccess(response.message)
       await fetchContracts()
-
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        successMessage.value = ''
-      }, 3000)
     } else {
       errorMessage.value = response.message || '操作失敗'
     }

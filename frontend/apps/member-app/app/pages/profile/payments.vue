@@ -98,12 +98,14 @@ const formatAmount = (amount: number, type: 'INCOME' | 'REFUND') => {
   return type === 'REFUND' ? `-${formatted}` : formatted
 }
 
-const methodLabels: Record<string, string> = {
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: '現金',
   CREDIT_CARD: '信用卡',
   LINE_PAY: 'LINE Pay',
   TRANSFER: '轉帳'
 }
+
+const methodLabels = PAYMENT_METHOD_LABELS
 
 // Calculate totals
 const totals = computed(() => {

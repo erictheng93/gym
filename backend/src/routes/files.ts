@@ -96,7 +96,7 @@ app.get('/:id/download', async (c) => {
   const { expires = '3600' } = c.req.query();
 
   const [file] = await db
-    .select()
+    .select({ id: files.id })
     .from(files)
     .where(
       and(
@@ -211,21 +211,6 @@ app.patch('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { id } = c.req.param();
 
-  const [existingFile] = await db
-    .select()
-    .from(files)
-    .where(
-      and(
-        eq(files.id, id),
-        eq(files.tenantId, tenantId)
-      )
-    )
-    .limit(1);
-
-  if (!existingFile) {
-    return c.json({ success: false, error: '檔案不存在' }, 404);
-  }
-
   const body = await c.req.json<{
     title?: string;
     description?: string;
@@ -240,8 +225,17 @@ app.patch('/:id', async (c) => {
       folder: body.folder,
       updatedAt: new Date(),
     })
-    .where(eq(files.id, id))
+    .where(
+      and(
+        eq(files.id, id),
+        eq(files.tenantId, tenantId)
+      )
+    )
     .returning();
+
+  if (!updated) {
+    return c.json({ success: false, error: '檔案不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -261,7 +255,7 @@ app.delete('/:id', async (c) => {
   const { id } = c.req.param();
 
   const [existingFile] = await db
-    .select()
+    .select({ id: files.id })
     .from(files)
     .where(
       and(

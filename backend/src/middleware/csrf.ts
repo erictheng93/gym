@@ -53,7 +53,7 @@ export const csrfProtection = createMiddleware(async (c, next) => {
       setCookie(c, CSRF_COOKIE_NAME, csrfToken, {
         httpOnly: false, // Frontend needs to read this
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
+        sameSite: 'Lax',
         path: '/',
         maxAge: 60 * 60 * 24, // 24 hours
       });

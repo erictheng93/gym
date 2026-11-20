@@ -274,7 +274,11 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   }
 
   const [existingUser] = await db
-    .select()
+    .select({
+      id: users.id,
+      email: users.email,
+      employeeId: users.employeeId,
+    })
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -286,7 +290,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   // Check email uniqueness if changing
   if (data.email && data.email.toLowerCase() !== existingUser.email) {
     const [emailExists] = await db
-      .select()
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.email, data.email.toLowerCase()))
       .limit(1);
@@ -309,7 +313,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
     // Link new employee if provided
     if (data.employeeId) {
       const [employee] = await db
-        .select()
+        .select({ id: employees.id, userId: employees.userId })
         .from(employees)
         .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
         .limit(1);
@@ -359,7 +363,7 @@ app.post('/:id/reset-password', zValidator('json', changePasswordSchema), async 
   const { newPassword } = c.req.valid('json');
 
   const [existingUser] = await db
-    .select()
+    .select({ id: users.id })
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -399,7 +403,7 @@ app.delete('/:id', async (c) => {
   }
 
   const [existingUser] = await db
-    .select()
+    .select({ id: users.id, employeeId: users.employeeId })
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);

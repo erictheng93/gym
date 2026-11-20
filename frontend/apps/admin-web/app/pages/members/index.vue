@@ -27,6 +27,14 @@ const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 // Batch selection state
 const selectedIds = ref<string[]>([])
 
+// Cached Intl formatter and mappings
+const exportDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const BATCH_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: '有效',
+  SUSPENDED: '暫停',
+  BANNED: '停權'
+}
+
 // Modal state
 const showModal = ref(false)
 const selectedMember = ref<typeof members.value[0] | null>(null)
@@ -103,15 +111,9 @@ const handleRowClick = (member: typeof members.value[0]) => {
 const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE') => {
   if (selectedIds.value.length === 0) return
 
-  const statusLabels: Record<string, string> = {
-    ACTIVE: '有效',
-    SUSPENDED: '暫停',
-    BANNED: '停權'
-  }
-
   const confirmed = await confirm({
     title: '批量更新狀態',
-    message: `確定要將 ${selectedIds.value.length} 位會員的狀態更新為「${statusLabels[status] || status}」嗎？`,
+    message: `確定要將 ${selectedIds.value.length} 位會員的狀態更新為「${BATCH_STATUS_LABELS[status] || status}」嗎？`,
     confirmText: '確定更新',
     confirmVariant: 'primary'
   })
@@ -164,7 +166,7 @@ const handleExportSelected = () => {
     m.phone || '',
     m.email || '',
     m.status,
-    m.joinDate ? new Date(m.joinDate).toLocaleDateString('zh-TW') : ''
+    m.joinDate ? exportDateFormatter.format(new Date(m.joinDate)) : ''
   ])
 
   const csv = [headers, ...rows].map(row => row.join(',')).join('\n')

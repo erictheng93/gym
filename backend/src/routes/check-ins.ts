@@ -151,7 +151,14 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const [tenantBranchIds, [member], [activeContractResult], [existingCheckIn]] = await Promise.all([
     getTenantBranchIds(tenantId),
     db
-      .select()
+      .select({
+        id: members.id,
+        memberCode: members.memberCode,
+        fullName: members.fullName,
+        phone: members.phone,
+        email: members.email,
+        status: members.status,
+      })
       .from(members)
       .where(eq(members.id, data.memberId))
       .limit(1),
@@ -177,7 +184,15 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       )
       .limit(1),
     db
-      .select()
+      .select({
+        id: checkIns.id,
+        memberId: checkIns.memberId,
+        branchId: checkIns.branchId,
+        contractId: checkIns.contractId,
+        checkInType: checkIns.checkInType,
+        checkInTime: checkIns.checkInTime,
+        notes: checkIns.notes,
+      })
       .from(checkIns)
       .where(
         and(
