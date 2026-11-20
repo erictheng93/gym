@@ -1,3 +1,19 @@
+<script lang="ts">
+const checkinMonthDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+const checkinWeekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
+const checkinDateKeyFormatter = new Intl.DateTimeFormat('zh-TW')
+
+const VERIFICATION_LABELS: Record<string, string> = {
+  BARCODE: '條碼',
+  QR_CODE: 'QR Code',
+  MANUAL: '人工',
+  FACE_ID: '人臉辨識',
+  FINGERPRINT: '指紋',
+  BATCH: '批次簽到'
+}
+</script>
+
 <script setup lang="ts">
 import { useFetch } from '~/composables/core/useFetch'
 
@@ -70,12 +86,6 @@ onMounted(() => {
   fetchCheckins()
 })
 
-// Cached Intl formatters
-const checkinMonthDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
-const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
-const checkinWeekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
-const checkinDateKeyFormatter = new Intl.DateTimeFormat('zh-TW')
-
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr)
   return {
@@ -83,15 +93,6 @@ const formatDateTime = (dateStr: string) => {
     time: checkinTimeFormatter.format(date),
     weekday: checkinWeekdayFormatter.format(date),
   }
-}
-
-const VERIFICATION_LABELS: Record<string, string> = {
-  BARCODE: '條碼',
-  QR_CODE: 'QR Code',
-  MANUAL: '人工',
-  FACE_ID: '人臉辨識',
-  FINGERPRINT: '指紋',
-  BATCH: '批次簽到'
 }
 
 const verificationLabels = VERIFICATION_LABELS

@@ -27,6 +27,8 @@ const PAYMENT_RETURNING = {
   tenantId: payments.tenantId,
 };
 
+const PAYMENT_SELECT = PAYMENT_RETURNING;
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -83,7 +85,7 @@ app.get('/', async (c) => {
       .where(whereCondition),
     db
       .select({
-        payment: payments,
+        payment: PAYMENT_SELECT,
         member: {
           id: members.id,
           fullName: members.fullName,
@@ -276,7 +278,7 @@ app.get('/:id', async (c) => {
 
   const [payment] = await db
     .select({
-      payment: payments,
+      payment: PAYMENT_SELECT,
       member: {
         id: members.id,
         fullName: members.fullName,

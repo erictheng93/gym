@@ -13,6 +13,28 @@ import type { CoachVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
+const TEACHING_MATERIAL_SELECT = {
+  id: teachingMaterials.id,
+  type: teachingMaterials.type,
+  category: teachingMaterials.category,
+  name: teachingMaterials.name,
+  description: teachingMaterials.description,
+  fileId: teachingMaterials.fileId,
+  videoUrl: teachingMaterials.videoUrl,
+  thumbnailUrl: teachingMaterials.thumbnailUrl,
+  muscleGroups: teachingMaterials.muscleGroups,
+  equipment: teachingMaterials.equipment,
+  difficulty: teachingMaterials.difficulty,
+  instructions: teachingMaterials.instructions,
+  tips: teachingMaterials.tips,
+  commonMistakes: teachingMaterials.commonMistakes,
+  isActive: teachingMaterials.isActive,
+  createdBy: teachingMaterials.createdBy,
+  createdAt: teachingMaterials.createdAt,
+  updatedAt: teachingMaterials.updatedAt,
+  tenantId: teachingMaterials.tenantId,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -389,7 +411,7 @@ app.get('/:id', async (c) => {
   // Get material and file info in a single query
   const [result] = await db
     .select({
-      material: teachingMaterials,
+      material: TEACHING_MATERIAL_SELECT,
       fileId: files.id,
       filename: files.filename,
       mimeType: files.mimeType,

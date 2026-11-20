@@ -1,5 +1,35 @@
+<script lang="ts">
+import { STATUS } from '~/constants'
+
+const dashboardDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric'
+})
+
+const dashboardCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
+const dashboardHeaderDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
+}
+</script>
+
 <script setup lang="ts">
-import { MESSAGES, PAGES, STATUS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
@@ -105,35 +135,9 @@ onMounted(() => {
   fetchDashboardData()
 })
 
-const dashboardDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  month: 'short',
-  day: 'numeric'
-})
-
-const dashboardCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
-  style: 'currency',
-  currency: 'TWD',
-  maximumFractionDigits: 0
-})
-
-const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
-  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-  SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
-}
-
 const formatDate = (dateStr: string) => {
   return dashboardDateFormatter.format(new Date(dateStr))
 }
-
-const dashboardHeaderDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  weekday: 'long',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-})
 
 const todayFormatted = computed(() => dashboardHeaderDateFormatter.format(new Date()))
 

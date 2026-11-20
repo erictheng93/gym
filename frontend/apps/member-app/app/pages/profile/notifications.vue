@@ -1,3 +1,26 @@
+<script lang="ts">
+const notificationDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const NOTIFICATION_STATUS_LABEL_MAP: Record<string, string> = {
+  sent: '已發送',
+  delivered: '已送達',
+  failed: '失敗',
+  pending: '待發送',
+}
+
+const NOTIFICATION_STATUS_CLASS_MAP: Record<string, string> = {
+  sent: 'status-success',
+  delivered: 'status-success',
+  failed: 'status-error',
+  pending: 'status-pending',
+}
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth'
@@ -227,14 +250,6 @@ watch(activeTab, async (tab) => {
   }
 })
 
-// Cached Intl formatter
-const notificationDateFormatter = new Intl.DateTimeFormat('zh-TW', {
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
 // Format date for display
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
@@ -245,28 +260,12 @@ const formatDate = (dateStr: string) => {
 
 // Get status badge class
 const getStatusClass = (status: string) => {
-  switch (status) {
-    case 'sent':
-    case 'delivered':
-      return 'status-success'
-    case 'failed':
-      return 'status-error'
-    case 'pending':
-      return 'status-pending'
-    default:
-      return 'status-default'
-  }
+  return NOTIFICATION_STATUS_CLASS_MAP[status] || 'status-default'
 }
 
 // Get status label
 const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    sent: '已發送',
-    delivered: '已送達',
-    failed: '失敗',
-    pending: '待發送',
-  }
-  return labels[status] || status
+  return NOTIFICATION_STATUS_LABEL_MAP[status] || status
 }
 </script>
 

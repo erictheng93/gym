@@ -36,6 +36,8 @@ const CONTRACT_RETURNING = {
   tenantId: contracts.tenantId,
 };
 
+const CONTRACT_SELECT = CONTRACT_RETURNING;
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -88,7 +90,7 @@ app.get('/', async (c) => {
       .where(and(...conditions)),
     db
       .select({
-        contract: contracts,
+        contract: CONTRACT_SELECT,
         member: {
           id: members.id,
           fullName: members.fullName,
@@ -147,7 +149,7 @@ app.get('/export', async (c) => {
 
   const result = await db
     .select({
-      contract: contracts,
+      contract: CONTRACT_SELECT,
       member: {
         id: members.id,
         fullName: members.fullName,
@@ -210,7 +212,7 @@ app.get('/:id', async (c) => {
   const [[contract], branchIds, logs, contractPayments] = await Promise.all([
     db
       .select({
-        contract: contracts,
+        contract: CONTRACT_SELECT,
         member: {
           id: members.id,
           fullName: members.fullName,
