@@ -95,8 +95,8 @@ const filteredMembers = computed(() => {
   if (!searchQuery.value) return []
   const query = searchQuery.value.toLowerCase()
   return members.value.filter(m =>
-    m.full_name?.toLowerCase().includes(query) ||
-    m.member_code?.toLowerCase().includes(query) ||
+    (m.full_name || m.fullName)?.toLowerCase().includes(query) ||
+    (m.member_code || m.memberCode)?.toLowerCase().includes(query) ||
     m.phone?.includes(query)
   ).slice(0, 5)
 })
@@ -140,9 +140,10 @@ const performMemberCheckin = async () => {
   errorMessage.value = ''
 
   try {
+    const branchId = currentEmployee.value?.branch_id || selectedMember.value?.branch_id || selectedMember.value?.branchId
     const result = await doCheckin({
       memberId: selectedMember.value.id,
-      branchId: currentEmployee.value?.branch_id || undefined,
+      branchId: branchId || undefined,
       contractId: selectedContract.value?.id || undefined,
       verifiedBy: currentEmployee.value?.id || undefined
     })
@@ -180,8 +181,8 @@ const filteredEmployees = computed(() => {
   if (!employeeSearchQuery.value) return []
   const query = employeeSearchQuery.value.toLowerCase()
   return employees.value.filter(e =>
-    e.full_name?.toLowerCase().includes(query) ||
-    e.employee_code?.toLowerCase().includes(query) ||
+    (e.full_name || e.fullName)?.toLowerCase().includes(query) ||
+    (e.employee_code || e.employeeCode)?.toLowerCase().includes(query) ||
     e.phone?.includes(query)
   ).slice(0, 5)
 })
@@ -470,7 +471,7 @@ const getAttendanceStatusLabel = (status: string) => {
 
 const canMemberCheckin = computed(() => {
   if (!selectedMember.value) return false
-  const status = selectedMember.value.member_status
+  const status = selectedMember.value.member_status || selectedMember.value.status
   return (status === 'ACTIVE' || status === 'active') && !alreadyCheckedIn.value
 })
 
@@ -633,13 +634,13 @@ const todayCountLabel = computed(() => {
                 class="result-item"
                 @click="selectMember(member)"
               >
-                <div class="result-avatar">{{ member.full_name?.[0] }}</div>
+                <div class="result-avatar">{{ (member.full_name || member.fullName)?.[0] }}</div>
                 <div class="result-info">
-                  <span class="result-name">{{ member.full_name }}</span>
-                  <span class="result-code">{{ member.member_code }}</span>
+                  <span class="result-name">{{ member.full_name || member.fullName }}</span>
+                  <span class="result-code">{{ member.member_code || member.memberCode }}</span>
                 </div>
-                <span class="member-status" :class="getMemberStatusClass(member.member_status)">
-                  {{ getMemberStatusLabel(member.member_status) }}
+                <span class="member-status" :class="getMemberStatusClass(member.member_status || member.status)">
+                  {{ getMemberStatusLabel(member.member_status || member.status) }}
                 </span>
               </button>
             </div>
@@ -655,13 +656,13 @@ const todayCountLabel = computed(() => {
             <!-- Selected Member Preview -->
             <div v-if="selectedMember" class="selected-preview theme-member">
               <div class="selected-header">
-                <div class="selected-avatar">{{ selectedMember.full_name?.[0] }}</div>
+                <div class="selected-avatar">{{ (selectedMember.full_name || selectedMember.fullName)?.[0] }}</div>
                 <div class="selected-info">
-                  <h3>{{ selectedMember.full_name }}</h3>
-                  <p>{{ selectedMember.member_code }}</p>
+                  <h3>{{ selectedMember.full_name || selectedMember.fullName }}</h3>
+                  <p>{{ selectedMember.member_code || selectedMember.memberCode }}</p>
                 </div>
-                <span class="member-status large" :class="getMemberStatusClass(selectedMember.member_status)">
-                  {{ getMemberStatusLabel(selectedMember.member_status) }}
+                <span class="member-status large" :class="getMemberStatusClass(selectedMember.member_status || selectedMember.status)">
+                  {{ getMemberStatusLabel(selectedMember.member_status || selectedMember.status) }}
                 </span>
               </div>
 
@@ -780,10 +781,10 @@ const todayCountLabel = computed(() => {
                 class="result-item"
                 @click="selectEmployee(employee)"
               >
-                <div class="result-avatar theme-staff">{{ employee.full_name?.[0] }}</div>
+                <div class="result-avatar theme-staff">{{ (employee.full_name || employee.fullName)?.[0] }}</div>
                 <div class="result-info">
-                  <span class="result-name">{{ employee.full_name }}</span>
-                  <span class="result-code">{{ employee.employee_code }}</span>
+                  <span class="result-name">{{ employee.full_name || employee.fullName }}</span>
+                  <span class="result-code">{{ employee.employee_code || employee.employeeCode }}</span>
                 </div>
                 <span class="employee-role">{{ employee.job_title?.name || '員工' }}</span>
               </button>
@@ -800,10 +801,10 @@ const todayCountLabel = computed(() => {
             <!-- Selected Employee Preview -->
             <div v-if="selectedEmployee" class="selected-preview theme-staff">
               <div class="selected-header">
-                <div class="selected-avatar theme-staff">{{ selectedEmployee.full_name?.[0] }}</div>
+                <div class="selected-avatar theme-staff">{{ (selectedEmployee.full_name || selectedEmployee.fullName)?.[0] }}</div>
                 <div class="selected-info">
-                  <h3>{{ selectedEmployee.full_name }}</h3>
-                  <p>{{ selectedEmployee.employee_code }}</p>
+                  <h3>{{ selectedEmployee.full_name || selectedEmployee.fullName }}</h3>
+                  <p>{{ selectedEmployee.employee_code || selectedEmployee.employeeCode }}</p>
                 </div>
                 <span class="employee-role large">{{ selectedEmployee.job_title?.name || '員工' }}</span>
               </div>
