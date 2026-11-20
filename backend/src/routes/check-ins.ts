@@ -9,6 +9,23 @@ import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const CHECK_IN_RETURNING = {
+  id: checkIns.id,
+  status: checkIns.status,
+  dateCreated: checkIns.dateCreated,
+  dateUpdated: checkIns.dateUpdated,
+  memberId: checkIns.memberId,
+  branchId: checkIns.branchId,
+  contractId: checkIns.contractId,
+  checkInTime: checkIns.checkInTime,
+  checkInType: checkIns.checkInType,
+  checkInMethod: checkIns.checkInMethod,
+  processedById: checkIns.processedById,
+  locationIp: checkIns.locationIp,
+  locationDevice: checkIns.locationDevice,
+  notes: checkIns.notes,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -246,7 +263,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       checkInTime: new Date(),
       processedById: user.employeeId,
       notes: data.notes,
-    }).returning(),
+    }).returning(CHECK_IN_RETURNING),
     activePlan?.planType === 'COUNT_BASED' && activeContract
       ? db
           .update(contracts)

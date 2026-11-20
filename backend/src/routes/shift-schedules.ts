@@ -8,6 +8,36 @@ import type { AuthVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const SHIFT_SCHEDULE_RETURNING = {
+  id: shiftSchedules.id,
+  status: shiftSchedules.status,
+  createdAt: shiftSchedules.createdAt,
+  updatedAt: shiftSchedules.updatedAt,
+  branchId: shiftSchedules.branchId,
+  name: shiftSchedules.name,
+  startTime: shiftSchedules.startTime,
+  endTime: shiftSchedules.endTime,
+  breakStart: shiftSchedules.breakStart,
+  breakEnd: shiftSchedules.breakEnd,
+  gracePeriodMinutes: shiftSchedules.gracePeriodMinutes,
+  earlyLeaveMinutes: shiftSchedules.earlyLeaveMinutes,
+  overtimeStartAfter: shiftSchedules.overtimeStartAfter,
+  isDefault: shiftSchedules.isDefault,
+  applicableDays: shiftSchedules.applicableDays,
+  tenantId: shiftSchedules.tenantId,
+};
+
+const EMPLOYEE_SHIFT_RETURNING = {
+  id: employeeShifts.id,
+  createdAt: employeeShifts.createdAt,
+  updatedAt: employeeShifts.updatedAt,
+  employeeId: employeeShifts.employeeId,
+  shiftScheduleId: employeeShifts.shiftScheduleId,
+  effectiveDate: employeeShifts.effectiveDate,
+  endDate: employeeShifts.endDate,
+  tenantId: employeeShifts.tenantId,
+};
+
 app.use('*', authMiddleware, requireAuth);
 
 // =============================================================================
@@ -209,7 +239,7 @@ app.post('/', zValidator('json', createShiftSchema), async (c) => {
         applicableDays: data.applicable_days ?? ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
         status: data.status ?? 'published',
       })
-      .returning();
+      .returning(SHIFT_SCHEDULE_RETURNING);
 
     return c.json({
       success: true,
@@ -277,7 +307,7 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
     .update(shiftSchedules)
     .set(updates)
     .where(eq(shiftSchedules.id, id))
-    .returning();
+    .returning(SHIFT_SCHEDULE_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '找不到班表' }, 404);
@@ -451,7 +481,7 @@ app.post('/employee_shifts', zValidator('json', createEmployeeShiftSchema), asyn
         effectiveDate: data.effective_date,
         endDate: data.end_date || null,
       })
-      .returning();
+      .returning(EMPLOYEE_SHIFT_RETURNING);
 
     return c.json({
       success: true,
@@ -491,7 +521,7 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
     .update(employeeShifts)
     .set(updates)
     .where(eq(employeeShifts.id, id))
-    .returning();
+    .returning(EMPLOYEE_SHIFT_RETURNING);
 
   if (!updated) {
     return c.json({ success: false, error: '找不到班表指派' }, 404);

@@ -130,8 +130,10 @@ const handleSubmit = async () => {
   }
 }
 
+const paymentNumberFormatter = new Intl.NumberFormat('zh-TW')
+
 const formatCurrency = (amount: number) => {
-  return `NT$ ${amount.toLocaleString()}`
+  return `NT$ ${paymentNumberFormatter.format(amount)}`
 }
 </script>
 
