@@ -215,6 +215,22 @@ const timeFormatter = new Intl.DateTimeFormat('zh-TW', {
   hour: '2-digit',
   minute: '2-digit',
 })
+
+const COACH_CLASS_STATUS_CLASSES: Record<string, string> = {
+  BOOKED: 'status-booked',
+  COMPLETED: 'status-completed',
+  MEMBER_CANCELLED: 'status-cancelled',
+  COACH_CANCELLED: 'status-cancelled',
+  NO_SHOW: 'status-no-show',
+}
+
+const COACH_CLASS_STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '已預約',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
 </script>
 
 <script setup lang="ts">
@@ -274,22 +290,6 @@ const fetchTodayClasses = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const COACH_CLASS_STATUS_CLASSES: Record<string, string> = {
-  BOOKED: 'status-booked',
-  COMPLETED: 'status-completed',
-  MEMBER_CANCELLED: 'status-cancelled',
-  COACH_CANCELLED: 'status-cancelled',
-  NO_SHOW: 'status-no-show',
-}
-
-const COACH_CLASS_STATUS_TEXTS: Record<string, string> = {
-  BOOKED: '已預約',
-  COMPLETED: '已完成',
-  MEMBER_CANCELLED: '學員取消',
-  COACH_CANCELLED: '教練取消',
-  NO_SHOW: '未到',
 }
 
 const formatTime = (dateStr: string) => {

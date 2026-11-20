@@ -328,15 +328,15 @@ const isOverdue = (invoice) => {
   return new Date(invoice.due_date) < new Date()
 }
 
-const getStatusLabel = (status: string) => INVOICE_STATUS_LABELS[status] || status
+const getStatusLabel = (status) => INVOICE_STATUS_LABELS[status] || status
 
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return isNaN(d.getTime()) ? '' : invoiceDateFormatter.format(d)
 }
 
-const formatCurrency = (amount: number | null | undefined) => {
+const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
   return invoiceCurrencyFormatter.format(amount)
 }

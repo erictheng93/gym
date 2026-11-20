@@ -1,6 +1,6 @@
 import webPush from 'web-push';
 import { db, pushSubscriptions } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 // Type guard for web-push errors
 function isWebPushError(error: unknown): error is { statusCode: number } {
@@ -47,27 +47,39 @@ class PushService {
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.userId, userId));
 
+    if (subscriptions.length === 0) {
+      return 0;
+    }
+
+    const stringifiedPayload = JSON.stringify(payload);
+    const expiredIds: string[] = [];
     let successCount = 0;
 
-    for (const sub of subscriptions) {
-      try {
-        await webPush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
+    await Promise.all(
+      subscriptions.map(async (sub) => {
+        try {
+          await webPush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              },
             },
-          },
-          JSON.stringify(payload)
-        );
-        successCount++;
-      } catch (error: unknown) {
-        if (isWebPushError(error) && (error.statusCode === 410 || error.statusCode === 404)) {
-          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+            stringifiedPayload
+          );
+          successCount++;
+        } catch (error: unknown) {
+          if (isWebPushError(error) && (error.statusCode === 410 || error.statusCode === 404)) {
+            expiredIds.push(sub.id);
+          }
+          console.error('[Push] Send failed:', error);
         }
-        console.error('[Push] Send failed:', error);
-      }
+      })
+    );
+
+    if (expiredIds.length > 0) {
+      await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, expiredIds));
     }
 
     return successCount;
@@ -84,27 +96,39 @@ class PushService {
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.memberId, memberId));
 
+    if (subscriptions.length === 0) {
+      return 0;
+    }
+
+    const stringifiedPayload = JSON.stringify(payload);
+    const expiredIds: string[] = [];
     let successCount = 0;
 
-    for (const sub of subscriptions) {
-      try {
-        await webPush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
+    await Promise.all(
+      subscriptions.map(async (sub) => {
+        try {
+          await webPush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              },
             },
-          },
-          JSON.stringify(payload)
-        );
-        successCount++;
-      } catch (error: unknown) {
-        if (isWebPushError(error) && (error.statusCode === 410 || error.statusCode === 404)) {
-          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+            stringifiedPayload
+          );
+          successCount++;
+        } catch (error: unknown) {
+          if (isWebPushError(error) && (error.statusCode === 410 || error.statusCode === 404)) {
+            expiredIds.push(sub.id);
+          }
+          console.error('[Push] Send failed:', error);
         }
-        console.error('[Push] Send failed:', error);
-      }
+      })
+    );
+
+    if (expiredIds.length > 0) {
+      await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, expiredIds));
     }
 
     return successCount;

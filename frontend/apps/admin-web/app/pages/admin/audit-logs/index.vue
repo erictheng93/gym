@@ -395,16 +395,16 @@ const changePage = (newPage) => {
   }
 }
 
-const getActionLabel = (action: string) => ACTION_LABELS[action] || action
-const getResourceLabel = (resourceType: string) => RESOURCE_LABELS[resourceType] || resourceType
-const getSeverityLabel = (severity: string) => SEVERITY_LABELS[severity] || severity
+const getActionLabel = (action) => ACTION_LABELS[action] || action
+const getResourceLabel = (resourceType) => RESOURCE_LABELS[resourceType] || resourceType
+const getSeverityLabel = (severity) => SEVERITY_LABELS[severity] || severity
 
-const formatNumber = (num: number | null | undefined) => {
+const formatNumber = (num) => {
   if (num === null || num === undefined) return '0'
   return auditNumberFormatter.format(num)
 }
 
-const formatDateTime = (dateStr: string) => {
+const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return isNaN(d.getTime()) ? '' : auditDateTimeFormatter.format(d)
