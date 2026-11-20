@@ -122,7 +122,7 @@ app.get('/', async (c) => {
 
   const condition = branchId
     ? eq(employees.branchId, branchId)
-    : inArray(employees.branchId, branchIds);
+    : (branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds));
 
   const result = await db
     .select(EMPLOYEE_LIST_JOIN_SELECT)
@@ -132,13 +132,19 @@ app.get('/', async (c) => {
     .where(condition)
     .orderBy(employees.fullName);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.employee,
       jobTitle: r.jobTitle,
       branch: r.branch,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 
@@ -193,10 +199,11 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
+  const branchFilter = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [countResult] = await db
     .select(EMPLOYEE_COUNT_SELECT)
     .from(employees)
-    .where(inArray(employees.branchId, branchIds));
+    .where(branchFilter);
 
   const employeeCount = Number(countResult?.count || 0);
   const employeeCode = `E${String(employeeCount + 1).padStart(5, '0')}`;
@@ -240,10 +247,11 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   if (data.hireDate !== undefined && data.hireDate !== null) updateData.hireDate = data.hireDate;
   if (data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary ? String(data.basicSalary) : null;
 
+  const branchCondition = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [updatedEmployee] = await db
     .update(employees)
     .set(updateData)
-    .where(and(eq(employees.id, id), inArray(employees.branchId, branchIds)))
+    .where(and(eq(employees.id, id), branchCondition))
     .returning(EMPLOYEE_RETURNING);
 
   if (!updatedEmployee) {
@@ -271,13 +279,14 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
     return c.json({ success: false, error: '無權限刪除此員工' }, 403);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [resignedEmployee] = await db
     .update(employees)
     .set({
       status: 'RESIGNED',
       updatedAt: new Date(),
     })
-    .where(and(eq(employees.id, id), inArray(employees.branchId, branchIds)))
+    .where(and(eq(employees.id, id), branchCondition))
     .returning(EMPLOYEE_RESIGNED_RETURNING);
 
   if (!resignedEmployee) {

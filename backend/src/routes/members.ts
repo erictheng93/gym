@@ -321,10 +321,11 @@ app.post('/', zValidator('json', createMemberSchema), async (c) => {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
+  const branchFilter = branchIds.length === 1 ? eq(members.branchId, branchIds[0]) : inArray(members.branchId, branchIds);
   const [countResult] = await db
     .select(COUNT_SELECT)
     .from(members)
-    .where(inArray(members.branchId, branchIds));
+    .where(branchFilter);
 
   const memberCount = Number(countResult?.count || 0);
 
@@ -354,13 +355,14 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(members.branchId, branchIds[0]) : inArray(members.branchId, branchIds);
   const [updatedMember] = await db
     .update(members)
     .set({
       ...data,
       updatedAt: new Date(),
     })
-    .where(and(eq(members.id, id), inArray(members.branchId, branchIds)))
+    .where(and(eq(members.id, id), branchCondition))
     .returning(MEMBER_RETURNING);
 
   if (!updatedMember) {
@@ -388,10 +390,11 @@ app.delete('/:id', async (c) => {
     return c.json({ success: false, error: '無權限刪除此會員' }, 403);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(members.branchId, branchIds[0]) : inArray(members.branchId, branchIds);
   const [updatedMember] = await db
     .update(members)
     .set({ status: 'SUSPENDED', updatedAt: new Date() })
-    .where(and(eq(members.id, id), inArray(members.branchId, branchIds)))
+    .where(and(eq(members.id, id), branchCondition))
     .returning(MEMBER_ID_SELECT);
 
   if (!updatedMember) {
