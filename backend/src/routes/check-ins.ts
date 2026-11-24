@@ -233,7 +233,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     db
       .select(CHECK_IN_MEMBER_SELECT)
       .from(members)
-      .where(eq(members.id, data.memberId))
+      .where(and(eq(members.id, data.memberId), eq(members.tenantId, tenantId)))
       .limit(1),
     db
       .select(CHECK_IN_ACTIVE_CONTRACT_SELECT)
@@ -242,6 +242,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       .where(
         and(
           eq(contracts.memberId, data.memberId),
+          eq(contracts.tenantId, tenantId),
           eq(contracts.status, 'ACTIVE'),
           lte(contracts.startDate, today),
           gte(contracts.endDate, today)
@@ -268,6 +269,21 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
 
   if (!member) {
     return c.json({ success: false, error: '會員不存在' }, 404);
+  }
+
+  if (data.contractId) {
+    const [ownContract] = await db
+      .select({ id: contracts.id })
+      .from(contracts)
+      .where(and(
+        eq(contracts.id, data.contractId),
+        eq(contracts.memberId, data.memberId),
+        eq(contracts.tenantId, tenantId),
+      ))
+      .limit(1);
+    if (!ownContract) {
+      return c.json({ success: false, error: '合約不存在' }, 404);
+    }
   }
 
   const activeContract = activeContractResult?.contract;

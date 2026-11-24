@@ -194,7 +194,7 @@ app.post(
     const [branch] = await db
       .select(BRANCH_NAME_SELECT)
       .from(branches)
-      .where(eq(branches.id, data.branchId))
+      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, memberInfo.tenantId)))
       .limit(1);
 
     if (!branch) {
