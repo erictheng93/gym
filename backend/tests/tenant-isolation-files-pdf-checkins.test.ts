@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
+import { eq } from 'drizzle-orm';
+import { db, leads, members } from '../src/db/index.js';
 import { escapeHtml, isAllowedPdfRequest } from '../src/services/pdf.js';
 import {
   createTestFixtures,
@@ -8,6 +10,7 @@ import {
   memberAuthRequest,
   getAuthToken,
   TEST_BRANCH_ID,
+  TEST_TENANT_ID,
   TEST_BRANCH_B_ID,
   TEST_MEMBER_ID,
   TEST_MEMBER_B_ID,
@@ -102,5 +105,27 @@ describe('Tenant isolation: files, pdf, check-ins, member issues', () => {
       }),
     });
     expect(res.status).toBe(404);
+  });
+  it('lead conversion stamps the new member with the tenant', async () => {
+    const phone = `09${Date.now().toString().slice(-8)}`;
+    const created = await authRequest('/api/leads', {
+      method: 'POST',
+      token: authToken,
+      body: JSON.stringify({ fullName: 'Lead Tenant Test', phone, branchId: TEST_BRANCH_ID }),
+    });
+    expect(created.status).toBe(201);
+    const leadId = (await created.json()).data.id as string;
+
+    const res = await authRequest(`/api/leads/${leadId}/convert`, { method: 'POST', token: authToken });
+    expect(res.status).toBe(200);
+    const memberId = (await res.json()).data.member.id as string;
+
+    try {
+      const [member] = await db.select({ tenantId: members.tenantId }).from(members).where(eq(members.id, memberId));
+      expect(member.tenantId).toBe(TEST_TENANT_ID);
+    } finally {
+      await db.delete(leads).where(eq(leads.id, leadId));
+      await db.delete(members).where(eq(members.id, memberId));
+    }
   });
 });
