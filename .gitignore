@@ -49,3 +49,8 @@ Gym參考廠商/
 
 # Git worktrees
 .worktrees/
+
+# curl cookie jars (may contain session tokens)
+cookies.txt
+*.cookies
+cookie*.txt
