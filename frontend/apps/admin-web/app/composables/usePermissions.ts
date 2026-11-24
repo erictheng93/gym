@@ -31,6 +31,8 @@ const state = reactive<PermissionState>({
 })
 
 let inFlightPermissionsPromise: Promise<void> | null = null
+// Bumped per fetch; a response from an older (superseded) fetch must not write state
+let permissionsRequestSeq = 0
 
 export const usePermissions = () => {
   const config = useRuntimeConfig()
@@ -52,6 +54,7 @@ export const usePermissions = () => {
       return inFlightPermissionsPromise
     }
 
+    const seq = ++permissionsRequestSeq
     inFlightPermissionsPromise = (async () => {
       state.isLoading = true
       state.employeeStatus = 'loading'
@@ -71,6 +74,7 @@ export const usePermissions = () => {
         }
 
         const result = await response.json()
+        if (seq !== permissionsRequestSeq) return
 
         if (!result.success) {
           throw new Error(result.error || 'Failed to fetch permissions')
@@ -101,13 +105,16 @@ export const usePermissions = () => {
 
         state.permissions = data.permissions || {}
       } catch (error) {
+        if (seq !== permissionsRequestSeq) return
         console.error('[usePermissions] Failed to fetch permissions:', error)
         state.error = error as Error
         state.permissions = {}
         state.employeeStatus = 'unknown'
       } finally {
-        state.isLoading = false
-        inFlightPermissionsPromise = null
+        if (seq === permissionsRequestSeq) {
+          state.isLoading = false
+          inFlightPermissionsPromise = null
+        }
       }
     })()
 
@@ -165,7 +172,8 @@ export const usePermissions = () => {
   // 監聽使用者變更
   watch(() => user.value?.id, (newUserId) => {
     if (newUserId) {
-      fetchPermissions()
+      // force: never reuse an in-flight fetch started for the previous user
+      fetchPermissions(true)
     } else {
       clearPermissions()
     }

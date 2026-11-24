@@ -180,7 +180,8 @@ app.get('/', async (c) => {
   const conditions = [branchCondition];
   if (status) {
     // Case-insensitive status comparison using index-friendly uppercase normalization
-    conditions.push(eq(contracts.status, status.toUpperCase() as typeof CONTRACT_STATUS[number]));
+    // ponytail: upper+lower covers legacy lowercase rows without lower() defeating the index
+    conditions.push(inArray(contracts.status, [status.toUpperCase(), status.toLowerCase()] as typeof CONTRACT_STATUS[number][]));
   }
 
   // Determine sort order
@@ -240,7 +241,8 @@ app.get('/export', async (c) => {
   const conditions = [branchCondition];
   if (status) {
     // Case-insensitive status comparison using index-friendly uppercase normalization
-    conditions.push(eq(contracts.status, status.toUpperCase() as typeof CONTRACT_STATUS[number]));
+    // ponytail: upper+lower covers legacy lowercase rows without lower() defeating the index
+    conditions.push(inArray(contracts.status, [status.toUpperCase(), status.toLowerCase()] as typeof CONTRACT_STATUS[number][]));
   }
 
   const result = await db

@@ -134,20 +134,8 @@ export default defineNuxtConfig({
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
       runtimeCaching: [
         {
-          // Coach API 請求 - Network First with timeout for offline support
-          urlPattern: /\/api\/coach\/.*/i,
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'coach-api-cache',
-            expiration: {
-              maxEntries: 100,
-              maxAgeSeconds: 60 * 60 * 24
-            },
-            cacheableResponse: {
-              statuses: [0, 200]
-            },
-            networkTimeoutSeconds: 5,
-          }
+          urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+          handler: 'NetworkOnly',
         },
         {
           // 圖片 - Cache First
