@@ -23,26 +23,57 @@ vi.mock('../src/services/payment.js', () => ({
 const mockUpdateWhere = vi.fn();
 const mockUpdateSet = vi.fn();
 const mockUpdate = vi.fn();
+/** db.update outside a transaction - webhook writes must never use it */
+const mockDbUpdate = vi.fn();
 
+const mockSelectFor = vi.fn();
 const mockSelectLimit = vi.fn();
+/** Result of a select awaited right after .where() (the paid-total sum) */
+const mockSelectSum = vi.fn();
 const mockSelectWhere = vi.fn();
 const mockSelectFrom = vi.fn();
 const mockSelect = vi.fn();
+const mockTransaction = vi.fn();
+
+const txClient = {
+  select: (...args: unknown[]) => mockSelect(...args),
+  update: (...args: unknown[]) => mockUpdate(...args),
+};
+
+/** .limit() result: awaitable directly or after .for('update') */
+function limitBuilder(...args: unknown[]) {
+  const result = mockSelectLimit(...args);
+  return {
+    for: (...lockArgs: unknown[]) => {
+      mockSelectFor(...lockArgs);
+      return Promise.resolve(result);
+    },
+    then: (onFulfilled?: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+      Promise.resolve(result).then(onFulfilled, onRejected),
+  };
+}
 
 function setupMockDefaults() {
   mockSelect.mockImplementation(() => ({ from: mockSelectFrom }));
   mockSelectFrom.mockImplementation(() => ({ where: mockSelectWhere }));
-  mockSelectWhere.mockImplementation(() => ({ limit: mockSelectLimit }));
+  mockSelectWhere.mockImplementation(() => ({
+    limit: limitBuilder,
+    then: (onFulfilled?: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+      Promise.resolve(mockSelectSum()).then(onFulfilled, onRejected),
+  }));
+  mockSelectSum.mockReturnValue([{ total: '5000' }]);
   mockUpdate.mockImplementation(() => ({ set: mockUpdateSet }));
   mockUpdateSet.mockImplementation(() => ({ where: mockUpdateWhere }));
   mockUpdateWhere.mockResolvedValue(undefined);
+  mockTransaction.mockImplementation((cb: (tx: typeof txClient) => unknown) => cb(txClient));
   mockIsGatewayEnabled.mockReturnValue(true);
 }
 
 vi.mock('../src/db/index.js', () => ({
   db: {
     select: (...args: unknown[]) => mockSelect(...args),
-    update: (...args: unknown[]) => mockUpdate(...args),
+    update: (...args: unknown[]) => mockDbUpdate(...args),
+    transaction: (...args: unknown[]) => mockTransaction(...args),
   },
   payments: {
     id: 'id',
@@ -59,6 +90,9 @@ vi.mock('../src/db/index.js', () => ({
     id: 'contracts.id',
     status: 'contracts.status',
     totalAmount: 'contracts.totalAmount',
+    paidAmount: 'contracts.paidAmount',
+    paymentStatus: 'contracts.paymentStatus',
+    updatedAt: 'contracts.updatedAt',
     tenantId: 'contracts.tenantId',
   },
 }));
@@ -70,10 +104,11 @@ vi.mock('../src/db/index.js', () => ({
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: unknown, b: unknown) => ({ _op: 'eq', a, b })),
   and: vi.fn((...args: unknown[]) => ({ _op: 'and', args })),
+  sum: vi.fn((col: unknown) => ({ _op: 'sum', col })),
 }));
 
 // handlePaymentSuccess query results
-const PAYMENT_ROW = { amount: '5000', contractId: 'contract-1', tenantId: 'tenant-1' };
+const PAYMENT_ROW = { amount: '5000', contractId: 'contract-1', tenantId: 'tenant-1', receiptNo: null };
 const CONTRACT_ROW = { totalAmount: '5000' };
 
 // =============================================================================
@@ -88,6 +123,7 @@ vi.stubGlobal('fetch', mockFetch);
 // =============================================================================
 
 import app from '../src/routes/payment-webhooks.js';
+import { payments } from '../src/db/index.js';
 
 // =============================================================================
 // TESTS
@@ -159,8 +195,8 @@ describe('Payment Webhook Routes', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.received).toBe(true);
-      // 2 updates: payment record + contract activation
-      expect(mockUpdate).toHaveBeenCalledTimes(2);
+      // 3 updates: payment record + contract paid total + contract activation
+      expect(mockUpdate).toHaveBeenCalledTimes(3);
       expect(mockUpdateSet).toHaveBeenCalledWith(
         expect.objectContaining({ receiptNo: 'cs_123' }),
       );
@@ -615,7 +651,7 @@ describe('Payment Webhook Routes', () => {
       const location = res.headers.get('location')!;
       expect(location).toContain('/payment/success');
       expect(location).toContain('transaction_id=tx_123');
-      expect(mockUpdate).toHaveBeenCalledTimes(2);
+      expect(mockUpdate).toHaveBeenCalledTimes(3);
       // Confirm must send the expected amount, not 0
       const [, init] = mockFetch.mock.calls[0]!;
       expect(JSON.parse(init.body)).toEqual({ amount: 5000, currency: 'TWD' });
@@ -903,8 +939,8 @@ describe('Payment Webhook Routes', () => {
       const res = await makeStripeRequest('payment-1');
       expect(res.status).toBe(200);
 
-      // 2 updates: payment receiptNo/notes + contract status
-      expect(mockUpdate).toHaveBeenCalledTimes(2);
+      // 3 updates: payment receiptNo/notes + contract paid total + contract status
+      expect(mockUpdate).toHaveBeenCalledTimes(3);
       expect(mockUpdateSet).toHaveBeenLastCalledWith({ status: 'ACTIVE' });
     });
 
@@ -914,7 +950,7 @@ describe('Payment Webhook Routes', () => {
 
       await makeStripeRequest('payment-1');
 
-      const contractWhere = mockUpdateWhere.mock.calls[1]![0] as { _op: string; args: unknown[] };
+      const contractWhere = mockUpdateWhere.mock.calls[2]![0] as { _op: string; args: unknown[] };
       expect(contractWhere._op).toBe('and');
       expect(contractWhere.args).toEqual(expect.arrayContaining([
         { _op: 'eq', a: 'contracts.id', b: 'contract-1' },
@@ -948,7 +984,11 @@ describe('Payment Webhook Routes', () => {
       const res = await makeStripeRequest('payment-1');
       expect(res.status).toBe(200);
 
-      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      // payment + contract paid total; no activation
+      expect(mockUpdate).toHaveBeenCalledTimes(2);
+      expect(mockUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ paidAmount: '5000.00', paymentStatus: 'PARTIAL' }),
+      );
       expect(mockUpdateSet).not.toHaveBeenCalledWith({ status: 'ACTIVE' });
     });
 
@@ -977,6 +1017,190 @@ describe('Payment Webhook Routes', () => {
 
       const res = await makeStripeRequest('payment-1');
       expect(res.status).toBe(500);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Idempotency + transaction (#15)
+  // ---------------------------------------------------------------------------
+  // A stateful fake of the transaction: writes go to a working copy that is
+  // committed only when the callback resolves (rollback on throw), and
+  // transactions are serialized like the payment row's SELECT ... FOR UPDATE.
+
+  describe('idempotency and transactions (#15)', () => {
+    type Row = Record<string, unknown>;
+
+    function installStatefulDb(opts: { totalAmount?: string; otherPaid?: number; failContractUpdate?: boolean } = {}) {
+      const committed: Row = { receiptNo: null, paidAmount: '0', paymentStatus: 'UNPAID', status: 'DRAFT' };
+      const paymentWrites: Row[] = [];
+      let lock: Promise<unknown> = Promise.resolve();
+
+      mockTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => {
+        const run = async () => {
+          const working: Row = { ...committed };
+          const tx = {
+            select: () => ({
+              from: (table: unknown) => ({
+                where: () => ({
+                  limit: () => ({
+                    for: async () => (table === payments
+                      ? [{ ...PAYMENT_ROW, receiptNo: working.receiptNo }]
+                      : [{ totalAmount: opts.totalAmount ?? '5000' }]),
+                  }),
+                  // paid total: this payment row (it exists since checkout) + other payments
+                  then: (onFulfilled?: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+                    Promise.resolve([{ total: String(5000 + (opts.otherPaid ?? 0)) }]).then(onFulfilled, onRejected),
+                }),
+              }),
+            }),
+            update: (table: unknown) => ({
+              set: (values: Row) => ({
+                where: async () => {
+                  if (table === payments) {
+                    paymentWrites.push(values);
+                  } else if (opts.failContractUpdate) {
+                    throw new Error('contract update failed');
+                  }
+                  Object.assign(working, values);
+                },
+              }),
+            }),
+          };
+          const result = await cb(tx);
+          Object.assign(committed, working); // commit only on success
+          return result;
+        };
+        const next = lock.then(run, run);
+        lock = next.catch(() => undefined);
+        return next;
+      });
+
+      return { committed, paymentWrites };
+    }
+
+    function stripeCompleted(sessionId: string | undefined, amountTotal = 500000) {
+      mockVerifyStripe.mockReturnValue(true);
+      return app.request('/stripe', {
+        method: 'POST',
+        headers: { 'stripe-signature': 'valid' },
+        body: JSON.stringify({
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              id: sessionId,
+              metadata: { payment_id: 'payment-1' },
+              payment_status: 'paid',
+              amount_total: amountTotal,
+            },
+          },
+        }),
+      });
+    }
+
+    it('應該在 transaction 中以 FOR UPDATE 鎖定 payment', async () => {
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
+
+      const res = await stripeCompleted('cs_lock');
+
+      expect(res.status).toBe(200);
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+      expect(mockSelectFor).toHaveBeenCalledWith('update');
+      expect(mockDbUpdate).not.toHaveBeenCalled();
+    });
+
+    it('重複送達的 webhook 只處理一次且仍回傳 200', async () => {
+      const { committed, paymentWrites } = installStatefulDb();
+
+      const first = await stripeCompleted('cs_dup');
+      const second = await stripeCompleted('cs_dup');
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(paymentWrites).toHaveLength(1);
+      expect(committed).toMatchObject({
+        receiptNo: 'cs_dup', paidAmount: '5000.00', paymentStatus: 'PAID', status: 'ACTIVE',
+      });
+    });
+
+    it('同時送達的重複 webhook 只產生一次效果', async () => {
+      const { committed, paymentWrites } = installStatefulDb();
+
+      const responses = await Promise.all([
+        stripeCompleted('cs_race'),
+        stripeCompleted('cs_race'),
+        stripeCompleted('cs_race'),
+      ]);
+
+      expect(responses.map((r) => r.status)).toEqual([200, 200, 200]);
+      expect(paymentWrites).toHaveLength(1);
+      expect(committed).toMatchObject({ receiptNo: 'cs_race', paymentStatus: 'PAID' });
+    });
+
+    it('已處理的 payment 收到不同 transactionId 時應記錄錯誤且不重複計算', async () => {
+      const { committed, paymentWrites } = installStatefulDb();
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await stripeCompleted('cs_first');
+      const res = await stripeCompleted('cs_second');
+
+      expect(res.status).toBe(200);
+      expect(paymentWrites).toHaveLength(1);
+      expect(committed.receiptNo).toBe('cs_first');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('cs_second'));
+      errorSpy.mockRestore();
+    });
+
+    it('ECPay 重複通知應該回傳 1|OK 且只處理一次', async () => {
+      const { paymentWrites } = installStatefulDb();
+      mockVerifyECPay.mockReturnValue(true);
+      const send = () => app.request('/ecpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ RtnCode: '1', TradeNo: 'trade-dup', TradeAmt: '5000', CustomField1: 'payment-1' }),
+      });
+
+      expect(await (await send()).text()).toBe('1|OK');
+      expect(await (await send()).text()).toBe('1|OK');
+      expect(paymentWrites).toHaveLength(1);
+    });
+
+    it('合約更新失敗時應該 rollback，payment 保持未處理並回傳 500 讓 gateway 重試', async () => {
+      const { committed, paymentWrites } = installStatefulDb({ failContractUpdate: true });
+
+      const res = await stripeCompleted('cs_fail');
+
+      expect(res.status).toBe(500);
+      // the payment write happened inside the transaction, then was rolled back
+      expect(paymentWrites).toHaveLength(1);
+      expect(committed).toMatchObject({ receiptNo: null, paymentStatus: 'UNPAID', status: 'DRAFT' });
+      expect(mockDbUpdate).not.toHaveBeenCalled();
+    });
+
+    it('部分付款應該更新 paidAmount 與 PARTIAL 狀態但不啟用合約', async () => {
+      const { committed } = installStatefulDb({ totalAmount: '10000' });
+
+      const res = await stripeCompleted('cs_partial');
+
+      expect(res.status).toBe(200);
+      expect(committed).toMatchObject({ paidAmount: '5000.00', paymentStatus: 'PARTIAL', status: 'DRAFT' });
+    });
+
+    it('累計付款達到總額時應該標記 PAID，但單筆不足總額仍不自動啟用', async () => {
+      const { committed } = installStatefulDb({ totalAmount: '10000', otherPaid: 5000 });
+
+      const res = await stripeCompleted('cs_balance');
+
+      expect(res.status).toBe(200);
+      expect(committed).toMatchObject({ paidAmount: '10000.00', paymentStatus: 'PAID', status: 'DRAFT' });
+    });
+
+    it('缺少 transactionId 時不應該處理付款', async () => {
+      const res = await stripeCompleted(undefined);
+
+      expect(res.status).toBe(200);
+      expect(mockTransaction).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
   });
 });
