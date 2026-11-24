@@ -353,6 +353,7 @@ app.post('/:id/convert', async (c) => {
     email: lead.email,
     memberCode,
     branchId: lead.branchId,
+    tenantId,
     status: 'ACTIVE',
     notes: lead.source ? `來源: ${lead.source}` : undefined,
     joinDate: new Date().toISOString().slice(0, 10),
