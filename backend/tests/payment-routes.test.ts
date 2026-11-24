@@ -72,11 +72,13 @@ vi.mock('../src/db/index.js', () => ({
     createdBy: 'createdBy', tenantId: 'tenantId',
   },
   contracts: {
-    id: 'id', contractNo: 'contractNo', totalAmount: 'totalAmount',
+    id: 'contracts.id', contractNo: 'contractNo', totalAmount: 'totalAmount',
     paymentStatus: 'paymentStatus', updatedAt: 'updatedAt', status: 'status',
+    tenantId: 'contracts.tenantId', memberId: 'contracts.memberId',
   },
   members: {
-    id: 'id', fullName: 'fullName', memberCode: 'memberCode',
+    id: 'members.id', fullName: 'fullName', memberCode: 'memberCode',
+    tenantId: 'members.tenantId',
   },
   branches: {
     id: 'id', tenantId: 'tenantId',
@@ -334,9 +336,9 @@ describe('Payment Routes', () => {
     it('應該成功建立付款並返回 201', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]); // branch
       dbResults.push([{ id: MEMBER_ID }]);                            // member
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);   // contract
       dbResults.push([{ id: PAYMENT_ID, amount: '5000' }]);          // insert
       dbResults.push([{ total: '5000' }]);                            // sum INCOME
-      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);   // contract
       dbResults.push(undefined);                                       // update
 
       const res = await postPayment(validBody);
@@ -382,9 +384,9 @@ describe('Payment Routes', () => {
     it('全額付清應該更新 contract 為 PAID', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
       dbResults.push([{ total: '10000' }]);                          // total paid = totalAmount
-      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push(undefined);
 
       await postPayment(validBody);
@@ -397,9 +399,9 @@ describe('Payment Routes', () => {
     it('部分付款應該更新 contract 為 PARTIAL', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
       dbResults.push([{ total: '3000' }]);                          // partial
-      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push(undefined);
 
       await postPayment({ ...validBody, amount: 3000 });
@@ -412,9 +414,9 @@ describe('Payment Routes', () => {
     it('未付款應該 status 為 UNPAID', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
       dbResults.push([{ total: null }]);                              // no paid
-      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push(undefined);
 
       await postPayment(validBody);
@@ -424,17 +426,96 @@ describe('Payment Routes', () => {
       );
     });
 
-    it('找不到合約時不應該更新 status', async () => {
+    it('找不到合約時應該返回 404 且不建立付款', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
-      dbResults.push([{ id: PAYMENT_ID }]);
-      dbResults.push([{ total: '5000' }]);
       dbResults.push([]); // contract not found
 
       const res = await postPayment(validBody);
+      const json = await res.json() as any;
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(404);
+      expect(json.error).toBe('合約不存在');
+      expect(chainFns.insert).not.toHaveBeenCalled();
       expect(chainFns.update).not.toHaveBeenCalled();
+    });
+
+    it('其他 tenant 的會員應該返回 404 (#6)', async () => {
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([]); // member lookup scoped to tenant → not found
+
+      const res = await postPayment(validBody);
+
+      expect(res.status).toBe(404);
+      expect(chainFns.where).toHaveBeenCalledWith({
+        _op: 'and',
+        args: [
+          { _op: 'eq', a: 'members.id', b: MEMBER_ID },
+          { _op: 'eq', a: 'members.tenantId', b: TEST_TENANT_ID },
+        ],
+      });
+      expect(chainFns.insert).not.toHaveBeenCalled();
+    });
+
+    it('其他 tenant 的合約應該返回 404 (#6)', async () => {
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([]); // contract lookup scoped to tenant → not found
+
+      const res = await postPayment(validBody);
+
+      expect(res.status).toBe(404);
+      expect(chainFns.where).toHaveBeenCalledWith({
+        _op: 'and',
+        args: [
+          {
+            _op: 'and',
+            args: [
+              { _op: 'eq', a: 'contracts.id', b: CONTRACT_ID },
+              { _op: 'eq', a: 'contracts.tenantId', b: TEST_TENANT_ID },
+            ],
+          },
+          { _op: 'eq', a: 'contracts.memberId', b: MEMBER_ID },
+        ],
+      });
+      expect(chainFns.insert).not.toHaveBeenCalled();
+      expect(chainFns.update).not.toHaveBeenCalled();
+    });
+
+    it('合約不屬於指定會員時應該返回 404 且不建立付款', async () => {
+      const OTHER_MEMBER_ID = 'ffffffff-ffff-4fff-afff-ffffffffffff';
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([{ id: OTHER_MEMBER_ID }]);
+      dbResults.push([]); // contract lookup requires contracts.memberId = memberId → not found
+
+      const res = await postPayment({ ...validBody, memberId: OTHER_MEMBER_ID });
+      const json = await res.json() as any;
+
+      expect(res.status).toBe(404);
+      expect(json.error).toBe('合約不存在');
+      const contractWhere = chainFns.where.mock.calls[2]![0];
+      expect(contractWhere.args).toContainEqual({ _op: 'eq', a: 'contracts.memberId', b: OTHER_MEMBER_ID });
+      expect(chainFns.insert).not.toHaveBeenCalled();
+      expect(chainFns.update).not.toHaveBeenCalled();
+    });
+
+    it('更新合約付款狀態時應該限定 tenant', async () => {
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
+      dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ total: '5000' }]);
+      dbResults.push(undefined);
+
+      await postPayment(validBody);
+
+      expect(chainFns.where).toHaveBeenLastCalledWith({
+        _op: 'and',
+        args: [
+          { _op: 'eq', a: 'contracts.id', b: CONTRACT_ID },
+          { _op: 'eq', a: 'contracts.tenantId', b: TEST_TENANT_ID },
+        ],
+      });
     });
 
     it('缺少必要欄位應該返回 400', async () => {
@@ -464,9 +545,9 @@ describe('Payment Routes', () => {
     it('合約 totalAmount 為 null 時應視為 0 → PAID', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: null }]); // null totalAmount → 0
       dbResults.push([{ id: PAYMENT_ID }]);
       dbResults.push([{ total: '0' }]);
-      dbResults.push([{ id: CONTRACT_ID, totalAmount: null }]); // null totalAmount → 0
       dbResults.push(undefined);
 
       await postPayment(validBody);
@@ -479,9 +560,9 @@ describe('Payment Routes', () => {
     it('支援 REFUND 類型', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID, type: 'REFUND' }]);
       dbResults.push([{ total: '5000' }]);
-      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push(undefined);
 
       const res = await postPayment({

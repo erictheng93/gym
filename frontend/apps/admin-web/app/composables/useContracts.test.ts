@@ -236,6 +236,29 @@ describe('useContracts', () => {
     })
   })
 
+  describe('activateContract', () => {
+    it('應該呼叫啟用端點並回傳合約', async () => {
+      const activated = { id: 'contract-1', contract_status: 'ACTIVE' }
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: activated })
+
+      const { activateContract } = useContracts()
+      const result = await activateContract('contract-1')
+
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/contracts/contract-1/activate', { method: 'POST' })
+      expect(result).toEqual(activated)
+    })
+
+    it('應該在啟用失敗時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('只有草稿狀態的合約可以啟用'))
+
+      const { activateContract } = useContracts()
+      const result = await activateContract('contract-1')
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
+    })
+  })
+
   describe('getContractStats', () => {
     it('應該成功取得合約統計資料', async () => {
       mockFetchInstance.readItems

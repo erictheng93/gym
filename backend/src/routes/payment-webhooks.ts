@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { db, payments, contracts } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import {
+  isGatewayEnabled,
   verifyStripeWebhook,
   verifyECPayWebhook,
   verifyLinePayWebhook,
@@ -12,18 +13,18 @@ import {
 // =============================================================================
 // Handles callbacks from payment gateways
 
-const PAYMENT_STATUS_SELECT = {
-  id: payments.id,
+const PAYMENT_AMOUNT_SELECT = {
   amount: payments.amount,
-  paymentMethod: payments.paymentMethod,
-  paymentDate: payments.paymentDate,
-  type: payments.type,
-  receiptNo: payments.receiptNo,
-  notes: payments.notes,
 };
 
-const PAYMENT_CONTRACT_ID_SELECT = {
+const PAYMENT_SUCCESS_SELECT = {
+  amount: payments.amount,
   contractId: payments.contractId,
+  tenantId: payments.tenantId,
+};
+
+const CONTRACT_TOTAL_AMOUNT_SELECT = {
+  totalAmount: contracts.totalAmount,
 };
 
 const app = new Hono();
@@ -53,6 +54,7 @@ app.post('/stripe', async (c) => {
           metadata?: { payment_id?: string; contract_id?: string };
           payment_status?: string;
           status?: string;
+          amount_total?: number | null;
         };
       };
     };
@@ -66,9 +68,12 @@ app.post('/stripe', async (c) => {
 
         if (paymentId && session.payment_status === 'paid') {
           // Payment was successful
+          // amount_total is in the smallest currency unit; checkout sessions are
+          // created with unit_amount = amount * 100 (see services/payment.ts)
           await handlePaymentSuccess(paymentId, {
             gateway: 'stripe',
             transactionId: session.id,
+            paidAmount: typeof session.amount_total === 'number' ? session.amount_total / 100 : NaN,
           });
         }
         break;
@@ -131,7 +136,8 @@ app.post('/ecpay', async (c) => {
     }
   }
 
-  if (!verifyECPayWebhook(params)) {
+  // CheckMacValue is computable by anyone when HashKey/HashIV are unset
+  if (!isGatewayEnabled('ecpay') || !verifyECPayWebhook(params)) {
     console.error('[ECPay Webhook] Invalid CheckMacValue');
     return c.text('0|ErrorMessage=Invalid CheckMacValue', 200);
   }
@@ -146,12 +152,16 @@ app.post('/ecpay', async (c) => {
 
     console.log(`[ECPay Webhook] TradeNo: ${tradeNo}, RtnCode: ${rtnCode}, RtnMsg: ${rtnMsg}`);
 
-    if (rtnCode === '1') {
+    if (params.SimulatePaid === '1') {
+      // Simulated payment triggered from the ECPay merchant dashboard - no money received
+      console.log(`[ECPay Webhook] Ignoring simulated payment for ${merchantTradeNo}`);
+    } else if (rtnCode === '1') {
       // Payment successful
       if (paymentId) {
         await handlePaymentSuccess(paymentId, {
           gateway: 'ecpay',
           transactionId: tradeNo || merchantTradeNo,
+          paidAmount: Number(params.TradeAmt),
         });
       }
     } else {
@@ -189,10 +199,25 @@ app.post('/linepay/confirm', async (c) => {
       throw new Error('LINE Pay not configured');
     }
 
-    // Call LINE Pay confirm API
+    // Find payment by orderId (which should be the payment ID)
+    // In a real implementation, orderId should contain or map to payment ID
+    const paymentId = orderId.replace('GN', '');
+    const [payment] = await db
+      .select(PAYMENT_AMOUNT_SELECT)
+      .from(payments)
+      .where(eq(payments.id, paymentId))
+      .limit(1);
+
+    if (!payment) {
+      throw new Error(`Payment ${paymentId} not found`);
+    }
+
+    // Confirm with the expected amount; LINE Pay rejects the confirm when it
+    // does not match the reserved transaction amount
+    const expectedAmount = Number(payment.amount);
     const requestUri = `/v3/payments/${transactionId}/confirm`;
     const requestBody = JSON.stringify({
-      amount: 0, // Will be retrieved from transaction
+      amount: expectedAmount,
       currency: 'TWD',
     });
 
@@ -215,19 +240,24 @@ app.post('/linepay/confirm', async (c) => {
     const data = await response.json() as {
       returnCode: string;
       returnMessage: string;
-      info?: { orderId?: string; transactionId?: string };
+      info?: { orderId?: string; transactionId?: string; payInfo?: { amount?: number }[] };
     };
 
     if (data.returnCode === '0000') {
+      if (data.info?.orderId && data.info.orderId !== orderId) {
+        throw new Error(`Order mismatch: expected ${orderId}, got ${data.info.orderId}`);
+      }
+
       // Payment confirmed successfully
       console.log(`[LINE Pay Webhook] Payment confirmed for order ${orderId}`);
 
-      // Find and update payment by orderId (which should be the payment ID)
-      // In a real implementation, orderId should contain or map to payment ID
-      const paymentId = orderId.replace('GN', '');
+      const payInfo = data.info?.payInfo;
       await handlePaymentSuccess(paymentId, {
         gateway: 'linepay',
         transactionId: transactionId,
+        paidAmount: payInfo?.length
+          ? payInfo.reduce((total, p) => total + Number(p.amount), 0)
+          : expectedAmount,
       });
 
       return c.redirect(`${process.env.FRONTEND_URL}/payment/success?transaction_id=${transactionId}`);
@@ -250,8 +280,8 @@ app.post('/linepay', async (c) => {
   const signature = c.req.header('X-Line-Signature');
   const rawBody = await c.req.text();
 
-  if (signature && !verifyLinePayWebhook(signature, rawBody)) {
-    return c.json({ error: 'Invalid signature' }, 401);
+  if (!signature || !verifyLinePayWebhook(signature, rawBody)) {
+    return c.json({ error: 'Invalid or missing signature' }, 401);
   }
 
   try {
@@ -291,53 +321,49 @@ app.post('/linepay', async (c) => {
 });
 
 // -----------------------------------------------------------------------------
-// GET /api/payments/:id/status - Get Payment Status
-// -----------------------------------------------------------------------------
-
-app.get('/:id/status', async (c) => {
-  const paymentId = c.req.param('id');
-
-  try {
-    const [payment] = await db
-      .select(PAYMENT_STATUS_SELECT)
-      .from(payments)
-      .where(eq(payments.id, paymentId))
-      .limit(1);
-
-    if (!payment) {
-      return c.json({ success: false, error: 'Payment not found' }, 404);
-    }
-
-    return c.json({
-      success: true,
-      data: {
-        id: payment.id,
-        amount: parseFloat(payment.amount),
-        payment_method: payment.paymentMethod,
-        payment_date: payment.paymentDate,
-        type: payment.type,
-        receipt_no: payment.receiptNo,
-        status: payment.type === 'REFUND' ? 'refunded' : 'completed',
-      },
-    });
-
-  } catch (error) {
-    console.error('[Payment Status] Error:', error);
-    return c.json({ success: false, error: 'Failed to get payment status' }, 500);
-  }
-});
-
-// -----------------------------------------------------------------------------
 // Helper Functions
 // -----------------------------------------------------------------------------
 
 interface PaymentSuccessDetails {
   gateway: string;
   transactionId?: string;
+  /** Amount reported by the gateway, in the same unit as payments.amount */
+  paidAmount: number;
+}
+
+/** Compare money values in cents to avoid floating point drift */
+function toCents(value: number | string | null): number {
+  return Math.round(Number(value) * 100);
 }
 
 async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDetails): Promise<void> {
   try {
+    const [payment] = await db
+      .select(PAYMENT_SUCCESS_SELECT)
+      .from(payments)
+      .where(eq(payments.id, paymentId))
+      .limit(1);
+
+    if (!payment) {
+      console.warn(`[Payment Success] Payment ${paymentId} not found`);
+      return;
+    }
+
+    const paidCents = toCents(details.paidAmount);
+    // ECPay charges whole TWD (TotalAmount is rounded, see services/payment.ts)
+    const expectedCents = details.gateway === 'ecpay'
+      ? toCents(Math.round(Number(payment.amount)))
+      : toCents(payment.amount);
+
+    // A missing amount (NaN) also fails this check
+    if (!(paidCents >= expectedCents)) {
+      console.warn(
+        `[Payment Success] Payment ${paymentId} underpaid via ${details.gateway}: ` +
+        `paid ${details.paidAmount}, expected ${payment.amount}`,
+      );
+      return;
+    }
+
     // Update payment record with transaction details
     await db
       .update(payments)
@@ -347,21 +373,32 @@ async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDe
       })
       .where(eq(payments.id, paymentId));
 
-    // Get payment details to update contract
-    const [payment] = await db
-      .select(PAYMENT_CONTRACT_ID_SELECT)
-      .from(payments)
-      .where(eq(payments.id, paymentId))
-      .limit(1);
+    if (payment.contractId) {
+      const contractConditions = [eq(contracts.id, payment.contractId)];
+      if (payment.tenantId) {
+        contractConditions.push(eq(contracts.tenantId, payment.tenantId));
+      }
 
-    if (payment?.contractId) {
-      // Update contract status to ACTIVE if it was DRAFT
-      await db
-        .update(contracts)
-        .set({ status: 'ACTIVE' })
-        .where(eq(contracts.id, payment.contractId));
+      const [contract] = await db
+        .select(CONTRACT_TOTAL_AMOUNT_SELECT)
+        .from(contracts)
+        .where(and(...contractConditions))
+        .limit(1);
 
-      console.log(`[Payment Success] Contract ${payment.contractId} activated`);
+      if (contract && paidCents >= toCents(contract.totalAmount)) {
+        // Only DRAFT -> ACTIVE; never re-activate paused/expired/cancelled contracts
+        await db
+          .update(contracts)
+          .set({ status: 'ACTIVE' })
+          .where(and(...contractConditions, eq(contracts.status, 'DRAFT')));
+
+        console.log(`[Payment Success] Contract ${payment.contractId} activated`);
+      } else {
+        console.warn(
+          `[Payment Success] Contract ${payment.contractId} not activated: ` +
+          `paid ${details.paidAmount} does not cover contract total`,
+        );
+      }
     }
 
     console.log(`[Payment Success] Payment ${paymentId} completed via ${details.gateway}`);
