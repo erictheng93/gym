@@ -1,5 +1,5 @@
 import { db, tenants, branches, members, contracts, payments, usageRecords } from '../db/index.js';
-import { eq, and, sql, sum, count } from 'drizzle-orm';
+import { eq, and, gte, lt, sql, sum, count } from 'drizzle-orm';
 
 const ANALYTICS_TENANTS_SELECT = {
   id: tenants.id,
@@ -52,7 +52,10 @@ async function generateDailySnapshot() {
       .where(
         and(
           eq(payments.type, 'INCOME'),
-          sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
+          // Half-open [day, day+1) range, sargable. date -> timestamptz casts at
+          // midnight in the DB session time zone, the same zone DATE() used.
+          gte(payments.paymentDate, sql`${yesterdayStr}::date`),
+          lt(payments.paymentDate, sql`(${yesterdayStr}::date + 1)`)
         )
       )
       .groupBy(branches.tenantId),

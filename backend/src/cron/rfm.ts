@@ -5,7 +5,7 @@
  */
 
 import { db, members, contracts, payments, checkIns } from '../db/index.js';
-import { eq, and, gte, count, sum, max } from 'drizzle-orm';
+import { eq, and, gte, sum, max, sql } from 'drizzle-orm';
 
 type RFMSegment = 'CHAMPION' | 'LOYAL' | 'POTENTIAL' | 'AT_RISK' | 'HIBERNATING' | 'LOST';
 
@@ -25,15 +25,18 @@ const ALL_ACTIVE_MEMBERS_SELECT = {
   tags: members.tags,
 };
 
-const RECENCY_AGG_SELECT = {
+const UPDATE_CHUNK_SIZE = 500;
+
+/**
+ * Recency (all-time last check-in) and frequency (check-ins since a cutoff)
+ * come from one pass over check_ins; the cutoff is bound as a parameter.
+ */
+const checkInAggSelect = (since: Date) => ({
   memberId: checkIns.memberId,
   lastTime: max(checkIns.checkInTime),
-};
-
-const FREQUENCY_AGG_SELECT = {
-  memberId: checkIns.memberId,
-  count: count(),
-};
+  // Raw sql params bypass Drizzle's column mapping; postgres-js can't bind a Date here
+  frequency: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${since.toISOString()}::timestamptz)`,
+});
 
 const MONETARY_AGG_SELECT = {
   memberId: contracts.memberId,
@@ -69,15 +72,10 @@ export async function runRFMSegmentation() {
     }
 
     // Batch aggregate Recency, Frequency, and Monetary metrics across all members
-    const [recencyRows, frequencyRows, monetaryRows] = await Promise.all([
+    const [checkInRows, monetaryRows] = await Promise.all([
       db
-        .select(RECENCY_AGG_SELECT)
+        .select(checkInAggSelect(ninetyDaysAgo))
         .from(checkIns)
-        .groupBy(checkIns.memberId),
-      db
-        .select(FREQUENCY_AGG_SELECT)
-        .from(checkIns)
-        .where(gte(checkIns.checkInTime, ninetyDaysAgo))
         .groupBy(checkIns.memberId),
       db
         .select(MONETARY_AGG_SELECT)
@@ -93,17 +91,11 @@ export async function runRFMSegmentation() {
     ]);
 
     const recencyMap = new Map<string, Date>();
-    for (const r of recencyRows) {
-      if (r.memberId && r.lastTime) {
-        recencyMap.set(r.memberId, new Date(r.lastTime));
-      }
-    }
-
     const frequencyMap = new Map<string, number>();
-    for (const f of frequencyRows) {
-      if (f.memberId) {
-        frequencyMap.set(f.memberId, Number(f.count || 0));
-      }
+    for (const r of checkInRows) {
+      if (!r.memberId) continue;
+      if (r.lastTime) recencyMap.set(r.memberId, new Date(r.lastTime));
+      frequencyMap.set(r.memberId, Number(r.frequency || 0));
     }
 
     const monetaryMap = new Map<string, number>();
@@ -114,6 +106,7 @@ export async function runRFMSegmentation() {
     }
 
     const rfmData: MemberRFM[] = [];
+    const pendingUpdates: Array<{ id: string; tags: string[] }> = [];
 
     for (const member of allMembers) {
       try {
@@ -144,18 +137,14 @@ export async function runRFMSegmentation() {
           existingTags.some((t, i) => t !== updatedTags[i]);
 
         if (tagsChanged) {
-          await db
-            .update(members)
-            .set({
-              tags: updatedTags,
-              updatedAt: new Date(),
-            })
-            .where(eq(members.id, member.id));
+          pendingUpdates.push({ id: member.id, tags: updatedTags });
         }
       } catch (error) {
         console.error(`[RFM] Failed to analyze member ${member.id}:`, error);
       }
     }
+
+    await applyTagUpdates(pendingUpdates);
 
     // Generate summary statistics
     const segmentCounts = rfmData.reduce((acc, m) => {
@@ -173,6 +162,30 @@ export async function runRFMSegmentation() {
   } catch (error) {
     console.error('[RFM] Error running RFM segmentation:', error);
     throw error;
+  }
+}
+
+/**
+ * Persist changed tags in batches: one UPDATE ... FROM (VALUES ...) per chunk.
+ * All values are bound as parameters.
+ */
+async function applyTagUpdates(updates: Array<{ id: string; tags: string[] }>) {
+  for (let i = 0; i < updates.length; i += UPDATE_CHUNK_SIZE) {
+    const chunk = updates.slice(i, i + UPDATE_CHUNK_SIZE);
+    const rows = sql.join(
+      chunk.map((u) => sql`(${u.id}::uuid, ${JSON.stringify(u.tags)}::jsonb)`),
+      sql`, `
+    );
+    try {
+      await db.execute(sql`
+        UPDATE members AS m
+        SET tags = v.tags, updated_at = now()
+        FROM (VALUES ${rows}) AS v(id, tags)
+        WHERE m.id = v.id
+      `);
+    } catch (error) {
+      console.error(`[RFM] Failed to update tags for batch starting at ${i}:`, error);
+    }
   }
 }
 
