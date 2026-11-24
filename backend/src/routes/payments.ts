@@ -2,11 +2,12 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, payments, contracts, members } from '../db/index.js';
-import { eq, and, sql, desc, sum, inArray, gte, lte } from 'drizzle-orm';
+import { eq, and, sql, desc, inArray, gte, lte } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
+import { recalculateContractPayment } from '../services/contract-payment.js';
 import { generateExcel, generateCsv, paymentsColumns, translatePaymentMethod, translatePaymentType } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
@@ -37,8 +38,6 @@ const CONTRACT_TOTAL_AMOUNT_SELECT = {
   id: contracts.id,
   totalAmount: contracts.totalAmount,
 };
-
-const PAYMENT_TOTAL_AMOUNT_SELECT = { total: sum(payments.amount) };
 
 const PAYMENT_LIST_JOIN_SELECT = {
   payment: PAYMENT_SELECT,
@@ -380,6 +379,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   if (!data.contractId) {
     return c.json({ success: false, error: '必須指定合約' }, 400);
   }
+  const contractId = data.contractId;
 
   const contractCondition = and(eq(contracts.id, data.contractId), eq(contracts.tenantId, tenantId));
 
@@ -393,44 +393,26 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
-  const [newPayment] = await db.insert(payments).values({
-    contractId: data.contractId,
-    memberId: data.memberId,
-    branchId: data.branchId,
-    amount: String(data.amount),
-    paymentMethod: data.paymentMethod,
-    paymentDate: new Date(),
-    type: data.paymentType,
-    notes: data.notes,
-    createdBy: user.employeeId,
-    tenantId,
-  }).returning(PAYMENT_RETURNING);
+  // Insert and recalculate atomically; the contract row is locked inside
+  // recalculateContractPayment so concurrent payments cannot race the total
+  const newPayment = await db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(payments).values({
+      contractId,
+      memberId: data.memberId,
+      branchId: data.branchId,
+      amount: String(data.amount),
+      paymentMethod: data.paymentMethod,
+      paymentDate: new Date(),
+      type: data.paymentType,
+      notes: data.notes,
+      createdBy: user.employeeId,
+      tenantId,
+    }).returning(PAYMENT_RETURNING);
 
-  const existingPayments = await db
-    .select(PAYMENT_TOTAL_AMOUNT_SELECT)
-    .from(payments)
-    .where(
-      and(
-        eq(payments.contractId, data.contractId),
-        eq(payments.tenantId, tenantId),
-        eq(payments.type, 'INCOME')
-      )
-    );
+    await recalculateContractPayment(tx, contractId, tenantId);
 
-  const totalPaid = Number(existingPayments[0]?.total || 0);
-  const totalAmount = Number(contract.totalAmount || 0);
-  let paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' = 'UNPAID';
-
-  if (totalPaid >= totalAmount) {
-    paymentStatus = 'PAID';
-  } else if (totalPaid > 0) {
-    paymentStatus = 'PARTIAL';
-  }
-
-  await db.update(contracts).set({
-    paymentStatus,
-    updatedAt: new Date(),
-  }).where(contractCondition);
+    return inserted;
+  });
 
   return c.json({ success: true, data: newPayment }, 201);
 });

@@ -37,7 +37,7 @@ const CHAIN_METHODS = [
   'select', 'from', 'where', 'limit', 'offset',
   'leftJoin', 'orderBy',
   'insert', 'values', 'returning',
-  'update', 'set',
+  'update', 'set', 'for',
 ];
 
 let chain: any;
@@ -58,11 +58,15 @@ let chain: any;
   };
 })();
 
+const mockTransaction = vi.fn();
+
 vi.mock('../src/db/index.js', () => ({
   db: {
     select: (...args: any[]) => { chainFns.select(...args); return chain; },
     insert: (...args: any[]) => { chainFns.insert(...args); return chain; },
     update: (...args: any[]) => { chainFns.update(...args); return chain; },
+    // The transaction callback runs against the same chainable builder (this = db)
+    transaction(cb: (tx: unknown) => unknown) { mockTransaction(); return cb(this); },
   },
   payments: {
     id: 'id', contractId: 'contractId', memberId: 'memberId',
@@ -73,7 +77,7 @@ vi.mock('../src/db/index.js', () => ({
   },
   contracts: {
     id: 'contracts.id', contractNo: 'contractNo', totalAmount: 'totalAmount',
-    paymentStatus: 'paymentStatus', updatedAt: 'updatedAt', status: 'status',
+    paymentStatus: 'paymentStatus', paidAmount: 'paidAmount', updatedAt: 'updatedAt', status: 'status',
     tenantId: 'contracts.tenantId', memberId: 'contracts.memberId',
   },
   members: {
@@ -338,6 +342,7 @@ describe('Payment Routes', () => {
       dbResults.push([{ id: MEMBER_ID }]);                            // member
       dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);   // contract
       dbResults.push([{ id: PAYMENT_ID, amount: '5000' }]);          // insert
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: '5000' }]);                            // sum INCOME
       dbResults.push(undefined);                                       // update
 
@@ -386,6 +391,7 @@ describe('Payment Routes', () => {
       dbResults.push([{ id: MEMBER_ID }]);
       dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: '10000' }]);                          // total paid = totalAmount
       dbResults.push(undefined);
 
@@ -401,6 +407,7 @@ describe('Payment Routes', () => {
       dbResults.push([{ id: MEMBER_ID }]);
       dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: '3000' }]);                          // partial
       dbResults.push(undefined);
 
@@ -411,11 +418,40 @@ describe('Payment Routes', () => {
       );
     });
 
+    it('應該在同一 transaction 中更新 contract paidAmount 並鎖定合約 (#15)', async () => {
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
+      dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
+      dbResults.push([{ total: '3000.5' }]);
+      dbResults.push(undefined);
+
+      const res = await postPayment({ ...validBody, amount: 3000.5 });
+
+      expect(res.status).toBe(201);
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+      expect(chainFns.for).toHaveBeenCalledWith('update');
+      expect(chainFns.set).toHaveBeenCalledWith(
+        expect.objectContaining({ paidAmount: '3000.50', paymentStatus: 'PARTIAL' }),
+      );
+      // Paid total sums only this contract's INCOME payments in this tenant
+      expect(chainFns.where).toHaveBeenCalledWith({
+        _op: 'and',
+        args: [
+          { _op: 'eq', a: 'contractId', b: CONTRACT_ID },
+          { _op: 'eq', a: 'type', b: 'INCOME' },
+          { _op: 'eq', a: 'tenantId', b: TEST_TENANT_ID },
+        ],
+      });
+    });
+
     it('未付款應該 status 為 UNPAID', async () => {
       dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
       dbResults.push([{ id: MEMBER_ID }]);
       dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: null }]);                              // no paid
       dbResults.push(undefined);
 
@@ -504,6 +540,7 @@ describe('Payment Routes', () => {
       dbResults.push([{ id: MEMBER_ID }]);
       dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: '5000' }]);
       dbResults.push(undefined);
 
@@ -547,6 +584,7 @@ describe('Payment Routes', () => {
       dbResults.push([{ id: MEMBER_ID }]);
       dbResults.push([{ id: CONTRACT_ID, totalAmount: null }]); // null totalAmount → 0
       dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: null }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: '0' }]);
       dbResults.push(undefined);
 
@@ -562,6 +600,7 @@ describe('Payment Routes', () => {
       dbResults.push([{ id: MEMBER_ID }]);
       dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
       dbResults.push([{ id: PAYMENT_ID, type: 'REFUND' }]);
+      dbResults.push([{ totalAmount: '10000' }]);          // contract lock (FOR UPDATE)
       dbResults.push([{ total: '5000' }]);
       dbResults.push(undefined);
 

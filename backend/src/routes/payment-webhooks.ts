@@ -7,6 +7,7 @@ import {
   verifyECPayWebhook,
   verifyLinePayWebhook,
 } from '../services/payment.js';
+import { recalculateContractPayment, toCents } from '../services/contract-payment.js';
 
 // =============================================================================
 // PAYMENT WEBHOOK ROUTES
@@ -21,10 +22,7 @@ const PAYMENT_SUCCESS_SELECT = {
   amount: payments.amount,
   contractId: payments.contractId,
   tenantId: payments.tenantId,
-};
-
-const CONTRACT_TOTAL_AMOUNT_SELECT = {
-  totalAmount: contracts.totalAmount,
+  receiptNo: payments.receiptNo,
 };
 
 const app = new Hono();
@@ -72,7 +70,7 @@ app.post('/stripe', async (c) => {
           // created with unit_amount = amount * 100 (see services/payment.ts)
           await handlePaymentSuccess(paymentId, {
             gateway: 'stripe',
-            transactionId: session.id,
+            transactionId: session.id ?? '',
             paidAmount: typeof session.amount_total === 'number' ? session.amount_total / 100 : NaN,
           });
         }
@@ -326,83 +324,109 @@ app.post('/linepay', async (c) => {
 
 interface PaymentSuccessDetails {
   gateway: string;
-  transactionId?: string;
+  /** Gateway transaction id; stored in payments.receiptNo as the processed marker */
+  transactionId: string;
   /** Amount reported by the gateway, in the same unit as payments.amount */
   paidAmount: number;
 }
 
-/** Compare money values in cents to avoid floating point drift */
-function toCents(value: number | string | null): number {
-  return Math.round(Number(value) * 100);
-}
-
+/**
+ * Record a successful gateway payment and update its contract.
+ *
+ * Runs in one transaction with the payment row locked (SELECT ... FOR UPDATE),
+ * so retried and concurrent duplicate webhooks are serialized. A payment is
+ * "processed" once payments.receiptNo holds a gateway transaction id (gateway
+ * payment rows are created at checkout with receiptNo = NULL); a processed
+ * payment is never processed again.
+ */
 async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDetails): Promise<void> {
+  if (!details.transactionId) {
+    console.warn(`[Payment Success] Payment ${paymentId} via ${details.gateway} has no transaction id; ignored`);
+    return;
+  }
+
   try {
-    const [payment] = await db
-      .select(PAYMENT_SUCCESS_SELECT)
-      .from(payments)
-      .where(eq(payments.id, paymentId))
-      .limit(1);
+    await db.transaction(async (tx) => {
+      const [payment] = await tx
+        .select(PAYMENT_SUCCESS_SELECT)
+        .from(payments)
+        .where(eq(payments.id, paymentId))
+        .limit(1)
+        .for('update');
 
-    if (!payment) {
-      console.warn(`[Payment Success] Payment ${paymentId} not found`);
-      return;
-    }
-
-    const paidCents = toCents(details.paidAmount);
-    // ECPay charges whole TWD (TotalAmount is rounded, see services/payment.ts)
-    const expectedCents = details.gateway === 'ecpay'
-      ? toCents(Math.round(Number(payment.amount)))
-      : toCents(payment.amount);
-
-    // A missing amount (NaN) also fails this check
-    if (!(paidCents >= expectedCents)) {
-      console.warn(
-        `[Payment Success] Payment ${paymentId} underpaid via ${details.gateway}: ` +
-        `paid ${details.paidAmount}, expected ${payment.amount}`,
-      );
-      return;
-    }
-
-    // Update payment record with transaction details
-    await db
-      .update(payments)
-      .set({
-        receiptNo: details.transactionId,
-        notes: `Paid via ${details.gateway} - Transaction: ${details.transactionId}`,
-      })
-      .where(eq(payments.id, paymentId));
-
-    if (payment.contractId) {
-      const contractConditions = [eq(contracts.id, payment.contractId)];
-      if (payment.tenantId) {
-        contractConditions.push(eq(contracts.tenantId, payment.tenantId));
+      if (!payment) {
+        console.warn(`[Payment Success] Payment ${paymentId} not found`);
+        return;
       }
 
-      const [contract] = await db
-        .select(CONTRACT_TOTAL_AMOUNT_SELECT)
-        .from(contracts)
-        .where(and(...contractConditions))
-        .limit(1);
+      if (payment.receiptNo) {
+        if (payment.receiptNo === details.transactionId) {
+          console.log(
+            `[Payment Success] Payment ${paymentId} already processed ` +
+            `(transaction ${details.transactionId}); duplicate webhook ignored`,
+          );
+        } else {
+          // Possibly a second charge for the same payment - needs manual reconciliation
+          console.error(
+            `[Payment Success] Payment ${paymentId} already processed with transaction ` +
+            `${payment.receiptNo}; ignoring different transaction ${details.transactionId} ` +
+            `via ${details.gateway} (not counted, reconcile manually)`,
+          );
+        }
+        return;
+      }
 
-      if (contract && paidCents >= toCents(contract.totalAmount)) {
-        // Only DRAFT -> ACTIVE; never re-activate paused/expired/cancelled contracts
-        await db
-          .update(contracts)
-          .set({ status: 'ACTIVE' })
-          .where(and(...contractConditions, eq(contracts.status, 'DRAFT')));
+      const paidCents = toCents(details.paidAmount);
+      // ECPay charges whole TWD (TotalAmount is rounded, see services/payment.ts)
+      const expectedCents = details.gateway === 'ecpay'
+        ? toCents(Math.round(Number(payment.amount)))
+        : toCents(payment.amount);
 
-        console.log(`[Payment Success] Contract ${payment.contractId} activated`);
-      } else {
+      // A missing amount (NaN) also fails this check
+      if (!(paidCents >= expectedCents)) {
         console.warn(
-          `[Payment Success] Contract ${payment.contractId} not activated: ` +
-          `paid ${details.paidAmount} does not cover contract total`,
+          `[Payment Success] Payment ${paymentId} underpaid via ${details.gateway}: ` +
+          `paid ${details.paidAmount}, expected ${payment.amount}`,
         );
+        return;
       }
-    }
 
-    console.log(`[Payment Success] Payment ${paymentId} completed via ${details.gateway}`);
+      // Mark the payment processed with the gateway transaction details
+      await tx
+        .update(payments)
+        .set({
+          receiptNo: details.transactionId,
+          notes: `Paid via ${details.gateway} - Transaction: ${details.transactionId}`,
+        })
+        .where(eq(payments.id, paymentId));
 
+      if (payment.contractId) {
+        const summary = await recalculateContractPayment(tx, payment.contractId, payment.tenantId);
+
+        // Partial payments (deposits/instalments) never auto-activate; staff do that manually
+        if (summary && paidCents >= toCents(summary.totalAmount)) {
+          const contractConditions = [eq(contracts.id, payment.contractId)];
+          if (payment.tenantId) {
+            contractConditions.push(eq(contracts.tenantId, payment.tenantId));
+          }
+
+          // Only DRAFT -> ACTIVE; never re-activate paused/expired/cancelled contracts
+          await tx
+            .update(contracts)
+            .set({ status: 'ACTIVE' })
+            .where(and(...contractConditions, eq(contracts.status, 'DRAFT')));
+
+          console.log(`[Payment Success] Contract ${payment.contractId} activated`);
+        } else {
+          console.warn(
+            `[Payment Success] Contract ${payment.contractId} not activated: ` +
+            `paid ${details.paidAmount} does not cover contract total`,
+          );
+        }
+      }
+
+      console.log(`[Payment Success] Payment ${paymentId} completed via ${details.gateway}`);
+    });
   } catch (error) {
     console.error('[Payment Success] Error:', error);
     throw error;

@@ -279,7 +279,7 @@ export const payments = pgTable('payments', {
   paymentMethod: varchar('payment_method', { length: 20 }).notNull().$type<typeof PAYMENT_METHOD[number]>(),
   paymentDate: timestamp('payment_date', { withTimezone: true }).defaultNow().notNull(),
   type: varchar('type', { length: 20 }).notNull().default('INCOME').$type<typeof PAYMENT_TYPE[number]>(),
-  receiptNo: varchar('receipt_no', { length: 30 }),
+  receiptNo: varchar('receipt_no', { length: 100 }), // gateway transaction id (Stripe cs_… ids are ~66 chars); idempotency marker
   notes: varchar('notes', { length: 255 }),
   createdBy: uuid('created_by').references(() => employees.id),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
