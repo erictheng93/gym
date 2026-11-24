@@ -31,7 +31,8 @@ const maxValue = computed(() => {
     const row = props.data[i]
     if (row) {
       for (let j = 0; j < row.length; j++) {
-        if (row[j] > max) max = row[j]
+        const v = row[j] ?? 0
+        if (v > max) max = v
       }
     }
   }

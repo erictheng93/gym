@@ -17,13 +17,13 @@ const formatCurrency = (amount: number) => {
   return SEGMENT_CURRENCY_FORMATTER.format(amount)
 }
 
-const COLUMNS = Object.freeze([
+const COLUMNS = [
   { key: 'member', label: '會員', slot: 'member' },
   { key: 'rfm', label: 'RFM 分數', slot: 'rfm' },
   { key: 'last_payment_date', label: '最後消費', format: (v: string) => formatDate(v) },
   { key: 'total_amount', label: '消費金額', slot: 'amount' },
   { key: 'visit_count', label: '打卡次數' }
-])
+]
 </script>
 
 <script setup lang="ts">

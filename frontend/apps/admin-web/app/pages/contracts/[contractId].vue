@@ -37,7 +37,7 @@ const LOG_TYPE_LABEL_MAP: Record<string, string> = {
 
 <script setup lang="ts">
 import type { ContractLog, Member } from '~/types/schema'
-import { MESSAGES, PAGES, STATUS, LABELS, TIMING } from '~/constants'
+import { MESSAGES, PAGES, TIMING } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
 import { useFetch } from '~/composables/core/useFetch'
 

@@ -33,7 +33,7 @@ const columns = [
  * 使用 @gym-nexus/ui 組件庫重構
  * 支援批量選擇和操作
  */
-import { PAGES, TIMING } from '~/constants'
+import { TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
