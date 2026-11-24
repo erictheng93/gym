@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { db, files } from '../db/index.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { fileService } from '../services/files.js';
+import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
 type Variables = AuthVariables & TenantVariables;
@@ -41,6 +42,9 @@ const FILE_STORAGE_STATS_SELECT = {
 };
 
 const app = new Hono<{ Variables: Variables }>();
+
+app.use('*', requireAuth);
+app.use('*', requireTenant);
 
 /**
  * GET /api/files
@@ -139,7 +143,7 @@ app.get('/:id/download', async (c) => {
     return c.json({ success: false, error: '檔案不存在' }, 404);
   }
 
-  const signedUrl = await fileService.getSignedUrl(id, parseInt(expires));
+  const signedUrl = await fileService.getSignedUrl(id, parseInt(expires), tenantId);
 
   if (!signedUrl) {
     return c.json({ success: false, error: '無法生成下載連結' }, 500);
@@ -220,7 +224,7 @@ app.post('/', async (c) => {
         description,
         updatedAt: new Date(),
       })
-      .where(eq(files.id, result.id));
+      .where(and(eq(files.id, result.id), eq(files.tenantId, tenantId)));
   }
 
   return c.json({
@@ -298,7 +302,7 @@ app.delete('/:id', async (c) => {
     return c.json({ success: false, error: '檔案不存在' }, 404);
   }
 
-  const deleted = await fileService.delete(id);
+  const deleted = await fileService.delete(id, tenantId);
 
   if (!deleted) {
     return c.json({ success: false, error: '刪除失敗' }, 500);

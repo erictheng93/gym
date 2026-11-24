@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { db, files } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 const FILE_ID_RETURNING = {
@@ -47,9 +47,11 @@ class FileService {
     }
 
     const ext = file.name.split('.').pop() || '';
-    const key = options.folder
+    // Storage keys are tenant-scoped so tenants never share an object namespace
+    const baseKey = options.folder
       ? `${options.folder}/${randomUUID()}.${ext}`
       : `${randomUUID()}.${ext}`;
+    const key = options.tenantId ? `${options.tenantId}/${baseKey}` : baseKey;
 
     try {
       await this.s3.send(new PutObjectCommand({
@@ -80,7 +82,7 @@ class FileService {
     }
   }
 
-  async delete(fileId: string): Promise<boolean> {
+  async delete(fileId: string, tenantId?: string): Promise<boolean> {
     if (!this.s3) {
       console.warn('[Files] R2 not configured');
       return false;
@@ -89,7 +91,7 @@ class FileService {
     const [file] = await db
       .select(FILE_STORAGE_KEY_SELECT)
       .from(files)
-      .where(eq(files.id, fileId))
+      .where(tenantId ? and(eq(files.id, fileId), eq(files.tenantId, tenantId)) : eq(files.id, fileId))
       .limit(1);
 
     if (!file) {
@@ -102,7 +104,9 @@ class FileService {
         Key: file.storageKey,
       }));
 
-      await db.delete(files).where(eq(files.id, fileId));
+      await db.delete(files).where(
+        tenantId ? and(eq(files.id, fileId), eq(files.tenantId, tenantId)) : eq(files.id, fileId)
+      );
 
       return true;
     } catch (error) {
@@ -111,7 +115,7 @@ class FileService {
     }
   }
 
-  async getSignedUrl(fileId: string, expiresIn = 3600): Promise<string | null> {
+  async getSignedUrl(fileId: string, expiresIn = 3600, tenantId?: string): Promise<string | null> {
     if (!this.s3) {
       return null;
     }
@@ -119,7 +123,7 @@ class FileService {
     const [file] = await db
       .select(FILE_STORAGE_KEY_SELECT)
       .from(files)
-      .where(eq(files.id, fileId))
+      .where(tenantId ? and(eq(files.id, fileId), eq(files.tenantId, tenantId)) : eq(files.id, fileId))
       .limit(1);
 
     if (!file) {
