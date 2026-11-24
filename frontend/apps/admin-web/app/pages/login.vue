@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
               <path d="M14 24h6v-8h8v8h6v4h-6v8h-8v-8h-6v-4z" fill="white" />
               <defs>
                 <linearGradient id="logo-gradient" x1="0" y1="0" x2="48" y2="48">
-                  <stop stop-color="#0071e3" />
+                  <stop stop-color="#007aff" />
                   <stop offset="1" stop-color="#00c7be" />
                 </linearGradient>
               </defs>
@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
 .orb-1 {
   width: 600px;
   height: 600px;
-  background: linear-gradient(135deg, #0071e3 0%, #00c7be 100%);
+  background: linear-gradient(135deg, #007aff 0%, #00c7be 100%);
   top: -200px;
   right: -100px;
   animation-delay: 0s;
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
 .orb-3 {
   width: 400px;
   height: 400px;
-  background: linear-gradient(135deg, #ff9f0a 0%, #ff375f 100%);
+  background: linear-gradient(135deg, #ff9500 0%, #ff375f 100%);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);

@@ -500,7 +500,7 @@ onMounted(() => {
 .btn-text {
   background: none;
   border: none;
-  color: #0071e3;
+  color: #007aff;
   cursor: pointer;
   font-size: 14px;
   text-decoration: none;
@@ -567,7 +567,7 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: #0071e3;
+  background: #007aff;
   color: white;
 }
 

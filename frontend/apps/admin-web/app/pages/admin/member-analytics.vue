@@ -211,8 +211,8 @@ const renderCharts = () => {
         datasets: [{
           label: '會員總數',
           data: memberGrowthData.value.map(d => d.total),
-          borderColor: '#0071e3',
-          backgroundColor: 'rgba(0, 113, 227, 0.1)',
+          borderColor: '#007aff',
+          backgroundColor: 'rgba(0, 122, 255, 0.1)',
           tension: 0.3,
           fill: true
         }]
@@ -330,7 +330,7 @@ const renderCharts = () => {
   // Gender Pie Chart
   if (genderChartRef.value && genderDistributionData.value.length > 0) {
     const genderColors: Record<string, string> = {
-      'M': '#0071e3',
+      'M': '#007aff',
       'F': '#ff2d55',
       'OTHER': '#8e8e93'
     }
@@ -762,8 +762,8 @@ onUnmounted(() => {
 }
 
 .icon.members {
-  background: rgba(0, 113, 227, 0.1);
-  color: #0071e3;
+  background: rgba(0, 122, 255, 0.1);
+  color: #007aff;
 }
 
 .icon.active {

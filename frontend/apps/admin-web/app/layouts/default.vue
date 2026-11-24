@@ -201,7 +201,7 @@ const userEmail = computed(() => {
               <path d="M14 24h6v-8h8v8h6v4h-6v8h-8v-8h-6v-4z" fill="white" />
               <defs>
                 <linearGradient id="logo-gradient-sidebar" x1="0" y1="0" x2="48" y2="48">
-                  <stop stop-color="#0071e3" />
+                  <stop stop-color="#007aff" />
                   <stop offset="1" stop-color="#00c7be" />
                 </linearGradient>
               </defs>
@@ -367,10 +367,10 @@ const userEmail = computed(() => {
 }
 
 .nav-link.active {
-  background: linear-gradient(180deg, #0077ed 0%, #0071e3 100%);
+  background: linear-gradient(180deg, #1a88ff 0%, #007aff 100%);
   color: #ffffff;
   box-shadow:
-    0 1px 3px rgba(0, 113, 227, 0.3),
+    0 1px 3px rgba(0, 122, 255, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
@@ -535,7 +535,7 @@ const userEmail = computed(() => {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
   color: white;
   display: flex;
   align-items: center;

@@ -619,7 +619,7 @@ onBeforeUnmount(() => {
 .btn-text {
   background: none;
   border: none;
-  color: #0071e3;
+  color: #007aff;
   cursor: pointer;
   font-size: 14px;
   padding: 0;

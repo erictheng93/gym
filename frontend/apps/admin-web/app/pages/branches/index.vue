@@ -179,7 +179,7 @@ const branchTypeLabel = (type: string) => {
 }
 
 .branch-icon.branch {
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
   color: white;
 }
 

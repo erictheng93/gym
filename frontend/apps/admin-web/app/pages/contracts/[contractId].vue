@@ -1239,7 +1239,7 @@ const openRenewModal = () => {
   width: 72px;
   height: 72px;
   border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
   color: white;
   display: flex;
   align-items: center;
@@ -1345,7 +1345,7 @@ const openRenewModal = () => {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;
@@ -1573,7 +1573,7 @@ const openRenewModal = () => {
 }
 
 .log-extend {
-  background: rgba(0, 113, 227, 0.15);
+  background: rgba(0, 122, 255, 0.15);
   color: var(--color-accent);
 }
 
@@ -1810,7 +1810,7 @@ const openRenewModal = () => {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;
@@ -1879,7 +1879,7 @@ const openRenewModal = () => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;

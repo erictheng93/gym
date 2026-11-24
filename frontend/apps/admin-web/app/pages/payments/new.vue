@@ -440,7 +440,7 @@ const formatCurrency = (amount: number) => {
 }
 
 .hero-refund {
-  background: linear-gradient(135deg, #ff9f0a, #ff6b35);
+  background: linear-gradient(135deg, #ff9500, #ff6b35);
 }
 
 /* Type Toggle */

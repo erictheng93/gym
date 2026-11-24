@@ -249,7 +249,7 @@ const performExport = async () => {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: #0071e3;
+  color: #007aff;
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;

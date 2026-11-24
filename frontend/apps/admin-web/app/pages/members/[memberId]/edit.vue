@@ -396,7 +396,7 @@ const handleSubmit = async () => {
   width: 80px;
   height: 80px;
   border-radius: var(--radius-2xl);
-  background: linear-gradient(135deg, #ff9f0a, #ff6b35);
+  background: linear-gradient(135deg, #ff9500, #ff6b35);
   color: white;
   display: flex;
   align-items: center;

@@ -115,15 +115,15 @@ onUnmounted(() => {
 }
 
 .dialog-icon--info {
-  background: rgba(0, 113, 227, 0.1);
-  color: var(--color-accent, #0071e3);
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--color-accent, #007aff);
 }
 
 .dialog-title {
   margin: 0 0 var(--space-sm, 12px) 0;
   font-size: 20px;
   font-weight: 600;
-  color: var(--color-text-primary, #1d1d1f);
+  color: var(--color-text-primary, #1c1c1e);
 }
 
 .dialog-message {
@@ -152,7 +152,7 @@ onUnmounted(() => {
 
 .dialog-btn--secondary {
   background: var(--color-bg-secondary, #f5f5f7);
-  color: var(--color-text-primary, #1d1d1f);
+  color: var(--color-text-primary, #1c1c1e);
 }
 
 .dialog-btn--secondary:hover {
@@ -178,7 +178,7 @@ onUnmounted(() => {
 }
 
 .dialog-btn--info {
-  background: var(--color-accent, #0071e3);
+  background: var(--color-accent, #007aff);
   color: white;
 }
 

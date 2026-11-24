@@ -627,7 +627,7 @@ onMounted(() => {
   width: 80px;
   height: 80px;
   border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;
@@ -676,7 +676,7 @@ onMounted(() => {
 
 .plan-badge-large {
   padding: 8px 16px;
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   border-radius: var(--radius-md);
   font-size: 14px;
@@ -803,7 +803,7 @@ onMounted(() => {
 }
 
 .quota-icon--blue {
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
 }
 
@@ -914,13 +914,13 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #0077ed 0%, #0071e3 100%);
+  background: linear-gradient(180deg, #1a88ff 0%, #007aff 100%);
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
 }
 
 .btn-primary:disabled {

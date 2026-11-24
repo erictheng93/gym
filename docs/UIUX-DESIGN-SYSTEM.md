@@ -400,7 +400,7 @@
 
 ## 14\. 樣式快速參考 (Quick Reference)
 
-> 專案**未安裝 Tailwind CSS**。樣式一律以純 CSS 寫在 Vue SFC 的 `<style scoped>` 中，數值優先使用設計 Token（CSS 自訂屬性），定義於 `packages/ui/assets/css/main.css`（共用，coach-app 透過 `@import` 載入）與 admin-web 的 `assets/css/main.css`。**member-app 目前未匯入共用 Token 檔**，只有部分 Token；在 member-app 使用前請先確認 Token 已定義。本文件其他章節出現的 Tailwind class 名稱（如 `rounded-2xl`、`gap-4`）僅作為數值速記，不代表可直接使用。
+> 專案**未安裝 Tailwind CSS**。樣式一律以純 CSS 寫在 Vue SFC 的 `<style scoped>` 中，數值優先使用設計 Token（CSS 自訂屬性），定義於 `packages/ui/assets/css/main.css`（共用，coach-app 透過 `@import` 載入）與 admin-web 的 `assets/css/main.css`。member-app 以別名方式定義相同的 Token 名稱（對應其自有 Token），三端 App 皆可直接使用。本文件其他章節出現的 Tailwind class 名稱（如 `rounded-2xl`、`gap-4`）僅作為數值速記，不代表可直接使用。
 
 ### 14.1 常用組合
 

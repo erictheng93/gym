@@ -283,11 +283,11 @@ const peakInfo = computed(() => {
   width: 100px;
   height: 12px;
   background: linear-gradient(to right,
-    rgba(0, 113, 227, 0.1),
-    rgba(0, 113, 227, 0.3),
-    rgba(0, 113, 227, 0.5),
-    rgba(0, 113, 227, 0.7),
-    rgba(0, 113, 227, 1)
+    rgba(0, 122, 255, 0.1),
+    rgba(0, 122, 255, 0.3),
+    rgba(0, 122, 255, 0.5),
+    rgba(0, 122, 255, 0.7),
+    rgba(0, 122, 255, 1)
   );
   border-radius: 6px;
 }

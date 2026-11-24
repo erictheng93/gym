@@ -465,7 +465,7 @@ const summaryStats = computed(() => {
 }
 
 .summary-icon.blue {
-  background: rgba(0, 113, 227, 0.1);
+  background: rgba(0, 122, 255, 0.1);
   color: var(--color-accent);
 }
 
@@ -608,7 +608,7 @@ const summaryStats = computed(() => {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;
@@ -799,7 +799,7 @@ const summaryStats = computed(() => {
 }
 
 .status-leave {
-  background: rgba(0, 113, 227, 0.15);
+  background: rgba(0, 122, 255, 0.15);
   color: var(--color-accent);
 }
 

@@ -72,7 +72,7 @@ This is the **Apple-Native Soft Minimalism** design system (蘋果原生柔和�
 - **Icons:** SF Symbols style (Lucide Icons for web), outline/filled toggle
 - **Motion:** 200–350ms, ease-out, fluid and unobtrusive
 - **Typography:** SF Pro / Inter + Noto Sans TC, avoid pure black, strong title/body contrast
-- **Output:** Vue SFCs styled with plain CSS: `<style scoped>` plus the design tokens (CSS custom properties) from `packages/ui/assets/css/main.css` (shared) and admin-web's own `main.css`; member-app does not import the shared token file yet, so check a token exists there before using it. Tailwind is not installed — Tailwind class names in the design doc are shorthand for values only. Confirm against design checklist before output
+- **Output:** Vue SFCs styled with plain CSS: `<style scoped>` plus the design tokens (CSS custom properties) from `packages/ui/assets/css/main.css` (shared; admin-web keeps an identical copy, member-app defines the same names as aliases of its own tokens). Tailwind is not installed — Tailwind class names in the design doc are shorthand for values only. Confirm against design checklist before output
 
 When designing any UI component, page, or feature, always read `docs/UIUX-DESIGN-SYSTEM.md` first and apply its full specifications.
 

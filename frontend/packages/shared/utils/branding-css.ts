@@ -117,7 +117,7 @@ ${lightSelector} #launch-screen{background:${lightBg}}
 #launch-screen .logo-icon{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,${colors.start} 0%,${colors.end} 100%);display:flex;align-items:center;justify-content:center}
 #launch-screen .logo-icon svg{width:28px;height:28px;color:#fff}
 #launch-screen .logo-text{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-size:${appType === 'coach' ? '26' : '28'}px;font-weight:600;letter-spacing:-.02em;color:#f5f5f7}
-${lightSelector} #launch-screen .logo-text{color:#1d1d1f}
+${lightSelector} #launch-screen .logo-text{color:#1c1c1e}
 #launch-screen .loading-dots{display:flex;gap:6px;margin-top:32px}
 #launch-screen .loading-dots span{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);animation:dotPulse 1.4s ease-in-out infinite}
 ${lightSelector} #launch-screen .loading-dots span{background:rgba(0,0,0,.2)}

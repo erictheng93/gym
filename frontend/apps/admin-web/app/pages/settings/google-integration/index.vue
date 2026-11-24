@@ -658,7 +658,7 @@ const copyToClipboard = async (text: string) => {
 
 .view-link {
   margin-left: auto;
-  color: #0071e3;
+  color: #007aff;
   text-decoration: none;
   font-weight: 500;
 }

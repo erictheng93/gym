@@ -493,7 +493,7 @@ const handleDelete = async () => {
   width: 100px;
   height: 100px;
   border-radius: var(--radius-2xl);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;

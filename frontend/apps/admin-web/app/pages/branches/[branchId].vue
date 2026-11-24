@@ -486,7 +486,7 @@ const handleDelete = async () => {
 }
 
 .branch-icon-large.branch {
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
 }
 
 .branch-info {
@@ -517,7 +517,7 @@ const handleDelete = async () => {
 }
 
 .badge-branch {
-  background: rgba(0, 113, 227, 0.1);
+  background: rgba(0, 122, 255, 0.1);
   color: var(--color-accent);
 }
 

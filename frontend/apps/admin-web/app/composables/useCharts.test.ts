@@ -128,10 +128,10 @@ describe('useCharts', () => {
     it('應該包含預設的顏色配置', () => {
       const { colors } = useCharts()
 
-      expect(colors.primary).toBe('#0071e3')
+      expect(colors.primary).toBe('#007aff')
       expect(colors.secondary).toBe('#5856d6')
       expect(colors.success).toBe('#34c759')
-      expect(colors.warning).toBe('#ff9f0a')
+      expect(colors.warning).toBe('#ff9500')
       expect(colors.error).toBe('#ff3b30')
       expect(colors.info).toBe('#5ac8fa')
       expect(colors.accent).toBe('#af52de')
@@ -142,7 +142,7 @@ describe('useCharts', () => {
 
       expect(Array.isArray(colorPalette)).toBe(true)
       expect(colorPalette.length).toBeGreaterThan(0)
-      expect(colorPalette[0]).toBe('#0071e3') // primary color
+      expect(colorPalette[0]).toBe('#007aff') // primary color
     })
   })
 
