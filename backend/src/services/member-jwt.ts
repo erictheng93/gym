@@ -7,7 +7,27 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 // Tokens include: type='member', memberId, memberCode, branchId
 // Access token: 1 hour, Refresh token: 7 days
 
-const JWT_SECRET = process.env.MEMBER_JWT_SECRET || process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const DEV_FALLBACK_SECRET = 'dev-secret-change-in-production';
+const KNOWN_DEFAULT_SECRETS = [DEV_FALLBACK_SECRET, 'change-me-in-production'];
+const MIN_PRODUCTION_SECRET_LENGTH = 32;
+
+function resolveJwtSecret(): string {
+  const secret = process.env.MEMBER_JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret) {
+      throw new Error('MEMBER_JWT_SECRET must be set in production');
+    }
+    if (KNOWN_DEFAULT_SECRETS.includes(secret) || secret.length < MIN_PRODUCTION_SECRET_LENGTH) {
+      throw new Error(
+        `MEMBER_JWT_SECRET must be a non-default secret of at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production`,
+      );
+    }
+    return secret;
+  }
+  return secret || process.env.JWT_SECRET || DEV_FALLBACK_SECRET;
+}
+
+const JWT_SECRET = resolveJwtSecret();
 const ACCESS_TOKEN_EXPIRY = 60 * 60; // 1 hour in seconds
 const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60; // 7 days in seconds
 

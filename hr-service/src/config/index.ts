@@ -6,6 +6,23 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
+const DEV_FALLBACK_SECRET = 'dev-secret-change-in-production'
+const KNOWN_DEFAULT_SECRETS = [DEV_FALLBACK_SECRET, 'change-me-in-production', 'change-this-in-production']
+
+function resolveJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret) {
+      throw new Error('JWT_SECRET must be set in production')
+    }
+    if (KNOWN_DEFAULT_SECRETS.includes(secret) || secret.length < 32) {
+      throw new Error('JWT_SECRET must be a non-default secret of at least 32 characters in production')
+    }
+    return secret
+  }
+  return secret || DEV_FALLBACK_SECRET
+}
+
 export const config = {
   // Server
   port: parseInt(process.env.PORT || '3001', 10),
@@ -21,7 +38,7 @@ export const config = {
 
   // JWT
   jwt: {
-    secret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
+    secret: resolveJwtSecret(),
     expiresIn: process.env.JWT_EXPIRES_IN || '24h'
   },
 
