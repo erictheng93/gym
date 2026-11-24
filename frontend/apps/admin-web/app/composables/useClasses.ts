@@ -7,6 +7,10 @@ import type { Class } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
+const inFlightClassesMap = new Map<string, Promise<void>>()
+const inFlightSingleClassMap = new Map<string, Promise<Class | null>>()
+const inFlightClassStatsMap = new Map<string, Promise<{ total: number; active: number }>>()
+
 export const useClasses = () => {
   const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
   const { handleError } = useErrorHandler()
@@ -26,53 +30,75 @@ export const useClasses = () => {
     categoryId?: string
     isActive?: boolean
     difficulty?: string
-  }) => {
-    isLoading.value = true
-    const { page = 1, limit = 20, search, branchId, categoryId, isActive, difficulty } = options || {}
-
-    try {
-      const filter: Record<string, unknown> = {}
-
-      if (branchId) filter.branch_id = branchId
-      if (categoryId) filter.category_id = categoryId
-      if (typeof isActive === 'boolean') filter.is_active = isActive
-      if (difficulty) filter.difficulty_level = difficulty
-
-      const { data, total } = await readItems<Class>('classes', {
-        page,
-        limit,
-        search,
-        filter,
-        sort: 'date_created',
-        sortOrder: 'desc'
-      })
-
-      classes.value = data
-      totalCount.value = total
-    } catch (error) {
-      handleError(error, {
-        context: 'useClasses.fetchClasses',
-        customMessage: '載入課程資料失敗'
-      })
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightClassesMap.has(key)) {
+      return inFlightClassesMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { page = 1, limit = 20, search, branchId, categoryId, isActive, difficulty } = options || {}
+
+      try {
+        const filter: Record<string, unknown> = {}
+
+        if (branchId) filter.branch_id = branchId
+        if (categoryId) filter.category_id = categoryId
+        if (typeof isActive === 'boolean') filter.is_active = isActive
+        if (difficulty) filter.difficulty_level = difficulty
+
+        const { data, total } = await readItems<Class>('classes', {
+          page,
+          limit,
+          search,
+          filter,
+          sort: 'date_created',
+          sortOrder: 'desc'
+        })
+
+        classes.value = data
+        totalCount.value = total
+      } catch (error) {
+        handleError(error, {
+          context: 'useClasses.fetchClasses',
+          customMessage: '載入課程資料失敗'
+        })
+      } finally {
+        isLoading.value = false
+        inFlightClassesMap.delete(key)
+      }
+    })()
+
+    inFlightClassesMap.set(key, promise)
+    return promise
   }
 
   /**
    * 獲取單一課程詳情
    */
-  const getClass = async (id: string): Promise<Class | null> => {
-    try {
-      const data = await readItem<Class>('classes', id)
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useClasses.getClass',
-        customMessage: '載入課程資料失敗'
-      })
-      return null
+  const getClass = async (id: string, force = false): Promise<Class | null> => {
+    if (!force && inFlightSingleClassMap.has(id)) {
+      return inFlightSingleClassMap.get(id)!
     }
+
+    const promise = (async () => {
+      try {
+        const data = await readItem<Class>('classes', id)
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useClasses.getClass',
+          customMessage: '載入課程資料失敗'
+        })
+        return null
+      } finally {
+        inFlightSingleClassMap.delete(id)
+      }
+    })()
+
+    inFlightSingleClassMap.set(id, promise)
+    return promise
   }
 
   /**
@@ -143,26 +169,37 @@ export const useClasses = () => {
    * 獲取課程統計
    */
   const getClassStats = async (branchId?: string) => {
-    try {
-      const filter: Record<string, unknown> = {}
-      if (branchId) filter.branch_id = branchId
+    const key = branchId || ''
+    const existing = inFlightClassStatsMap.get(key)
+    if (existing) return existing
 
-      const [totalResult, activeResult] = await Promise.all([
-        readItems<Class>('classes', { filter, limit: 1 }),
-        readItems<Class>('classes', { filter: { ...filter, is_active: true }, limit: 1 })
-      ])
+    const promise = (async () => {
+      try {
+        const filter: Record<string, unknown> = {}
+        if (branchId) filter.branch_id = branchId
 
-      return {
-        total: totalResult.total,
-        active: activeResult.total
+        const [totalResult, activeResult] = await Promise.all([
+          readItems<Class>('classes', { filter, limit: 1 }),
+          readItems<Class>('classes', { filter: { ...filter, is_active: true }, limit: 1 })
+        ])
+
+        return {
+          total: totalResult.total,
+          active: activeResult.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'useClasses.getClassStats',
+          showToast: false
+        })
+        return { total: 0, active: 0 }
+      } finally {
+        inFlightClassStatsMap.delete(key)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'useClasses.getClassStats',
-        showToast: false
-      })
-      return { total: 0, active: 0 }
-    }
+    })()
+
+    inFlightClassStatsMap.set(key, promise)
+    return promise
   }
 
   return {

@@ -1,3 +1,12 @@
+<script lang="ts">
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'PENDING', label: '待審核' },
+  { value: 'APPROVED', label: '已核准' },
+  { value: 'PAID', label: '已發放' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 薪資管理頁面
@@ -32,13 +41,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: '待審核' },
-  { value: 'APPROVED', label: '已核准' },
-  { value: 'PAID', label: '已發放' }
-]
 
 // Get current period (YYYY-MM)
 function getCurrentPeriod() {
@@ -106,10 +108,9 @@ const handleBatchApprove = async () => {
   if (!confirmed) return
 
   try {
-    for (const id of selectedIds.value) {
-      await approveSalary(id)
-    }
-    toast.success(`已核准 ${selectedIds.value.length} 筆薪資紀錄`)
+    const count = selectedIds.value.length
+    await Promise.all(selectedIds.value.map(id => approveSalary(id)))
+    toast.success(`已核准 ${count} 筆薪資紀錄`)
     selectedIds.value = []
     await loadRecords()
   } catch (error) {
@@ -120,10 +121,16 @@ const handleBatchApprove = async () => {
 
 // Summary stats
 const summaryStats = computed(() => {
-  const pending = salaryRecords.value.filter(r => r.status === 'PENDING').length
-  const approved = salaryRecords.value.filter(r => r.status === 'APPROVED').length
-  const paid = salaryRecords.value.filter(r => r.status === 'PAID').length
-  const totalAmount = salaryRecords.value.reduce((sum, r) => sum + (r.net_salary || 0), 0)
+  let pending = 0
+  let approved = 0
+  let paid = 0
+  let totalAmount = 0
+  for (const r of salaryRecords.value) {
+    if (r.status === 'PENDING') pending++
+    else if (r.status === 'APPROVED') approved++
+    else if (r.status === 'PAID') paid++
+    totalAmount += (r.net_salary || 0)
+  }
   return { pending, approved, paid, totalAmount }
 })
 

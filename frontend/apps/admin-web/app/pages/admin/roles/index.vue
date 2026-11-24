@@ -1,3 +1,23 @@
+<script lang="ts">
+const permissionModules = [
+  { key: 'members', label: '會員管理' },
+  { key: 'contracts', label: '合約管理' },
+  { key: 'payments', label: '付款管理' },
+  { key: 'employees', label: '員工管理' },
+  { key: 'branches', label: '分店管理' },
+  { key: 'reports', label: '報表功能' },
+  { key: 'settings', label: '系統設定' },
+  { key: 'users', label: '用戶管理' },
+]
+
+const permissionTypes = [
+  { key: 'read', label: '查看' },
+  { key: 'create', label: '新增' },
+  { key: 'update', label: '編輯' },
+  { key: 'delete', label: '刪除' },
+]
+</script>
+
 <script setup lang="ts">
 /**
  * Admin Role Management - List Page
@@ -99,24 +119,6 @@ const roles = ref<Role[]>([
     }
   }
 ])
-
-const permissionModules = [
-  { key: 'members', label: '會員管理' },
-  { key: 'contracts', label: '合約管理' },
-  { key: 'payments', label: '付款管理' },
-  { key: 'employees', label: '員工管理' },
-  { key: 'branches', label: '分店管理' },
-  { key: 'reports', label: '報表功能' },
-  { key: 'settings', label: '系統設定' },
-  { key: 'users', label: '用戶管理' },
-]
-
-const permissionTypes = [
-  { key: 'read', label: '查看' },
-  { key: 'create', label: '新增' },
-  { key: 'update', label: '編輯' },
-  { key: 'delete', label: '刪除' },
-]
 
 const selectedRole = ref<string | null>(null)
 

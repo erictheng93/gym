@@ -14,6 +14,76 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+const MEMBER_CHECKIN_VERIFY_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  status: members.status,
+  branchId: members.branchId,
+};
+
+const BRANCH_CHECKIN_VERIFY_SELECT = {
+  id: branches.id,
+  name: branches.name,
+  tenantId: branches.tenantId,
+};
+
+const CONTRACT_PLAN_CHECKIN_SELECT = {
+  contract: {
+    id: contracts.id,
+    contractNo: contracts.contractNo,
+    remainingCounts: contracts.remainingCounts,
+    endDate: contracts.endDate,
+  },
+  plan: {
+    planType: membershipPlans.planType,
+  },
+};
+
+const CHECK_IN_EXISTING_SELECT = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+};
+
+const CHECK_IN_INSERT_RETURNING = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+};
+
+const CHECK_IN_HISTORY_COUNT_SELECT = {
+  total: sql<number>`count(*)`,
+};
+
+const CHECK_IN_HISTORY_LIST_SELECT = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+  checkInType: checkIns.checkInType,
+  checkInMethod: checkIns.checkInMethod,
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+  contractId: checkIns.contractId,
+};
+
+const CHECK_IN_TODAY_SELECT = {
+  id: checkIns.id,
+  checkInTime: checkIns.checkInTime,
+  checkInType: checkIns.checkInType,
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+};
+
+const CHECK_IN_STATS_BRANCH_SELECT = {
+  branchId: checkIns.branchId,
+  branchName: branches.name,
+  count: sql<number>`count(*)`,
+};
+
+const createCheckInCountStatsSelect = (monthStart: Date, thirtyDaysAgo: Date) => ({
+  total: sql<number>`count(*)`,
+  thisMonth: sql<number>`count(case when ${gte(checkIns.checkInTime, monthStart)} then 1 end)`,
+  last30Days: sql<number>`count(case when ${gte(checkIns.checkInTime, thirtyDaysAgo)} then 1 end)`,
+});
+
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -78,51 +148,10 @@ app.post(
       }, 400);
     }
 
-    // Verify member status
-    const [member] = await db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        fullName: members.fullName,
-        status: members.status,
-        branchId: members.branchId,
-      })
-      .from(members)
-      .where(eq(members.id, memberInfo.id))
-      .limit(1);
-
-    if (!member || member.status !== 'ACTIVE') {
-      return c.json({
-        success: false,
-        error: '會員狀態無效',
-        code: 'MEMBER_INACTIVE',
-        memberStatus: member?.status,
-      }, 403);
-    }
-
-    // Verify branch exists
-    const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
-      .from(branches)
-      .where(eq(branches.id, branchId))
-      .limit(1);
-
-    if (!branch) {
-      return c.json({
-        success: false,
-        error: '分店不存在',
-        code: 'BRANCH_NOT_FOUND',
-      }, 404);
-    }
-
-    // Get active contract
-    const today = new Date().toISOString().split('T')[0];
+    // Date ranges for contract and check-in checks
+    const today = new Date().toISOString().slice(0, 10);
     const contractConditions = [
-      eq(contracts.memberId, member.id),
+      eq(contracts.memberId, memberInfo.id),
       eq(contracts.status, 'ACTIVE'),
       lte(contracts.startDate, today),
       gte(contracts.endDate, today),
@@ -133,16 +162,63 @@ app.post(
       contractConditions.push(eq(contracts.id, qrPayload.c));
     }
 
-    const [contractResult] = await db
-      .select({
-        contract: contracts,
-        plan: membershipPlans,
-      })
-      .from(contracts)
-      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-      .where(and(...contractConditions))
-      .orderBy(desc(contracts.endDate))
-      .limit(1);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Concurrently verify member status, branch, active contract, and today's check-in in 1 round trip
+    const [
+      [member],
+      [branch],
+      [contractResult],
+      [existingCheckIn],
+    ] = await Promise.all([
+      db
+        .select(MEMBER_CHECKIN_VERIFY_SELECT)
+        .from(members)
+        .where(eq(members.id, memberInfo.id))
+        .limit(1),
+      db
+        .select(BRANCH_CHECKIN_VERIFY_SELECT)
+        .from(branches)
+        .where(eq(branches.id, branchId))
+        .limit(1),
+      db
+        .select(CONTRACT_PLAN_CHECKIN_SELECT)
+        .from(contracts)
+        .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+        .where(and(...contractConditions))
+        .orderBy(desc(contracts.endDate))
+        .limit(1),
+      db
+        .select(CHECK_IN_EXISTING_SELECT)
+        .from(checkIns)
+        .where(and(
+          eq(checkIns.memberId, memberInfo.id),
+          eq(checkIns.branchId, branchId),
+          gte(checkIns.checkInTime, todayStart),
+          lte(checkIns.checkInTime, todayEnd),
+        ))
+        .limit(1),
+    ]);
+
+    if (!member || member.status !== 'ACTIVE') {
+      return c.json({
+        success: false,
+        error: '會員狀態無效',
+        code: 'MEMBER_INACTIVE',
+        memberStatus: member?.status,
+      }, 403);
+    }
+
+    if (!branch) {
+      return c.json({
+        success: false,
+        error: '分店不存在',
+        code: 'BRANCH_NOT_FOUND',
+      }, 404);
+    }
 
     const activeContract = contractResult?.contract;
     const activePlan = contractResult?.plan;
@@ -172,26 +248,6 @@ app.post(
       }
     }
 
-    // Check if already checked in today at this branch
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const [existingCheckIn] = await db
-      .select({
-        id: checkIns.id,
-        checkInTime: checkIns.checkInTime,
-      })
-      .from(checkIns)
-      .where(and(
-        eq(checkIns.memberId, member.id),
-        eq(checkIns.branchId, branchId),
-        gte(checkIns.checkInTime, todayStart),
-        lte(checkIns.checkInTime, todayEnd),
-      ))
-      .limit(1);
-
     if (existingCheckIn) {
       return c.json({
         success: true,
@@ -215,27 +271,31 @@ app.post(
       });
     }
 
-    // Create check-in
-    const [newCheckIn] = await db.insert(checkIns).values({
-      memberId: member.id,
-      branchId,
-      contractId: activeContract.id,
-      checkInType: 'ENTRY',
-      checkInMethod: 'QR_CODE',
-      checkInTime: new Date(),
-    }).returning();
-
-    // Deduct session for COUNT_BASED contracts
+    // Calculate new remaining counts for COUNT_BASED contracts
     let newRemainingCounts: number | null = null;
-    if (activePlan?.planType === 'COUNT_BASED') {
+    const isCountBased = activePlan?.planType === 'COUNT_BASED';
+    if (isCountBased) {
       const remainingCounts = activeContract.remainingCounts ?? 0;
-      newRemainingCounts = remainingCounts - 1;
-
-      await db.update(contracts).set({
-        remainingCounts: newRemainingCounts,
-        updatedAt: new Date(),
-      }).where(eq(contracts.id, activeContract.id));
+      newRemainingCounts = Math.max(0, remainingCounts - 1);
     }
+
+    // Concurrently create check-in and deduct count if applicable
+    const [[newCheckIn]] = await Promise.all([
+      db.insert(checkIns).values({
+        memberId: member.id,
+        branchId,
+        contractId: activeContract.id,
+        checkInType: 'ENTRY',
+        checkInMethod: 'QR_CODE',
+        checkInTime: new Date(),
+      }).returning(CHECK_IN_INSERT_RETURNING),
+      isCountBased
+        ? db.update(contracts).set({
+            remainingCounts: newRemainingCounts,
+            updatedAt: new Date(),
+          }).where(eq(contracts.id, activeContract.id))
+        : Promise.resolve([]),
+    ]);
 
     return c.json({
       success: true,
@@ -318,29 +378,21 @@ app.get(
       conditions.push(lte(checkIns.checkInTime, endDateTime));
     }
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(checkIns)
-      .where(and(...conditions));
-
-    // Get check-ins with branch info
-    const checkInList = await db
-      .select({
-        id: checkIns.id,
-        checkInTime: checkIns.checkInTime,
-        checkInType: checkIns.checkInType,
-        checkInMethod: checkIns.checkInMethod,
-        branchId: checkIns.branchId,
-        branchName: branches.name,
-        contractId: checkIns.contractId,
-      })
-      .from(checkIns)
-      .leftJoin(branches, eq(checkIns.branchId, branches.id))
-      .where(and(...conditions))
-      .orderBy(desc(checkIns.checkInTime))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and check-ins with branch info
+    const [[{ total }], checkInList] = await Promise.all([
+      db
+        .select(CHECK_IN_HISTORY_COUNT_SELECT)
+        .from(checkIns)
+        .where(and(...conditions)),
+      db
+        .select(CHECK_IN_HISTORY_LIST_SELECT)
+        .from(checkIns)
+        .leftJoin(branches, eq(checkIns.branchId, branches.id))
+        .where(and(...conditions))
+        .orderBy(desc(checkIns.checkInTime))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,
@@ -388,13 +440,7 @@ app.get('/today', async (c) => {
   }
 
   const todayCheckIns = await db
-    .select({
-      id: checkIns.id,
-      checkInTime: checkIns.checkInTime,
-      checkInType: checkIns.checkInType,
-      branchId: checkIns.branchId,
-      branchName: branches.name,
-    })
+    .select(CHECK_IN_TODAY_SELECT)
     .from(checkIns)
     .leftJoin(branches, eq(checkIns.branchId, branches.id))
     .where(and(...conditions))
@@ -433,50 +479,34 @@ app.get('/stats', async (c) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  // Count this month
-  const [monthStats] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .where(and(
-      eq(checkIns.memberId, memberInfo.id),
-      gte(checkIns.checkInTime, monthStart),
-    ));
+  // Concurrently execute count stats and most visited branch query
+  const [
+    [countStats],
+    branchStats,
+  ] = await Promise.all([
+    // Counts (total, this month, last 30 days) computed in a single pass
+    db
+      .select(createCheckInCountStatsSelect(monthStart, thirtyDaysAgo))
+      .from(checkIns)
+      .where(eq(checkIns.memberId, memberInfo.id)),
 
-  // Count last 30 days
-  const [thirtyDayStats] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .where(and(
-      eq(checkIns.memberId, memberInfo.id),
-      gte(checkIns.checkInTime, thirtyDaysAgo),
-    ));
-
-  // Total count
-  const [totalStats] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(checkIns)
-    .where(eq(checkIns.memberId, memberInfo.id));
-
-  // Most visited branch
-  const branchStats = await db
-    .select({
-      branchId: checkIns.branchId,
-      branchName: branches.name,
-      count: sql<number>`count(*)`,
-    })
-    .from(checkIns)
-    .leftJoin(branches, eq(checkIns.branchId, branches.id))
-    .where(eq(checkIns.memberId, memberInfo.id))
-    .groupBy(checkIns.branchId, branches.name)
-    .orderBy(desc(sql`count(*)`))
-    .limit(1);
+    // Most visited branch
+    db
+      .select(CHECK_IN_STATS_BRANCH_SELECT)
+      .from(checkIns)
+      .leftJoin(branches, eq(checkIns.branchId, branches.id))
+      .where(eq(checkIns.memberId, memberInfo.id))
+      .groupBy(checkIns.branchId, branches.name)
+      .orderBy(desc(sql`count(*)`))
+      .limit(1),
+  ]);
 
   return c.json({
     success: true,
     data: {
-      thisMonth: Number(monthStats?.count || 0),
-      last30Days: Number(thirtyDayStats?.count || 0),
-      total: Number(totalStats?.count || 0),
+      thisMonth: Number(countStats?.thisMonth || 0),
+      last30Days: Number(countStats?.last30Days || 0),
+      total: Number(countStats?.total || 0),
       mostVisitedBranch: branchStats[0] ? {
         id: branchStats[0].branchId,
         name: branchStats[0].branchName,

@@ -42,7 +42,7 @@ export function useFetch() {
 
       const queryString = searchParams.toString()
       if (queryString) {
-        url += `?${queryString}`
+        url += (url.includes('?') ? '&' : '?') + queryString
       }
     }
 

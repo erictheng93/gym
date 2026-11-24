@@ -1,10 +1,21 @@
+<script lang="ts">
+import { LABELS } from '~/constants'
+
+const planPriceFormatter = new Intl.NumberFormat('zh-TW')
+
+const planTypeOptions = [
+  { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },
+  { value: 'COUNT_BASED', label: LABELS.CONTRACT_TYPE.COUNT_BASED }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增會籍方案頁面
  *
  * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
-import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+import { MESSAGES, PAGES, STATUS } from '~/constants'
 import { createPlanSchema, type CreatePlanInput } from '~/schemas/plan.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
@@ -39,11 +50,6 @@ const {
 
 // Form submission helper
 const { isSubmitting, submit } = useFormSubmit()
-
-const planTypeOptions = [
-  { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },
-  { value: 'COUNT_BASED', label: LABELS.CONTRACT_TYPE.COUNT_BASED }
-]
 
 const handleSubmit = async () => {
   clearErrors()
@@ -81,7 +87,7 @@ const handleSubmit = async () => {
 }
 
 const formatPrice = (value: number) => {
-  return new Intl.NumberFormat('zh-TW').format(value)
+  return planPriceFormatter.format(value)
 }
 </script>
 

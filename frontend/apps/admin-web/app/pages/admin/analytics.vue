@@ -1,3 +1,7 @@
+<script lang="ts">
+const analyticsNumberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { useAuth } from '~/composables/useAuth'
 
@@ -38,9 +42,11 @@ const statsTimeRange = ref<'24h' | '7d' | '30d'>('24h')
 onMounted(async () => {
   isLoading.value = true
   try {
-    await fetchTenantInfo()
-    await fetchTenantQuota()
-    await fetchApiStats()
+    await Promise.all([
+      fetchTenantInfo(),
+      fetchTenantQuota(),
+      fetchApiStats()
+    ])
   } catch (error) {
     console.error('[Analytics] Error loading data:', error)
   } finally {
@@ -92,7 +98,7 @@ const rateLimitHitRate = computed(() => {
 
 // 格式化數字
 const formatNumber = (num: number) => {
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return analyticsNumberFormatter.format(num)
 }
 </script>
 

@@ -1,5 +1,35 @@
+<script lang="ts">
+import { STATUS } from '~/constants'
+
+const dashboardDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric'
+})
+
+const dashboardCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
+const dashboardHeaderDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
+}
+</script>
+
 <script setup lang="ts">
-import { MESSAGES, PAGES, STATUS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import { useFetch } from '~/composables/core/useFetch'
 
 definePageMeta({
@@ -64,13 +94,13 @@ const fetchDashboardData = async () => {
       readItems<any>('contracts', { limit: 5, sort: 'dateCreated', sortOrder: 'desc' }),
       // Fetch monthly revenue from reports API
       getRevenueReport(
-        startOfMonth.toISOString().split('T')[0],
-        now.toISOString().split('T')[0]
+        startOfMonth.toISOString().slice(0, 10),
+        now.toISOString().slice(0, 10)
       ).catch(() => ({ summary: { net_revenue: 0 } })),
       // Fetch today's revenue from reports API
       getRevenueReport(
-        startOfToday.toISOString().split('T')[0],
-        now.toISOString().split('T')[0]
+        startOfToday.toISOString().slice(0, 10),
+        now.toISOString().slice(0, 10)
       ).catch(() => ({ summary: { net_revenue: 0 } }))
     ])
 
@@ -106,29 +136,17 @@ onMounted(() => {
 })
 
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric'
-  })
+  return dashboardDateFormatter.format(new Date(dateStr))
 }
 
+const todayFormatted = computed(() => dashboardHeaderDateFormatter.format(new Date()))
+
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    maximumFractionDigits: 0
-  }).format(amount)
+  return dashboardCurrencyFormatter.format(amount)
 }
 
 const getStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-    SUSPENDED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' }
-  }
-  return map[status] || { label: status, class: '' }
+  return CONTRACT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 </script>
 
@@ -141,7 +159,7 @@ const getStatusBadge = (status: string) => {
         <p class="text-title-3 text-secondary">{{ PAGES.DASHBOARD.WELCOME }}</p>
       </div>
       <div class="header-date">
-        <p class="text-callout text-tertiary">{{ new Date().toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</p>
+        <p class="text-callout text-tertiary">{{ todayFormatted }}</p>
       </div>
     </header>
 

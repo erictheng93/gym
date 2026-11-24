@@ -15,7 +15,7 @@ const { createWorkout } = useWorkouts()
 
 // Form state
 const form = reactive({
-  date: new Date().toISOString().split('T')[0],
+  date: new Date().toISOString().slice(0, 10),
   duration: null as number | null,
   calories: null as number | null,
   notes: '',
@@ -103,7 +103,7 @@ const handleSubmit = async () => {
           v-model="form.date"
           type="date"
           class="form-input"
-          :max="new Date().toISOString().split('T')[0]"
+          :max="new Date().toISOString().slice(0, 10)"
         >
       </div>
 

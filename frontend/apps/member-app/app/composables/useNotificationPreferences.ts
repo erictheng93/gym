@@ -11,6 +11,7 @@ import type {
   ChannelDetails,
   NotificationHistory,
 } from '../types/notification'
+import { deduplicateRequest } from '../utils/debounce'
 
 interface PreferencesResponse {
   success: boolean
@@ -58,31 +59,33 @@ export const useNotificationPreferences = () => {
   const error = useState<string | null>('notification_prefs_error', () => null)
 
   /**
-   * Fetch notification preferences and available channels
+   * Fetch notification preferences and available channels (with request deduplication)
    */
   const fetchPreferences = async (): Promise<boolean> => {
     if (!isAuthenticated.value) return false
 
-    isLoading.value = true
-    error.value = null
+    return deduplicateRequest('notification:preferences', async () => {
+      isLoading.value = true
+      error.value = null
 
-    try {
-      const response = await $fetch<PreferencesResponse>(`${apiUrl}/api/member/notifications/preferences`, {
-        headers: getAuthHeader(),
-      })
+      try {
+        const response = await $fetch<PreferencesResponse>(`${apiUrl}/api/member/notifications/preferences`, {
+          headers: getAuthHeader(),
+        })
 
-      if (response.success) {
-        preferences.value = response.preferences
-        availableChannels.value = response.available_channels
-        return true
+        if (response.success) {
+          preferences.value = response.preferences
+          availableChannels.value = response.available_channels
+          return true
+        }
+        return false
+      } catch (err) {
+        error.value = err instanceof Error ? err.message : '載入設定失敗'
+        return false
+      } finally {
+        isLoading.value = false
       }
-      return false
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : '載入設定失敗'
-      return false
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -131,28 +134,30 @@ export const useNotificationPreferences = () => {
   }
 
   /**
-   * Fetch detailed channel information
+   * Fetch detailed channel information (with request deduplication)
    */
   const fetchChannelDetails = async (): Promise<boolean> => {
     if (!isAuthenticated.value) return false
 
-    try {
-      const response = await $fetch<ChannelsResponse>(`${apiUrl}/api/member/notifications/channels`, {
-        headers: getAuthHeader(),
-      })
+    return deduplicateRequest('notification:channels', async () => {
+      try {
+        const response = await $fetch<ChannelsResponse>(`${apiUrl}/api/member/notifications/channels`, {
+          headers: getAuthHeader(),
+        })
 
-      if (response.success) {
-        channelDetails.value = response.channels
-        return true
+        if (response.success) {
+          channelDetails.value = response.channels
+          return true
+        }
+        return false
+      } catch {
+        return false
       }
-      return false
-    } catch {
-      return false
-    }
+    })
   }
 
   /**
-   * Fetch notification history
+   * Fetch notification history (with request deduplication)
    */
   const fetchHistory = async (
     limit = 20,
@@ -160,27 +165,30 @@ export const useNotificationPreferences = () => {
   ): Promise<boolean> => {
     if (!isAuthenticated.value) return false
 
-    try {
-      const response = await $fetch<HistoryResponse>(
-        `${apiUrl}/api/member/notifications/history?limit=${limit}&offset=${offset}`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
+    const dedupKey = `notification:history:${limit}:${offset}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<HistoryResponse>(
+          `${apiUrl}/api/member/notifications/history?limit=${limit}&offset=${offset}`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
 
-      if (response.success) {
-        if (offset === 0) {
-          history.value = response.data
-        } else {
-          history.value = [...history.value, ...response.data]
+        if (response.success) {
+          if (offset === 0) {
+            history.value = response.data
+          } else {
+            history.value = [...history.value, ...response.data]
+          }
+          historyPagination.value = response.pagination
+          return true
         }
-        historyPagination.value = response.pagination
-        return true
+        return false
+      } catch {
+        return false
       }
-      return false
-    } catch {
-      return false
-    }
+    })
   }
 
   /**

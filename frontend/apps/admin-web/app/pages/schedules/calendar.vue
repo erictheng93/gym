@@ -274,6 +274,7 @@ const calendarDays = computed((): CalendarDay[] => {
   const days: CalendarDay[] = []
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const todayISO = formatDateISO(today)
 
   // Previous month days
   const firstDayOfWeek = firstDay.getDay()
@@ -291,11 +292,12 @@ const calendarDays = computed((): CalendarDay[] => {
   // Current month days
   for (let i = 1; i <= lastDay.getDate(); i++) {
     const date = new Date(year, month, i)
+    const dateISO = formatDateISO(date)
     days.push({
-      date: formatDateISO(date),
+      date: dateISO,
       day: i,
       isCurrentMonth: true,
-      isToday: formatDateISO(date) === formatDateISO(today),
+      isToday: dateISO === todayISO,
     })
   }
 
@@ -316,13 +318,14 @@ const calendarDays = computed((): CalendarDay[] => {
 
 const filteredEmployees = computed(() => {
   if (!employeeSearch.value) return employees.value
+  const query = employeeSearch.value.toLowerCase()
   return employees.value.filter(emp =>
-    emp.name.toLowerCase().includes(employeeSearch.value.toLowerCase())
+    emp.name.toLowerCase().includes(query)
   )
 })
 
 function formatDateISO(date: Date): string {
-  return date.toISOString().split('T')[0]!
+  return date.toISOString().slice(0, 10)!
 }
 
 function formatDate(dateStr: string): string {
@@ -340,27 +343,63 @@ function nextMonth() {
   fetchEmployeeShifts()
 }
 
+const EMPTY_ASSIGNMENTS: EmployeeShift[] = []
+
+const assignmentsByDate = computed(() => {
+  const map = new Map<string, EmployeeShift[]>()
+  for (const shift of employeeShifts.value) {
+    const list = map.get(shift.effective_date)
+    if (list) {
+      list.push(shift)
+    } else {
+      map.set(shift.effective_date, [shift])
+    }
+  }
+  return map
+})
+
+const employeeMap = computed(() => {
+  const map = new Map<string, string>()
+  for (const e of employees.value) {
+    map.set(e.id, e.name)
+  }
+  return map
+})
+
+const shiftMap = computed(() => {
+  const map = new Map<string, { name: string; color: string }>()
+  const shifts = availableShifts.value
+  const colorsLen = shiftColors.length
+  for (let i = 0; i < shifts.length; i++) {
+    const s = shifts[i]!
+    map.set(s.id, {
+      name: s.name,
+      color: shiftColors[i % colorsLen]!,
+    })
+  }
+  return map
+})
+
 function getAssignmentsForDate(date: string): EmployeeShift[] {
-  return employeeShifts.value.filter(shift => shift.effective_date === date)
+  return assignmentsByDate.value.get(date) || EMPTY_ASSIGNMENTS
 }
 
 function getEmployeeName(employeeId: string): string {
-  const employee = employees.value.find(e => e.id === employeeId)
-  return employee?.name || '未知'
+  return employeeMap.value.get(employeeId) || '未知'
 }
 
 function getShiftName(shiftId: string): string {
-  const shift = availableShifts.value.find(s => s.id === shiftId)
-  return shift?.name || ''
+  return shiftMap.value.get(shiftId)?.name || ''
 }
 
 function getShiftColor(shiftId: string): string {
-  const index = availableShifts.value.findIndex(s => s.id === shiftId)
-  return shiftColors[index % shiftColors.length]!
+  return shiftMap.value.get(shiftId)?.color || shiftColors[0]!
 }
 
+const selectedDatesSet = computed(() => new Set(selectedDates.value))
+
 function isDateSelected(date: string): boolean {
-  return selectedDates.value.includes(date)
+  return selectedDatesSet.value.has(date)
 }
 
 function toggleDateSelection(date: string) {
@@ -526,8 +565,8 @@ async function fetchEmployeeShifts() {
   try {
     const year = currentDate.value.getFullYear()
     const month = currentDate.value.getMonth()
-    const startDate = new Date(year, month, 1).toISOString().split('T')[0]
-    const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0]
+    const startDate = new Date(year, month, 1).toISOString().slice(0, 10)
+    const endDate = new Date(year, month + 1, 0).toISOString().slice(0, 10)
 
     const response = await fetch(
       `${apiBaseUrl}/api/hr/employee-shifts?startDate=${startDate}&endDate=${endDate}`,

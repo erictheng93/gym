@@ -13,6 +13,139 @@ import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
+const COUNT_SELECT = { count: sql<number>`count(*)` };
+
+const PROMOTION_RECORD_RETURNING = {
+  id: promotionRecords.id,
+  employeeId: promotionRecords.employeeId,
+  type: promotionRecords.type,
+  fromJobTitleId: promotionRecords.fromJobTitleId,
+  toJobTitleId: promotionRecords.toJobTitleId,
+  fromBranchId: promotionRecords.fromBranchId,
+  toBranchId: promotionRecords.toBranchId,
+  effectiveDate: promotionRecords.effectiveDate,
+  newBaseSalary: promotionRecords.newBaseSalary,
+  reason: promotionRecords.reason,
+  createdBy: promotionRecords.createdBy,
+  createdAt: promotionRecords.createdAt,
+  tenantId: promotionRecords.tenantId,
+};
+
+const SALARY_RECORD_LIST_SELECT = {
+  id: salaryRecords.id,
+  employeeId: salaryRecords.employeeId,
+  period: salaryRecords.period,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  overtimePay: salaryRecords.overtimePay,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+  netSalary: salaryRecords.netSalary,
+  hourlyRate: salaryRecords.hourlyRate,
+  workDays: salaryRecords.workDays,
+  leaveDays: salaryRecords.leaveDays,
+  notes: salaryRecords.notes,
+  status: salaryRecords.status,
+  approvedBy: salaryRecords.approvedBy,
+  approvedAt: salaryRecords.approvedAt,
+  paidAt: salaryRecords.paidAt,
+  createdAt: salaryRecords.createdAt,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const SALARY_RECORD_BY_ID_SELECT = {
+  id: salaryRecords.id,
+  employeeId: salaryRecords.employeeId,
+  period: salaryRecords.period,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  overtimePay: salaryRecords.overtimePay,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+  netSalary: salaryRecords.netSalary,
+  hourlyRate: salaryRecords.hourlyRate,
+  workDays: salaryRecords.workDays,
+  leaveDays: salaryRecords.leaveDays,
+  notes: salaryRecords.notes,
+  status: salaryRecords.status,
+  approvedBy: salaryRecords.approvedBy,
+  approvedAt: salaryRecords.approvedAt,
+  paidAt: salaryRecords.paidAt,
+  createdAt: salaryRecords.createdAt,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+};
+
+const EMPLOYEE_GENERATE_SELECT = {
+  id: employees.id,
+  branchId: employees.branchId,
+  basicSalary: employees.basicSalary,
+};
+
+const SALARY_RECORD_EXISTING_SELECT = {
+  employeeId: salaryRecords.employeeId,
+};
+
+const SALARY_RECORD_ID_SELECT = {
+  id: salaryRecords.id,
+};
+
+const SALARY_RECORD_UPDATE_SELECT = {
+  id: salaryRecords.id,
+  status: salaryRecords.status,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  hourlyRate: salaryRecords.hourlyRate,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+};
+
+const SALARY_RECORD_EXPORT_SELECT = {
+  id: salaryRecords.id,
+  employeeId: salaryRecords.employeeId,
+  period: salaryRecords.period,
+  baseSalary: salaryRecords.baseSalary,
+  overtimeHours: salaryRecords.overtimeHours,
+  overtimePay: salaryRecords.overtimePay,
+  commission: salaryRecords.commission,
+  bonus: salaryRecords.bonus,
+  deductions: salaryRecords.deductions,
+  netSalary: salaryRecords.netSalary,
+  status: salaryRecords.status,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  branchName: branches.name,
+  jobTitleName: jobTitles.name,
+};
+
+const PROMOTION_RECORD_LIST_SELECT = {
+  id: promotionRecords.id,
+  employeeId: promotionRecords.employeeId,
+  type: promotionRecords.type,
+  fromJobTitleId: promotionRecords.fromJobTitleId,
+  toJobTitleId: promotionRecords.toJobTitleId,
+  fromBranchId: promotionRecords.fromBranchId,
+  toBranchId: promotionRecords.toBranchId,
+  effectiveDate: promotionRecords.effectiveDate,
+  newBaseSalary: promotionRecords.newBaseSalary,
+  reason: promotionRecords.reason,
+  createdAt: promotionRecords.createdAt,
+  employeeName: employees.fullName,
+  employeeCode: employees.employeeCode,
+};
+
+const EMPLOYEE_PROMOTION_SELECT = {
+  jobTitleId: employees.jobTitleId,
+  branchId: employees.branchId,
+};
+
 app.use('*', authMiddleware, requireAuth);
 
 // -----------------------------------------------------------------------------
@@ -30,31 +163,7 @@ app.get('/salary-records', async (c) => {
 
   const [records, countResult] = await Promise.all([
     db
-      .select({
-        id: salaryRecords.id,
-        employeeId: salaryRecords.employeeId,
-        period: salaryRecords.period,
-        baseSalary: salaryRecords.baseSalary,
-        overtimeHours: salaryRecords.overtimeHours,
-        overtimePay: salaryRecords.overtimePay,
-        commission: salaryRecords.commission,
-        bonus: salaryRecords.bonus,
-        deductions: salaryRecords.deductions,
-        netSalary: salaryRecords.netSalary,
-        hourlyRate: salaryRecords.hourlyRate,
-        workDays: salaryRecords.workDays,
-        leaveDays: salaryRecords.leaveDays,
-        notes: salaryRecords.notes,
-        status: salaryRecords.status,
-        approvedBy: salaryRecords.approvedBy,
-        approvedAt: salaryRecords.approvedAt,
-        paidAt: salaryRecords.paidAt,
-        createdAt: salaryRecords.createdAt,
-        employeeName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        branchName: branches.name,
-        jobTitleName: jobTitles.name,
-      })
+      .select(SALARY_RECORD_LIST_SELECT)
       .from(salaryRecords)
       .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
       .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
@@ -64,7 +173,7 @@ app.get('/salary-records', async (c) => {
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select(COUNT_SELECT)
       .from(salaryRecords)
       .where(conditions.length > 0 ? and(...conditions) : undefined),
   ]);
@@ -113,30 +222,7 @@ app.get('/salary-records/:id', async (c) => {
   const id = c.req.param('id');
 
   const [record] = await db
-    .select({
-      id: salaryRecords.id,
-      employeeId: salaryRecords.employeeId,
-      period: salaryRecords.period,
-      baseSalary: salaryRecords.baseSalary,
-      overtimeHours: salaryRecords.overtimeHours,
-      overtimePay: salaryRecords.overtimePay,
-      commission: salaryRecords.commission,
-      bonus: salaryRecords.bonus,
-      deductions: salaryRecords.deductions,
-      netSalary: salaryRecords.netSalary,
-      hourlyRate: salaryRecords.hourlyRate,
-      workDays: salaryRecords.workDays,
-      leaveDays: salaryRecords.leaveDays,
-      notes: salaryRecords.notes,
-      status: salaryRecords.status,
-      approvedBy: salaryRecords.approvedBy,
-      approvedAt: salaryRecords.approvedAt,
-      paidAt: salaryRecords.paidAt,
-      createdAt: salaryRecords.createdAt,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchName: branches.name,
-    })
+    .select(SALARY_RECORD_BY_ID_SELECT)
     .from(salaryRecords)
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
@@ -199,17 +285,13 @@ app.post('/generate', zValidator('json', generateSchema), async (c) => {
   }
 
   const employeeList = await db
-    .select({
-      id: employees.id,
-      branchId: employees.branchId,
-      basicSalary: employees.basicSalary,
-    })
+    .select(EMPLOYEE_GENERATE_SELECT)
     .from(employees)
     .where(and(...conditions));
 
   // Check for existing records
   const existingRecords = await db
-    .select({ employeeId: salaryRecords.employeeId })
+    .select(SALARY_RECORD_EXISTING_SELECT)
     .from(salaryRecords)
     .where(
       and(
@@ -266,7 +348,7 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 
   // Get current record
   const [record] = await db
-    .select()
+    .select(SALARY_RECORD_UPDATE_SELECT)
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -313,8 +395,30 @@ app.post('/salary-records/:id/approve', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
 
+  // Fast-path atomic update if in PENDING status
+  const [approved] = await db
+    .update(salaryRecords)
+    .set({
+      status: 'APPROVED',
+      approvedBy: user?.employeeId || null,
+      approvedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(salaryRecords.id, id),
+        eq(salaryRecords.status, 'PENDING')
+      )
+    )
+    .returning(SALARY_RECORD_ID_SELECT);
+
+  if (approved) {
+    return c.json({ success: true, message: '薪資已核准' });
+  }
+
+  // Fallback to distinguish between 404 and 400
   const [record] = await db
-    .select()
+    .select(SALARY_RECORD_ID_SELECT)
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -323,21 +427,7 @@ app.post('/salary-records/:id/approve', async (c) => {
     return c.json({ success: false, error: '找不到薪資記錄' }, 404);
   }
 
-  if (record.status !== 'PENDING') {
-    return c.json({ success: false, error: '此記錄無法核准' }, 400);
-  }
-
-  await db
-    .update(salaryRecords)
-    .set({
-      status: 'APPROVED',
-      approvedBy: user?.employeeId || null,
-      approvedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(salaryRecords.id, id));
-
-  return c.json({ success: true, message: '薪資已核准' });
+  return c.json({ success: false, error: '此記錄無法核准' }, 400);
 });
 
 // -----------------------------------------------------------------------------
@@ -380,8 +470,29 @@ app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => 
 app.post('/salary-records/:id/pay', async (c) => {
   const id = c.req.param('id');
 
+  // Fast-path atomic update if in APPROVED status
+  const [paid] = await db
+    .update(salaryRecords)
+    .set({
+      status: 'PAID',
+      paidAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(salaryRecords.id, id),
+        eq(salaryRecords.status, 'APPROVED')
+      )
+    )
+    .returning(SALARY_RECORD_ID_SELECT);
+
+  if (paid) {
+    return c.json({ success: true, message: '已標記為已發放' });
+  }
+
+  // Fallback to distinguish between 404 and 400
   const [record] = await db
-    .select()
+    .select(SALARY_RECORD_ID_SELECT)
     .from(salaryRecords)
     .where(eq(salaryRecords.id, id))
     .limit(1);
@@ -390,20 +501,7 @@ app.post('/salary-records/:id/pay', async (c) => {
     return c.json({ success: false, error: '找不到薪資記錄' }, 404);
   }
 
-  if (record.status !== 'APPROVED') {
-    return c.json({ success: false, error: '只能標記已核准的記錄為已發放' }, 400);
-  }
-
-  await db
-    .update(salaryRecords)
-    .set({
-      status: 'PAID',
-      paidAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(salaryRecords.id, id));
-
-  return c.json({ success: true, message: '已標記為已發放' });
+  return c.json({ success: false, error: '只能標記已核准的記錄為已發放' }, 400);
 });
 
 // -----------------------------------------------------------------------------
@@ -419,23 +517,7 @@ app.get('/export', async (c) => {
   if (branch_id) conditions.push(eq(salaryRecords.branchId, branch_id));
 
   const records = await db
-    .select({
-      id: salaryRecords.id,
-      employeeId: salaryRecords.employeeId,
-      period: salaryRecords.period,
-      baseSalary: salaryRecords.baseSalary,
-      overtimeHours: salaryRecords.overtimeHours,
-      overtimePay: salaryRecords.overtimePay,
-      commission: salaryRecords.commission,
-      bonus: salaryRecords.bonus,
-      deductions: salaryRecords.deductions,
-      netSalary: salaryRecords.netSalary,
-      status: salaryRecords.status,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      branchName: branches.name,
-      jobTitleName: jobTitles.name,
-    })
+    .select(SALARY_RECORD_EXPORT_SELECT)
     .from(salaryRecords)
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
@@ -460,7 +542,7 @@ app.get('/export', async (c) => {
     status: translateStatus(r.status),
   }));
 
-  const filename = `薪資記錄_${period || new Date().toISOString().split('T')[0]}`;
+  const filename = `薪資記錄_${period || new Date().toISOString().slice(0, 10)}`;
 
   if (format === 'xlsx' || format === 'excel') {
     const result = await generateExcel(payrollColumns, exportData, '薪資記錄');
@@ -499,33 +581,20 @@ app.get('/promotions', async (c) => {
   if (employee_id) conditions.push(eq(promotionRecords.employeeId, employee_id));
   if (type) conditions.push(eq(promotionRecords.type, type as 'PROMOTION' | 'TRANSFER' | 'DEMOTION'));
 
-  const records = await db
-    .select({
-      id: promotionRecords.id,
-      employeeId: promotionRecords.employeeId,
-      type: promotionRecords.type,
-      fromJobTitleId: promotionRecords.fromJobTitleId,
-      toJobTitleId: promotionRecords.toJobTitleId,
-      fromBranchId: promotionRecords.fromBranchId,
-      toBranchId: promotionRecords.toBranchId,
-      effectiveDate: promotionRecords.effectiveDate,
-      newBaseSalary: promotionRecords.newBaseSalary,
-      reason: promotionRecords.reason,
-      createdAt: promotionRecords.createdAt,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-    })
-    .from(promotionRecords)
-    .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(promotionRecords.effectiveDate))
-    .limit(parseInt(limit))
-    .offset(parseInt(offset));
-
-  const countResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(promotionRecords)
-    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  const [records, countResult] = await Promise.all([
+    db
+      .select(PROMOTION_RECORD_LIST_SELECT)
+      .from(promotionRecords)
+      .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(promotionRecords.effectiveDate))
+      .limit(parseInt(limit))
+      .offset(parseInt(offset)),
+    db
+      .select(COUNT_SELECT)
+      .from(promotionRecords)
+      .where(conditions.length > 0 ? and(...conditions) : undefined),
+  ]);
 
   return c.json({
     success: true,
@@ -571,10 +640,7 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
 
   // Get current employee data
   const [employee] = await db
-    .select({
-      jobTitleId: employees.jobTitleId,
-      branchId: employees.branchId,
-    })
+    .select(EMPLOYEE_PROMOTION_SELECT)
     .from(employees)
     .where(eq(employees.id, data.employee_id))
     .limit(1);
@@ -598,10 +664,10 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
       reason: data.reason,
       createdBy: user?.employeeId,
     })
-    .returning();
+    .returning(PROMOTION_RECORD_RETURNING);
 
   // Update employee if changes are effective today or earlier
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
   if (data.effective_date <= today) {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (data.to_job_title_id) updates.jobTitleId = data.to_job_title_id;

@@ -5,6 +5,7 @@ import { db, employees, branches, jobTitles, users, attendances } from '../db/in
 import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -35,52 +36,115 @@ const updateEmployeeSchema = z.object({
   basicSalary: z.coerce.number().optional().nullable(),
 });
 
+const EMPLOYEE_SELECT = {
+  id: employees.id,
+  userId: employees.userId,
+  branchId: employees.branchId,
+  jobTitleId: employees.jobTitleId,
+  employeeCode: employees.employeeCode,
+  fullName: employees.fullName,
+  phone: employees.phone,
+  email: employees.email,
+  status: employees.status,
+  employmentType: employees.employmentType,
+  hireDate: employees.hireDate,
+  resignDate: employees.resignDate,
+  basicSalary: employees.basicSalary,
+  customPermissions: employees.customPermissions,
+  createdAt: employees.createdAt,
+  updatedAt: employees.updatedAt,
+  tenantId: employees.tenantId,
+};
+
+const EMPLOYEE_RETURNING = EMPLOYEE_SELECT;
+
+const EMPLOYEE_COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const EMPLOYEE_LIST_JOIN_SELECT = {
+  employee: EMPLOYEE_SELECT,
+  jobTitle: {
+    id: jobTitles.id,
+    name: jobTitles.name,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const EMPLOYEE_DETAIL_JOIN_SELECT = {
+  employee: EMPLOYEE_SELECT,
+  jobTitle: {
+    id: jobTitles.id,
+    name: jobTitles.name,
+    permissionsConfig: jobTitles.permissionsConfig,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const EMPLOYEE_ATTENDANCE_SELECT = {
+  id: attendances.id,
+  createdAt: attendances.createdAt,
+  employeeId: attendances.employeeId,
+  checkIn: attendances.checkIn,
+  checkOut: attendances.checkOut,
+  workHours: attendances.workHours,
+  branchId: attendances.branchId,
+};
+
+const EMPLOYEE_ID_SELECT = {
+  id: employees.id,
+};
+
+const EMPLOYEE_RESIGNED_RETURNING = {
+  id: employees.id,
+  userId: employees.userId,
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });
   }
 
-  let condition = inArray(employees.branchId, branchIds);
-
-  if (branchId) {
-    condition = and(condition, eq(employees.branchId, branchId))!;
+  if (branchId && !branchIds.includes(branchId)) {
+    return c.json({ success: true, data: [] });
   }
 
+  const condition = branchId
+    ? eq(employees.branchId, branchId)
+    : (branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds));
+
   const result = await db
-    .select({
-      employee: employees,
-      jobTitle: {
-        id: jobTitles.id,
-        name: jobTitles.name,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(EMPLOYEE_LIST_JOIN_SELECT)
     .from(employees)
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .leftJoin(branches, eq(employees.branchId, branches.id))
     .where(condition)
     .orderBy(employees.fullName);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.employee,
       jobTitle: r.jobTitle,
       branch: r.branch,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 
@@ -88,49 +152,30 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [employee] = await db
-    .select({
-      employee: employees,
-      jobTitle: {
-        id: jobTitles.id,
-        name: jobTitles.name,
-        permissionsConfig: jobTitles.permissionsConfig,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(employees)
-    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
-    .leftJoin(branches, eq(employees.branchId, branches.id))
-    .where(eq(employees.id, id))
-    .limit(1);
+  const [[employee], branchIds, recentAttendances] = await Promise.all([
+    db
+      .select(EMPLOYEE_DETAIL_JOIN_SELECT)
+      .from(employees)
+      .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
+      .leftJoin(branches, eq(employees.branchId, branches.id))
+      .where(eq(employees.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+    db
+      .select(EMPLOYEE_ATTENDANCE_SELECT)
+      .from(attendances)
+      .where(eq(attendances.employeeId, id))
+      .orderBy(desc(attendances.createdAt))
+      .limit(30)
+      .catch(() => []),
+  ]);
 
   if (!employee) {
     return c.json({ success: false, error: '員工不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, employee.employee.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!employee.employee.branchId || !branchIds.includes(employee.employee.branchId)) {
     return c.json({ success: false, error: '無權限存取此員工' }, 403);
-  }
-
-  let recentAttendances: typeof attendances.$inferSelect[] = [];
-  try {
-    recentAttendances = await db
-      .select()
-      .from(attendances)
-      .where(eq(attendances.employeeId, id))
-      .orderBy(desc(attendances.createdAt))
-      .limit(30);
-  } catch {
-    // Ignore attendance fetch errors
   }
 
   return c.json({
@@ -148,21 +193,17 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  if (!branch) {
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
+  const branchFilter = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select(EMPLOYEE_COUNT_SELECT)
     .from(employees)
-    .innerJoin(branches, eq(employees.branchId, branches.id))
-    .where(eq(branches.tenantId, tenantId));
+    .where(branchFilter);
 
   const employeeCount = Number(countResult?.count || 0);
   const employeeCode = `E${String(employeeCount + 1).padStart(5, '0')}`;
@@ -170,10 +211,10 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
   const [newEmployee] = await db.insert(employees).values({
     ...data,
     employeeCode,
-    hireDate: data.hireDate || new Date().toISOString().split('T')[0],
+    hireDate: data.hireDate || new Date().toISOString().slice(0, 10),
     basicSalary: data.basicSalary ? String(data.basicSalary) : null,
     tenantId,
-  }).returning();
+  }).returning(EMPLOYEE_RETURNING);
 
   return c.json({ success: true, data: newEmployee }, 201);
 });
@@ -183,36 +224,13 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [employee] = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.id, id))
-    .limit(1);
-
-  if (!employee) {
-    return c.json({ success: false, error: '員工不存在' }, 404);
-  }
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, employee.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '無權限修改此員工' }, 403);
   }
 
-  if (data.branchId) {
-    const [newBranch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-      .limit(1);
-
-    if (!newBranch) {
-      return c.json({ success: false, error: '無效的分店' }, 400);
-    }
+  if (data.branchId && !branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
   // Build update data, excluding null values for non-nullable fields
@@ -229,11 +247,25 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   if (data.hireDate !== undefined && data.hireDate !== null) updateData.hireDate = data.hireDate;
   if (data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary ? String(data.basicSalary) : null;
 
+  const branchCondition = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [updatedEmployee] = await db
     .update(employees)
     .set(updateData)
-    .where(eq(employees.id, id))
-    .returning();
+    .where(and(eq(employees.id, id), branchCondition))
+    .returning(EMPLOYEE_RETURNING);
+
+  if (!updatedEmployee) {
+    const [existingEmployee] = await db
+      .select(EMPLOYEE_ID_SELECT)
+      .from(employees)
+      .where(eq(employees.id, id))
+      .limit(1);
+
+    if (!existingEmployee) {
+      return c.json({ success: false, error: '員工不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限修改此員工' }, 403);
+  }
 
   return c.json({ success: true, data: updatedEmployee });
 });
@@ -242,39 +274,39 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [employee] = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.id, id))
-    .limit(1);
-
-  if (!employee) {
-    return c.json({ success: false, error: '員工不存在' }, 404);
-  }
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, employee.branchId!), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '無權限刪除此員工' }, 403);
   }
 
-  await db
+  const branchCondition = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
+  const [resignedEmployee] = await db
     .update(employees)
     .set({
       status: 'RESIGNED',
       updatedAt: new Date(),
     })
-    .where(eq(employees.id, id));
+    .where(and(eq(employees.id, id), branchCondition))
+    .returning(EMPLOYEE_RESIGNED_RETURNING);
 
-  if (employee.userId) {
+  if (!resignedEmployee) {
+    const [existingEmployee] = await db
+      .select(EMPLOYEE_ID_SELECT)
+      .from(employees)
+      .where(eq(employees.id, id))
+      .limit(1);
+
+    if (!existingEmployee) {
+      return c.json({ success: false, error: '員工不存在' }, 404);
+    }
+    return c.json({ success: false, error: '無權限刪除此員工' }, 403);
+  }
+
+  if (resignedEmployee.userId) {
     await db.update(users).set({
       isActive: false,
       updatedAt: new Date(),
-    }).where(eq(users.id, employee.userId));
+    }).where(eq(users.id, resignedEmployee.userId));
   }
 
   return c.json({ success: true, message: '員工已封存' });

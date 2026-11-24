@@ -162,7 +162,7 @@ describe('Bookings API', () => {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          sessionId: '00000000-0000-0000-0000-999999999999',
+          sessionId: '00000000-0000-4000-8000-999999999999',
           memberId: TEST_MEMBER_ID,
         }),
       });

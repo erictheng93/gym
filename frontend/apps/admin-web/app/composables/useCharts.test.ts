@@ -16,14 +16,16 @@ vi.mock('chart.js', () => {
   const mockUpdate = vi.fn()
   const mockDestroy = vi.fn()
 
-  const MockChart = vi.fn().mockImplementation(() => ({
-    data: {
-      labels: [] as string[],
-      datasets: [] as any[]
-    },
-    update: mockUpdate,
-    destroy: mockDestroy
-  })) as any
+  const MockChart = vi.fn().mockImplementation(function (this: any) {
+    return {
+      data: {
+        labels: [] as string[],
+        datasets: [] as any[]
+      },
+      update: mockUpdate,
+      destroy: mockDestroy
+    }
+  }) as any
 
   // Add static methods
   MockChart.register = vi.fn()

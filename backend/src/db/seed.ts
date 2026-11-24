@@ -265,14 +265,14 @@ async function seed() {
   for (let i = 0; i < contractData.length; i++) {
     const c = contractData[i];
     const contractNo = `CON${String(i + 1).padStart(6, '0')}`;
-    const endDateStr = c.endDate.toISOString().split('T')[0];
+    const endDateStr = c.endDate.toISOString().slice(0, 10);
     const [contract] = await db.insert(contracts).values({
       contractNo,
       memberId: c.member.id,
       planId: c.plan.id,
       branchId: c.member.branchId!,
       status: c.status,
-      startDate: c.startDate.toISOString().split('T')[0],
+      startDate: c.startDate.toISOString().slice(0, 10),
       originalEndDate: endDateStr,
       endDate: endDateStr,
       totalAmount: c.plan.price!,

@@ -1,6 +1,11 @@
 import crypto from 'crypto';
-import { db, payments, branches } from '../db/index.js';
+import { db, payments } from '../db/index.js';
 import { eq } from 'drizzle-orm';
+import { getTenantIdForBranch } from '../utils/tenant-cache.js';
+
+const PAYMENT_ID_SELECT = {
+  id: payments.id,
+};
 
 // =============================================================================
 // PAYMENT GATEWAY SERVICE
@@ -197,7 +202,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
       type: 'INCOME',
       notes: description || `Payment via ${gateway}`,
       tenantId: await getTenantIdForBranch(branchId),
-    }).returning();
+    }).returning(PAYMENT_ID_SELECT);
 
     // Process payment based on gateway
     let result: PaymentResult;
@@ -230,13 +235,40 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
   }
 }
 
+const PAYMENT_STATUS_SELECT = {
+  id: payments.id,
+  type: payments.type,
+};
+
+const PAYMENT_REFUND_SELECT = {
+  id: payments.id,
+  type: payments.type,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  contractId: payments.contractId,
+  memberId: payments.memberId,
+  branchId: payments.branchId,
+  tenantId: payments.tenantId,
+};
+
+type PaymentRefundInfo = {
+  id: string;
+  type: string;
+  amount: string;
+  paymentMethod: string;
+  contractId: string | null;
+  memberId: string;
+  branchId: string;
+  tenantId: string | null;
+};
+
 /**
  * Get payment status
  */
 export async function getPaymentStatus(paymentId: string): Promise<PaymentResult> {
   try {
     const [payment] = await db
-      .select()
+      .select(PAYMENT_STATUS_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);
@@ -267,7 +299,7 @@ export async function processRefund(options: RefundOptions): Promise<RefundResul
 
   try {
     const [payment] = await db
-      .select()
+      .select(PAYMENT_REFUND_SELECT)
       .from(payments)
       .where(eq(payments.id, paymentId))
       .limit(1);
@@ -374,7 +406,7 @@ async function processStripePayment(
 }
 
 async function processStripeRefund(
-  payment: typeof payments.$inferSelect,
+  payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
@@ -393,21 +425,20 @@ async function processStripeRefund(
 // ECPay Implementation (綠界)
 // -----------------------------------------------------------------------------
 
+function formatECPayDate(d: Date): string {
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 async function processECPayPayment(
   paymentId: string,
   amount: number,
   options: CreatePaymentOptions
 ): Promise<PaymentResult> {
   try {
-    const merchantTradeNo = `GN${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const merchantTradeDate = new Date().toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).replace(/\//g, '/');
+    const randomSuffix = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const merchantTradeNo = `GN${Date.now()}${randomSuffix}`;
+    const merchantTradeDate = formatECPayDate(new Date());
 
     const params: Record<string, string> = {
       MerchantID: config.ecpay.merchantId!,
@@ -476,7 +507,7 @@ function buildECPayForm(params: Record<string, string>): string {
 }
 
 async function processECPayRefund(
-  payment: typeof payments.$inferSelect,
+  payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
@@ -564,7 +595,7 @@ function generateLinePaySignature(uri: string, body: string, nonce: string): str
 }
 
 async function processLinePayRefund(
-  payment: typeof payments.$inferSelect,
+  payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
@@ -685,19 +716,6 @@ function paymentMethodToGateway(method: string | null): PaymentGateway {
     DEBIT_CARD: 'ecpay',
   };
   return map[method] || 'manual';
-}
-
-async function getTenantIdForBranch(branchId: string): Promise<string | null> {
-  try {
-    const [branch] = await db
-      .select({ tenantId: branches.tenantId })
-      .from(branches)
-      .where(eq(branches.id, branchId))
-      .limit(1);
-    return branch?.tenantId || null;
-  } catch {
-    return null;
-  }
 }
 
 // -----------------------------------------------------------------------------

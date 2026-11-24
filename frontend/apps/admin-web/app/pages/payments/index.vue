@@ -1,3 +1,26 @@
+<script lang="ts">
+import { PAGES, LABELS } from '~/constants'
+
+const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+})
+
+const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
+  CASH: LABELS.PAYMENT_METHOD.CASH,
+  CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
+  LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
+  TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
+}
+
+const typeOptions = [
+  { value: '', label: PAGES.PAYMENTS.ALL_TYPES },
+  { value: 'INCOME', label: LABELS.PAYMENT_TYPE.INCOME },
+  { value: 'REFUND', label: LABELS.PAYMENT_TYPE.REFUND }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 收款管理頁面
@@ -22,12 +45,6 @@ const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const stats = ref({ income: { count: 0, amount: 0 }, refund: { count: 0, amount: 0 }, netAmount: 0 })
-
-const typeOptions = [
-  { value: '', label: PAGES.PAYMENTS.ALL_TYPES },
-  { value: 'INCOME', label: LABELS.PAYMENT_TYPE.INCOME },
-  { value: 'REFUND', label: LABELS.PAYMENT_TYPE.REFUND }
-]
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 
@@ -63,8 +80,7 @@ const loadStats = async () => {
 
 watch([selectedBranch, selectedType, startDate, endDate], () => {
   currentPage.value = 1
-  loadPayments()
-  loadStats()
+  Promise.all([loadPayments(), loadStats()])
 })
 
 watch(currentPage, () => {
@@ -75,30 +91,26 @@ onMounted(async () => {
   await Promise.all([loadPayments(), loadStats(), fetchBranches()])
 })
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '—'
+  return paymentDateFormatter.format(date)
 }
 
 const getPaymentMethodLabel = (method: string | null) => {
   if (!method) return '—'
-  const map: Record<string, string> = {
-    CASH: LABELS.PAYMENT_METHOD.CASH,
-    CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
-    LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
-    TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
-  }
-  return map[method] || method
+  return PAYMENT_METHOD_LABEL_MAP[method] || method
 }
 
 // 設定日期快捷選項
 const setDateRange = (range: string) => {
   const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]!
+  const todayStr = today.toISOString().slice(0, 10)!
 
   switch (range) {
     case 'today':
@@ -107,13 +119,13 @@ const setDateRange = (range: string) => {
       break
     case 'week': {
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-      startDate.value = weekAgo.toISOString().split('T')[0]!
+      startDate.value = weekAgo.toISOString().slice(0, 10)!
       endDate.value = todayStr
       break
     }
     case 'month': {
       const monthAgo = new Date(today.getFullYear(), today.getMonth(), 1)
-      startDate.value = monthAgo.toISOString().split('T')[0]!
+      startDate.value = monthAgo.toISOString().slice(0, 10)!
       endDate.value = todayStr
       break
     }

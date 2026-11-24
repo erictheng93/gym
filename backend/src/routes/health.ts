@@ -4,9 +4,12 @@ import { sql } from 'drizzle-orm';
 
 const app = new Hono();
 
+const HEALTH_CHECK_SQL = sql`SELECT 1 as ok`;
+const READY_CHECK_SQL = sql`SELECT 1`;
+
 app.get('/', async (c) => {
   try {
-    const [result] = await db.execute(sql`SELECT 1 as ok`);
+    const [result] = await db.execute(HEALTH_CHECK_SQL);
     const dbHealthy = result !== undefined;
 
     return c.json({
@@ -33,7 +36,7 @@ app.get('/', async (c) => {
 
 app.get('/ready', async (c) => {
   try {
-    await db.execute(sql`SELECT 1`);
+    await db.execute(READY_CHECK_SQL);
     return c.json({ ready: true });
   } catch {
     return c.json({ ready: false }, 503);

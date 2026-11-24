@@ -177,6 +177,42 @@
   </div>
 </template>
 
+<script>
+const PLAN_LABELS = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+}
+
+const STATUS_LABELS = {
+  active: '活跃',
+  canceled: '已取消',
+  past_due: '逾期',
+}
+
+const INVOICE_STATUS_LABELS = {
+  draft: '草稿',
+  open: '待付款',
+  paid: '已付款',
+  void: '作废',
+  uncollectible: '无法收款',
+}
+
+const subDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const subDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+const subCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+})
+</script>
+
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -271,57 +307,43 @@ const cancelSubscription = async () => {
 }
 
 const getPlanLabel = (planType) => {
-  const labels = {
-    starter: 'Starter',
-    professional: 'Professional',
-    enterprise: 'Enterprise'
-  }
-  return labels[planType] || planType
+  return PLAN_LABELS[planType] || planType
 }
 
 const getStatusLabel = (status) => {
-  const labels = {
-    active: '活跃',
-    canceled: '已取消',
-    past_due: '逾期'
-  }
-  return labels[status] || status
+  return STATUS_LABELS[status] || status
 }
 
 const getInvoiceStatusLabel = (status) => {
-  const labels = {
-    draft: '草稿',
-    open: '待付款',
-    paid: '已付款',
-    void: '作废',
-    uncollectible: '无法收款'
-  }
-  return labels[status] || status
+  return INVOICE_STATUS_LABELS[status] || status
 }
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+  return subDateFormatter.format(d)
 }
 
 const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-TW')
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+  return subDateTimeFormatter.format(d)
 }
 
 const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD'
-  }).format(amount)
+  return subCurrencyFormatter.format(amount)
 }
 
 onMounted(async () => {
   await loadSubscription()
   if (subscription.value) {
-    loadInvoices()
-    loadUsageRecords()
+    await Promise.all([
+      loadInvoices(),
+      loadUsageRecords()
+    ])
   }
 })
 </script>

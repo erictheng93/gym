@@ -1,40 +1,4 @@
-<script setup lang="ts">
-/**
- * 客服支援頁面
- * 提供聯絡方式、常見問題、問題回報功能
- */
-definePageMeta({
-  middleware: 'auth'
-})
-
-const config = useRuntimeConfig()
-const apiUrl = config.public.apiBaseUrl
-const { member, getAuthHeader } = useMemberAuth()
-const toast = useToast()
-const { handleError } = useApiError()
-
-// 目前顯示的 Tab
-type Tab = 'contact' | 'faq' | 'report'
-const activeTab = ref<Tab>('contact')
-
-// 問題回報表單
-interface ReportForm {
-  category: string
-  subject: string
-  description: string
-  attachScreenshot: boolean
-}
-
-const reportForm = reactive<ReportForm>({
-  category: '',
-  subject: '',
-  description: '',
-  attachScreenshot: false,
-})
-
-const isSubmitting = ref(false)
-const submitSuccess = ref(false)
-
+<script lang="ts">
 const reportCategories = [
   { value: 'booking', label: '課程預約問題' },
   { value: 'contract', label: '合約相關問題' },
@@ -99,6 +63,52 @@ const faqItems = [
     answer: '視您的合約類型而定。單店會籍僅限該分店使用；多店會籍可於指定分店群組內使用；全館會籍則可於全台分店使用。詳情請查看您的合約內容。'
   }
 ]
+</script>
+
+<script setup lang="ts">
+/**
+ * 客服支援頁面
+ * 提供聯絡方式、常見問題、問題回報功能
+ */
+definePageMeta({
+  middleware: 'auth'
+})
+
+const config = useRuntimeConfig()
+const apiUrl = config.public.apiBaseUrl
+const { member, getAuthHeader } = useMemberAuth()
+const toast = useToast()
+const { handleError } = useApiError()
+
+// 目前顯示的 Tab
+type Tab = 'contact' | 'faq' | 'report'
+const activeTab = ref<Tab>('contact')
+
+// 問題回報表單
+interface ReportForm {
+  category: string
+  subject: string
+  description: string
+  attachScreenshot: boolean
+}
+
+const reportForm = reactive<ReportForm>({
+  category: '',
+  subject: '',
+  description: '',
+  attachScreenshot: false,
+})
+
+const isSubmitting = ref(false)
+const submitSuccess = ref(false)
+let submitSuccessTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (submitSuccessTimer) {
+    clearTimeout(submitSuccessTimer)
+    submitSuccessTimer = null
+  }
+})
 
 const expandedFaq = ref<number | null>(null)
 
@@ -161,9 +171,13 @@ const submitReport = async () => {
     reportForm.description = ''
     reportForm.attachScreenshot = false
 
-    // 3 秒後隱藏成功訊息
-    setTimeout(() => {
+    // 5 秒後隱藏成功訊息
+    if (submitSuccessTimer) {
+      clearTimeout(submitSuccessTimer)
+    }
+    submitSuccessTimer = setTimeout(() => {
       submitSuccess.value = false
+      submitSuccessTimer = null
     }, 5000)
   } catch (error) {
     handleError(error, { fallbackMessage: '提交失敗，請稍後再試' })

@@ -1,3 +1,42 @@
+<script lang="ts">
+const TYPE_OPTIONS = [
+  { value: '', label: '全部類型' },
+  { value: 'PROMOTION', label: '升遷' },
+  { value: 'TRANSFER', label: '調動' },
+  { value: 'DEMOTION', label: '降職' }
+]
+
+const PROMOTION_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const TYPE_BADGE_CLASS_MAP: Record<string, string> = {
+  PROMOTION: 'type-promotion',
+  TRANSFER: 'type-transfer',
+  DEMOTION: 'type-demotion'
+}
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : PROMOTION_DATE_FORMATTER.format(d)
+}
+
+const getTypeBadgeClass = (type: string) => {
+  return TYPE_BADGE_CLASS_MAP[type] || ''
+}
+
+const COLUMNS = [
+  { key: 'employee', label: '員工', slot: 'employee' },
+  { key: 'type', label: '異動類型', slot: 'type' },
+  { key: 'change', label: '異動內容', slot: 'change' },
+  { key: 'effective_date', label: '生效日期', format: (v: string) => formatDate(v) },
+  { key: 'new_base_salary', label: '新底薪', slot: 'salary' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 員工異動紀錄頁面
@@ -25,13 +64,6 @@ const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
 const totalPages = computed(() => Math.ceil(promotionCount.value / pageSize))
 
-const typeOptions = [
-  { value: '', label: '全部類型' },
-  { value: 'PROMOTION', label: '升遷' },
-  { value: 'TRANSFER', label: '調動' },
-  { value: 'DEMOTION', label: '降職' }
-]
-
 // Load promotions
 const loadPromotions = async () => {
   await fetchPromotions({
@@ -49,35 +81,6 @@ watch([selectedType], () => {
 watch(currentPage, loadPromotions)
 
 onMounted(loadPromotions)
-
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
-
-// Get type badge color
-const getTypeBadgeClass = (type: string) => {
-  const map: Record<string, string> = {
-    PROMOTION: 'type-promotion',
-    TRANSFER: 'type-transfer',
-    DEMOTION: 'type-demotion'
-  }
-  return map[type] || ''
-}
-
-// Table columns
-const columns = [
-  { key: 'employee', label: '員工', slot: 'employee' },
-  { key: 'type', label: '異動類型', slot: 'type' },
-  { key: 'change', label: '異動內容', slot: 'change' },
-  { key: 'effective_date', label: '生效日期', format: (v: string) => formatDate(v) },
-  { key: 'new_base_salary', label: '新底薪', slot: 'salary' }
-]
 </script>
 
 <template>
@@ -95,7 +98,7 @@ const columns = [
     <FilterBar>
       <template #filters>
         <select v-model="selectedType" class="input filter-select">
-          <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in TYPE_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -108,7 +111,7 @@ const columns = [
     <!-- Data Table -->
     <DataTable
       :data="promotions"
-      :columns="columns"
+      :columns="COLUMNS"
       :loading="isPromotionLoading"
       :loading-message="MESSAGES.ACTIONS.LOADING"
       empty-title="暫無異動紀錄"

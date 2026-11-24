@@ -1,3 +1,17 @@
+<script lang="ts">
+const DISCOUNT_TYPE_OPTIONS = [
+  { value: 'PERCENTAGE', label: '百分比折扣' },
+  { value: 'FIXED_AMOUNT', label: '固定金額折扣' }
+]
+
+const COUPON_PLAN_NUMBER_FORMATTER = new Intl.NumberFormat('zh-TW')
+
+const formatPrice = (price?: number | null) => {
+  if (price === undefined || price === null) return '0'
+  return COUPON_PLAN_NUMBER_FORMATTER.format(price)
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 新增優惠券頁面
@@ -26,7 +40,7 @@ const initialData: CreateCouponInput = {
   usage_limit: null,
   usage_per_member: 1,
   applicable_plans: null,
-  start_date: new Date().toISOString().split('T')[0]!,
+  start_date: new Date().toISOString().slice(0, 10),
   end_date: ''
 }
 
@@ -39,12 +53,6 @@ const {
 } = useZodFormValidation(createCouponSchema, initialData)
 
 const { isSubmitting, submit } = useFormSubmit()
-
-// Options
-const discountTypeOptions = [
-  { value: 'PERCENTAGE', label: '百分比折扣' },
-  { value: 'FIXED_AMOUNT', label: '固定金額折扣' }
-]
 
 // Generate random code
 const generateCode = () => {
@@ -63,7 +71,7 @@ onMounted(async () => {
   // Set default end date to 30 days from now
   const endDate = new Date()
   endDate.setDate(endDate.getDate() + 30)
-  form.end_date = endDate.toISOString().split('T')[0]!
+  form.end_date = endDate.toISOString().slice(0, 10)
 })
 
 // Form submission
@@ -179,7 +187,7 @@ const handleSubmit = async () => {
           <FormRadioGroup
             v-model="form.discount_type"
             label="折扣類型"
-            :options="discountTypeOptions"
+            :options="DISCOUNT_TYPE_OPTIONS"
           />
 
           <FormInput
@@ -303,7 +311,7 @@ const handleSubmit = async () => {
                 }"
               />
               <span class="plan-name">{{ plan.name }}</span>
-              <span class="plan-price">NT$ {{ plan.price?.toLocaleString() }}</span>
+              <span class="plan-price">NT$ {{ formatPrice(plan.price) }}</span>
             </label>
           </div>
         </div>

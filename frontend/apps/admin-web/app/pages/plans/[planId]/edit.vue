@@ -1,12 +1,24 @@
+<script lang="ts">
+import { LABELS } from '~/constants'
+
+const planPriceFormatter = new Intl.NumberFormat('zh-TW')
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const planTypeOptions = [
+  { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },
+  { value: 'COUNT_BASED', label: LABELS.CONTRACT_TYPE.COUNT_BASED }
+]
+</script>
+
 <script setup lang="ts">
-import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+import { MESSAGES, PAGES, STATUS } from '~/constants'
 import type { MembershipPlan } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth',
   validate: (route) => {
     const id = route.params.planId as string
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    return UUID_REGEX.test(id)
   }
 })
 
@@ -32,11 +44,6 @@ const form = reactive({
   description: '',
   status: 'active' as 'active' | 'archived'
 })
-
-const planTypeOptions = [
-  { value: 'TIME_BASED', label: LABELS.CONTRACT_TYPE.TIME_BASED },
-  { value: 'COUNT_BASED', label: LABELS.CONTRACT_TYPE.COUNT_BASED }
-]
 
 const loadPlan = async () => {
   isLoading.value = true
@@ -122,7 +129,7 @@ const handleSubmit = async () => {
 }
 
 const formatPrice = (value: number) => {
-  return new Intl.NumberFormat('zh-TW').format(value)
+  return planPriceFormatter.format(value)
 }
 </script>
 

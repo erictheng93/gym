@@ -59,12 +59,14 @@ export async function generateExcel(
     headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
     // Add data rows
-    for (const row of data) {
-      const rowData: Record<string, unknown> = {};
-      for (const col of columns) {
-        rowData[col.key] = formatCellValue(row[col.key]);
+    const colCount = columns.length;
+    for (let r = 0; r < data.length; r++) {
+      const row = data[r];
+      const rowValues = new Array(colCount);
+      for (let c = 0; c < colCount; c++) {
+        rowValues[c] = formatCellValue(row[columns[c].key]);
       }
-      worksheet.addRow(rowData);
+      worksheet.addRow(rowValues);
     }
 
     // Auto-filter
@@ -96,18 +98,26 @@ export function generateCsv(
   data: Record<string, unknown>[]
 ): ExportResult {
   try {
-    const rows: string[] = [];
+    const colCount = columns.length;
+    const rowCount = data.length;
+    const rows: string[] = new Array(rowCount + 1);
 
     // Header row
-    rows.push(columns.map(col => escapeCSVField(col.header)).join(','));
+    const headerParts = new Array(colCount);
+    for (let c = 0; c < colCount; c++) {
+      headerParts[c] = escapeCSVField(columns[c].header);
+    }
+    rows[0] = headerParts.join(',');
 
     // Data rows
-    for (const row of data) {
-      const values = columns.map(col => {
-        const value = formatCellValue(row[col.key]);
-        return escapeCSVField(String(value ?? ''));
-      });
-      rows.push(values.join(','));
+    for (let r = 0; r < rowCount; r++) {
+      const row = data[r];
+      const cellValues = new Array(colCount);
+      for (let c = 0; c < colCount; c++) {
+        const value = formatCellValue(row[columns[c].key]);
+        cellValues[c] = escapeCSVField(String(value ?? ''));
+      }
+      rows[r + 1] = cellValues.join(',');
     }
 
     // Add BOM for UTF-8 encoding (helps with Excel opening)
@@ -126,11 +136,13 @@ export function generateCsv(
 // Helper Functions
 // -----------------------------------------------------------------------------
 
+const CSV_SPECIAL_CHARS = /[",\r\n]/;
+
 /**
  * Escape CSV field value
  */
 function escapeCSVField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+  if (CSV_SPECIAL_CHARS.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -144,7 +156,7 @@ function formatCellValue(value: unknown): string | number | null {
     return '';
   }
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    return value.toISOString().slice(0, 10);
   }
   if (typeof value === 'object') {
     return JSON.stringify(value);
@@ -290,64 +302,68 @@ export const paymentsColumns: ExportColumn[] = [
 // Translation Helpers
 // -----------------------------------------------------------------------------
 
+const STATUS_MAP: Record<string, string> = {
+  ACTIVE: '有效',
+  EXPIRED: '已過期',
+  SUSPENDED: '已停權',
+  BANNED: '已封鎖',
+  DRAFT: '草稿',
+  PAUSED: '暫停中',
+  CANCELLED: '已取消',
+  TRANSFERRED: '已轉讓',
+  PENDING: '待審核',
+  APPROVED: '已核准',
+  PAID: '已發放',
+  UNPAID: '未付款',
+  PARTIAL: '部分付款',
+};
+
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  CASH: '現金',
+  CREDIT_CARD: '信用卡',
+  DEBIT_CARD: '金融卡',
+  BANK_TRANSFER: '銀行轉帳',
+  LINE_PAY: 'LINE Pay',
+  OTHER: '其他',
+};
+
+const PAYMENT_TYPE_MAP: Record<string, string> = {
+  INCOME: '收入',
+  REFUND: '退款',
+};
+
+const GENDER_MAP: Record<string, string> = {
+  MALE: '男',
+  FEMALE: '女',
+  OTHER: '其他',
+};
+
 /**
  * Translate status to Chinese
  */
 export function translateStatus(status: string | null): string {
-  const statusMap: Record<string, string> = {
-    ACTIVE: '有效',
-    EXPIRED: '已過期',
-    SUSPENDED: '已停權',
-    BANNED: '已封鎖',
-    DRAFT: '草稿',
-    PAUSED: '暫停中',
-    CANCELLED: '已取消',
-    TRANSFERRED: '已轉讓',
-    PENDING: '待審核',
-    APPROVED: '已核准',
-    PAID: '已發放',
-    UNPAID: '未付款',
-    PARTIAL: '部分付款',
-  };
-  return statusMap[status || ''] || status || '';
+  return STATUS_MAP[status || ''] || status || '';
 }
 
 /**
  * Translate payment method to Chinese
  */
 export function translatePaymentMethod(method: string | null): string {
-  const methodMap: Record<string, string> = {
-    CASH: '現金',
-    CREDIT_CARD: '信用卡',
-    DEBIT_CARD: '金融卡',
-    BANK_TRANSFER: '銀行轉帳',
-    LINE_PAY: 'LINE Pay',
-    OTHER: '其他',
-  };
-  return methodMap[method || ''] || method || '';
+  return PAYMENT_METHOD_MAP[method || ''] || method || '';
 }
 
 /**
  * Translate payment type to Chinese
  */
 export function translatePaymentType(type: string | null): string {
-  const typeMap: Record<string, string> = {
-    INCOME: '收入',
-    REFUND: '退款',
-  };
-  return typeMap[type || ''] || type || '';
+  return PAYMENT_TYPE_MAP[type || ''] || type || '';
 }
 
 /**
  * Translate gender to Chinese
  */
 export function translateGender(gender: string | null): string {
-  const genderMap: Record<string, string> = {
-    MALE: '男',
-    FEMALE: '女',
-    OTHER: '其他',
-  };
-  return genderMap[gender || ''] || gender || '';
+  return GENDER_MAP[gender || ''] || gender || '';
 }
 
 // -----------------------------------------------------------------------------

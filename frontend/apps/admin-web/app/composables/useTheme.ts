@@ -44,6 +44,10 @@ export const useTheme = () => {
     // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     mediaQuery.addEventListener('change', applyTheme)
+
+    onUnmounted(() => {
+      mediaQuery.removeEventListener('change', applyTheme)
+    })
   })
 
   return {

@@ -83,15 +83,78 @@ type Variables = AuthVariables & TenantVariables;
 const app = new Hono<{ Variables: Variables }>();
 
 // Parse CORS origins from environment variable or use defaults
-const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'];
+const rawCorsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',')
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:3004',
+      'http://localhost:3005',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:3002',
+      'http://127.0.0.1:3003',
+      'http://127.0.0.1:3004',
+      'http://127.0.0.1:3005',
+    ];
+
+const configuredCorsOrigins = rawCorsOrigins.map(o => o.trim().replace(/\/$/, '')).filter(Boolean);
 
 app.use('*', cors({
-  origin: corsOrigins,
+  origin: (origin) => {
+    if (!origin) return '*';
+    const normalized = origin.replace(/\/$/, '');
+    // Exact match
+    if (configuredCorsOrigins.includes(normalized)) return origin;
+    // Wildcard pattern match (e.g., https://*.pages.dev or *.gym-nexus.com)
+    for (const pattern of configuredCorsOrigins) {
+      if (pattern.includes('*')) {
+        const escaped = pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const regexStr = '^' + escaped.join('.*') + '$';
+        if (new RegExp(regexStr, 'i').test(normalized)) return origin;
+      }
+    }
+    // Allow any localhost/127.0.0.1/0.0.0.0 on any port in development
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(normalized)) {
+      return origin;
+    }
+    return undefined;
+  },
   credentials: true,
-  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Branch-Id', 'X-Tenant-Id', 'X-Member-Token', 'X-Coach-Token'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'Origin',
+    'X-Requested-With',
+    'X-Branch-Id',
+    'X-Tenant-Id',
+    'X-Member-Token',
+    'X-Coach-Token',
+    'X-CSRF-Token',
+    'X-Request-Id',
+    'X-API-Key',
+    'X-Webhook-Signature',
+    'X-Webhook-Timestamp',
+    'X-Line-Signature',
+    'Stripe-Signature',
+    'Cache-Control',
+    'Pragma',
+  ],
+  exposeHeaders: [
+    'Content-Disposition',
+    'Content-Length',
+    'X-Total-Count',
+    'X-Request-Id',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'Retry-After',
+  ],
+  maxAge: 86400,
 }));
 
 app.use('*', secureHeaders());
@@ -164,6 +227,7 @@ app.route('/api/member/workouts', memberWorkoutsRoutes);
 app.route('/api/member/goals', memberGoalsRoutes);
 app.route('/api/member/measurements', memberMeasurementsRoutes);
 app.route('/api/member/issues', memberIssuesRoutes);
+app.route('/api/member', memberProfileRoutes);
 
 // Coach-App routes (authenticated via X-Coach-Token)
 app.route('/api/coach/auth', coachAuthRoutes);

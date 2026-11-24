@@ -12,7 +12,7 @@ import {
   lessonPlans,
   contractLogs,
 } from '../db/index.js';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, count, inArray } from 'drizzle-orm';
 import { coachAuthMiddleware, requireCoach } from '../middleware/index.js';
 import type { CoachVariables } from '../middleware/index.js';
 
@@ -25,6 +25,124 @@ const app = new Hono<{ Variables: CoachVariables }>();
 
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
+
+const COACH_SESSION_BOOKING_SELECT = {
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  memberName: members.fullName,
+  memberCode: members.memberCode,
+  bookingStatus: bookings.bookingStatus,
+};
+
+const COACH_SESSION_DETAIL_BOOKING_SELECT = {
+  id: bookings.id,
+  memberId: bookings.memberId,
+  memberName: members.fullName,
+  memberCode: members.memberCode,
+  memberPhone: members.phone,
+  memberEmail: members.email,
+  bookingStatus: bookings.bookingStatus,
+  bookedAt: bookings.bookedAt,
+  attendedAt: bookings.attendedAt,
+  cancelledAt: bookings.cancelledAt,
+  cancelReason: bookings.cancelReason,
+  contractId: bookings.contractId,
+};
+
+const COACH_SESSION_LESSON_PLAN_SELECT = {
+  id: lessonPlans.id,
+  title: lessonPlans.title,
+  objectives: lessonPlans.objectives,
+  warmupExercises: lessonPlans.warmupExercises,
+  mainExercises: lessonPlans.mainExercises,
+  cooldownExercises: lessonPlans.cooldownExercises,
+};
+
+const COACH_CLASSES_LIST_SELECT = {
+  id: classSessions.id,
+  classId: classSessions.classId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+  sessionStatus: classSessions.sessionStatus,
+  cancelledReason: classSessions.cancelledReason,
+  cancelledAt: classSessions.cancelledAt,
+  className: classes.name,
+  classCategory: classes.category,
+  classDuration: classes.durationMinutes,
+  branchId: classSessions.branchId,
+};
+
+const COUNT_SELECT = {
+  count: count(),
+};
+
+const COACH_CLASS_DETAIL_SELECT = {
+  id: classSessions.id,
+  classId: classSessions.classId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+  sessionStatus: classSessions.sessionStatus,
+  cancelledReason: classSessions.cancelledReason,
+  cancelledAt: classSessions.cancelledAt,
+  instructorId: classSessions.instructorId,
+  className: classes.name,
+  classCategory: classes.category,
+  classDuration: classes.durationMinutes,
+  classDescription: classes.description,
+  branchId: classSessions.branchId,
+};
+
+const CLASS_RECORDS_LIST_SELECT = {
+  id: classRecords.id,
+  bookingId: classRecords.bookingId,
+  warmupContent: classRecords.warmupContent,
+  mainContent: classRecords.mainContent,
+  cooldownContent: classRecords.cooldownContent,
+  memberCondition: classRecords.memberCondition,
+  coachNotes: classRecords.coachNotes,
+  nextPlan: classRecords.nextPlan,
+};
+
+const BOOKING_ATTEND_SELECT = {
+  id: bookings.id,
+  sessionId: bookings.sessionId,
+  memberId: bookings.memberId,
+  bookingStatus: bookings.bookingStatus,
+  contractId: bookings.contractId,
+  countDeducted: bookings.countDeducted,
+};
+
+const SESSION_ATTEND_VERIFY_SELECT = {
+  id: classSessions.id,
+  instructorId: classSessions.instructorId,
+  sessionDate: classSessions.sessionDate,
+};
+
+const CONTRACT_REMAINING_SELECT = {
+  id: contracts.id,
+  remainingCounts: contracts.remainingCounts,
+};
+
+const CLASS_RECORD_ID_SELECT = {
+  id: classRecords.id,
+};
+
+const SESSION_CANCEL_VERIFY_SELECT = {
+  id: classSessions.id,
+  instructorId: classSessions.instructorId,
+  sessionStatus: classSessions.sessionStatus,
+  sessionDate: classSessions.sessionDate,
+};
 
 // -----------------------------------------------------------------------------
 // Validation Schemas
@@ -71,38 +189,21 @@ app.get('/', async (c) => {
     conditions.push(eq(classSessions.sessionStatus, status as 'SCHEDULED' | 'CANCELLED' | 'COMPLETED'));
   }
 
-  // Get sessions with class info
-  const sessionsData = await db
-    .select({
-      id: classSessions.id,
-      classId: classSessions.classId,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      endTime: classSessions.endTime,
-      room: classSessions.room,
-      maxCapacity: classSessions.maxCapacity,
-      currentCount: classSessions.currentCount,
-      waitlistCount: classSessions.waitlistCount,
-      sessionStatus: classSessions.sessionStatus,
-      cancelledReason: classSessions.cancelledReason,
-      cancelledAt: classSessions.cancelledAt,
-      className: classes.name,
-      classCategory: classes.category,
-      classDuration: classes.durationMinutes,
-      branchId: classSessions.branchId,
-    })
-    .from(classSessions)
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(and(...conditions))
-    .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(classSessions)
-    .where(and(...conditions));
+  // Get sessions with class info and total count in parallel
+  const [sessionsData, [countResult]] = await Promise.all([
+    db
+      .select(COACH_CLASSES_LIST_SELECT)
+      .from(classSessions)
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(and(...conditions))
+      .orderBy(desc(classSessions.sessionDate), classSessions.startTime)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select(COUNT_SELECT)
+      .from(classSessions)
+      .where(and(...conditions)),
+  ]);
 
   // Get bookings for each session
   const sessionIds = sessionsData.map(s => s.id);
@@ -117,13 +218,7 @@ app.get('/', async (c) => {
 
   if (sessionIds.length > 0) {
     bookingsData = await db
-      .select({
-        sessionId: bookings.sessionId,
-        memberId: bookings.memberId,
-        memberName: members.fullName,
-        memberCode: members.memberCode,
-        bookingStatus: bookings.bookingStatus,
-      })
+      .select(COACH_SESSION_BOOKING_SELECT)
       .from(bookings)
       .innerJoin(members, eq(bookings.memberId, members.id))
       .where(
@@ -194,32 +289,26 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Get session details
-  const [session] = await db
-    .select({
-      id: classSessions.id,
-      classId: classSessions.classId,
-      sessionDate: classSessions.sessionDate,
-      startTime: classSessions.startTime,
-      endTime: classSessions.endTime,
-      room: classSessions.room,
-      maxCapacity: classSessions.maxCapacity,
-      currentCount: classSessions.currentCount,
-      waitlistCount: classSessions.waitlistCount,
-      sessionStatus: classSessions.sessionStatus,
-      cancelledReason: classSessions.cancelledReason,
-      cancelledAt: classSessions.cancelledAt,
-      instructorId: classSessions.instructorId,
-      className: classes.name,
-      classCategory: classes.category,
-      classDuration: classes.durationMinutes,
-      classDescription: classes.description,
-      branchId: classSessions.branchId,
-    })
-    .from(classSessions)
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(eq(classSessions.id, id))
-    .limit(1);
+  // Concurrently fetch session, bookings with member details, and lesson plan
+  const [[session], bookingsData, [lessonPlan]] = await Promise.all([
+    db
+      .select(COACH_CLASS_DETAIL_SELECT)
+      .from(classSessions)
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(eq(classSessions.id, id))
+      .limit(1),
+    db
+      .select(COACH_SESSION_DETAIL_BOOKING_SELECT)
+      .from(bookings)
+      .innerJoin(members, eq(bookings.memberId, members.id))
+      .where(eq(bookings.sessionId, id))
+      .orderBy(bookings.bookedAt),
+    db
+      .select(COACH_SESSION_LESSON_PLAN_SELECT)
+      .from(lessonPlans)
+      .where(eq(lessonPlans.sessionId, id))
+      .limit(1),
+  ]);
 
   if (!session) {
     return c.json({
@@ -238,27 +327,6 @@ app.get('/:id', async (c) => {
     }, 403);
   }
 
-  // Get all bookings with member details
-  const bookingsData = await db
-    .select({
-      id: bookings.id,
-      memberId: bookings.memberId,
-      memberName: members.fullName,
-      memberCode: members.memberCode,
-      memberPhone: members.phone,
-      memberEmail: members.email,
-      bookingStatus: bookings.bookingStatus,
-      bookedAt: bookings.bookedAt,
-      attendedAt: bookings.attendedAt,
-      cancelledAt: bookings.cancelledAt,
-      cancelReason: bookings.cancelReason,
-      contractId: bookings.contractId,
-    })
-    .from(bookings)
-    .innerJoin(members, eq(bookings.memberId, members.id))
-    .where(eq(bookings.sessionId, id))
-    .orderBy(bookings.bookedAt);
-
   // Get class records for attended bookings
   const bookingIds = bookingsData.map(b => b.id);
   let recordsMap: Record<string, {
@@ -273,7 +341,7 @@ app.get('/:id', async (c) => {
 
   if (bookingIds.length > 0) {
     const records = await db
-      .select()
+      .select(CLASS_RECORDS_LIST_SELECT)
       .from(classRecords)
       .where(inArray(classRecords.bookingId, bookingIds));
 
@@ -290,20 +358,6 @@ app.get('/:id', async (c) => {
       return acc;
     }, {} as typeof recordsMap);
   }
-
-  // Get lesson plan if linked
-  const [lessonPlan] = await db
-    .select({
-      id: lessonPlans.id,
-      title: lessonPlans.title,
-      objectives: lessonPlans.objectives,
-      warmupExercises: lessonPlans.warmupExercises,
-      mainExercises: lessonPlans.mainExercises,
-      cooldownExercises: lessonPlans.cooldownExercises,
-    })
-    .from(lessonPlans)
-    .where(eq(lessonPlans.sessionId, id))
-    .limit(1);
 
   // Format response
   const formattedBookings = bookingsData.map(b => ({
@@ -378,14 +432,7 @@ app.post(
 
     // Verify this is a booking ID and coach owns the session
     const [booking] = await db
-      .select({
-        id: bookings.id,
-        sessionId: bookings.sessionId,
-        memberId: bookings.memberId,
-        bookingStatus: bookings.bookingStatus,
-        contractId: bookings.contractId,
-        countDeducted: bookings.countDeducted,
-      })
+      .select(BOOKING_ATTEND_SELECT)
       .from(bookings)
       .where(eq(bookings.id, id))
       .limit(1);
@@ -400,11 +447,7 @@ app.post(
 
     // Verify coach owns this session
     const [session] = await db
-      .select({
-        id: classSessions.id,
-        instructorId: classSessions.instructorId,
-        sessionDate: classSessions.sessionDate,
-      })
+      .select(SESSION_ATTEND_VERIFY_SELECT)
       .from(classSessions)
       .where(eq(classSessions.id, booking.sessionId))
       .limit(1);
@@ -432,10 +475,7 @@ app.post(
     // Handle class count deduction for COUNT_BASED contracts
     if (attended && booking.contractId && !booking.countDeducted) {
       const [contract] = await db
-        .select({
-          id: contracts.id,
-          remainingCounts: contracts.remainingCounts,
-        })
+        .select(CONTRACT_REMAINING_SELECT)
         .from(contracts)
         .where(eq(contracts.id, booking.contractId))
         .limit(1);
@@ -472,7 +512,7 @@ app.post(
     // Create or update class record
     if (class_record) {
       const existingRecord = await db
-        .select({ id: classRecords.id })
+        .select(CLASS_RECORD_ID_SELECT)
         .from(classRecords)
         .where(eq(classRecords.bookingId, booking.id))
         .limit(1);
@@ -527,12 +567,7 @@ app.post(
 
     // Get session
     const [session] = await db
-      .select({
-        id: classSessions.id,
-        instructorId: classSessions.instructorId,
-        sessionStatus: classSessions.sessionStatus,
-        sessionDate: classSessions.sessionDate,
-      })
+      .select(SESSION_CANCEL_VERIFY_SELECT)
       .from(classSessions)
       .where(eq(classSessions.id, id))
       .limit(1);

@@ -183,7 +183,7 @@ describe('Member Issues Routes', () => {
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
         body: JSON.stringify({
-          branchId: '00000000-0000-0000-0000-000000099999',
+          branchId: '00000000-0000-4000-8000-000000099999',
           type: 'EQUIPMENT',
           title: 'Test issue',
           content: 'This is a test issue with enough detail to pass validation',

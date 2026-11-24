@@ -5,6 +5,49 @@ import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { validateBranding, mergeBranding } from '../types/branding.js';
 import type { TenantBranding } from '../types/branding.js';
+import { invalidateBrandingCache } from './branding.js';
+
+const TENANT_DETAIL_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+  slug: tenants.slug,
+  planType: tenants.planType,
+  status: tenants.tenantStatus,
+  maxBranches: tenants.maxBranches,
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxStorageMb: tenants.maxStorageMb,
+  trialEndsAt: tenants.trialEndsAt,
+  billingCycle: tenants.billingCycle,
+  nextBillingDate: tenants.nextBillingDate,
+  settings: tenants.settings,
+};
+
+const TENANT_LIMITS_SELECT = {
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxBranches: tenants.maxBranches,
+  maxStorageMb: tenants.maxStorageMb,
+};
+
+const TENANT_CHECK_LIMITS_SELECT = {
+  maxMembers: tenants.maxMembers,
+  maxEmployees: tenants.maxEmployees,
+  maxBranches: tenants.maxBranches,
+};
+
+const TENANT_SETTINGS_SELECT = {
+  slug: tenants.slug,
+  settings: tenants.settings,
+};
+
+const TENANT_BRANDING_SELECT = {
+  settings: tenants.settings,
+};
+
+const COUNT_SELECT = {
+  count: count(),
+};
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -24,21 +67,7 @@ app.get('/', async (c) => {
   }
 
   const [tenant] = await db
-    .select({
-      id: tenants.id,
-      name: tenants.name,
-      slug: tenants.slug,
-      planType: tenants.planType,
-      status: tenants.tenantStatus,
-      maxBranches: tenants.maxBranches,
-      maxMembers: tenants.maxMembers,
-      maxEmployees: tenants.maxEmployees,
-      maxStorageMb: tenants.maxStorageMb,
-      trialEndsAt: tenants.trialEndsAt,
-      billingCycle: tenants.billingCycle,
-      nextBillingDate: tenants.nextBillingDate,
-      settings: tenants.settings,
-    })
+    .select(TENANT_DETAIL_SELECT)
     .from(tenants)
     .where(eq(tenants.id, tenantId))
     .limit(1);
@@ -64,40 +93,34 @@ app.get('/quota', async (c) => {
     return c.json({ success: false, error: '無租戶上下文' }, 400);
   }
 
-  // Get tenant limits
-  const [tenant] = await db
-    .select({
-      maxMembers: tenants.maxMembers,
-      maxEmployees: tenants.maxEmployees,
-      maxBranches: tenants.maxBranches,
-      maxStorageMb: tenants.maxStorageMb,
-    })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
+  // Fetch tenant limits and current usage in parallel
+  const [[tenant], memberRows, employeeRows, branchRows] = await Promise.all([
+    db
+      .select(TENANT_LIMITS_SELECT)
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1),
+    db
+      .select(COUNT_SELECT)
+      .from(members)
+      .where(eq(members.tenantId, tenantId)),
+    db
+      .select(COUNT_SELECT)
+      .from(employees)
+      .where(eq(employees.tenantId, tenantId)),
+    db
+      .select(COUNT_SELECT)
+      .from(branches)
+      .where(eq(branches.tenantId, tenantId)),
+  ]);
 
   if (!tenant) {
     return c.json({ success: false, error: '找不到租戶' }, 404);
   }
 
-  // Count current usage in parallel
-  const [memberCount, employeeCount, branchCount] = await Promise.all([
-    db
-      .select({ count: count() })
-      .from(members)
-      .where(eq(members.tenantId, tenantId))
-      .then(rows => rows[0]?.count || 0),
-    db
-      .select({ count: count() })
-      .from(employees)
-      .where(eq(employees.tenantId, tenantId))
-      .then(rows => rows[0]?.count || 0),
-    db
-      .select({ count: count() })
-      .from(branches)
-      .where(eq(branches.tenantId, tenantId))
-      .then(rows => rows[0]?.count || 0),
-  ]);
+  const memberCount = memberRows[0]?.count || 0;
+  const employeeCount = employeeRows[0]?.count || 0;
+  const branchCount = branchRows[0]?.count || 0;
 
   // TODO: Calculate actual storage usage from files table
   const storageUsedMb = 0;
@@ -147,51 +170,32 @@ app.get('/quota/check/:resource', async (c) => {
     return c.json({ success: false, error: '無效的資源類型' }, 400);
   }
 
-  // Get tenant limits
-  const [tenant] = await db
-    .select({
-      maxMembers: tenants.maxMembers,
-      maxEmployees: tenants.maxEmployees,
-      maxBranches: tenants.maxBranches,
-    })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
+  const countQuery = resource === 'members'
+    ? db.select(COUNT_SELECT).from(members).where(eq(members.tenantId, tenantId))
+    : resource === 'employees'
+    ? db.select(COUNT_SELECT).from(employees).where(eq(employees.tenantId, tenantId))
+    : db.select(COUNT_SELECT).from(branches).where(eq(branches.tenantId, tenantId));
+
+  // Get tenant limits and resource count in parallel
+  const [[tenant], countRows] = await Promise.all([
+    db
+      .select(TENANT_CHECK_LIMITS_SELECT)
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1),
+    countQuery,
+  ]);
 
   if (!tenant) {
     return c.json({ success: false, error: '找不到租戶' }, 404);
   }
 
-  // Get current count for the requested resource
-  let currentCount = 0;
-  let limit = 0;
-
-  switch (resource) {
-    case 'members':
-      currentCount = await db
-        .select({ count: count() })
-        .from(members)
-        .where(eq(members.tenantId, tenantId))
-        .then(rows => Number(rows[0]?.count || 0));
-      limit = tenant.maxMembers || 100;
-      break;
-    case 'employees':
-      currentCount = await db
-        .select({ count: count() })
-        .from(employees)
-        .where(eq(employees.tenantId, tenantId))
-        .then(rows => Number(rows[0]?.count || 0));
-      limit = tenant.maxEmployees || 10;
-      break;
-    case 'branches':
-      currentCount = await db
-        .select({ count: count() })
-        .from(branches)
-        .where(eq(branches.tenantId, tenantId))
-        .then(rows => Number(rows[0]?.count || 0));
-      limit = tenant.maxBranches || 1;
-      break;
-  }
+  const currentCount = Number(countRows[0]?.count || 0);
+  const limit = resource === 'members'
+    ? (tenant.maxMembers || 100)
+    : resource === 'employees'
+    ? (tenant.maxEmployees || 10)
+    : (tenant.maxBranches || 1);
 
   const canCreate = currentCount < limit;
 
@@ -228,9 +232,7 @@ app.patch('/settings', async (c) => {
 
     // Fetch current tenant settings
     const [tenant] = await db
-      .select({
-        settings: tenants.settings
-      })
+      .select(TENANT_SETTINGS_SELECT)
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);
@@ -273,6 +275,10 @@ app.patch('/settings', async (c) => {
       })
       .where(eq(tenants.id, tenantId));
 
+    if (tenant.slug) {
+      invalidateBrandingCache(tenant.slug);
+    }
+
     return c.json({
       success: true,
       message: '設定已更新',
@@ -300,9 +306,7 @@ app.get('/settings/branding', async (c) => {
 
   try {
     const [tenant] = await db
-      .select({
-        settings: tenants.settings
-      })
+      .select(TENANT_BRANDING_SELECT)
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);

@@ -1,3 +1,45 @@
+<script lang="ts">
+import { PAGES } from '~/constants'
+
+const leaveDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
+const leaveDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const LEAVE_STATUS_BADGE_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
+  PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
+  APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
+  REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
+  CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' },
+}
+
+const leaveTypeOptions = [
+  { value: 'ANNUAL', label: PAGES.HR.LEAVES.ANNUAL, color: '#007aff' },
+  { value: 'SICK', label: PAGES.HR.LEAVES.SICK, color: '#ff3b30' },
+  { value: 'PERSONAL', label: PAGES.HR.LEAVES.PERSONAL, color: '#ff9500' },
+  { value: 'MATERNITY', label: PAGES.HR.LEAVES.MATERNITY, color: '#af52de' },
+  { value: 'BEREAVEMENT', label: PAGES.HR.LEAVES.BEREAVEMENT, color: '#8e8e93' },
+  { value: 'OTHER', label: PAGES.HR.LEAVES.OTHER, color: '#5856d6' }
+]
+
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'PENDING', label: PAGES.HR.LEAVES.PENDING_APPROVAL },
+  { value: 'APPROVED', label: PAGES.HR.LEAVES.APPROVED },
+  { value: 'REJECTED', label: PAGES.HR.LEAVES.REJECTED },
+  { value: 'CANCELLED', label: PAGES.HR.LEAVES.CANCELLED }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 休假管理頁面
@@ -54,24 +96,6 @@ const reviewData = ref<{ leaveId: string; action: 'APPROVE' | 'REJECT'; employee
 const reviewNotes = ref('')
 const isReviewing = ref(false)
 
-// 假別選項
-const leaveTypeOptions = [
-  { value: 'ANNUAL', label: PAGES.HR.LEAVES.ANNUAL, color: '#007aff' },
-  { value: 'SICK', label: PAGES.HR.LEAVES.SICK, color: '#ff3b30' },
-  { value: 'PERSONAL', label: PAGES.HR.LEAVES.PERSONAL, color: '#ff9500' },
-  { value: 'MATERNITY', label: PAGES.HR.LEAVES.MATERNITY, color: '#af52de' },
-  { value: 'BEREAVEMENT', label: PAGES.HR.LEAVES.BEREAVEMENT, color: '#8e8e93' },
-  { value: 'OTHER', label: PAGES.HR.LEAVES.OTHER, color: '#5856d6' }
-]
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: PAGES.HR.LEAVES.PENDING_APPROVAL },
-  { value: 'APPROVED', label: PAGES.HR.LEAVES.APPROVED },
-  { value: 'REJECTED', label: PAGES.HR.LEAVES.REJECTED },
-  { value: 'CANCELLED', label: PAGES.HR.LEAVES.CANCELLED }
-]
-
 onMounted(async () => {
   await checkAuth()
   if (currentEmployee.value?.id) {
@@ -118,8 +142,16 @@ const calculateDays = computed(() => {
 })
 
 // 取得假別餘額
+const leaveBalancesMap = computed(() => {
+  const map = new Map<string, typeof leaveBalances.value[0]>()
+  for (const b of leaveBalances.value) {
+    map.set(b.leave_type, b)
+  }
+  return map
+})
+
 const getBalance = (type: string) => {
-  const balance = leaveBalances.value.find(b => b.leave_type === type)
+  const balance = leaveBalancesMap.value.get(type)
   if (!balance) return { total: 0, used: 0, remaining: 0 }
   return {
     total: balance.total_days,
@@ -128,43 +160,40 @@ const getBalance = (type: string) => {
   }
 }
 
-// 取得假別標籤
-const getLeaveTypeLabel = (type: string) => {
-  return leaveTypeOptions.find(o => o.value === type)?.label || type
+const LEAVE_TYPE_LABEL_MAP: Record<string, string> = {
+  ANNUAL: PAGES.HR.LEAVES.ANNUAL,
+  SICK: PAGES.HR.LEAVES.SICK,
+  PERSONAL: PAGES.HR.LEAVES.PERSONAL,
+  MATERNITY: PAGES.HR.LEAVES.MATERNITY,
+  BEREAVEMENT: PAGES.HR.LEAVES.BEREAVEMENT,
+  OTHER: PAGES.HR.LEAVES.OTHER,
 }
 
-const getLeaveTypeColor = (type: string) => {
-  return leaveTypeOptions.find(o => o.value === type)?.color || '#8e8e93'
+const LEAVE_TYPE_COLOR_MAP: Record<string, string> = {
+  ANNUAL: '#007aff',
+  SICK: '#ff3b30',
+  PERSONAL: '#ff9500',
+  MATERNITY: '#af52de',
+  BEREAVEMENT: '#8e8e93',
+  OTHER: '#5856d6',
 }
 
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } => {
-  const map: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
-    PENDING: { label: PAGES.HR.LEAVES.PENDING_APPROVAL, variant: 'warning' },
-    APPROVED: { label: PAGES.HR.LEAVES.APPROVED, variant: 'success' },
-    REJECTED: { label: PAGES.HR.LEAVES.REJECTED, variant: 'error' },
-    CANCELLED: { label: PAGES.HR.LEAVES.CANCELLED, variant: 'default' }
-  }
-  return map[status] || { label: status, variant: 'default' }
+  return LEAVE_STATUS_BADGE_MAP[status] || { label: status, variant: 'default' }
 }
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : leaveDateFormatter.format(d)
 }
 
 const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : leaveDateTimeFormatter.format(d)
 }
 
 // 提交申請
@@ -578,7 +607,7 @@ const getActionLabel = (action: string) => {
             <div class="table-cell">{{ getBalance(option.value).total }} 天</div>
             <div class="table-cell">{{ getBalance(option.value).used }} 天</div>
             <div class="table-cell">
-              {{ leaveBalances.find(b => b.leave_type === option.value)?.pending_days || 0 }} 天
+              {{ leaveBalancesMap.get(option.value)?.pending_days || 0 }} 天
             </div>
             <div class="table-cell">
               <strong :style="{ color: getBalance(option.value).remaining < 1 ? '#ff3b30' : 'inherit' }">
@@ -703,14 +732,14 @@ const getActionLabel = (action: string) => {
                     v-model="applyForm.startDate"
                     type="date"
                     class="input"
-                    :min="new Date().toISOString().split('T')[0]"
+                    :min="new Date().toISOString().slice(0, 10)"
                   />
                   <span class="date-to">至</span>
                   <input
                     v-model="applyForm.endDate"
                     type="date"
                     class="input"
-                    :min="applyForm.startDate || new Date().toISOString().split('T')[0]"
+                    :min="applyForm.startDate || new Date().toISOString().slice(0, 10)"
                   />
                 </div>
               </div>

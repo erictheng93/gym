@@ -1,3 +1,31 @@
+<script lang="ts">
+const SEGMENT_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW')
+const SEGMENT_CURRENCY_FORMATTER = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
+  return SEGMENT_DATE_FORMATTER.format(d)
+}
+
+const formatCurrency = (amount: number) => {
+  return SEGMENT_CURRENCY_FORMATTER.format(amount)
+}
+
+const COLUMNS = Object.freeze([
+  { key: 'member', label: '會員', slot: 'member' },
+  { key: 'rfm', label: 'RFM 分數', slot: 'rfm' },
+  { key: 'last_payment_date', label: '最後消費', format: (v: string) => formatDate(v) },
+  { key: 'total_amount', label: '消費金額', slot: 'amount' },
+  { key: 'visit_count', label: '打卡次數' }
+])
+</script>
+
 <script setup lang="ts">
 /**
  * 特定分群會員列表頁面
@@ -82,30 +110,6 @@ const handleAutoTag = async () => {
 const handleRowClick = (member: typeof segmentMembers.value[0]) => {
   router.push(`/members/${member.member_id}`)
 }
-
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
-}
-
-// Format currency
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    minimumFractionDigits: 0
-  }).format(amount)
-}
-
-// Table columns
-const columns = [
-  { key: 'member', label: '會員', slot: 'member' },
-  { key: 'rfm', label: 'RFM 分數', slot: 'rfm' },
-  { key: 'last_payment_date', label: '最後消費', format: (v: string) => formatDate(v) },
-  { key: 'total_amount', label: '消費金額', slot: 'amount' },
-  { key: 'visit_count', label: '打卡次數' }
-]
 </script>
 
 <template>
@@ -163,7 +167,7 @@ const columns = [
     <!-- Data Table -->
     <DataTable
       :data="segmentMembers"
-      :columns="columns"
+      :columns="COLUMNS"
       :loading="isLoading"
       :loading-message="MESSAGES.ACTIONS.LOADING"
       empty-title="此分群沒有會員"

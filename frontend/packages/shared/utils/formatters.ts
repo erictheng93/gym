@@ -11,6 +11,28 @@ export interface DateFormatOptions {
   locale?: string
 }
 
+const numberFormatCache = new Map<string, Intl.NumberFormat>()
+function getCachedNumberFormat(locale: string, options?: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = `${locale}:${options ? JSON.stringify(options) : ''}`
+  let fmt = numberFormatCache.get(key)
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale, options)
+    numberFormatCache.set(key, fmt)
+  }
+  return fmt
+}
+
+const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>()
+function getCachedDateTimeFormat(locale: string, options?: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}:${options ? JSON.stringify(options) : ''}`
+  let fmt = dateTimeFormatCache.get(key)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, options)
+    dateTimeFormatCache.set(key, fmt)
+  }
+  return fmt
+}
+
 /**
  * 格式化日期為繁體中文格式
  *
@@ -44,7 +66,7 @@ export function formatDate(
     dateOptions.minute = '2-digit'
   }
 
-  return date.toLocaleDateString(locale, dateOptions)
+  return getCachedDateTimeFormat(locale, dateOptions).format(date)
 }
 
 /**
@@ -55,11 +77,14 @@ export function formatDate(
  * formatRelativeTime(new Date(Date.now() - 3600000)) // '1 小時前'
  */
 export function formatRelativeTime(
-  date: Date | string,
+  date: Date | string | null | undefined,
   locale = 'zh-TW'
 ): string {
+  if (!date) return ''
   const now = new Date()
   const target = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(target.getTime())) return ''
+
   const diffMs = now.getTime() - target.getTime()
   const diffSec = Math.floor(diffMs / 1000)
   const diffMin = Math.floor(diffSec / 60)
@@ -89,7 +114,7 @@ export function formatCurrency(
 
   const { currency = 'TWD', locale = 'zh-TW' } = options
 
-  return new Intl.NumberFormat(locale, {
+  return getCachedNumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
@@ -108,8 +133,11 @@ export function formatNumber(
   locale = 'zh-TW'
 ): string {
   if (num == null) return '—'
-  return new Intl.NumberFormat(locale).format(num)
+  return getCachedNumberFormat(locale).format(num)
 }
+
+const TW_MOBILE_REGEX = /^09\d{8}$/
+const TW_LANDLINE_REGEX = /^0\d{8,9}$/
 
 /**
  * 格式化電話號碼
@@ -121,12 +149,12 @@ export function formatPhone(phone: string | null | undefined): string {
   if (!phone) return '—'
 
   // 台灣手機格式
-  if (phone.match(/^09\d{8}$/)) {
+  if (TW_MOBILE_REGEX.test(phone)) {
     return `${phone.slice(0, 4)}-${phone.slice(4, 7)}-${phone.slice(7)}`
   }
 
   // 台灣市話格式
-  if (phone.match(/^0\d{8,9}$/)) {
+  if (TW_LANDLINE_REGEX.test(phone)) {
     const areaCode = phone.slice(0, 2)
     const rest = phone.slice(2)
     return `${areaCode}-${rest}`
@@ -162,8 +190,10 @@ export function getDayName(dayIndex: number): string {
  * @example
  * formatDateWithDay('2024-01-15') // '1/15 (週一)'
  */
-export function formatDateWithDay(dateStr: string): string {
+export function formatDateWithDay(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—'
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '—'
   const month = date.getMonth() + 1
   const day = date.getDate()
   const dayName = DAY_OF_WEEK_NAMES[date.getDay()]

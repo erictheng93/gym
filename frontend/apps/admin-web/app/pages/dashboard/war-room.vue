@@ -1,3 +1,12 @@
+<script lang="ts">
+const PERIOD_OPTIONS = [
+  { value: 'today', label: '今日' },
+  { value: 'week', label: '本週' },
+  { value: 'month', label: '本月' },
+  { value: 'year', label: '今年' }
+] as const
+</script>
+
 <script setup lang="ts">
 /**
  * War Room Dashboard
@@ -39,12 +48,7 @@ const isHeadquarter = computed(() => {
 })
 
 // 期間選項
-const periodOptions = [
-  { value: 'today', label: '今日' },
-  { value: 'week', label: '本週' },
-  { value: 'month', label: '本月' },
-  { value: 'year', label: '今年' }
-]
+const periodOptions = PERIOD_OPTIONS
 
 // 載入數據
 const loadData = async () => {
@@ -138,7 +142,7 @@ const exportData = async (type: 'kpis' | 'revenue' | 'contracts' | 'checkins', f
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${type}-${new Date().toISOString().split('T')[0]}.${format}`
+      a.download = `${type}-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -170,8 +174,10 @@ watch([selectedPeriod, selectedBranch], () => {
 
 // 初始化
 onMounted(async () => {
-  await fetchBranches()
-  await loadData()
+  await Promise.all([
+    fetchBranches(),
+    loadData()
+  ])
 })
 
 onUnmounted(() => {

@@ -10,6 +10,85 @@ import { lucia } from '../auth/lucia.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
+const USER_SAFE_SELECT = {
+  id: users.id,
+  email: users.email,
+  role: users.role,
+  isActive: users.isActive,
+  emailVerified: users.emailVerified,
+  lastLoginAt: users.lastLoginAt,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+  employeeId: users.employeeId,
+  tenantId: users.tenantId,
+};
+
+const USER_RETURNING = USER_SAFE_SELECT;
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const AVAILABLE_EMPLOYEE_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  email: employees.email,
+};
+
+const USER_LIST_JOIN_SELECT = {
+  user: USER_SAFE_SELECT,
+  employee: {
+    id: employees.id,
+    fullName: employees.fullName,
+    employeeCode: employees.employeeCode,
+  },
+};
+
+const USER_DETAIL_JOIN_SELECT = {
+  user: USER_SAFE_SELECT,
+  employee: {
+    id: employees.id,
+    fullName: employees.fullName,
+    employeeCode: employees.employeeCode,
+    phone: employees.phone,
+    branchId: employees.branchId,
+    jobTitleId: employees.jobTitleId,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  jobTitle: {
+    id: jobTitles.id,
+    name: jobTitles.name,
+  },
+};
+
+const USER_ID_SELECT = {
+  id: users.id,
+};
+
+const EMPLOYEE_ID_SELECT = {
+  id: employees.id,
+};
+
+const EMPLOYEE_USER_SELECT = {
+  id: employees.id,
+  userId: employees.userId,
+};
+
+const USER_EXISTING_SELECT = {
+  id: users.id,
+  email: users.email,
+  employeeId: users.employeeId,
+};
+
+const USER_DELETE_SELECT = {
+  id: users.id,
+  employeeId: users.employeeId,
+};
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -47,12 +126,7 @@ app.get('/available-employees', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const result = await db
-    .select({
-      id: employees.id,
-      fullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      email: employees.email,
-    })
+    .select(AVAILABLE_EMPLOYEE_SELECT)
     .from(employees)
     .where(and(
       eq(employees.tenantId, tenantId),
@@ -88,37 +162,22 @@ app.get('/', async (c) => {
     conditions.push(eq(users.isActive, activeFilter === 'true'));
   }
 
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(and(...conditions));
+  const [[countResult], result] = await Promise.all([
+    db
+      .select(COUNT_SELECT)
+      .from(users)
+      .where(and(...conditions)),
+    db
+      .select(USER_LIST_JOIN_SELECT)
+      .from(users)
+      .leftJoin(employees, eq(users.employeeId, employees.id))
+      .where(and(...conditions))
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
 
   const total = Number(countResult?.count || 0);
-
-  const result = await db
-    .select({
-      user: {
-        id: users.id,
-        email: users.email,
-        role: users.role,
-        isActive: users.isActive,
-        emailVerified: users.emailVerified,
-        lastLoginAt: users.lastLoginAt,
-        createdAt: users.createdAt,
-        employeeId: users.employeeId,
-      },
-      employee: {
-        id: employees.id,
-        fullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-      },
-    })
-    .from(users)
-    .leftJoin(employees, eq(users.employeeId, employees.id))
-    .where(and(...conditions))
-    .orderBy(desc(users.createdAt))
-    .limit(limit)
-    .offset(offset);
 
   return c.json({
     success: true,
@@ -141,19 +200,11 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      user: users,
-      employee: {
-        id: employees.id,
-        fullName: employees.fullName,
-        employeeCode: employees.employeeCode,
-        phone: employees.phone,
-        branchId: employees.branchId,
-        jobTitleId: employees.jobTitleId,
-      },
-    })
+    .select(USER_DETAIL_JOIN_SELECT)
     .from(users)
     .leftJoin(employees, eq(users.employeeId, employees.id))
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
 
@@ -161,35 +212,14 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '使用者不存在' }, 404);
   }
 
-  // Get employee's branch and job title info if linked
-  let branch = null;
-  let jobTitle = null;
-  if (result.employee?.branchId) {
-    [branch] = await db
-      .select({ id: branches.id, name: branches.name })
-      .from(branches)
-      .where(eq(branches.id, result.employee.branchId))
-      .limit(1);
-  }
-  if (result.employee?.jobTitleId) {
-    [jobTitle] = await db
-      .select({ id: jobTitles.id, name: jobTitles.name })
-      .from(jobTitles)
-      .where(eq(jobTitles.id, result.employee.jobTitleId))
-      .limit(1);
-  }
-
-  // Exclude password hash
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = result.user;
-
   return c.json({
     success: true,
     data: {
-      ...userWithoutPassword,
-      employee: result.employee ? {
+      ...result.user,
+      employee: result.employee?.id ? {
         ...result.employee,
-        branch,
-        jobTitle,
+        branch: result.branch?.id ? result.branch : null,
+        jobTitle: result.jobTitle?.id ? result.jobTitle : null,
       } : null,
     },
   });
@@ -200,12 +230,28 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  // Check if email already exists
-  const [existingUser] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, data.email.toLowerCase()))
-    .limit(1);
+  // Check email and employee relations in parallel
+  const [[existingUser], employeeCheck, existingEmployeeUser] = await Promise.all([
+    db
+      .select(USER_ID_SELECT)
+      .from(users)
+      .where(eq(users.email, data.email.toLowerCase()))
+      .limit(1),
+    data.employeeId
+      ? db
+          .select(EMPLOYEE_ID_SELECT)
+          .from(employees)
+          .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
+          .limit(1)
+      : Promise.resolve([]),
+    data.employeeId
+      ? db
+          .select(USER_ID_SELECT)
+          .from(users)
+          .where(eq(users.employeeId, data.employeeId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
 
   if (existingUser) {
     return c.json({ success: false, error: '此電子郵件已被使用' }, 400);
@@ -213,24 +259,11 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
 
   // Verify employee belongs to tenant if provided
   if (data.employeeId) {
-    const [employee] = await db
-      .select()
-      .from(employees)
-      .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
-      .limit(1);
-
-    if (!employee) {
+    if (!employeeCheck[0]) {
       return c.json({ success: false, error: '員工不存在' }, 400);
     }
 
-    // Check if employee already has a user account
-    const [existingEmployeeUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.employeeId, data.employeeId))
-      .limit(1);
-
-    if (existingEmployeeUser) {
+    if (existingEmployeeUser[0]) {
       return c.json({ success: false, error: '此員工已有帳號' }, 400);
     }
   }
@@ -250,7 +283,7 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
     tenantId,
     isActive: true,
     emailVerified: false,
-  }).returning();
+  }).returning(USER_RETURNING);
 
   // Update employee with userId if linked
   if (data.employeeId) {
@@ -260,9 +293,7 @@ app.post('/', zValidator('json', createUserSchema), async (c) => {
     }).where(eq(employees.id, data.employeeId));
   }
 
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = newUser;
-
-  return c.json({ success: true, data: userWithoutPassword }, 201);
+  return c.json({ success: true, data: newUser }, 201);
 });
 
 // Update user
@@ -278,7 +309,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   }
 
   const [existingUser] = await db
-    .select()
+    .select(USER_EXISTING_SELECT)
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -290,7 +321,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
   // Check email uniqueness if changing
   if (data.email && data.email.toLowerCase() !== existingUser.email) {
     const [emailExists] = await db
-      .select()
+      .select(USER_ID_SELECT)
       .from(users)
       .where(eq(users.email, data.email.toLowerCase()))
       .limit(1);
@@ -313,7 +344,7 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
     // Link new employee if provided
     if (data.employeeId) {
       const [employee] = await db
-        .select()
+        .select(EMPLOYEE_USER_SELECT)
         .from(employees)
         .where(and(eq(employees.id, data.employeeId), eq(employees.tenantId, tenantId)))
         .limit(1);
@@ -344,16 +375,14 @@ app.patch('/:id', zValidator('json', updateUserSchema), async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(users.id, id))
-    .returning();
+    .returning(USER_RETURNING);
 
   // Invalidate sessions if user is deactivated
   if (data.isActive === false) {
     await lucia.invalidateUserSessions(id);
   }
 
-  const { passwordHash: _passwordHash, ...userWithoutPassword } = updatedUser;
-
-  return c.json({ success: true, data: userWithoutPassword });
+  return c.json({ success: true, data: updatedUser });
 });
 
 // Reset user password (admin action)
@@ -363,7 +392,7 @@ app.post('/:id/reset-password', zValidator('json', changePasswordSchema), async 
   const { newPassword } = c.req.valid('json');
 
   const [existingUser] = await db
-    .select()
+    .select(USER_ID_SELECT)
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -383,8 +412,6 @@ app.post('/:id/reset-password', zValidator('json', changePasswordSchema), async 
     passwordHash,
     updatedAt: new Date(),
   }).where(eq(users.id, id));
-
-  // Invalidate all sessions for security
   await lucia.invalidateUserSessions(id);
 
   return c.json({ success: true, message: '密碼已重設' });
@@ -402,7 +429,7 @@ app.delete('/:id', async (c) => {
   }
 
   const [existingUser] = await db
-    .select()
+    .select(USER_DELETE_SELECT)
     .from(users)
     .where(and(eq(users.id, id), eq(users.tenantId, tenantId)))
     .limit(1);
@@ -411,16 +438,16 @@ app.delete('/:id', async (c) => {
     return c.json({ success: false, error: '使用者不存在' }, 404);
   }
 
-  // Unlink employee if any
-  if (existingUser.employeeId) {
-    await db.update(employees).set({
-      userId: null,
-      updatedAt: new Date(),
-    }).where(eq(employees.id, existingUser.employeeId));
-  }
-
-  // Delete sessions first
-  await db.delete(sessions).where(eq(sessions.userId, id));
+  // Unlink employee and delete sessions in parallel
+  await Promise.all([
+    existingUser.employeeId
+      ? db.update(employees).set({
+          userId: null,
+          updatedAt: new Date(),
+        }).where(eq(employees.id, existingUser.employeeId))
+      : Promise.resolve(),
+    db.delete(sessions).where(eq(sessions.userId, id)),
+  ]);
 
   // Delete user
   await db.delete(users).where(eq(users.id, id));

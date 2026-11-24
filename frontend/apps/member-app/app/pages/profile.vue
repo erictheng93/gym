@@ -1,3 +1,45 @@
+<script lang="ts">
+const profileDateFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })
+
+const GENDER_MAP: Record<string, string> = {
+  MALE: '男',
+  FEMALE: '女',
+  OTHER: '其他',
+}
+
+const STATUS_INFO_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: '有效會員', class: 'status-active' },
+  EXPIRED: { label: '已到期', class: 'status-expired' },
+  SUSPENDED: { label: '已暫停', class: 'status-suspended' },
+  INACTIVE: { label: '未啟用', class: 'status-inactive' },
+}
+
+const ICON_COLOR_MAP: Record<string, string> = {
+  activity: 'pink',
+  history: 'blue',
+  payment: 'green',
+  bell: 'red',
+  alert: 'orange',
+  help: 'teal',
+}
+
+const menuItems = [
+  { icon: 'activity', label: '健身追蹤', description: '目標、體態、運動紀錄', path: '/fitness' },
+  { icon: 'history', label: '入場紀錄', description: '查看進出場記錄', path: '/profile/checkins' },
+  { icon: 'payment', label: '付款紀錄', description: '交易與帳單明細', path: '/profile/payments' },
+  { icon: 'bell', label: '通知設定', description: '管理推播與提醒', path: '/profile/notifications' },
+  { icon: 'alert', label: '問題回報', description: '回報問題與查看狀態', path: '/profile/issues' },
+  { icon: 'help', label: '聯絡客服', description: '問題諮詢與回報', path: '/profile/support' },
+]
+
+type ThemeModeType = 'light' | 'dark' | 'system'
+const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
+  { value: 'light', label: '淺色', icon: 'sun' },
+  { value: 'dark', label: '深色', icon: 'moon' },
+  { value: 'system', label: '系統', icon: 'auto' },
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 個人資料頁面
@@ -173,29 +215,19 @@ const handleLogout = async () => {
 // 格式化日期
 const formatDate = (dateStr: string | null | undefined) => {
   if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return profileDateFormatter.format(d)
 }
 
 // 格式化性別
 const formatGender = (gender: string | null | undefined) => {
-  const genderMap: Record<string, string> = {
-    MALE: '男',
-    FEMALE: '女',
-    OTHER: '其他',
-  }
-  return gender ? genderMap[gender] || '-' : '-'
+  return gender ? GENDER_MAP[gender] || '-' : '-'
 }
 
 // 格式化會籍狀態
 const getStatusInfo = (status: string) => {
-  const statusMap: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: '有效會員', class: 'status-active' },
-    EXPIRED: { label: '已到期', class: 'status-expired' },
-    SUSPENDED: { label: '已暫停', class: 'status-suspended' },
-    INACTIVE: { label: '未啟用', class: 'status-inactive' },
-  }
-  return statusMap[status] || { label: status, class: '' }
+  return STATUS_INFO_MAP[status] || { label: status, class: '' }
 }
 
 // 計算會員年資
@@ -213,24 +245,8 @@ const membershipDuration = computed(() => {
   return months > 0 ? `${months} 個月` : '不到 1 個月'
 })
 
-const menuItems = [
-  { icon: 'activity', label: '健身追蹤', description: '目標、體態、運動紀錄', path: '/fitness' },
-  { icon: 'history', label: '入場紀錄', description: '查看進出場記錄', path: '/profile/checkins' },
-  { icon: 'payment', label: '付款紀錄', description: '交易與帳單明細', path: '/profile/payments' },
-  { icon: 'bell', label: '通知設定', description: '管理推播與提醒', path: '/profile/notifications' },
-  { icon: 'alert', label: '問題回報', description: '回報問題與查看狀態', path: '/profile/issues' },
-  { icon: 'help', label: '聯絡客服', description: '問題諮詢與回報', path: '/profile/support' },
-]
-
 // Theme settings
 const { themeMode, setTheme } = useTheme()
-
-type ThemeModeType = 'light' | 'dark' | 'system'
-const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
-  { value: 'light', label: '淺色', icon: 'sun' },
-  { value: 'dark', label: '深色', icon: 'moon' },
-  { value: 'system', label: '系統', icon: 'auto' },
-]
 
 const handleThemeChange = (mode: ThemeModeType) => {
   setTheme(mode)
@@ -238,15 +254,7 @@ const handleThemeChange = (mode: ThemeModeType) => {
 
 // Icon color mapping for iOS style
 const getIconColor = (icon: string) => {
-  const colorMap: Record<string, string> = {
-    activity: 'pink',
-    history: 'blue',
-    payment: 'green',
-    bell: 'red',
-    alert: 'orange',
-    help: 'teal',
-  }
-  return colorMap[icon] || 'gray'
+  return ICON_COLOR_MAP[icon] || 'gray'
 }
 
 // Pull-to-refresh handlers

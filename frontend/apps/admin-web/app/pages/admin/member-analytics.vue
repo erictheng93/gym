@@ -1,3 +1,28 @@
+<script lang="ts">
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: '活躍',
+  INACTIVE: '未啟用',
+  SUSPENDED: '暫停',
+  EXPIRED: '已過期',
+}
+
+const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  TIME_BASED: '期限制',
+  COUNT_BASED: '次數制',
+}
+
+const GENDER_LABELS: Record<string, string> = {
+  M: '男性',
+  F: '女性',
+  OTHER: '其他',
+}
+
+const analyticsDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+})
+</script>
+
 <script setup lang="ts">
 /**
  * Member Analytics Page
@@ -84,8 +109,19 @@ const loadAnalytics = async () => {
   const days = getDays()
 
   try {
-    // Fetch member demographics (status, gender, age distribution)
-    const demographicsResponse = await apiCall(`/api/admin/analytics/member-demographics?days=${days}`)
+    // Fetch all analytics and reports concurrently
+    const [
+      demographicsResponse,
+      contractResponse,
+      revenueResponse,
+      growthResponse,
+    ] = await Promise.all([
+      apiCall(`/api/admin/analytics/member-demographics?days=${days}`),
+      apiCall(`/api/admin/analytics/contract-analytics?days=${days}`),
+      apiCall(`/api/admin/analytics/revenue-breakdown?days=${days}`),
+      apiCall(`/api/admin/reports/member-growth?days=${days}`),
+    ])
+
     if (demographicsResponse.success) {
       const data = demographicsResponse.data
 
@@ -98,16 +134,21 @@ const loadAnalytics = async () => {
       // Age distribution
       ageDistributionData.value = data.age_distribution || []
 
-      // Summary stats
-      const total = memberStatusData.value.reduce((sum: number, s: any) => sum + (parseInt(s.count) || 0), 0)
-      const active = memberStatusData.value.find((s: any) => s.status === 'ACTIVE')?.count || 0
+      // Summary stats (single pass)
+      let total = 0
+      let active = 0
+      for (const s of memberStatusData.value) {
+        const count = parseInt(s.count) || 0
+        total += count
+        if (s.status === 'ACTIVE') {
+          active = count
+        }
+      }
       summary.value.totalMembers = total
-      summary.value.activeMembers = parseInt(active)
-      summary.value.activeRate = total > 0 ? parseFloat(((parseInt(active) / total) * 100).toFixed(1)) : 0
+      summary.value.activeMembers = active
+      summary.value.activeRate = total > 0 ? parseFloat(((active / total) * 100).toFixed(1)) : 0
     }
 
-    // Fetch contract analytics
-    const contractResponse = await apiCall(`/api/admin/analytics/contract-analytics?days=${days}`)
     if (contractResponse.success) {
       const data = contractResponse.data
 
@@ -128,8 +169,6 @@ const loadAnalytics = async () => {
       summary.value.churnRate = parseFloat((100 - renewalRate).toFixed(1))
     }
 
-    // Fetch revenue breakdown for trend
-    const revenueResponse = await apiCall(`/api/admin/analytics/revenue-breakdown?days=${days}`)
     if (revenueResponse.success) {
       const data = revenueResponse.data
 
@@ -140,8 +179,6 @@ const loadAnalytics = async () => {
       }))
     }
 
-    // Fetch member growth from reports
-    const growthResponse = await apiCall(`/api/admin/reports/member-growth?days=${days}`)
     if (growthResponse.success) {
       memberGrowthData.value = growthResponse.data.growth || []
       summary.value.newMembers = growthResponse.data.newMembers || 0
@@ -337,7 +374,7 @@ const exportData = async (format: 'csv' | 'pdf' = 'csv') => {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `member-analytics-${new Date().toISOString().split('T')[0]}.${format}`
+      a.download = `member-analytics-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -351,38 +388,22 @@ const exportData = async (format: 'csv' | 'pdf' = 'csv') => {
 }
 
 const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    ACTIVE: '活躍',
-    INACTIVE: '未啟用',
-    SUSPENDED: '暫停',
-    EXPIRED: '已過期'
-  }
-  return labels[status] || status
+  return STATUS_LABELS[status] || status
 }
 
 const getContractTypeLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    TIME_BASED: '期限制',
-    COUNT_BASED: '次數制'
-  }
-  return labels[type] || type
+  return CONTRACT_TYPE_LABELS[type] || type
 }
 
 const getGenderLabel = (gender: string) => {
-  const labels: Record<string, string> = {
-    M: '男性',
-    F: '女性',
-    OTHER: '其他'
-  }
-  return labels[gender] || gender
+  return GENDER_LABELS[gender] || gender
 }
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+  return analyticsDateFormatter.format(d)
 }
 
 watch(timeRange, () => {

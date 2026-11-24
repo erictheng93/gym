@@ -80,7 +80,7 @@ export const useAuthMethods = () => {
       return {
         success: response.success,
         message: response.message,
-        otp: response.data?.otp, // For development testing
+        otp: response.data?.otp || (response as any)._devCode, // For development testing
       }
     } catch (error: unknown) {
       return {
@@ -147,7 +147,7 @@ export const useAuthMethods = () => {
     try {
       const response = await $fetch<EmailLoginResponse>(`${apiUrl}/api/member/auth/login`, {
         method: 'POST',
-        body: { email, password },
+        body: { email, account: email, password },
       })
 
       if (response.success && response.data) {

@@ -134,20 +134,8 @@ export default defineNuxtConfig({
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
       runtimeCaching: [
         {
-          // Coach API 請求 - Network First with timeout for offline support
-          urlPattern: /\/api\/coach\/.*/i,
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'coach-api-cache',
-            expiration: {
-              maxEntries: 100,
-              maxAgeSeconds: 60 * 60 * 24
-            },
-            cacheableResponse: {
-              statuses: [0, 200]
-            },
-            networkTimeoutSeconds: 5,
-          }
+          urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+          handler: 'NetworkOnly',
         },
         {
           // 圖片 - Cache First
@@ -206,7 +194,7 @@ export default defineNuxtConfig({
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: blob: https:",
-          "connect-src 'self' http://localhost:* https://*.sentry.io ws://localhost:* wss://localhost:*",
+          "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* https://*.sentry.io" + (process.env.API_BASE_URL ? ` ${process.env.API_BASE_URL} ${process.env.API_BASE_URL.replace(/^http/, 'ws')}` : ''),
           "manifest-src 'self'",
           "worker-src 'self' blob:",
           "object-src 'none'",
@@ -234,7 +222,7 @@ export default defineNuxtConfig({
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data: blob: https:",
-            "connect-src 'self' http://localhost:* https://*.sentry.io ws://localhost:* wss://localhost:*",
+            "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* https://*.sentry.io" + (process.env.API_BASE_URL ? ` ${process.env.API_BASE_URL} ${process.env.API_BASE_URL.replace(/^http/, 'ws')}` : ''),
             "manifest-src 'self'",
             "worker-src 'self' blob:",
             "object-src 'none'",
@@ -243,6 +231,46 @@ export default defineNuxtConfig({
           ].join('; ')
         }
       }
+    }
+  },
+
+  // Vite configuration with chunk splitting
+  vite: {
+    server: {
+      fs: {
+        strict: false,
+        allow: ['..']
+      }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            // Core Vue/Nuxt - loaded on every page
+            if (id.includes('node_modules/vue') ||
+                id.includes('node_modules/@vue') ||
+                id.includes('node_modules/nuxt')) {
+              return 'vue-core'
+            }
+
+            // Sentry - Error tracking, can be loaded async
+            if (id.includes('node_modules/@sentry')) {
+              return 'sentry-vendor'
+            }
+
+            // Zod - Schema validation
+            if (id.includes('node_modules/zod')) {
+              return 'zod-vendor'
+            }
+
+            // QR scanning
+            if (id.includes('node_modules/jsqr')) {
+              return 'qr-vendor'
+            }
+          }
+        }
+      },
+      chunkSizeWarningLimit: 550
     }
   }
 })

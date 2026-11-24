@@ -308,8 +308,8 @@ const config = useRuntimeConfig()
 const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 
 const dateRange = ref({
-  start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-  end: new Date().toISOString().split('T')[0],
+  start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  end: new Date().toISOString().slice(0, 10),
 })
 
 const attendances = ref<Attendance[]>([])
@@ -318,28 +318,58 @@ const filterEmployee = ref('')
 const filterStatus = ref('')
 const rankingType = ref<'late' | 'earlyLeave' | 'overtime'>('late')
 
-const stats = computed(() => {
-  const lateRecords = attendances.value.filter(a => a.late_minutes > 0)
-  const earlyLeaveRecords = attendances.value.filter(a => a.early_leave_minutes > 0)
-  const overtimeRecords = attendances.value.filter(a => a.overtime_hours > 0)
+const employeeMap = computed(() => {
+  const map = new Map<string, Employee>()
+  for (const emp of employees.value) {
+    map.set(emp.id, emp)
+  }
+  return map
+})
 
+const stats = computed(() => {
+  const list = attendances.value
+  let lateCount = 0
+  let lateTotalMinutes = 0
+  let earlyLeaveCount = 0
+  let earlyLeaveTotalMinutes = 0
+  let overtimeCount = 0
+  let overtimeTotalHours = 0
+  let presentCount = 0
+
+  for (const a of list) {
+    if (a.late_minutes > 0) {
+      lateCount++
+      lateTotalMinutes += a.late_minutes
+    }
+    if (a.early_leave_minutes > 0) {
+      earlyLeaveCount++
+      earlyLeaveTotalMinutes += a.early_leave_minutes
+    }
+    if (a.overtime_hours > 0) {
+      overtimeCount++
+      overtimeTotalHours += Number(a.overtime_hours)
+    }
+    if (a.attendance_status === 'PRESENT') {
+      presentCount++
+    }
+  }
+
+  const totalDays = list.length
   return {
-    lateCount: lateRecords.length,
-    lateTotalMinutes: lateRecords.reduce((sum, a) => sum + a.late_minutes, 0),
+    lateCount,
+    lateTotalMinutes,
     lateTrend: 0, // Calculate based on historical data
 
-    earlyLeaveCount: earlyLeaveRecords.length,
-    earlyLeaveTotalMinutes: earlyLeaveRecords.reduce((sum, a) => sum + a.early_leave_minutes, 0),
+    earlyLeaveCount,
+    earlyLeaveTotalMinutes,
     earlyLeaveTrend: 0,
 
-    overtimeCount: overtimeRecords.length,
-    overtimeTotalHours: overtimeRecords.reduce((sum, a) => sum + Number(a.overtime_hours), 0),
+    overtimeCount,
+    overtimeTotalHours,
     overtimeTrend: 0,
 
-    totalDays: attendances.value.length,
-    attendanceRate: attendances.value.length > 0
-      ? Math.round((attendances.value.filter(a => a.attendance_status === 'PRESENT').length / attendances.value.length) * 100)
-      : 0,
+    totalDays,
+    attendanceRate: totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 0,
   }
 })
 
@@ -379,7 +409,7 @@ const employeeRankings = computed(() => {
 
   attendances.value.forEach(attendance => {
     const empId = attendance.employee_id
-    const employee = employees.value.find(e => e.id === empId)
+    const employee = employeeMap.value.get(empId)
     if (!employee) return
 
     if (!rankingsMap.has(empId)) {
@@ -442,7 +472,7 @@ function formatTime(timeStr: string): string {
 }
 
 function getEmployeeName(employeeId: string): string {
-  const employee = employees.value.find(e => e.id === employeeId)
+  const employee = employeeMap.value.get(employeeId)
   return employee?.name || '未知'
 }
 
@@ -498,8 +528,7 @@ async function fetchReports() {
 }
 
 onMounted(() => {
-  fetchEmployees()
-  fetchReports()
+  Promise.all([fetchEmployees(), fetchReports()])
 })
 </script>
 

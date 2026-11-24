@@ -5,6 +5,7 @@ import { db, membershipPlans, branches, PLAN_TYPE } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -26,6 +27,40 @@ const createPlanSchema = z.object({
 });
 
 const updatePlanSchema = createPlanSchema.partial();
+
+const MEMBERSHIP_PLAN_SELECT = {
+  id: membershipPlans.id,
+  name: membershipPlans.name,
+  code: membershipPlans.code,
+  planType: membershipPlans.planType,
+  description: membershipPlans.description,
+  durationMonths: membershipPlans.durationMonths,
+  classCounts: membershipPlans.classCounts,
+  price: membershipPlans.price,
+  allowPause: membershipPlans.allowPause,
+  maxPauseDays: membershipPlans.maxPauseDays,
+  allowTransfer: membershipPlans.allowTransfer,
+  isActive: membershipPlans.isActive,
+  sort: membershipPlans.sort,
+  createdAt: membershipPlans.createdAt,
+  updatedAt: membershipPlans.updatedAt,
+  tenantId: membershipPlans.tenantId,
+  branchId: membershipPlans.branchId,
+};
+
+const MEMBERSHIP_PLAN_RETURNING = MEMBERSHIP_PLAN_SELECT;
+
+const MEMBERSHIP_PLAN_JOIN_SELECT = {
+  plan: MEMBERSHIP_PLAN_SELECT,
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const MEMBERSHIP_PLAN_ID_RETURNING = {
+  id: membershipPlans.id,
+};
 
 // List membership plans
 app.get('/', async (c) => {
@@ -49,13 +84,7 @@ app.get('/', async (c) => {
   }
 
   const result = await db
-    .select({
-      plan: membershipPlans,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(MEMBERSHIP_PLAN_JOIN_SELECT)
     .from(membershipPlans)
     .leftJoin(branches, eq(membershipPlans.branchId, branches.id))
     .where(and(...conditions))
@@ -76,13 +105,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      plan: membershipPlans,
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(MEMBERSHIP_PLAN_JOIN_SELECT)
     .from(membershipPlans)
     .leftJoin(branches, eq(membershipPlans.branchId, branches.id))
     .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
@@ -108,13 +131,8 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createPlanSche
 
   // Validate branch if provided
   if (data.branchId) {
-    const [branch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-      .limit(1);
-
-    if (!branch) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
       return c.json({ success: false, error: '無效的分店' }, 400);
     }
   }
@@ -132,7 +150,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createPlanSche
     ...data,
     price: String(data.price),
     tenantId,
-  }).returning();
+  }).returning(MEMBERSHIP_PLAN_RETURNING);
 
   return c.json({
     success: true,
@@ -146,14 +164,12 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(membershipPlans)
-    .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
-    .limit(1);
-
-  if (!existing) {
-    return c.json({ success: false, error: '方案不存在' }, 404);
+  // Validate branch if updated
+  if (data.branchId) {
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(data.branchId)) {
+      return c.json({ success: false, error: '無效的分店' }, 400);
+    }
   }
 
   const updateData: Record<string, unknown> = {
@@ -165,7 +181,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updatePlan
     updateData.price = String(data.price);
   }
 
-  const [updated] = await db.update(membershipPlans).set(updateData).where(eq(membershipPlans.id, id)).returning();
+  const [updated] = await db
+    .update(membershipPlans)
+    .set(updateData)
+    .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
+    .returning(MEMBERSHIP_PLAN_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '方案不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -178,21 +202,19 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(membershipPlans)
+  // Soft delete atomically
+  const [deleted] = await db
+    .update(membershipPlans)
+    .set({
+      isActive: false,
+      updatedAt: new Date(),
+    })
     .where(and(eq(membershipPlans.id, id), eq(membershipPlans.tenantId, tenantId)))
-    .limit(1);
+    .returning(MEMBERSHIP_PLAN_ID_RETURNING);
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '方案不存在' }, 404);
   }
-
-  // Soft delete by setting isActive to false
-  await db.update(membershipPlans).set({
-    isActive: false,
-    updatedAt: new Date(),
-  }).where(eq(membershipPlans.id, id));
 
   return c.json({ success: true, message: '方案已停用' });
 });

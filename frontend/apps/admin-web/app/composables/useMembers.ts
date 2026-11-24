@@ -4,6 +4,9 @@ import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 import { useFetch } from '~/composables/core/useFetch'
 
+const inFlightMembersMap = new Map<string, Promise<void>>()
+const inFlightMemberDetailMap = new Map<string, Promise<Member | null>>()
+
 export const useMembers = () => {
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
@@ -19,45 +22,66 @@ export const useMembers = () => {
     search?: string
     branchId?: string
     status?: string
-  }) => {
-    isLoading.value = true
-    const { page = 1, limit = 20, search, branchId, status } = options || {}
-
-    try {
-      const result = await readItems<Member>('members', {
-        page,
-        limit,
-        search,
-        filter: {
-          branchId,
-          status
-        },
-        sort: 'dateCreated',
-        sortOrder: 'desc'
-      })
-
-      members.value = result.data
-      totalCount.value = result.total
-    } catch (error) {
-      handleError(error, {
-        context: 'useMembers.fetchMembers',
-        customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
-      })
-    } finally {
-      isLoading.value = false
+  }, force = false) => {
+    const key = JSON.stringify(options || {})
+    if (!force && inFlightMembersMap.has(key)) {
+      return inFlightMembersMap.get(key)
     }
+
+    const promise = (async () => {
+      isLoading.value = true
+      const { page = 1, limit = 20, search, branchId, status } = options || {}
+
+      try {
+        const result = await readItems<Member>('members', {
+          page,
+          limit,
+          search,
+          filter: {
+            branchId,
+            status
+          },
+          sort: 'dateCreated',
+          sortOrder: 'desc'
+        })
+
+        members.value = result.data
+        totalCount.value = result.total
+      } catch (error) {
+        handleError(error, {
+          context: 'useMembers.fetchMembers',
+          customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
+        })
+      } finally {
+        isLoading.value = false
+        inFlightMembersMap.delete(key)
+      }
+    })()
+
+    inFlightMembersMap.set(key, promise)
+    return promise
   }
 
   const getMember = async (id: string): Promise<Member | null> => {
-    try {
-      return await readItem<Member>('members', id)
-    } catch (error) {
-      handleError(error, {
-        context: 'useMembers.getMember',
-        customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
-      })
-      return null
-    }
+    const existing = inFlightMemberDetailMap.get(id)
+    if (existing) return existing
+
+    const promise = (async () => {
+      try {
+        return await readItem<Member>('members', id)
+      } catch (error) {
+        handleError(error, {
+          context: 'useMembers.getMember',
+          customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightMemberDetailMap.delete(id)
+      }
+    })()
+
+    inFlightMemberDetailMap.set(id, promise)
+    return promise
   }
 
   const createMember = async (member: Partial<Member>): Promise<Member | null> => {

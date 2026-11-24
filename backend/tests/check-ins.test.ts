@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db, contracts, members, membershipPlans } from '../src/db/index.js';
-import { eq } from 'drizzle-orm';
+import { db, checkIns, contracts, members, membershipPlans } from '../src/db/index.js';
+import { eq, inArray } from 'drizzle-orm';
 import {
   createTestFixtures,
   cleanupTestFixtures,
   authRequest,
+  memberAuthRequest,
   getAuthToken,
   TEST_MEMBER_ID,
   TEST_BRANCH_ID,
@@ -22,6 +23,21 @@ describe('Check-ins API', () => {
 
   afterAll(async () => {
     await cleanupTestFixtures();
+  });
+
+  it('counts recent and older check-ins in the member statistics', async () => {
+    const member = { memberId: TEST_MEMBER_ID, branchId: TEST_BRANCH_ID };
+    const rows = await db.insert(checkIns).values([
+      { ...member, checkInTime: new Date() },
+      { ...member, checkInTime: new Date(Date.now() - 60 * 86400000) },
+    ]).returning({ id: checkIns.id });
+    try {
+      const response = await memberAuthRequest('/api/member/check-in/stats');
+      expect(response.status).toBe(200);
+      expect((await response.json()).data).toMatchObject({ total: 2, thisMonth: 1, last30Days: 1 });
+    } finally {
+      await db.delete(checkIns).where(inArray(checkIns.id, rows.map(row => row.id)));
+    }
   });
 
   describe('GET /api/check-ins', () => {
@@ -118,7 +134,7 @@ describe('Check-ins API', () => {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          memberId: '00000000-0000-0000-0000-999999999999',
+          memberId: '00000000-0000-4000-8000-999999999999',
           branchId: TEST_BRANCH_ID,
         }),
       });

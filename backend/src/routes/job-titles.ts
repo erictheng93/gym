@@ -22,12 +22,30 @@ const createJobTitleSchema = z.object({
 
 const updateJobTitleSchema = createJobTitleSchema.partial();
 
+const JOB_TITLE_SELECT = {
+  id: jobTitles.id,
+  createdAt: jobTitles.createdAt,
+  name: jobTitles.name,
+  code: jobTitles.code,
+  description: jobTitles.description,
+  level: jobTitles.level,
+  sort: jobTitles.sort,
+  permissionsConfig: jobTitles.permissionsConfig,
+  tenantId: jobTitles.tenantId,
+};
+
+const JOB_TITLE_RETURNING = JOB_TITLE_SELECT;
+
+const JOB_TITLE_ID_RETURNING = {
+  id: jobTitles.id,
+};
+
 // List job titles
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const result = await db
-    .select()
+    .select(JOB_TITLE_SELECT)
     .from(jobTitles)
     .where(eq(jobTitles.tenantId, tenantId))
     .orderBy(jobTitles.name);
@@ -44,7 +62,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [jobTitle] = await db
-    .select()
+    .select(JOB_TITLE_SELECT)
     .from(jobTitles)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
     .limit(1);
@@ -67,7 +85,7 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createJobTitle
   const [newJobTitle] = await db.insert(jobTitles).values({
     ...data,
     tenantId,
-  }).returning();
+  }).returning(JOB_TITLE_RETURNING);
 
   return c.json({
     success: true,
@@ -81,19 +99,15 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobT
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [existing] = await db
-    .select()
-    .from(jobTitles)
+  const [updated] = await db
+    .update(jobTitles)
+    .set(data)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .limit(1);
+    .returning(JOB_TITLE_RETURNING);
 
-  if (!existing) {
+  if (!updated) {
     return c.json({ success: false, error: '職稱不存在' }, 404);
   }
-
-  const [updated] = await db.update(jobTitles).set({
-    ...data,
-  }).where(eq(jobTitles.id, id)).returning();
 
   return c.json({
     success: true,
@@ -106,17 +120,14 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [existing] = await db
-    .select()
-    .from(jobTitles)
+  const [deleted] = await db
+    .delete(jobTitles)
     .where(and(eq(jobTitles.id, id), eq(jobTitles.tenantId, tenantId)))
-    .limit(1);
+    .returning(JOB_TITLE_ID_RETURNING);
 
-  if (!existing) {
+  if (!deleted) {
     return c.json({ success: false, error: '職稱不存在' }, 404);
   }
-
-  await db.delete(jobTitles).where(eq(jobTitles.id, id));
 
   return c.json({ success: true, message: '職稱已刪除' });
 });

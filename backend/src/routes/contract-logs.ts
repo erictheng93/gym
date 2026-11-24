@@ -2,9 +2,10 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, contractLogs, contracts, members, branches, employees, LOG_TYPE } from '../db/index.js';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, count, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -22,6 +23,64 @@ const createLogSchema = z.object({
   targetMemberId: z.string().uuid().optional(),
 });
 
+const CONTRACT_LOG_SELECT = {
+  id: contractLogs.id,
+  contractId: contractLogs.contractId,
+  logType: contractLogs.logType,
+  startDate: contractLogs.startDate,
+  endDate: contractLogs.endDate,
+  daysAffected: contractLogs.daysAffected,
+  reason: contractLogs.reason,
+  createdByEmployee: contractLogs.createdByEmployee,
+  branchId: contractLogs.branchId,
+  originalMemberId: contractLogs.originalMemberId,
+  targetMemberId: contractLogs.targetMemberId,
+  status: contractLogs.status,
+  dateCreated: contractLogs.dateCreated,
+  tenantId: contractLogs.tenantId,
+};
+
+const CONTRACT_LOG_RETURNING = CONTRACT_LOG_SELECT;
+
+const CONTRACT_LOG_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+};
+
+const CONTRACT_LOG_MEMBER_SELECT = {
+  id: members.id,
+  fullName: members.fullName,
+};
+
+const CONTRACT_LOG_EMPLOYEE_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+};
+
+const CONTRACT_LOG_WITH_RELATIONS_SELECT = {
+  log: CONTRACT_LOG_SELECT,
+  contract: CONTRACT_LOG_CONTRACT_SELECT,
+  member: CONTRACT_LOG_MEMBER_SELECT,
+  createdBy: CONTRACT_LOG_EMPLOYEE_SELECT,
+};
+
+const CONTRACT_LOG_WITH_CREATOR_SELECT = {
+  log: CONTRACT_LOG_SELECT,
+  createdBy: CONTRACT_LOG_EMPLOYEE_SELECT,
+};
+
+const CONTRACT_BRANCH_ID_SELECT = {
+  branchId: contracts.branchId,
+};
+
+const CONTRACT_ID_SELECT = {
+  id: contracts.id,
+};
+
+const COUNT_SELECT = {
+  count: count(),
+};
+
 // List contract logs
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -30,6 +89,20 @@ app.get('/', async (c) => {
   const page = Number(c.req.query('page')) || 1;
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
+
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      pagination: {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      },
+    });
+  }
 
   const conditions = [];
 
@@ -42,50 +115,41 @@ app.get('/', async (c) => {
   }
 
   // Get logs with contract and member info
-  const result = await db
-    .select({
-      log: contractLogs,
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(contractLogs)
-    .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
-    .innerJoin(members, eq(contracts.memberId, members.id))
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
-    .where(and(eq(branches.tenantId, tenantId), ...conditions))
-    .orderBy(desc(contractLogs.dateCreated))
-    .limit(limit)
-    .offset(offset);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(contractLogs)
-    .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(and(eq(branches.tenantId, tenantId), ...conditions));
+  const branchCondition = branchIds.length === 1 ? eq(contracts.branchId, branchIds[0]) : inArray(contracts.branchId, branchIds);
+  const [result, [countResult]] = await Promise.all([
+    db
+      .select(CONTRACT_LOG_WITH_RELATIONS_SELECT)
+      .from(contractLogs)
+      .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
+      .innerJoin(members, eq(contracts.memberId, members.id))
+      .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+      .where(and(branchCondition, ...conditions))
+      .orderBy(desc(contractLogs.dateCreated))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select(COUNT_SELECT)
+      .from(contractLogs)
+      .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
+      .where(and(branchCondition, ...conditions)),
+  ]);
 
   const total = Number(countResult?.count || 0);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.log,
       contract: r.contract,
       member: r.member,
       createdBy: r.createdBy,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
     pagination: {
       total,
       page,
@@ -100,30 +164,25 @@ app.get('/contract/:contractId', async (c) => {
   const contractId = c.req.param('contractId');
   const tenantId = c.get('tenantId')!;
 
-  // Verify contract belongs to tenant
-  const [contract] = await db
-    .select()
-    .from(contracts)
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(and(eq(contracts.id, contractId), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  // Concurrently fetch branch IDs, logs, and verify contract tenant ownership
+  const [branchIds, logs, [contract]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select(CONTRACT_LOG_WITH_CREATOR_SELECT)
+      .from(contractLogs)
+      .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
+      .where(eq(contractLogs.contractId, contractId))
+      .orderBy(desc(contractLogs.dateCreated)),
+    db
+      .select(CONTRACT_BRANCH_ID_SELECT)
+      .from(contracts)
+      .where(eq(contracts.id, contractId))
+      .limit(1),
+  ]);
 
-  if (!contract) {
+  if (!contract || !contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
   }
-
-  const logs = await db
-    .select({
-      log: contractLogs,
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(contractLogs)
-    .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
-    .where(eq(contractLogs.contractId, contractId))
-    .orderBy(desc(contractLogs.dateCreated));
 
   return c.json({
     success: true,
@@ -141,11 +200,16 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
   const data = c.req.valid('json');
 
   // Verify contract belongs to tenant
+  const tenantBranchIds = await getTenantBranchIds(tenantId);
+  if (tenantBranchIds.length === 0) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
+
+  const branchCondition = tenantBranchIds.length === 1 ? eq(contracts.branchId, tenantBranchIds[0]) : inArray(contracts.branchId, tenantBranchIds);
   const [contract] = await db
-    .select()
+    .select(CONTRACT_ID_SELECT)
     .from(contracts)
-    .innerJoin(branches, eq(contracts.branchId, branches.id))
-    .where(and(eq(contracts.id, data.contractId), eq(branches.tenantId, tenantId)))
+    .where(and(eq(contracts.id, data.contractId), branchCondition))
     .limit(1);
 
   if (!contract) {
@@ -163,7 +227,7 @@ app.post('/', zValidator('json', createLogSchema), async (c) => {
     targetMemberId: data.targetMemberId,
     createdByEmployee: user.employeeId,
     tenantId,
-  }).returning();
+  }).returning(CONTRACT_LOG_RETURNING);
 
   return c.json({
     success: true,
@@ -177,21 +241,7 @@ app.get('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const [result] = await db
-    .select({
-      log: contractLogs,
-      contract: {
-        id: contracts.id,
-        contractNo: contracts.contractNo,
-      },
-      member: {
-        id: members.id,
-        fullName: members.fullName,
-      },
-      createdBy: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
+    .select(CONTRACT_LOG_WITH_RELATIONS_SELECT)
     .from(contractLogs)
     .innerJoin(contracts, eq(contractLogs.contractId, contracts.id))
     .innerJoin(members, eq(contracts.memberId, members.id))

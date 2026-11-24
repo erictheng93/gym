@@ -13,6 +13,70 @@ import type { CoachVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: CoachVariables }>();
 
+const LESSON_PLAN_SELECT = {
+  id: lessonPlans.id,
+  coachId: lessonPlans.coachId,
+  title: lessonPlans.title,
+  objectives: lessonPlans.objectives,
+  warmupExercises: lessonPlans.warmupExercises,
+  mainExercises: lessonPlans.mainExercises,
+  cooldownExercises: lessonPlans.cooldownExercises,
+  notes: lessonPlans.notes,
+  isTemplate: lessonPlans.isTemplate,
+  templateCategory: lessonPlans.templateCategory,
+  difficulty: lessonPlans.difficulty,
+  durationMinutes: lessonPlans.durationMinutes,
+  sessionId: lessonPlans.sessionId,
+  createdAt: lessonPlans.createdAt,
+  updatedAt: lessonPlans.updatedAt,
+  tenantId: lessonPlans.tenantId,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const SESSION_INSTRUCTOR_SELECT = {
+  instructorId: classSessions.instructorId,
+};
+
+const PLAN_RETURNING_SELECT = {
+  id: lessonPlans.id,
+  title: lessonPlans.title,
+};
+
+const ID_RETURNING_SELECT = {
+  id: lessonPlans.id,
+};
+
+const TEMPLATE_LIST_SELECT = {
+  id: lessonPlans.id,
+  title: lessonPlans.title,
+  objectives: lessonPlans.objectives,
+  warmupExercises: lessonPlans.warmupExercises,
+  mainExercises: lessonPlans.mainExercises,
+  cooldownExercises: lessonPlans.cooldownExercises,
+  notes: lessonPlans.notes,
+  isTemplate: lessonPlans.isTemplate,
+  templateCategory: lessonPlans.templateCategory,
+  difficulty: lessonPlans.difficulty,
+  durationMinutes: lessonPlans.durationMinutes,
+  coachId: lessonPlans.coachId,
+  createdAt: lessonPlans.createdAt,
+};
+
+const TEMPLATE_CATEGORY_SELECT = {
+  category: lessonPlans.templateCategory,
+};
+
+const LESSON_PLAN_WITH_SESSION_SELECT = {
+  plan: LESSON_PLAN_SELECT,
+  sessionId: classSessions.id,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  sessionStatus: classSessions.sessionStatus,
+};
+
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
@@ -95,20 +159,20 @@ app.get('/', async (c) => {
     );
   }
 
-  // Get plans
-  const plansData = await db
-    .select()
-    .from(lessonPlans)
-    .where(and(...conditions))
-    .orderBy(desc(lessonPlans.createdAt))
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(lessonPlans)
-    .where(and(...conditions));
+  // Get plans and total count in parallel
+  const [plansData, [countResult]] = await Promise.all([
+    db
+      .select(LESSON_PLAN_SELECT)
+      .from(lessonPlans)
+      .where(and(...conditions))
+      .orderBy(desc(lessonPlans.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select(COUNT_SELECT)
+      .from(lessonPlans)
+      .where(and(...conditions)),
+  ]);
 
   return c.json({
     success: true,
@@ -167,28 +231,28 @@ app.get('/templates', async (c) => {
     conditions.push(eq(lessonPlans.difficulty, difficulty));
   }
 
-  // Get templates
-  const templatesData = await db
-    .select()
-    .from(lessonPlans)
-    .where(and(...conditions))
-    .orderBy(lessonPlans.templateCategory, lessonPlans.title)
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get unique categories
-  const categoriesResult = await db
-    .selectDistinct({ category: lessonPlans.templateCategory })
-    .from(lessonPlans)
-    .where(
-      and(
-        eq(lessonPlans.isTemplate, true),
-        or(
-          eq(lessonPlans.coachId, coach.id),
-          eq(lessonPlans.tenantId, coach.tenantId)
-        )!
-      )
-    );
+  // Get templates and unique categories in parallel
+  const [templatesData, categoriesResult] = await Promise.all([
+    db
+      .select(TEMPLATE_LIST_SELECT)
+      .from(lessonPlans)
+      .where(and(...conditions))
+      .orderBy(lessonPlans.templateCategory, lessonPlans.title)
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .selectDistinct(TEMPLATE_CATEGORY_SELECT)
+      .from(lessonPlans)
+      .where(
+        and(
+          eq(lessonPlans.isTemplate, true),
+          or(
+            eq(lessonPlans.coachId, coach.id),
+            eq(lessonPlans.tenantId, coach.tenantId)
+          )!
+        )
+      ),
+  ]);
 
   const categories = categoriesResult
     .map(r => r.category)
@@ -223,10 +287,11 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Get plan (own or shared template)
-  const [plan] = await db
-    .select()
+  // Get plan (own or shared template) and linked session in a single query
+  const [result] = await db
+    .select(LESSON_PLAN_WITH_SESSION_SELECT)
     .from(lessonPlans)
+    .leftJoin(classSessions, eq(lessonPlans.sessionId, classSessions.id))
     .where(
       and(
         eq(lessonPlans.id, id),
@@ -241,7 +306,7 @@ app.get('/:id', async (c) => {
     )
     .limit(1);
 
-  if (!plan) {
+  if (!result) {
     return c.json({
       success: false,
       error: '找不到教案',
@@ -249,29 +314,13 @@ app.get('/:id', async (c) => {
     }, 404);
   }
 
-  // Get linked session if any
-  let sessionInfo = null;
-  if (plan.sessionId) {
-    const [session] = await db
-      .select({
-        id: classSessions.id,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-        sessionStatus: classSessions.sessionStatus,
-      })
-      .from(classSessions)
-      .where(eq(classSessions.id, plan.sessionId))
-      .limit(1);
-
-    if (session) {
-      sessionInfo = {
-        id: session.id,
-        date: session.sessionDate,
-        start_time: session.startTime,
-        status: session.sessionStatus,
-      };
-    }
-  }
+  const { plan } = result;
+  const sessionInfo = result.sessionId ? {
+    id: result.sessionId,
+    date: result.sessionDate,
+    start_time: result.startTime,
+    status: result.sessionStatus,
+  } : null;
 
   return c.json({
     success: true,
@@ -310,7 +359,7 @@ app.post(
     // If linking to session, verify ownership
     if (data.session_id) {
       const [session] = await db
-        .select({ instructorId: classSessions.instructorId })
+        .select(SESSION_INSTRUCTOR_SELECT)
         .from(classSessions)
         .where(eq(classSessions.id, data.session_id))
         .limit(1);
@@ -342,7 +391,7 @@ app.post(
         sessionId: data.session_id,
         tenantId: coach.tenantId || null,
       })
-      .returning();
+      .returning(PLAN_RETURNING_SELECT);
 
     return c.json({
       success: true,
@@ -367,30 +416,10 @@ app.patch(
     const { id } = c.req.param();
     const data = c.req.valid('json');
 
-    // Verify ownership
-    const [existingPlan] = await db
-      .select()
-      .from(lessonPlans)
-      .where(
-        and(
-          eq(lessonPlans.id, id),
-          eq(lessonPlans.coachId, coach.id)
-        )
-      )
-      .limit(1);
-
-    if (!existingPlan) {
-      return c.json({
-        success: false,
-        error: '找不到教案或無權修改',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
     // If linking to session, verify ownership
     if (data.session_id) {
       const [session] = await db
-        .select({ instructorId: classSessions.instructorId })
+        .select(SESSION_INSTRUCTOR_SELECT)
         .from(classSessions)
         .where(eq(classSessions.id, data.session_id))
         .limit(1);
@@ -421,11 +450,25 @@ app.patch(
     if (data.duration_minutes !== undefined) updateData.durationMinutes = data.duration_minutes;
     if (data.session_id !== undefined) updateData.sessionId = data.session_id;
 
-    // Update plan
-    await db
+    // Atomic update with coach ownership check
+    const [updatedPlan] = await db
       .update(lessonPlans)
       .set(updateData)
-      .where(eq(lessonPlans.id, id));
+      .where(
+        and(
+          eq(lessonPlans.id, id),
+          eq(lessonPlans.coachId, coach.id)
+        )
+      )
+      .returning(ID_RETURNING_SELECT);
+
+    if (!updatedPlan) {
+      return c.json({
+        success: false,
+        error: '找不到教案或無權修改',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,
@@ -442,30 +485,24 @@ app.delete('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Verify ownership
-  const [existingPlan] = await db
-    .select()
-    .from(lessonPlans)
+  // Atomic delete with ownership check
+  const [deletedPlan] = await db
+    .delete(lessonPlans)
     .where(
       and(
         eq(lessonPlans.id, id),
         eq(lessonPlans.coachId, coach.id)
       )
     )
-    .limit(1);
+    .returning(ID_RETURNING_SELECT);
 
-  if (!existingPlan) {
+  if (!deletedPlan) {
     return c.json({
       success: false,
       error: '找不到教案或無權刪除',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  // Delete plan
-  await db
-    .delete(lessonPlans)
-    .where(eq(lessonPlans.id, id));
 
   return c.json({
     success: true,
@@ -487,7 +524,7 @@ app.post(
 
     // Get source plan (own or shared template)
     const [sourcePlan] = await db
-      .select()
+      .select(LESSON_PLAN_SELECT)
       .from(lessonPlans)
       .where(
         and(
@@ -514,7 +551,7 @@ app.post(
     // If linking to session, verify ownership
     if (session_id) {
       const [session] = await db
-        .select({ instructorId: classSessions.instructorId })
+        .select(SESSION_INSTRUCTOR_SELECT)
         .from(classSessions)
         .where(eq(classSessions.id, session_id))
         .limit(1);
@@ -546,7 +583,7 @@ app.post(
         sessionId: session_id || null,
         tenantId: coach.tenantId || null,
       })
-      .returning();
+      .returning(PLAN_RETURNING_SELECT);
 
     return c.json({
       success: true,

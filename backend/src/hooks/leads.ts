@@ -6,6 +6,29 @@
 import { db, leads, employees, jobTitles, leadActivities, notifications } from '../db/index.js';
 import { eq, and, or, ilike, sql, notInArray } from 'drizzle-orm';
 
+const SALES_EMPLOYEES_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+} as const;
+
+const EMPLOYEE_ID_SELECT = {
+  id: employees.id,
+} as const;
+
+const LEAD_COUNT_BY_ASSIGNEE_SELECT = {
+  assignedTo: leads.assignedToId,
+  count: sql<number>`count(*)`.as('count'),
+} as const;
+
+const EMPLOYEE_EMAIL_SELECT = {
+  email: employees.email,
+} as const;
+
+const EMPLOYEE_NAME_EMAIL_SELECT = {
+  fullName: employees.fullName,
+  email: employees.email,
+} as const;
+
 interface LeadData {
   id?: string;
   fullName: string;
@@ -34,10 +57,7 @@ export async function autoAssignLead(data: LeadData): Promise<string | null> {
   try {
     // Get sales employees in the branch
     const salesEmployees = await db
-      .select({
-        id: employees.id,
-        fullName: employees.fullName,
-      })
+      .select(SALES_EMPLOYEES_SELECT)
       .from(employees)
       .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
       .where(
@@ -55,7 +75,7 @@ export async function autoAssignLead(data: LeadData): Promise<string | null> {
     if (salesEmployees.length === 0) {
       // No sales employees, try any active employee
       const [fallbackEmployee] = await db
-        .select({ id: employees.id })
+        .select(EMPLOYEE_ID_SELECT)
         .from(employees)
         .where(
           and(
@@ -71,10 +91,7 @@ export async function autoAssignLead(data: LeadData): Promise<string | null> {
     // Get lead counts for each sales employee
     const employeeIds = salesEmployees.map(e => e.id);
     const leadCounts = await db
-      .select({
-        assignedTo: leads.assignedToId,
-        count: sql<number>`count(*)`.as('count'),
-      })
+      .select(LEAD_COUNT_BY_ASSIGNEE_SELECT)
       .from(leads)
       .where(
         and(
@@ -134,7 +151,7 @@ export async function onLeadCreate(leadId: string, data: LeadData): Promise<void
     // Send notification to assigned employee
     if (data.assignedTo) {
       const [employee] = await db
-        .select({ email: employees.email })
+        .select(EMPLOYEE_EMAIL_SELECT)
         .from(employees)
         .where(eq(employees.id, data.assignedTo));
 
@@ -246,19 +263,22 @@ export async function onLeadReassign(
   }
 ): Promise<void> {
   try {
-    // Get employee names
-    const [newAssignee] = await db
-      .select({ fullName: employees.fullName, email: employees.email })
-      .from(employees)
-      .where(eq(employees.id, newAssigneeId));
-
-    let oldAssignee = null;
-    if (oldAssigneeId) {
-      [oldAssignee] = await db
-        .select({ fullName: employees.fullName, email: employees.email })
+    // Concurrently fetch new and old assignee details
+    const [newAssigneeResult, oldAssigneeResult] = await Promise.all([
+      db
+        .select(EMPLOYEE_NAME_EMAIL_SELECT)
         .from(employees)
-        .where(eq(employees.id, oldAssigneeId));
-    }
+        .where(eq(employees.id, newAssigneeId)),
+      oldAssigneeId
+        ? db
+            .select(EMPLOYEE_NAME_EMAIL_SELECT)
+            .from(employees)
+            .where(eq(employees.id, oldAssigneeId))
+        : Promise.resolve([]),
+    ]);
+
+    const newAssignee = newAssigneeResult[0];
+    const oldAssignee = oldAssigneeResult[0] || null;
 
     // Create reassignment activity
     await db.insert(leadActivities).values({

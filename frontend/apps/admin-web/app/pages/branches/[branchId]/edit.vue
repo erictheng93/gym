@@ -1,12 +1,23 @@
+<script lang="ts">
+import { LABELS } from '~/constants'
+
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+const branchTypeOptions = [
+  { value: 'HEADQUARTER', label: LABELS.BRANCH_TYPE.HEADQUARTER },
+  { value: 'BRANCH', label: LABELS.BRANCH_TYPE.BRANCH }
+]
+</script>
+
 <script setup lang="ts">
-import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+import { MESSAGES, PAGES, STATUS } from '~/constants'
 import type { Branch } from '~/types/schema'
 
 definePageMeta({
   middleware: 'auth',
   validate: (route) => {
     const id = route.params.branchId as string
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    return UUID_V4_REGEX.test(id)
   }
 })
 
@@ -29,11 +40,6 @@ const form = reactive({
   tax_id: '',
   status: 'active' as 'active' | 'archived'
 })
-
-const branchTypeOptions = [
-  { value: 'HEADQUARTER', label: LABELS.BRANCH_TYPE.HEADQUARTER },
-  { value: 'BRANCH', label: LABELS.BRANCH_TYPE.BRANCH }
-]
 
 const loadBranch = async () => {
   isLoading.value = true

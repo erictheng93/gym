@@ -24,6 +24,7 @@ onMounted(async () => {
 })
 
 const isLoading = computed(() => goalsLoading.value || measurementsLoading.value || workoutsLoading.value)
+const displayedActiveGoals = computed(() => activeGoals.value.slice(0, 2))
 </script>
 
 <template>
@@ -86,7 +87,7 @@ const isLoading = computed(() => goalsLoading.value || measurementsLoading.value
 
         <div v-if="activeGoals.length > 0" class="goals-list">
           <GoalCard
-            v-for="goal in activeGoals.slice(0, 2)"
+            v-for="goal in displayedActiveGoals"
             :key="goal.id"
             :goal="goal"
             @click="router.push(`/fitness/goals/${goal.id}`)"

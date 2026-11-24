@@ -1,3 +1,41 @@
+<script lang="ts">
+const STATUS_OPTIONS = [
+  { value: '', label: '全部狀態' },
+  { value: 'NEW', label: '新建' },
+  { value: 'CONTACTED', label: '已聯繫' },
+  { value: 'TRIAL_BOOKED', label: '已預約體驗' },
+  { value: 'VISITED', label: '已到訪' },
+  { value: 'CONVERTED', label: '已轉換' },
+  { value: 'LOST', label: '已流失' }
+]
+
+const SOURCE_OPTIONS = [
+  { value: '', label: '全部來源' },
+  { value: 'FB_AD', label: 'Facebook 廣告' },
+  { value: 'IG_AD', label: 'Instagram 廣告' },
+  { value: 'GOOGLE_AD', label: 'Google 廣告' },
+  { value: 'WEBSITE', label: '網站' },
+  { value: 'WALK_IN', label: '現場' },
+  { value: 'REFERRAL', label: '推薦' }
+]
+
+const LEAD_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW')
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return LEAD_DATE_FORMATTER.format(new Date(dateStr))
+}
+
+const COLUMNS = [
+  { key: 'name', label: '姓名', slot: 'name' },
+  { key: 'phone', label: '電話' },
+  { key: 'source', label: '來源', slot: 'source' },
+  { key: 'status', label: '狀態', slot: 'status' },
+  { key: 'assigned_to', label: '負責人', slot: 'assignee', hideOnMobile: true },
+  { key: 'date_created', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 潛在客戶管理頁面
@@ -41,38 +79,6 @@ const selectedIds = ref<string[]>([])
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 
-// Status options
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'NEW', label: '新建' },
-  { value: 'CONTACTED', label: '已聯繫' },
-  { value: 'TRIAL_BOOKED', label: '已預約體驗' },
-  { value: 'VISITED', label: '已到訪' },
-  { value: 'CONVERTED', label: '已轉換' },
-  { value: 'LOST', label: '已流失' }
-]
-
-// Source options
-const sourceOptions = [
-  { value: '', label: '全部來源' },
-  { value: 'FB_AD', label: 'Facebook 廣告' },
-  { value: 'IG_AD', label: 'Instagram 廣告' },
-  { value: 'GOOGLE_AD', label: 'Google 廣告' },
-  { value: 'WEBSITE', label: '網站' },
-  { value: 'WALK_IN', label: '現場' },
-  { value: 'REFERRAL', label: '推薦' }
-]
-
-// Table columns configuration
-const columns = [
-  { key: 'name', label: '姓名', slot: 'name' },
-  { key: 'phone', label: '電話' },
-  { key: 'source', label: '來源', slot: 'source' },
-  { key: 'status', label: '狀態', slot: 'status' },
-  { key: 'assigned_to', label: '負責人', slot: 'assignee', hideOnMobile: true },
-  { key: 'date_created', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
-]
-
 // Load leads with current filters
 const loadLeads = async () => {
   await fetchLeads({
@@ -106,9 +112,12 @@ watch(currentPage, () => {
   loadLeads()
 })
 
-// Initial load
 onMounted(async () => {
   await Promise.all([loadLeads(), fetchBranches(), fetchEmployees()])
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
 })
 
 // Row click handler
@@ -166,7 +175,8 @@ const handleBatchDelete = async () => {
 }
 
 const handleExportSelected = () => {
-  const selectedLeads = leads.value.filter(l => selectedIds.value.includes(l.id))
+  const selectedSet = new Set(selectedIds.value)
+  const selectedLeads = leads.value.filter(l => selectedSet.has(l.id))
   const headers = ['姓名', '電話', 'Email', '來源', '狀態', '建立日期']
   const rows = selectedLeads.map(l => [
     l.name,
@@ -174,14 +184,14 @@ const handleExportSelected = () => {
     l.email || '',
     getSourceLabel(l.source),
     getStatusLabel(l.status),
-    l.date_created ? new Date(l.date_created).toLocaleDateString('zh-TW') : ''
+    l.date_created ? LEAD_DATE_FORMATTER.format(new Date(l.date_created)) : ''
   ])
 
   const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `leads_export_${new Date().toISOString().split('T')[0]}.csv`
+  link.download = `leads_export_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
 
   toast.success(`成功匯出 ${selectedLeads.length} 筆潛在客戶資料`)
@@ -191,12 +201,6 @@ const handleExportSelected = () => {
 watch(currentPage, () => {
   selectedIds.value = []
 })
-
-// Format date helper
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW')
-}
 
 // Assignee select modal
 const showAssignModal = ref(false)
@@ -251,12 +255,12 @@ const confirmAssign = async () => {
           </option>
         </select>
         <select v-model="selectedStatus" class="input filter-select">
-          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
         <select v-model="selectedSource" class="input filter-select">
-          <option v-for="opt in sourceOptions" :key="opt.value" :value="opt.value">
+          <option v-for="opt in SOURCE_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -279,7 +283,7 @@ const confirmAssign = async () => {
     <DataTable
       v-model:selected="selectedIds"
       :data="leads"
-      :columns="columns"
+      :columns="COLUMNS"
       :loading="isLoading"
       :loading-message="MESSAGES.ACTIONS.LOADING"
       empty-title="暫無潛在客戶"

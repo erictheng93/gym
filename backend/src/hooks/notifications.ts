@@ -4,7 +4,23 @@
  */
 
 import { db, bookings, classSessions, classes, pushSubscriptions, notifications } from '../db/index.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
+
+const CLASS_SESSION_CANCEL_SELECT = {
+  className: classes.name,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+} as const;
+
+const BOOKINGS_CONFIRMED_SELECT = {
+  id: bookings.id,
+  memberId: bookings.memberId,
+} as const;
+
+const PUSH_SUBSCRIPTIONS_CANCEL_SELECT = {
+  id: pushSubscriptions.id,
+  memberId: pushSubscriptions.memberId,
+} as const;
 
 interface PushPayload {
   title: string;
@@ -106,11 +122,7 @@ export async function onClassSessionCancelled(sessionId: string): Promise<void> 
   try {
     // Get session and class info
     const [session] = await db
-      .select({
-        className: classes.name,
-        sessionDate: classSessions.sessionDate,
-        startTime: classSessions.startTime,
-      })
+      .select(CLASS_SESSION_CANCEL_SELECT)
       .from(classSessions)
       .leftJoin(classes, eq(classSessions.classId, classes.id))
       .where(eq(classSessions.id, sessionId));
@@ -119,10 +131,7 @@ export async function onClassSessionCancelled(sessionId: string): Promise<void> 
 
     // Get all bookings for this session
     const confirmedBookings = await db
-      .select({
-        id: bookings.id,
-        memberId: bookings.memberId,
-      })
+      .select(BOOKINGS_CONFIRMED_SELECT)
       .from(bookings)
       .where(
         and(
@@ -134,37 +143,58 @@ export async function onClassSessionCancelled(sessionId: string): Promise<void> 
 
     if (confirmedBookings.length === 0) return;
 
-    // Queue cancellation notifications for each booking
-    for (const booking of confirmedBookings) {
-      const [subscription] = await db
-        .select({ id: pushSubscriptions.id })
-        .from(pushSubscriptions)
-        .where(
-          and(
-            eq(pushSubscriptions.memberId, booking.memberId),
-            eq(pushSubscriptions.isActive, true),
-            eq(pushSubscriptions.notifyClassCancelled, true)
-          )
+    const memberIds = Array.from(new Set(confirmedBookings.map((b) => b.memberId)));
+    if (memberIds.length === 0) return;
+
+    // Single batch query for active push subscriptions across all booked members
+    const subscriptions = await db
+      .select(PUSH_SUBSCRIPTIONS_CANCEL_SELECT)
+      .from(pushSubscriptions)
+      .where(
+        and(
+          inArray(pushSubscriptions.memberId, memberIds),
+          eq(pushSubscriptions.isActive, true),
+          eq(pushSubscriptions.notifyClassCancelled, true)
         )
-        .limit(1);
+      );
 
-      if (!subscription) continue;
+    if (subscriptions.length === 0) return;
 
-      const payload = buildNotificationPayload('class_cancelled', {
-        className: session.className,
-        sessionId,
-      });
+    // Map subscriptions by memberId (1 per member)
+    const subByMember = new Map<string, string>();
+    for (const sub of subscriptions) {
+      if (sub.memberId && !subByMember.has(sub.memberId)) {
+        subByMember.set(sub.memberId, sub.id);
+      }
+    }
 
-      // Insert into notification queue with dedup key
-      await db.execute(
-        sql`INSERT INTO notification_queue
-            (subscription_id, notification_type, scheduled_at, payload, dedup_key)
-            VALUES (${subscription.id}, 'class_cancelled', NOW(), ${JSON.stringify(payload)}, ${`cancel_${sessionId}_${booking.memberId}`})
-            ON CONFLICT (dedup_key) DO NOTHING`
+    const payload = buildNotificationPayload('class_cancelled', {
+      className: session.className,
+      sessionId,
+    });
+    const payloadJson = JSON.stringify(payload);
+
+    // Queue cancellation notifications concurrently
+    const queuePromises: Promise<unknown>[] = [];
+    for (const booking of confirmedBookings) {
+      const subId = subByMember.get(booking.memberId);
+      if (!subId) continue;
+
+      queuePromises.push(
+        db.execute(
+          sql`INSERT INTO notification_queue
+              (subscription_id, notification_type, scheduled_at, payload, dedup_key)
+              VALUES (${subId}, 'class_cancelled', NOW(), ${payloadJson}, ${`cancel_${sessionId}_${booking.memberId}`})
+              ON CONFLICT (dedup_key) DO NOTHING`
+        )
       );
     }
 
-    console.log(`[NotificationHook] Queued cancellation notifications for ${confirmedBookings.length} bookings`);
+    if (queuePromises.length > 0) {
+      await Promise.all(queuePromises);
+    }
+
+    console.log(`[NotificationHook] Queued cancellation notifications for ${queuePromises.length} subscriptions (${confirmedBookings.length} bookings)`);
   } catch (error) {
     console.error('[NotificationHook] Failed to queue cancellation notifications:', error);
   }

@@ -1,3 +1,8 @@
+<script lang="ts">
+const reportDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' })
+const reportTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+</script>
+
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
 import { useAttendance } from '~/composables/hr'
@@ -53,8 +58,10 @@ const loadStats = async () => {
 }
 
 onMounted(async () => {
-  await fetchBranches()
-  await loadStats()
+  await Promise.all([
+    fetchBranches(),
+    loadStats()
+  ])
 })
 
 watch([selectedBranch, selectedYear, selectedMonth], () => {
@@ -79,12 +86,15 @@ const viewDetail = async (employee: { employeeId: string; employeeName: string }
 
 const formatDate = (dateStr: string) => {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' })
+  if (Number.isNaN(date.getTime())) return dateStr || '—'
+  return reportDateFormatter.format(date)
 }
 
 const formatTime = (timeStr: string | null) => {
   if (!timeStr) return '—'
-  return new Date(timeStr).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+  const date = new Date(timeStr)
+  if (Number.isNaN(date.getTime())) return timeStr
+  return reportTimeFormatter.format(date)
 }
 
 const formatHours = (hours: number) => {

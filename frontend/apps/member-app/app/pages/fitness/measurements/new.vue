@@ -14,7 +14,7 @@ const { createMeasurement } = useMeasurements()
 
 // Form state
 const form = reactive({
-  date: new Date().toISOString().split('T')[0],
+  date: new Date().toISOString().slice(0, 10),
   weight: null as number | null,
   body_fat: null as number | null,
   muscle_mass: null as number | null,
@@ -77,7 +77,7 @@ const handleSubmit = async () => {
           v-model="form.date"
           type="date"
           class="form-input"
-          :max="new Date().toISOString().split('T')[0]"
+          :max="new Date().toISOString().slice(0, 10)"
         >
       </div>
 

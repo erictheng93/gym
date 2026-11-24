@@ -1,3 +1,20 @@
+<script lang="ts">
+const TYPE_OPTIONS = [
+  { value: 'PROMOTION', label: '升遷' },
+  { value: 'TRANSFER', label: '調動' },
+  { value: 'DEMOTION', label: '降職' }
+]
+
+const SALARY_NUMBER_FORMATTER = new Intl.NumberFormat('zh-TW')
+
+const formatSalary = (salary: number | string | null | undefined) => {
+  if (salary === null || salary === undefined || salary === '') return '—'
+  const num = Number(salary)
+  if (Number.isNaN(num)) return '—'
+  return `NT$ ${SALARY_NUMBER_FORMATTER.format(num)}`
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 新增員工異動頁面
@@ -27,12 +44,6 @@ const formData = ref({
 })
 
 const errors = ref<Record<string, string>>({})
-
-const typeOptions = [
-  { value: 'PROMOTION', label: '升遷' },
-  { value: 'TRANSFER', label: '調動' },
-  { value: 'DEMOTION', label: '降職' }
-]
 
 // Selected employee info
 const selectedEmployee = computed(() => {
@@ -123,14 +134,14 @@ const handleSubmit = async () => {
           </div>
           <div class="info-row">
             <span class="info-label">目前底薪</span>
-            <span class="info-value">{{ selectedEmployee.basic_salary ? `NT$ ${Number(selectedEmployee.basic_salary).toLocaleString()}` : '—' }}</span>
+            <span class="info-value">{{ formatSalary(selectedEmployee.basic_salary) }}</span>
           </div>
         </div>
 
         <FormSelect
           v-model="formData.type"
           label="異動類型"
-          :options="typeOptions"
+          :options="TYPE_OPTIONS"
           required
         />
 

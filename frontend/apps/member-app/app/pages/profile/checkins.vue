@@ -1,3 +1,19 @@
+<script lang="ts">
+const checkinMonthDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
+const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+const checkinWeekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
+const checkinDateKeyFormatter = new Intl.DateTimeFormat('zh-TW')
+
+const VERIFICATION_LABELS: Record<string, string> = {
+  BARCODE: '條碼',
+  QR_CODE: 'QR Code',
+  MANUAL: '人工',
+  FACE_ID: '人臉辨識',
+  FINGERPRINT: '指紋',
+  BATCH: '批次簽到'
+}
+</script>
+
 <script setup lang="ts">
 import { useFetch } from '~/composables/core/useFetch'
 
@@ -73,27 +89,20 @@ onMounted(() => {
 const formatDateTime = (dateStr: string) => {
   const date = new Date(dateStr)
   return {
-    date: date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }),
-    time: date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
-    weekday: date.toLocaleDateString('zh-TW', { weekday: 'short' })
+    date: checkinMonthDayFormatter.format(date),
+    time: checkinTimeFormatter.format(date),
+    weekday: checkinWeekdayFormatter.format(date),
   }
 }
 
-const verificationLabels: Record<string, string> = {
-  BARCODE: '條碼',
-  QR_CODE: 'QR Code',
-  MANUAL: '人工',
-  FACE_ID: '人臉辨識',
-  FINGERPRINT: '指紋',
-  BATCH: '批次簽到'
-}
+const verificationLabels = VERIFICATION_LABELS
 
 // Group checkins by date
 const groupedCheckins = computed(() => {
   const groups: Record<string, Checkin[]> = {}
 
   checkins.value.forEach(checkin => {
-    const dateKey = new Date(checkin.check_time).toLocaleDateString('zh-TW')
+    const dateKey = checkinDateKeyFormatter.format(new Date(checkin.check_time))
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }

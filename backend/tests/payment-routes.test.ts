@@ -101,6 +101,7 @@ vi.mock('drizzle-orm', () => ({
 // =============================================================================
 
 import app from '../src/routes/payments.js';
+import { clearTenantCache } from '../src/utils/tenant-cache.js';
 
 // =============================================================================
 // TESTS
@@ -110,6 +111,7 @@ describe('Payment Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbResults = [];
+    clearTenantCache();
   });
 
   // Helper to POST a payment
@@ -225,9 +227,7 @@ describe('Payment Routes', () => {
 
     it('應該正確計算收支摘要', async () => {
       dbResults.push([{ id: BRANCH_ID }]);  // branches
-      dbResults.push([{ total: '50000' }]); // income
-      dbResults.push([{ total: '5000' }]);  // refund
-      dbResults.push([{ count: 10 }]);      // count
+      dbResults.push([{ totalIncome: '50000', totalRefund: '5000', count: 10 }]); // single summary query
 
       const res = await app.request('/summary', { method: 'GET' });
       const json = await res.json() as any;
@@ -240,9 +240,7 @@ describe('Payment Routes', () => {
 
     it('sum 為 null 時應該視為 0', async () => {
       dbResults.push([{ id: BRANCH_ID }]);
-      dbResults.push([{ total: null }]);
-      dbResults.push([{ total: null }]);
-      dbResults.push([{ count: 0 }]);
+      dbResults.push([{ totalIncome: null, totalRefund: null, count: 0 }]);
 
       const res = await app.request('/summary', { method: 'GET' });
       const json = await res.json() as any;
@@ -254,9 +252,7 @@ describe('Payment Routes', () => {
 
     it('應該支援日期區間篩選', async () => {
       dbResults.push([{ id: BRANCH_ID }]);
-      dbResults.push([{ total: '10000' }]);
-      dbResults.push([{ total: '0' }]);
-      dbResults.push([{ count: 3 }]);
+      dbResults.push([{ totalIncome: '10000', totalRefund: '0', count: 3 }]);
 
       const res = await app.request(
         '/summary?startDate=2024-01-01&endDate=2024-01-31',
@@ -269,9 +265,7 @@ describe('Payment Routes', () => {
 
     it('應該支援 branchId 篩選', async () => {
       dbResults.push([{ id: BRANCH_ID }]);
-      dbResults.push([{ total: '8000' }]);
-      dbResults.push([{ total: '1000' }]);
-      dbResults.push([{ count: 5 }]);
+      dbResults.push([{ totalIncome: '8000', totalRefund: '1000', count: 5 }]);
 
       const res = await app.request(`/summary?branchId=${BRANCH_ID}`, {
         method: 'GET',

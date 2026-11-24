@@ -1,3 +1,30 @@
+<script lang="ts">
+import { MESSAGES } from '~/constants'
+
+const exportDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
+const BATCH_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: '有效',
+  SUSPENDED: '暫停',
+  BANNED: '停權'
+}
+
+const AVATAR_VARIANTS: Record<string, 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'gray'> = {
+  ACTIVE: 'blue',
+  EXPIRED: 'gray',
+  SUSPENDED: 'orange',
+  BANNED: 'red'
+}
+
+const statusOptions = [
+  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
+  { value: 'ACTIVE', label: '有效' },
+  { value: 'EXPIRED', label: '過期' },
+  { value: 'SUSPENDED', label: '暫停' },
+  { value: 'BANNED', label: '停權' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 會員管理頁面
@@ -5,7 +32,7 @@
  * Apple-style UI 設計
  * 使用 DataList 組件，卡片式呈現
  */
-import { MESSAGES, PAGES, PAGINATION, TIMING } from '~/constants'
+import { PAGES, PAGINATION, TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
@@ -32,15 +59,6 @@ const showModal = ref(false)
 const selectedMember = ref<typeof members.value[0] | null>(null)
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
-
-// Status options
-const statusOptions = [
-  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
-  { value: 'ACTIVE', label: '有效' },
-  { value: 'EXPIRED', label: '過期' },
-  { value: 'SUSPENDED', label: '暫停' },
-  { value: 'BANNED', label: '停權' }
-]
 
 // Load members with current filters
 const loadMembers = async () => {
@@ -78,6 +96,10 @@ onMounted(async () => {
   await Promise.all([loadMembers(), fetchBranches()])
 })
 
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
+})
+
 // Toggle selection
 const toggleSelection = (id: string, event: Event) => {
   event.stopPropagation()
@@ -99,15 +121,9 @@ const handleRowClick = (member: typeof members.value[0]) => {
 const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE') => {
   if (selectedIds.value.length === 0) return
 
-  const statusLabels: Record<string, string> = {
-    ACTIVE: '有效',
-    SUSPENDED: '暫停',
-    BANNED: '停權'
-  }
-
   const confirmed = await confirm({
     title: '批量更新狀態',
-    message: `確定要將 ${selectedIds.value.length} 位會員的狀態更新為「${statusLabels[status] || status}」嗎？`,
+    message: `確定要將 ${selectedIds.value.length} 位會員的狀態更新為「${BATCH_STATUS_LABELS[status] || status}」嗎？`,
     confirmText: '確定更新',
     confirmVariant: 'primary'
   })
@@ -151,7 +167,8 @@ const handleBatchDelete = async () => {
 }
 
 const handleExportSelected = () => {
-  const selectedMembers = members.value.filter(m => selectedIds.value.includes(m.id))
+  const selectedSet = new Set(selectedIds.value)
+  const selectedMembers = members.value.filter(m => selectedSet.has(m.id))
   const headers = ['會員編號', '姓名', '電話', 'Email', '狀態', '加入日期']
   const rows = selectedMembers.map(m => [
     m.memberCode,
@@ -159,14 +176,14 @@ const handleExportSelected = () => {
     m.phone || '',
     m.email || '',
     m.status,
-    m.joinDate ? new Date(m.joinDate).toLocaleDateString('zh-TW') : ''
+    m.joinDate ? exportDateFormatter.format(new Date(m.joinDate)) : ''
   ])
 
   const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `members_export_${new Date().toISOString().split('T')[0]}.csv`
+  link.download = `members_export_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
 
   toast.success(`成功匯出 ${selectedMembers.length} 位會員資料`)
@@ -179,20 +196,16 @@ watch(currentPage, () => {
 
 // Get avatar variant based on status
 const getAvatarVariant = (status: string) => {
-  const variants: Record<string, 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'gray'> = {
-    ACTIVE: 'blue',
-    EXPIRED: 'gray',
-    SUSPENDED: 'orange',
-    BANNED: 'red'
-  }
-  return variants[status] || 'blue'
+  return AVATAR_VARIANTS[status] || 'blue'
 }
+
+// Branch name lookup map for O(1) row rendering
+const branchMap = computed(() => new Map(branches.value.map(b => [b.id, b.name])))
 
 // Get branch name by ID
 const getBranchName = (branchId: string | null | undefined) => {
   if (!branchId) return '—'
-  const branch = branches.value.find(b => b.id === branchId)
-  return branch?.name || '—'
+  return branchMap.value.get(branchId) || '—'
 }
 </script>
 

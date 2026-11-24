@@ -244,6 +244,47 @@
   </div>
 </template>
 
+<script lang="ts">
+const classDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const STATUS_BANNER_CLASSES: Record<string, string> = {
+  BOOKED: 'blue',
+  COMPLETED: 'green',
+  MEMBER_CANCELLED: 'gray',
+  COACH_CANCELLED: 'gray',
+  NO_SHOW: 'red',
+}
+
+const STATUS_ICONS: Record<string, string> = {
+  BOOKED: '📅',
+  COMPLETED: '✅',
+  MEMBER_CANCELLED: '🚫',
+  COACH_CANCELLED: '🚫',
+  NO_SHOW: '❌',
+}
+
+const STATUS_TEXTS: Record<string, string> = {
+  BOOKED: '已預約',
+  COMPLETED: '已完成',
+  MEMBER_CANCELLED: '學員取消',
+  COACH_CANCELLED: '教練取消',
+  NO_SHOW: '未到',
+}
+
+const BOOKED_BY_TEXTS: Record<string, string> = {
+  MEMBER: '學員預約',
+  COACH: '教練預約',
+  RECEPTION: '櫃台預約',
+}
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth',
@@ -266,56 +307,26 @@ const showCancelModal = ref(false)
 const cancelReason = ref('')
 
 const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return dateStr
+  return classDateTimeFormatter.format(date)
 }
 
 const getStatusBannerClass = (status: string) => {
-  const classes: Record<string, string> = {
-    BOOKED: 'blue',
-    COMPLETED: 'green',
-    MEMBER_CANCELLED: 'gray',
-    COACH_CANCELLED: 'gray',
-    NO_SHOW: 'red',
-  }
-  return classes[status] || 'gray'
+  return STATUS_BANNER_CLASSES[status] || 'gray'
 }
 
 const getStatusIcon = (status: string) => {
-  const icons: Record<string, string> = {
-    BOOKED: '📅',
-    COMPLETED: '✅',
-    MEMBER_CANCELLED: '🚫',
-    COACH_CANCELLED: '🚫',
-    NO_SHOW: '❌',
-  }
-  return icons[status] || '📅'
+  return STATUS_ICONS[status] || '📅'
 }
 
 const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    BOOKED: '已預約',
-    COMPLETED: '已完成',
-    MEMBER_CANCELLED: '學員取消',
-    COACH_CANCELLED: '教練取消',
-    NO_SHOW: '未到',
-  }
-  return texts[status] || status
+  return STATUS_TEXTS[status] || status
 }
 
 const getBookedByText = (bookedBy: string) => {
-  const texts: Record<string, string> = {
-    MEMBER: '學員預約',
-    COACH: '教練預約',
-    RECEPTION: '櫃台預約',
-  }
-  return texts[bookedBy] || bookedBy
+  return BOOKED_BY_TEXTS[bookedBy] || bookedBy
 }
 
 const handleAttendance = async () => {

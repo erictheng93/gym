@@ -1,5 +1,41 @@
+<script lang="ts">
+import { STATUS, LABELS } from '~/constants'
+
+const MEMBER_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
+  EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
+  SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
+  BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
+}
+
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
+}
+
+const GENDER_LABEL_MAP: Record<string, string> = {
+  M: LABELS.GENDER.MALE,
+  F: LABELS.GENDER.FEMALE,
+  O: LABELS.GENDER.OTHER,
+  MALE: LABELS.GENDER.MALE,
+  FEMALE: LABELS.GENDER.FEMALE,
+  OTHER: LABELS.GENDER.OTHER
+}
+
+const memberDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const memberCurrencyFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
-import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
 
 definePageMeta({
@@ -44,45 +80,24 @@ onMounted(loadMember)
 
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  return memberDateFormatter.format(new Date(dateStr))
+}
+
+const formatCurrency = (amount?: number | null) => {
+  return memberCurrencyFormatter.format(amount ?? 0)
 }
 
 const getStatusBadge = (status: string) => {
   const normalizedStatus = status?.toUpperCase()
-  const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: STATUS.MEMBER.ACTIVE, class: 'badge-success' },
-    EXPIRED: { label: STATUS.MEMBER.EXPIRED, class: 'badge-error' },
-    SUSPENDED: { label: STATUS.MEMBER.PAUSED, class: 'badge-warning' },
-    BANNED: { label: STATUS.MEMBER.SUSPENDED, class: 'badge-error' }
-  }
-  return map[normalizedStatus] || { label: status, class: '' }
+  return MEMBER_STATUS_BADGE_MAP[normalizedStatus] || { label: status, class: '' }
 }
 
 const getContractStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-    TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
-  }
-  return map[status] || { label: status, class: '' }
+  return CONTRACT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 
 const getGenderLabel = (gender: string | null) => {
-  const map: Record<string, string> = {
-    M: LABELS.GENDER.MALE,
-    F: LABELS.GENDER.FEMALE,
-    O: LABELS.GENDER.OTHER,
-    MALE: LABELS.GENDER.MALE,
-    FEMALE: LABELS.GENDER.FEMALE,
-    OTHER: LABELS.GENDER.OTHER
-  }
-  return gender ? map[gender] || gender : '—'
+  return gender ? GENDER_LABEL_MAP[gender] || gender : '—'
 }
 
 const handleDelete = async () => {
@@ -314,7 +329,7 @@ const handleDelete = async () => {
               <span>{{ formatDate(contract.endDate) }}</span>
             </div>
             <div class="contract-amount">
-              NT$ {{ contract.totalAmount?.toLocaleString() || 0 }}
+              NT$ {{ formatCurrency(contract.totalAmount) }}
             </div>
           </NuxtLink>
         </div>

@@ -4,6 +4,14 @@ import { db, files } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
+const FILE_ID_RETURNING = {
+  id: files.id,
+} as const;
+
+const FILE_STORAGE_KEY_SELECT = {
+  storageKey: files.storageKey,
+} as const;
+
 class FileService {
   private s3: S3Client | null = null;
   private bucket: string;
@@ -60,7 +68,7 @@ class FileService {
         folder: options.folder,
         tenantId: options.tenantId,
         uploadedBy: options.uploadedBy,
-      }).returning();
+      }).returning(FILE_ID_RETURNING);
 
       return {
         id: newFile.id,
@@ -79,7 +87,7 @@ class FileService {
     }
 
     const [file] = await db
-      .select()
+      .select(FILE_STORAGE_KEY_SELECT)
       .from(files)
       .where(eq(files.id, fileId))
       .limit(1);
@@ -109,7 +117,7 @@ class FileService {
     }
 
     const [file] = await db
-      .select()
+      .select(FILE_STORAGE_KEY_SELECT)
       .from(files)
       .where(eq(files.id, fileId))
       .limit(1);

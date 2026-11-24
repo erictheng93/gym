@@ -184,6 +184,38 @@
   </div>
 </template>
 
+<script lang="ts">
+const TYPE_BADGE_CLASSES: Record<string, string> = {
+  EXERCISE: 'bg-blue-600 text-white',
+  VIDEO: 'bg-red-600 text-white',
+  DOCUMENT: 'bg-gray-600 text-white',
+}
+
+const TYPE_TEXTS: Record<string, string> = {
+  EXERCISE: '動作',
+  VIDEO: '影片',
+  DOCUMENT: '文件',
+}
+
+const DIFFICULTY_CLASSES: Record<string, string> = {
+  BEGINNER: 'bg-green-100 text-green-800',
+  INTERMEDIATE: 'bg-yellow-100 text-yellow-800',
+  ADVANCED: 'bg-red-100 text-red-800',
+}
+
+const DIFFICULTY_TEXTS: Record<string, string> = {
+  BEGINNER: '初階',
+  INTERMEDIATE: '中階',
+  ADVANCED: '進階',
+}
+
+const libraryDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+</script>
+
 <script setup lang="ts">
 import type { TeachingMaterial } from '~/types/coach'
 
@@ -199,47 +231,26 @@ const loading = ref(true)
 const material = ref<TeachingMaterial | null>(null)
 
 const getTypeBadgeClass = (type: string) => {
-  const classes: Record<string, string> = {
-    EXERCISE: 'bg-blue-600 text-white',
-    VIDEO: 'bg-red-600 text-white',
-    DOCUMENT: 'bg-gray-600 text-white',
-  }
-  return classes[type] || 'bg-gray-600 text-white'
+  return TYPE_BADGE_CLASSES[type] || 'bg-gray-600 text-white'
 }
 
 const getTypeText = (type: string) => {
-  const texts: Record<string, string> = {
-    EXERCISE: '動作',
-    VIDEO: '影片',
-    DOCUMENT: '文件',
-  }
-  return texts[type] || type
+  return TYPE_TEXTS[type] || type
 }
 
 const getDifficultyClass = (difficulty: string) => {
-  const classes: Record<string, string> = {
-    BEGINNER: 'bg-green-100 text-green-800',
-    INTERMEDIATE: 'bg-yellow-100 text-yellow-800',
-    ADVANCED: 'bg-red-100 text-red-800',
-  }
-  return classes[difficulty] || 'bg-gray-100 text-gray-600'
+  return DIFFICULTY_CLASSES[difficulty] || 'bg-gray-100 text-gray-600'
 }
 
 const getDifficultyText = (difficulty: string) => {
-  const texts: Record<string, string> = {
-    BEGINNER: '初階',
-    INTERMEDIATE: '中階',
-    ADVANCED: '進階',
-  }
-  return texts[difficulty] || difficulty
+  return DIFFICULTY_TEXTS[difficulty] || difficulty
 }
 
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return dateStr
+  return libraryDateFormatter.format(date)
 }
 
 onMounted(async () => {

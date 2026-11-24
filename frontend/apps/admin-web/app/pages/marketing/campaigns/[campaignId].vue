@@ -1,3 +1,36 @@
+<script lang="ts">
+type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'ENDED' | 'CANCELLED'
+
+const CAMPAIGN_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const CAMPAIGN_CURRENCY_FORMATTER = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  maximumFractionDigits: 0
+})
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '—'
+  return CAMPAIGN_DATE_FORMATTER.format(new Date(dateStr))
+}
+
+const formatCurrency = (amount: number) => {
+  return CAMPAIGN_CURRENCY_FORMATTER.format(amount)
+}
+
+const STATUS_OPTIONS = Object.freeze([
+  { value: 'DRAFT', label: '草稿' },
+  { value: 'SCHEDULED', label: '已排程' },
+  { value: 'ACTIVE', label: '進行中' },
+  { value: 'PAUSED', label: '已暫停' },
+  { value: 'ENDED', label: '已結束' }
+])
+</script>
+
 <script setup lang="ts">
 /**
  * 行銷活動詳情頁面
@@ -26,7 +59,6 @@ const {
 } = useCampaigns()
 
 const isEditing = ref(false)
-type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'ENDED' | 'CANCELLED'
 const editForm = ref({
   name: '',
   description: '',
@@ -49,30 +81,6 @@ onMounted(async () => {
     }
   }
 })
-
-// Format date
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
-
-// Format currency
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount)
-}
-
-// Status options
-const statusOptions = [
-  { value: 'DRAFT', label: '草稿' },
-  { value: 'SCHEDULED', label: '已排程' },
-  { value: 'ACTIVE', label: '進行中' },
-  { value: 'PAUSED', label: '已暫停' },
-  { value: 'ENDED', label: '已結束' }
-]
 
 // Save edits
 const saveEdits = async () => {
@@ -222,7 +230,7 @@ const roi = computed(() => {
             <FormSelect
               v-model="editForm.status"
               label="狀態"
-              :options="statusOptions"
+              :options="STATUS_OPTIONS"
             />
             <FormInput
               v-model="editForm.budget"

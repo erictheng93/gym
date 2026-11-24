@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.production
 
 # Build output
 .nuxt/
@@ -36,6 +37,7 @@ backend/uploads/
 # Test reports
 playwright-report/
 .playwright-mcp/
+.playwright-cli/
 test-results/
 
 # Claude Code
@@ -44,3 +46,6 @@ Gym參考廠商/
 
 # Images
 *.png
+
+# Git worktrees
+.worktrees/

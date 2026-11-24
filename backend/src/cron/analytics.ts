@@ -1,6 +1,21 @@
 import { db, tenants, branches, members, contracts, payments, usageRecords } from '../db/index.js';
 import { eq, and, sql, sum, count } from 'drizzle-orm';
 
+const ANALYTICS_TENANTS_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+};
+
+const ANALYTICS_BRANCH_AGG_SELECT = {
+  tenantId: branches.tenantId,
+  count: count(),
+};
+
+const ANALYTICS_REVENUE_AGG_SELECT = {
+  tenantId: branches.tenantId,
+  total: sum(payments.amount),
+};
+
 export async function runAnalyticsTasks() {
   console.log('[Analytics] Starting analytics tasks...');
 
@@ -15,60 +30,88 @@ export async function runAnalyticsTasks() {
 async function generateDailySnapshot() {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
   const allTenants = await db
-    .select({ id: tenants.id, name: tenants.name })
+    .select(ANALYTICS_TENANTS_SELECT)
     .from(tenants)
     .where(eq(tenants.status, 'active'));
 
+  if (allTenants.length === 0) return;
+
+  // Batch aggregate branch, revenue, member, and contract counts across all tenants in 4 parallel queries
+  const [branchAgg, revenueAgg, memberAgg, contractAgg] = await Promise.all([
+    db
+      .select(ANALYTICS_BRANCH_AGG_SELECT)
+      .from(branches)
+      .groupBy(branches.tenantId),
+    db
+      .select(ANALYTICS_REVENUE_AGG_SELECT)
+      .from(payments)
+      .innerJoin(branches, eq(payments.branchId, branches.id))
+      .where(
+        and(
+          eq(payments.type, 'INCOME'),
+          sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
+        )
+      )
+      .groupBy(branches.tenantId),
+    db
+      .select(ANALYTICS_BRANCH_AGG_SELECT)
+      .from(members)
+      .innerJoin(branches, eq(members.branchId, branches.id))
+      .where(eq(members.status, 'ACTIVE'))
+      .groupBy(branches.tenantId),
+    db
+      .select(ANALYTICS_BRANCH_AGG_SELECT)
+      .from(contracts)
+      .innerJoin(branches, eq(contracts.branchId, branches.id))
+      .where(eq(contracts.status, 'ACTIVE'))
+      .groupBy(branches.tenantId),
+  ]);
+
+  const branchCountMap = new Map<string, number>();
+  for (const row of branchAgg) {
+    if (row.tenantId) branchCountMap.set(row.tenantId, Number(row.count));
+  }
+
+  const dailyRevenueMap = new Map<string, number>();
+  for (const row of revenueAgg) {
+    if (row.tenantId) dailyRevenueMap.set(row.tenantId, Number(row.total || 0));
+  }
+
+  const memberCountMap = new Map<string, number>();
+  for (const row of memberAgg) {
+    if (row.tenantId) memberCountMap.set(row.tenantId, Number(row.count));
+  }
+
+  const contractCountMap = new Map<string, number>();
+  for (const row of contractAgg) {
+    if (row.tenantId) contractCountMap.set(row.tenantId, Number(row.count));
+  }
+
   for (const tenant of allTenants) {
+    const branchesCount = branchCountMap.get(tenant.id) || 0;
+    if (branchesCount === 0) continue;
+
+    const dailyRevenue = dailyRevenueMap.get(tenant.id) || 0;
+    const membersCount = memberCountMap.get(tenant.id) || 0;
+    const activeContractsCount = contractCountMap.get(tenant.id) || 0;
+
     try {
-      const tenantBranches = await db
-        .select({ id: branches.id })
-        .from(branches)
-        .where(eq(branches.tenantId, tenant.id));
-
-      const branchIds = tenantBranches.map(b => b.id);
-
-      if (branchIds.length === 0) continue;
-
-      const [revenueResult] = await db
-        .select({ total: sum(payments.amount) })
-        .from(payments)
-        .where(
-          and(
-            sql`${payments.branchId} = ANY(${branchIds})`,
-            eq(payments.type, 'INCOME'),
-            sql`DATE(${payments.paymentDate}) = ${yesterdayStr}`
-          )
-        );
-
-      const dailyRevenue = Number(revenueResult?.total || 0);
-
-      const [memberCount] = await db
-        .select({ count: count() })
-        .from(members)
-        .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
-
-      const [contractCount] = await db
-        .select({ count: count() })
-        .from(contracts)
-        .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
-
       await db.insert(usageRecords).values({
         tenantId: tenant.id,
         recordDate: yesterdayStr,
-        branchesCount: branchIds.length,
-        membersCount: Number(memberCount?.count || 0),
-        activeContractsCount: Number(contractCount?.count || 0),
+        branchesCount,
+        membersCount,
+        activeContractsCount,
         dailyRevenue: String(dailyRevenue),
       }).onConflictDoUpdate({
         target: [usageRecords.tenantId, usageRecords.recordDate],
         set: {
-          branchesCount: branchIds.length,
-          membersCount: Number(memberCount?.count || 0),
-          activeContractsCount: Number(contractCount?.count || 0),
+          branchesCount,
+          membersCount,
+          activeContractsCount,
           dailyRevenue: String(dailyRevenue),
         },
       });

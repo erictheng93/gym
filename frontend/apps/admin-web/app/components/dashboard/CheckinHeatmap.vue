@@ -1,3 +1,7 @@
+<script lang="ts">
+const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => `${i}`)
+</script>
+
 <script setup lang="ts">
 /**
  * Checkin Heatmap Component
@@ -17,12 +21,21 @@ const props = withDefaults(defineProps<Props>(), {
 const { getHeatmapColor } = useCharts()
 
 const dayLabels = DAY_OF_WEEK_NAMES
-const hourLabels = Array.from({ length: 24 }, (_, i) => `${i}`)
+const hourLabels = HOUR_LABELS
 
-// 計算最大值
+// 計算最大值 (避免 flat() 與 spread 陣列配置)
 const maxValue = computed(() => {
   if (!props.data) return 0
-  return Math.max(...props.data.flat())
+  let max = 0
+  for (let i = 0; i < props.data.length; i++) {
+    const row = props.data[i]
+    if (row) {
+      for (let j = 0; j < row.length; j++) {
+        if (row[j] > max) max = row[j]
+      }
+    }
+  }
+  return max
 })
 
 // 獲取單元格顏色
@@ -36,7 +49,7 @@ const getCellTooltip = (day: number, hour: number) => {
   return `${dayLabels[day]} ${hour}:00 - ${value} 次打卡`
 }
 
-// 找出尖峰時段
+// 找出尖峰時段 (避免巢狀 forEach 閉包配置)
 const peakInfo = computed(() => {
   if (!props.data) return null
 
@@ -44,15 +57,20 @@ const peakInfo = computed(() => {
   let peakDay = 0
   let peakHour = 0
 
-  props.data.forEach((dayData, day) => {
-    dayData.forEach((count, hour) => {
-      if (count > maxVal) {
-        maxVal = count
-        peakDay = day
-        peakHour = hour
+  const data = props.data
+  for (let day = 0; day < data.length; day++) {
+    const row = data[day]
+    if (row) {
+      for (let hour = 0; hour < row.length; hour++) {
+        const count = row[hour]!
+        if (count > maxVal) {
+          maxVal = count
+          peakDay = day
+          peakHour = hour
+        }
       }
-    })
-  })
+    }
+  }
 
   return {
     day: dayLabels[peakDay],

@@ -1,3 +1,8 @@
+<script lang="ts">
+const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })
+const numberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
@@ -23,18 +28,18 @@ const loadReport = async () => {
   }
 }
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(value)
-}
+const formatCurrency = (value: number) => currencyFormatter.format(value)
 
 const formatPercent = (value: number) => {
   const prefix = value > 0 ? '+' : ''
   return `${prefix}${value.toFixed(1)}%`
 }
 
-const formatNumber = (value: number) => {
-  return new Intl.NumberFormat('zh-TW').format(value)
-}
+const formatNumber = (value: number) => numberFormatter.format(value)
+
+const topRevenueBranches = computed(() => report.value?.ranking?.by_revenue?.slice(0, 5) || [])
+const topGrowthBranches = computed(() => report.value?.ranking?.by_growth?.slice(0, 5) || [])
+const topCheckInBranches = computed(() => report.value?.ranking?.by_check_ins?.slice(0, 5) || [])
 
 const exportReport = async (format: 'csv' | 'excel') => {
   const config = useRuntimeConfig()
@@ -52,8 +57,10 @@ watch([selectedBranch, selectedPeriod], () => {
 })
 
 onMounted(async () => {
-  await fetchBranches()
-  await loadReport()
+  await Promise.all([
+    fetchBranches(),
+    loadReport()
+  ])
 })
 </script>
 
@@ -225,7 +232,7 @@ onMounted(async () => {
           <div class="ranking-section">
             <h4>營收排名</h4>
             <div class="ranking-list">
-              <div v-for="item in report.ranking.by_revenue.slice(0, 5)" :key="item.branch_id" class="ranking-item">
+              <div v-for="item in topRevenueBranches" :key="item.branch_id" class="ranking-item">
                 <span class="rank" :class="{ gold: item.rank === 1, silver: item.rank === 2, bronze: item.rank === 3 }">
                   {{ item.rank }}
                 </span>
@@ -238,7 +245,7 @@ onMounted(async () => {
           <div class="ranking-section">
             <h4>成長率排名</h4>
             <div class="ranking-list">
-              <div v-for="item in report.ranking.by_growth.slice(0, 5)" :key="item.branch_id" class="ranking-item">
+              <div v-for="item in topGrowthBranches" :key="item.branch_id" class="ranking-item">
                 <span class="rank" :class="{ gold: item.rank === 1, silver: item.rank === 2, bronze: item.rank === 3 }">
                   {{ item.rank }}
                 </span>
@@ -253,7 +260,7 @@ onMounted(async () => {
           <div class="ranking-section">
             <h4>入場數排名</h4>
             <div class="ranking-list">
-              <div v-for="item in report.ranking.by_check_ins.slice(0, 5)" :key="item.branch_id" class="ranking-item">
+              <div v-for="item in topCheckInBranches" :key="item.branch_id" class="ranking-item">
                 <span class="rank" :class="{ gold: item.rank === 1, silver: item.rank === 2, bronze: item.rank === 3 }">
                   {{ item.rank }}
                 </span>

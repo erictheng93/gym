@@ -1,6 +1,35 @@
 import { db, tenants, subscriptions, invoices, usageRecords, branches, members, employees, contracts } from '../db/index.js';
 import { eq, and, lte, sql, count } from 'drizzle-orm';
 
+const CRON_DUE_SUBSCRIPTIONS_SELECT = {
+  id: subscriptions.id,
+  tenantId: subscriptions.tenantId,
+  planType: subscriptions.planType,
+  status: subscriptions.status,
+  billingCycle: subscriptions.billingCycle,
+  monthlyPrice: subscriptions.monthlyPrice,
+  yearlyPrice: subscriptions.yearlyPrice,
+  currentPeriodStart: subscriptions.currentPeriodStart,
+  currentPeriodEnd: subscriptions.currentPeriodEnd,
+};
+
+const CRON_TENANT_NAME_SELECT = {
+  id: tenants.id,
+  name: tenants.name,
+};
+
+const CRON_TENANT_ID_SELECT = {
+  id: tenants.id,
+};
+
+const CRON_BRANCH_ID_SELECT = {
+  id: branches.id,
+};
+
+const CRON_COUNT_SELECT = {
+  count: count(),
+};
+
 export async function runBillingTasks() {
   console.log('[Billing] Starting billing tasks...');
 
@@ -15,10 +44,10 @@ export async function runBillingTasks() {
 
 async function generateMonthlyInvoices() {
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = today.toISOString().slice(0, 10);
 
   const dueSubs = await db
-    .select()
+    .select(CRON_DUE_SUBSCRIPTIONS_SELECT)
     .from(subscriptions)
     .where(
       and(
@@ -30,7 +59,7 @@ async function generateMonthlyInvoices() {
   for (const sub of dueSubs) {
     try {
       const [tenant] = await db
-        .select()
+        .select(CRON_TENANT_NAME_SELECT)
         .from(tenants)
         .where(eq(tenants.id, sub.tenantId))
         .limit(1);
@@ -63,9 +92,9 @@ async function generateMonthlyInvoices() {
         amountTotal: String(amount),
         currency: 'TWD',
         status: 'open',
-        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        periodStart: periodStart.toISOString().split('T')[0],
-        periodEnd: periodEnd.toISOString().split('T')[0],
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        periodStart: periodStart.toISOString().slice(0, 10),
+        periodEnd: periodEnd.toISOString().slice(0, 10),
         lineItems: [
           {
             description: `${tenant.name} - ${sub.planType} Plan (${sub.billingCycle})`,
@@ -76,8 +105,8 @@ async function generateMonthlyInvoices() {
       });
 
       await db.update(subscriptions).set({
-        currentPeriodStart: periodStart.toISOString().split('T')[0],
-        currentPeriodEnd: periodEnd.toISOString().split('T')[0],
+        currentPeriodStart: periodStart.toISOString().slice(0, 10),
+        currentPeriodEnd: periodEnd.toISOString().slice(0, 10),
         updatedAt: new Date(),
       }).where(eq(subscriptions.id, sub.id));
 
@@ -89,22 +118,22 @@ async function generateMonthlyInvoices() {
 }
 
 async function updateUsageRecords() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().slice(0, 10);
 
   const allTenants = await db
-    .select({ id: tenants.id })
+    .select(CRON_TENANT_ID_SELECT)
     .from(tenants)
     .where(eq(tenants.status, 'active'));
 
   for (const tenant of allTenants) {
     try {
       const [branchCount] = await db
-        .select({ count: count() })
+        .select(CRON_COUNT_SELECT)
         .from(branches)
         .where(and(eq(branches.tenantId, tenant.id), eq(branches.status, 'active')));
 
       const tenantBranches = await db
-        .select({ id: branches.id })
+        .select(CRON_BRANCH_ID_SELECT)
         .from(branches)
         .where(eq(branches.tenantId, tenant.id));
 
@@ -116,19 +145,19 @@ async function updateUsageRecords() {
 
       if (branchIds.length > 0) {
         const [mc] = await db
-          .select({ count: count() })
+          .select(CRON_COUNT_SELECT)
           .from(members)
           .where(sql`${members.branchId} = ANY(${branchIds}) AND ${members.status} = 'ACTIVE'`);
         memberCount = Number(mc?.count || 0);
 
         const [ec] = await db
-          .select({ count: count() })
+          .select(CRON_COUNT_SELECT)
           .from(employees)
           .where(sql`${employees.branchId} = ANY(${branchIds}) AND ${employees.status} = 'ACTIVE'`);
         employeeCount = Number(ec?.count || 0);
 
         const [cc] = await db
-          .select({ count: count() })
+          .select(CRON_COUNT_SELECT)
           .from(contracts)
           .where(sql`${contracts.branchId} = ANY(${branchIds}) AND ${contracts.status} = 'ACTIVE'`);
         contractCount = Number(cc?.count || 0);

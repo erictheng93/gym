@@ -28,6 +28,132 @@ const app = new Hono<{ Variables: CoachVariables }>();
 // Apply auth middleware to all routes
 app.use('*', coachAuthMiddleware, requireCoach);
 
+const COACH_STUDENT_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  status: members.status,
+  avatar: members.avatar,
+  joinDate: members.joinDate,
+  role: coachMemberAssignments.role,
+  assignedAt: coachMemberAssignments.assignedAt,
+};
+
+const COACH_STUDENT_CONTRACT_SELECT = {
+  memberId: contracts.memberId,
+  planName: membershipPlans.name,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  contractStatus: contracts.status,
+};
+
+const COACH_STUDENT_DETAIL_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  fullName: members.fullName,
+  phone: members.phone,
+  email: members.email,
+  gender: members.gender,
+  birthday: members.birthday,
+  status: members.status,
+  avatar: members.avatar,
+  joinDate: members.joinDate,
+  address: members.address,
+  emergencyContact: members.emergencyContact,
+  emergencyPhone: members.emergencyPhone,
+  height: members.height,
+  notes: members.notes,
+  role: coachMemberAssignments.role,
+  assignedAt: coachMemberAssignments.assignedAt,
+};
+
+const ASSIGNMENT_EXISTS_SELECT = {
+  id: coachMemberAssignments.id,
+};
+
+const COACH_NOTE_SELECT = {
+  id: coachNotes.id,
+  noteType: coachNotes.noteType,
+  content: coachNotes.content,
+  isPrivate: coachNotes.isPrivate,
+  createdAt: coachNotes.createdAt,
+  updatedAt: coachNotes.updatedAt,
+};
+
+const COUNT_SELECT = {
+  count: sql<number>`count(*)`,
+};
+
+const COACH_NOTE_CREATE_RETURNING = {
+  id: coachNotes.id,
+  noteType: coachNotes.noteType,
+  content: coachNotes.content,
+  isPrivate: coachNotes.isPrivate,
+  createdAt: coachNotes.createdAt,
+};
+
+const COACH_NOTE_ID_RETURNING = {
+  id: coachNotes.id,
+};
+
+const STUDENT_DETAIL_CONTRACT_SELECT = {
+  id: contracts.id,
+  contractNo: contracts.contractNo,
+  status: contracts.status,
+  startDate: contracts.startDate,
+  endDate: contracts.endDate,
+  remainingCounts: contracts.remainingCounts,
+  planName: membershipPlans.name,
+  planType: membershipPlans.planType,
+};
+
+const STUDENT_DETAIL_GOAL_SELECT = {
+  id: memberGoals.id,
+  goalType: memberGoals.goalType,
+  targetValue: memberGoals.targetValue,
+  currentValue: memberGoals.currentValue,
+  startDate: memberGoals.startDate,
+  targetDate: memberGoals.targetDate,
+  status: memberGoals.status,
+};
+
+const STUDENT_DETAIL_MEASUREMENT_SELECT = {
+  id: bodyMeasurements.id,
+  date: bodyMeasurements.date,
+  weight: bodyMeasurements.weight,
+  bodyFat: bodyMeasurements.bodyFat,
+  muscleMass: bodyMeasurements.muscleMass,
+  bmi: bodyMeasurements.bmi,
+  source: bodyMeasurements.source,
+};
+
+const STUDENT_DETAIL_CLASS_HISTORY_SELECT = {
+  id: bookings.id,
+  scheduledAt: sql<string>`${classSessions.sessionDate}::text || 'T' || ${classSessions.startTime}::text`,
+  status: bookings.bookingStatus,
+  durationMinutes: sql<number>`EXTRACT(EPOCH FROM (${classSessions.endTime}::time - ${classSessions.startTime}::time)) / 60`,
+};
+
+const STUDENT_DETAIL_NOTE_SELECT = {
+  id: coachNotes.id,
+  noteType: coachNotes.noteType,
+  content: coachNotes.content,
+  isPrivate: coachNotes.isPrivate,
+  createdAt: coachNotes.createdAt,
+  updatedAt: coachNotes.updatedAt,
+};
+
+const STUDENT_DETAIL_CLASS_RECORD_SELECT = {
+  bookingId: classRecords.bookingId,
+  mainContent: classRecords.mainContent,
+  coachNotes: classRecords.coachNotes,
+  nextPlan: classRecords.nextPlan,
+};
+
 // -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
@@ -55,45 +181,18 @@ app.get('/', async (c) => {
   const limitNum = Math.min(parseInt(limit), 100);
   const offsetNum = parseInt(offset);
 
-  // Build conditions for assignments
-  const assignmentConditions = [
+  // Build conditions for assignments and members joined
+  const conditions = [
     eq(coachMemberAssignments.coachId, coach.id),
     sql`${coachMemberAssignments.unassignedAt} IS NULL`,
   ];
 
   if (role) {
-    assignmentConditions.push(eq(coachMemberAssignments.role, role as 'PRIMARY' | 'SECONDARY'));
+    conditions.push(eq(coachMemberAssignments.role, role as 'PRIMARY' | 'SECONDARY'));
   }
-
-  // Get assigned member IDs
-  const assignments = await db
-    .select({
-      memberId: coachMemberAssignments.memberId,
-      role: coachMemberAssignments.role,
-      assignedAt: coachMemberAssignments.assignedAt,
-    })
-    .from(coachMemberAssignments)
-    .where(and(...assignmentConditions));
-
-  const memberIds = assignments.map(a => a.memberId);
-
-  if (memberIds.length === 0) {
-    return c.json({
-      success: true,
-      data: [],
-      meta: {
-        total: 0,
-        limit: limitNum,
-        offset: offsetNum,
-      },
-    });
-  }
-
-  // Build member conditions
-  const memberConditions = [inArray(members.id, memberIds)];
 
   if (search) {
-    memberConditions.push(
+    conditions.push(
       or(
         like(members.fullName, `%${search}%`),
         like(members.memberCode, `%${search}%`),
@@ -103,91 +202,80 @@ app.get('/', async (c) => {
   }
 
   if (status) {
-    memberConditions.push(eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'));
+    conditions.push(eq(members.status, status as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'));
   }
 
-  // Get members
-  const membersData = await db
-    .select({
-      id: members.id,
-      memberCode: members.memberCode,
-      fullName: members.fullName,
-      phone: members.phone,
-      email: members.email,
-      gender: members.gender,
-      birthday: members.birthday,
-      status: members.status,
-      avatar: members.avatar,
-      joinDate: members.joinDate,
-    })
-    .from(members)
-    .where(and(...memberConditions))
-    .orderBy(members.fullName)
-    .limit(limitNum)
-    .offset(offsetNum);
+  // Get members with assignment details in a single query + count in parallel
+  const countQuery = (search || status)
+    ? db
+        .select(COUNT_SELECT)
+        .from(coachMemberAssignments)
+        .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
+        .where(and(...conditions))
+    : db
+        .select(COUNT_SELECT)
+        .from(coachMemberAssignments)
+        .where(and(...conditions));
 
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(members)
-    .where(and(...memberConditions));
+  const [membersData, [countResult]] = await Promise.all([
+    db
+      .select(COACH_STUDENT_SELECT)
+      .from(coachMemberAssignments)
+      .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
+      .where(and(...conditions))
+      .orderBy(members.fullName)
+      .limit(limitNum)
+      .offset(offsetNum),
+    countQuery,
+  ]);
+
+  if (membersData.length === 0) {
+    return c.json({
+      success: true,
+      data: [],
+      meta: {
+        total: Number(countResult?.count || 0),
+        limit: limitNum,
+        offset: offsetNum,
+      },
+    });
+  }
 
   // Get active contracts for each member
   const memberIdsForContracts = membersData.map(m => m.id);
-  let activeContracts: Array<{
-    memberId: string;
-    planName: string;
-    endDate: string;
-    remainingCounts: number | null;
-    contractStatus: string;
-  }> = [];
+  const activeContracts = await db
+    .select(COACH_STUDENT_CONTRACT_SELECT)
+    .from(contracts)
+    .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+    .where(
+      and(
+        inArray(contracts.memberId, memberIdsForContracts),
+        eq(contracts.status, 'ACTIVE')
+      )
+    );
 
-  if (memberIdsForContracts.length > 0) {
-    activeContracts = await db
-      .select({
-        memberId: contracts.memberId,
-        planName: membershipPlans.name,
-        endDate: contracts.endDate,
-        remainingCounts: contracts.remainingCounts,
-        contractStatus: contracts.status,
-      })
-      .from(contracts)
-      .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-      .where(
-        and(
-          inArray(contracts.memberId, memberIdsForContracts),
-          eq(contracts.status, 'ACTIVE')
-        )
-      );
-  }
-
-  // Group contracts by member
-  const contractsByMember = activeContracts.reduce((acc, c) => {
-    if (!acc[c.memberId]) {
-      acc[c.memberId] = [];
-    }
-    acc[c.memberId].push({
-      plan_name: c.planName,
-      end_date: c.endDate,
-      remaining_counts: c.remainingCounts,
-      status: c.contractStatus,
-    });
-    return acc;
-  }, {} as Record<string, Array<{
+  // Group contracts by member using Map for O(1) lookup
+  const contractsByMember = new Map<string, Array<{
     plan_name: string;
     end_date: string;
     remaining_counts: number | null;
     status: string;
-  }>>);
+  }>>();
 
-  // Get assignment roles
-  const rolesByMember = assignments.reduce((acc, a) => {
-    acc[a.memberId] = {
-      role: a.role,
-      assigned_at: a.assignedAt,
-    };
-    return acc;
-  }, {} as Record<string, { role: string; assigned_at: Date | null }>);
+  for (let i = 0; i < activeContracts.length; i++) {
+    const ac = activeContracts[i];
+    let memberContracts = contractsByMember.get(ac.memberId);
+    if (!memberContracts) {
+      memberContracts = [];
+      contractsByMember.set(ac.memberId, memberContracts);
+    }
+    memberContracts.push({
+      plan_name: ac.planName,
+      end_date: ac.endDate,
+      remaining_counts: ac.remainingCounts,
+      status: ac.contractStatus,
+    });
+  }
 
   // Format response
   const formattedData = membersData.map(member => ({
@@ -201,9 +289,9 @@ app.get('/', async (c) => {
     status: member.status,
     avatar: member.avatar,
     join_date: member.joinDate,
-    role: rolesByMember[member.id]?.role || 'PRIMARY',
-    assigned_at: rolesByMember[member.id]?.assigned_at,
-    active_contracts: contractsByMember[member.id] || [],
+    role: member.role || 'PRIMARY',
+    assigned_at: member.assignedAt,
+    active_contracts: contractsByMember.get(member.id) || [],
   }));
 
   return c.json({
@@ -225,10 +313,11 @@ app.get('/:id', async (c) => {
   const coach = c.get('coach')!;
   const { id } = c.req.param();
 
-  // Verify assignment
-  const [assignment] = await db
-    .select()
+  // Verify assignment and get member details in a single query
+  const [member] = await db
+    .select(COACH_STUDENT_DETAIL_SELECT)
     .from(coachMemberAssignments)
+    .innerJoin(members, eq(coachMemberAssignments.memberId, members.id))
     .where(
       and(
         eq(coachMemberAssignments.coachId, coach.id),
@@ -238,7 +327,7 @@ app.get('/:id', async (c) => {
     )
     .limit(1);
 
-  if (!assignment) {
+  if (!member) {
     return c.json({
       success: false,
       error: '無權查看此學員',
@@ -246,92 +335,69 @@ app.get('/:id', async (c) => {
     }, 403);
   }
 
-  // Get member details
-  const [member] = await db
-    .select({
-      id: members.id,
-      memberCode: members.memberCode,
-      fullName: members.fullName,
-      phone: members.phone,
-      email: members.email,
-      gender: members.gender,
-      birthday: members.birthday,
-      status: members.status,
-      avatar: members.avatar,
-      joinDate: members.joinDate,
-      address: members.address,
-      emergencyContact: members.emergencyContact,
-      emergencyPhone: members.emergencyPhone,
-      height: members.height,
-      notes: members.notes,
-    })
-    .from(members)
-    .where(eq(members.id, id))
-    .limit(1);
+  // Concurrently fetch contracts, goals, measurements, class history, and notes
+  const [
+    contractsData,
+    goalsData,
+    measurementsData,
+    classHistory,
+    notesData,
+  ] = await Promise.all([
+    // Get contracts
+    db
+      .select(STUDENT_DETAIL_CONTRACT_SELECT)
+      .from(contracts)
+      .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(eq(contracts.memberId, id))
+      .orderBy(desc(contracts.startDate)),
 
-  if (!member) {
-    return c.json({
-      success: false,
-      error: '找不到學員',
-      code: 'NOT_FOUND',
-    }, 404);
-  }
+    // Get goals
+    db
+      .select(STUDENT_DETAIL_GOAL_SELECT)
+      .from(memberGoals)
+      .where(eq(memberGoals.memberId, id))
+      .orderBy(desc(memberGoals.createdAt))
+      .limit(5),
 
-  // Get contracts
-  const contractsData = await db
-    .select({
-      id: contracts.id,
-      contractNo: contracts.contractNo,
-      status: contracts.status,
-      startDate: contracts.startDate,
-      endDate: contracts.endDate,
-      remainingCounts: contracts.remainingCounts,
-      planName: membershipPlans.name,
-      planType: membershipPlans.planType,
-    })
-    .from(contracts)
-    .innerJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
-    .where(eq(contracts.memberId, id))
-    .orderBy(desc(contracts.startDate));
+    // Get measurements
+    db
+      .select(STUDENT_DETAIL_MEASUREMENT_SELECT)
+      .from(bodyMeasurements)
+      .where(eq(bodyMeasurements.memberId, id))
+      .orderBy(desc(bodyMeasurements.date))
+      .limit(10),
 
-  // Get goals
-  const goalsData = await db
-    .select()
-    .from(memberGoals)
-    .where(eq(memberGoals.memberId, id))
-    .orderBy(desc(memberGoals.createdAt))
-    .limit(5);
-
-  // Get measurements
-  const measurementsData = await db
-    .select()
-    .from(bodyMeasurements)
-    .where(eq(bodyMeasurements.memberId, id))
-    .orderBy(desc(bodyMeasurements.date))
-    .limit(10);
-
-  // Get class history with this coach
-  const classHistory = await db
-    .select({
-      id: bookings.id,
-      scheduledAt: sql<string>`${classSessions.sessionDate}::text || 'T' || ${classSessions.startTime}::text`,
-      status: bookings.bookingStatus,
-      durationMinutes: sql<number>`EXTRACT(EPOCH FROM (${classSessions.endTime}::time - ${classSessions.startTime}::time)) / 60`,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .where(
-      and(
-        eq(bookings.memberId, id),
-        eq(classSessions.instructorId, coach.id)
+    // Get class history with this coach
+    db
+      .select(STUDENT_DETAIL_CLASS_HISTORY_SELECT)
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .where(
+        and(
+          eq(bookings.memberId, id),
+          eq(classSessions.instructorId, coach.id)
+        )
       )
-    )
-    .orderBy(desc(classSessions.sessionDate))
-    .limit(20);
+      .orderBy(desc(classSessions.sessionDate))
+      .limit(20),
+
+    // Get notes
+    db
+      .select(STUDENT_DETAIL_NOTE_SELECT)
+      .from(coachNotes)
+      .where(
+        and(
+          eq(coachNotes.coachId, coach.id),
+          eq(coachNotes.memberId, id)
+        )
+      )
+      .orderBy(desc(coachNotes.createdAt))
+      .limit(20),
+  ]);
 
   // Get class records for these bookings
   const bookingIds = classHistory.map(h => h.id);
-  let recordsMap: Record<string, {
+  const recordsMap: Record<string, {
     mainContent: unknown;
     coachNotes: string | null;
     nextPlan: string | null;
@@ -339,37 +405,18 @@ app.get('/:id', async (c) => {
 
   if (bookingIds.length > 0) {
     const records = await db
-      .select({
-        bookingId: classRecords.bookingId,
-        mainContent: classRecords.mainContent,
-        coachNotes: classRecords.coachNotes,
-        nextPlan: classRecords.nextPlan,
-      })
+      .select(STUDENT_DETAIL_CLASS_RECORD_SELECT)
       .from(classRecords)
       .where(inArray(classRecords.bookingId, bookingIds));
 
-    recordsMap = records.reduce((acc, r) => {
-      acc[r.bookingId] = {
+    for (const r of records) {
+      recordsMap[r.bookingId] = {
         mainContent: r.mainContent,
         coachNotes: r.coachNotes,
         nextPlan: r.nextPlan,
       };
-      return acc;
-    }, {} as typeof recordsMap);
+    }
   }
-
-  // Get notes
-  const notesData = await db
-    .select()
-    .from(coachNotes)
-    .where(
-      and(
-        eq(coachNotes.coachId, coach.id),
-        eq(coachNotes.memberId, id)
-      )
-    )
-    .orderBy(desc(coachNotes.createdAt))
-    .limit(20);
 
   return c.json({
     success: true,
@@ -389,8 +436,8 @@ app.get('/:id', async (c) => {
       emergency_phone: member.emergencyPhone,
       height: member.height,
       member_notes: member.notes,
-      role: assignment.role,
-      assigned_at: assignment.assignedAt,
+      role: member.role,
+      assigned_at: member.assignedAt,
       contracts: contractsData.map(c => ({
         id: c.id,
         contract_no: c.contractNo,
@@ -454,7 +501,7 @@ app.get('/:id/notes', async (c) => {
 
   // Verify assignment
   const [assignment] = await db
-    .select()
+    .select(ASSIGNMENT_EXISTS_SELECT)
     .from(coachMemberAssignments)
     .where(
       and(
@@ -483,20 +530,20 @@ app.get('/:id/notes', async (c) => {
     conditions.push(eq(coachNotes.noteType, note_type as 'PROGRESS' | 'INJURY' | 'PREFERENCE' | 'GOAL' | 'OTHER'));
   }
 
-  // Get notes
-  const notesData = await db
-    .select()
-    .from(coachNotes)
-    .where(and(...conditions))
-    .orderBy(desc(coachNotes.createdAt))
-    .limit(limitNum)
-    .offset(offsetNum);
-
-  // Get total count
-  const [countResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(coachNotes)
-    .where(and(...conditions));
+  // Concurrently get notes and total count
+  const [notesData, [countResult]] = await Promise.all([
+    db
+      .select(COACH_NOTE_SELECT)
+      .from(coachNotes)
+      .where(and(...conditions))
+      .orderBy(desc(coachNotes.createdAt))
+      .limit(limitNum)
+      .offset(offsetNum),
+    db
+      .select(COUNT_SELECT)
+      .from(coachNotes)
+      .where(and(...conditions)),
+  ]);
 
   return c.json({
     success: true,
@@ -530,7 +577,7 @@ app.post(
 
     // Verify assignment
     const [assignment] = await db
-      .select()
+      .select(ASSIGNMENT_EXISTS_SELECT)
       .from(coachMemberAssignments)
       .where(
         and(
@@ -560,7 +607,7 @@ app.post(
         isPrivate: is_private,
         tenantId: coach.tenantId || null,
       })
-      .returning();
+      .returning(COACH_NOTE_CREATE_RETURNING);
 
     return c.json({
       success: true,
@@ -588,27 +635,6 @@ app.patch(
     const { id, noteId } = c.req.param();
     const updates = c.req.valid('json');
 
-    // Verify note exists and belongs to this coach
-    const [existingNote] = await db
-      .select()
-      .from(coachNotes)
-      .where(
-        and(
-          eq(coachNotes.id, noteId),
-          eq(coachNotes.coachId, coach.id),
-          eq(coachNotes.memberId, id)
-        )
-      )
-      .limit(1);
-
-    if (!existingNote) {
-      return c.json({
-        success: false,
-        error: '找不到筆記',
-        code: 'NOT_FOUND',
-      }, 404);
-    }
-
     // Build update object
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -624,12 +650,26 @@ app.patch(
       updateData.isPrivate = updates.is_private;
     }
 
-    // Update note
+    // Atomic update note scoped to coach and member
     const [updatedNote] = await db
       .update(coachNotes)
       .set(updateData)
-      .where(eq(coachNotes.id, noteId))
-      .returning();
+      .where(
+        and(
+          eq(coachNotes.id, noteId),
+          eq(coachNotes.coachId, coach.id),
+          eq(coachNotes.memberId, id)
+        )
+      )
+      .returning(COACH_NOTE_SELECT);
+
+    if (!updatedNote) {
+      return c.json({
+        success: false,
+        error: '找不到筆記',
+        code: 'NOT_FOUND',
+      }, 404);
+    }
 
     return c.json({
       success: true,
@@ -654,10 +694,9 @@ app.delete('/:id/notes/:noteId', async (c) => {
   const coach = c.get('coach')!;
   const { id, noteId } = c.req.param();
 
-  // Verify note exists and belongs to this coach
-  const [existingNote] = await db
-    .select()
-    .from(coachNotes)
+  // Atomic delete note scoped to coach and member
+  const [deletedNote] = await db
+    .delete(coachNotes)
     .where(
       and(
         eq(coachNotes.id, noteId),
@@ -665,20 +704,15 @@ app.delete('/:id/notes/:noteId', async (c) => {
         eq(coachNotes.memberId, id)
       )
     )
-    .limit(1);
+    .returning(COACH_NOTE_ID_RETURNING);
 
-  if (!existingNote) {
+  if (!deletedNote) {
     return c.json({
       success: false,
       error: '找不到筆記',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  // Delete note
-  await db
-    .delete(coachNotes)
-    .where(eq(coachNotes.id, noteId));
 
   return c.json({
     success: true,

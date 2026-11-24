@@ -1,3 +1,14 @@
+<script lang="ts">
+const periodOptions = [
+  { value: 'last_7_days', label: '過去 7 天' },
+  { value: 'last_30_days', label: '過去 30 天' },
+  { value: 'last_90_days', label: '過去 90 天' },
+  { value: 'this_year', label: '今年' }
+]
+
+const roiCurrencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
+</script>
+
 <script setup lang="ts">
 /**
  * ROI 報表頁面
@@ -11,13 +22,6 @@ const { fetchROIReport, isLoading } = useCampaigns()
 const selectedPeriod = ref('last_30_days')
 const roiData = ref<any>(null)
 
-const periodOptions = [
-  { value: 'last_7_days', label: '過去 7 天' },
-  { value: 'last_30_days', label: '過去 30 天' },
-  { value: 'last_90_days', label: '過去 90 天' },
-  { value: 'this_year', label: '今年' }
-]
-
 const loadReport = async () => {
   roiData.value = await fetchROIReport({ type: selectedPeriod.value })
 }
@@ -27,7 +31,7 @@ onMounted(loadReport)
 
 // Format currency
 const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(amount)
+  return roiCurrencyFormatter.format(amount)
 }
 
 // Calculate ROI percentage
@@ -45,6 +49,48 @@ const getROIClass = (revenue: number, cost: number) => {
   if (roi >= 0) return 'neutral'
   return 'negative'
 }
+
+const averageROI = computed(() => {
+  if (!roiData.value) return { text: '—', className: '' }
+  const revenue = roiData.value.total_revenue || 0
+  const cost = roiData.value.total_budget || 0
+  if (!cost) return { text: '—', className: '' }
+  const roi = ((revenue - cost) / cost) * 100
+  let className = 'negative'
+  if (roi >= 100) className = 'excellent'
+  else if (roi >= 50) className = 'good'
+  else if (roi >= 0) className = 'neutral'
+  return {
+    text: `${roi.toFixed(1)}%`,
+    className,
+  }
+})
+
+const campaignsWithROI = computed(() => {
+  const campaigns = roiData.value?.campaigns
+  if (!campaigns || !Array.isArray(campaigns)) return []
+  return campaigns.map((campaign: any) => {
+    const revenue = campaign.revenue || 0
+    const cost = campaign.budget || 0
+    let roiText = '—'
+    let roiClass = ''
+    if (cost) {
+      const roi = ((revenue - cost) / cost) * 100
+      roiText = `${roi.toFixed(1)}%`
+      if (roi >= 100) roiClass = 'excellent'
+      else if (roi >= 50) roiClass = 'good'
+      else if (roi >= 0) roiClass = 'neutral'
+      else roiClass = 'negative'
+    }
+    return {
+      ...campaign,
+      formattedBudget: roiCurrencyFormatter.format(cost),
+      formattedRevenue: roiCurrencyFormatter.format(revenue),
+      roiText,
+      roiClass,
+    }
+  })
+})
 </script>
 
 <template>
@@ -119,9 +165,9 @@ const getROIClass = (revenue: number, cost: number) => {
             <span class="summary-label">平均 ROI</span>
             <span
               class="summary-value"
-              :class="getROIClass(roiData.total_revenue || 0, roiData.total_budget || 0)"
+              :class="averageROI.className"
             >
-              {{ calculateROI(roiData.total_revenue || 0, roiData.total_budget || 0) }}
+              {{ averageROI.text }}
             </span>
           </div>
         </div>
@@ -131,7 +177,7 @@ const getROIClass = (revenue: number, cost: number) => {
       <div class="table-card">
         <h3 class="card-title">各活動 ROI</h3>
 
-        <table v-if="roiData.campaigns?.length" class="roi-table">
+        <table v-if="campaignsWithROI.length" class="roi-table">
           <thead>
             <tr>
               <th>活動名稱</th>
@@ -143,7 +189,7 @@ const getROIClass = (revenue: number, cost: number) => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="campaign in roiData.campaigns" :key="campaign.id">
+            <tr v-for="campaign in campaignsWithROI" :key="campaign.id">
               <td>
                 <NuxtLink :to="`/marketing/campaigns/${campaign.id}`" class="campaign-link">
                   {{ campaign.name }}
@@ -154,15 +200,15 @@ const getROIClass = (revenue: number, cost: number) => {
                   {{ campaign.type_label }}
                 </span>
               </td>
-              <td class="text-right">{{ formatCurrency(campaign.budget || 0) }}</td>
-              <td class="text-right">{{ formatCurrency(campaign.revenue || 0) }}</td>
+              <td class="text-right">{{ campaign.formattedBudget }}</td>
+              <td class="text-right">{{ campaign.formattedRevenue }}</td>
               <td class="text-right">{{ campaign.conversions || 0 }}</td>
               <td class="text-right">
                 <span
                   class="roi-value"
-                  :class="getROIClass(campaign.revenue || 0, campaign.budget || 0)"
+                  :class="campaign.roiClass"
                 >
-                  {{ calculateROI(campaign.revenue || 0, campaign.budget || 0) }}
+                  {{ campaign.roiText }}
                 </span>
               </td>
             </tr>

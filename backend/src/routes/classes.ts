@@ -5,6 +5,7 @@ import { db, classes, classSchedules, classSessions, branches, employees } from 
 import { eq, and, gte, lte, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -40,52 +41,128 @@ const createScheduleSchema = z.object({
   validUntil: z.string().optional().nullable(),
 });
 
+const CLASS_RETURNING = {
+  id: classes.id,
+  status: classes.status,
+  createdAt: classes.createdAt,
+  updatedAt: classes.updatedAt,
+  name: classes.name,
+  description: classes.description,
+  durationMinutes: classes.durationMinutes,
+  maxCapacity: classes.maxCapacity,
+  instructorId: classes.instructorId,
+  branchId: classes.branchId,
+  category: classes.category,
+  difficultyLevel: classes.difficultyLevel,
+  imageUrl: classes.imageUrl,
+  isActive: classes.isActive,
+  requiresCount: classes.requiresCount,
+  countDeduction: classes.countDeduction,
+};
+
+const CLASS_SESSION_SELECT = {
+  id: classSessions.id,
+  status: classSessions.status,
+  createdAt: classSessions.createdAt,
+  updatedAt: classSessions.updatedAt,
+  scheduleId: classSessions.scheduleId,
+  classId: classSessions.classId,
+  branchId: classSessions.branchId,
+  instructorId: classSessions.instructorId,
+  sessionDate: classSessions.sessionDate,
+  startTime: classSessions.startTime,
+  endTime: classSessions.endTime,
+  room: classSessions.room,
+  maxCapacity: classSessions.maxCapacity,
+  currentCount: classSessions.currentCount,
+  waitlistCount: classSessions.waitlistCount,
+  sessionStatus: classSessions.sessionStatus,
+  cancelledReason: classSessions.cancelledReason,
+  cancelledAt: classSessions.cancelledAt,
+  cancelledBy: classSessions.cancelledBy,
+};
+
+const CLASS_WITH_RELATIONS_SELECT = {
+  class: CLASS_RETURNING,
+  instructor: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+};
+
+const CLASS_SCHEDULE_LIST_SELECT = {
+  id: classSchedules.id,
+  dayOfWeek: classSchedules.dayOfWeek,
+  startTime: classSchedules.startTime,
+  endTime: classSchedules.endTime,
+  room: classSchedules.room,
+  maxCapacity: classSchedules.maxCapacity,
+  isRecurring: classSchedules.isRecurring,
+  status: classSchedules.status,
+};
+
+const CLASS_ID_SELECT = {
+  id: classes.id,
+};
+
+const CLASS_BRANCH_ID_SELECT = {
+  id: classes.id,
+  branchId: classes.branchId,
+};
+
+const CLASS_SESSION_WITH_INSTRUCTOR_SELECT = {
+  session: CLASS_SESSION_SELECT,
+  instructor: {
+    id: employees.id,
+    fullName: employees.fullName,
+  },
+};
+
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
 
-  const tenantBranches = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.tenantId, tenantId));
-
-  const branchIds = tenantBranches.map(b => b.id);
+  const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0) {
     return c.json({ success: true, data: [] });
   }
 
-  let condition = and(inArray(classes.branchId, branchIds), eq(classes.status, 'active'));
-
-  if (branchId) {
-    condition = and(condition, eq(classes.branchId, branchId))!;
+  if (branchId && !branchIds.includes(branchId)) {
+    return c.json({ success: true, data: [] });
   }
 
+  const branchCondition = branchId
+    ? eq(classes.branchId, branchId)
+    : (branchIds.length === 1 ? eq(classes.branchId, branchIds[0]) : inArray(classes.branchId, branchIds));
+
+  const condition = and(branchCondition, eq(classes.status, 'active'));
+
   const result = await db
-    .select({
-      class: classes,
-      instructor: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
+    .select(CLASS_WITH_RELATIONS_SELECT)
     .from(classes)
     .leftJoin(employees, eq(classes.instructorId, employees.id))
     .leftJoin(branches, eq(classes.branchId, branches.id))
     .where(condition)
     .orderBy(classes.name);
 
-  return c.json({
-    success: true,
-    data: result.map(r => ({
+  const data = new Array(result.length);
+  for (let i = 0; i < result.length; i++) {
+    const r = result[i];
+    data[i] = {
       ...r.class,
       instructor: r.instructor,
       branch: r.branch,
-    })),
+    };
+  }
+
+  return c.json({
+    success: true,
+    data,
   });
 });
 
@@ -93,43 +170,29 @@ app.get('/:id', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
-  const [classItem] = await db
-    .select({
-      class: classes,
-      instructor: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-      branch: {
-        id: branches.id,
-        name: branches.name,
-      },
-    })
-    .from(classes)
-    .leftJoin(employees, eq(classes.instructorId, employees.id))
-    .leftJoin(branches, eq(classes.branchId, branches.id))
-    .where(eq(classes.id, id))
-    .limit(1);
+  const [[classItem], branchIds, schedules] = await Promise.all([
+    db
+      .select(CLASS_WITH_RELATIONS_SELECT)
+      .from(classes)
+      .leftJoin(employees, eq(classes.instructorId, employees.id))
+      .leftJoin(branches, eq(classes.branchId, branches.id))
+      .where(eq(classes.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+    db
+      .select(CLASS_SCHEDULE_LIST_SELECT)
+      .from(classSchedules)
+      .where(eq(classSchedules.classId, id))
+      .orderBy(classSchedules.dayOfWeek, classSchedules.startTime),
+  ]);
 
   if (!classItem) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, classItem.class.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(classItem.class.branchId)) {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
-
-  const schedules = await db
-    .select()
-    .from(classSchedules)
-    .where(eq(classSchedules.classId, id))
-    .orderBy(classSchedules.dayOfWeek, classSchedules.startTime);
 
   return c.json({
     success: true,
@@ -142,21 +205,34 @@ app.get('/:id', async (c) => {
   });
 });
 
+const CLASS_SCHEDULE_RETURNING = {
+  id: classSchedules.id,
+  status: classSchedules.status,
+  createdAt: classSchedules.createdAt,
+  updatedAt: classSchedules.updatedAt,
+  classId: classSchedules.classId,
+  branchId: classSchedules.branchId,
+  instructorId: classSchedules.instructorId,
+  dayOfWeek: classSchedules.dayOfWeek,
+  startTime: classSchedules.startTime,
+  endTime: classSchedules.endTime,
+  room: classSchedules.room,
+  maxCapacity: classSchedules.maxCapacity,
+  isRecurring: classSchedules.isRecurring,
+  validFrom: classSchedules.validFrom,
+  validUntil: classSchedules.validUntil,
+};
+
 app.post('/', zValidator('json', createClassSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (!branchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
-  const [newClass] = await db.insert(classes).values(data).returning();
+  const [newClass] = await db.insert(classes).values(data).returning(CLASS_RETURNING);
 
   return c.json({ success: true, data: newClass }, 201);
 });
@@ -166,34 +242,32 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [classItem] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, id))
-    .limit(1);
-
-  if (!classItem) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  if (branchIds.length === 0) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, classItem.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
-    return c.json({ success: false, error: '無權限修改此課程' }, 403);
+  if (data.branchId && !branchIds.includes(data.branchId)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
+  const branchCondition = branchIds.length === 1 ? eq(classes.branchId, branchIds[0]) : inArray(classes.branchId, branchIds);
   const [updatedClass] = await db
     .update(classes)
     .set({
       ...data,
       updatedAt: new Date(),
     })
-    .where(eq(classes.id, id))
-    .returning();
+    .where(and(eq(classes.id, id), branchCondition))
+    .returning(CLASS_RETURNING);
+
+  if (!updatedClass) {
+    const [exists] = await db.select(CLASS_ID_SELECT).from(classes).where(eq(classes.id, id)).limit(1);
+    if (exists) {
+      return c.json({ success: false, error: '無權限修改此課程' }, 403);
+    }
+    return c.json({ success: false, error: '課程不存在' }, 404);
+  }
 
   return c.json({ success: true, data: updatedClass });
 });
@@ -201,58 +275,51 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
 app.get('/:id/sessions', async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
-  const startDate = c.req.query('startDate') || new Date().toISOString().split('T')[0];
-  const endDate = c.req.query('endDate') || (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 14);
-    return d.toISOString().split('T')[0];
-  })();
+  const now = new Date();
+  const startDate = c.req.query('startDate') || now.toISOString().slice(0, 10);
+  const endDate = c.req.query('endDate') || new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [classItem] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, id))
-    .limit(1);
+  const [[classItem], branchIds, sessions] = await Promise.all([
+    db
+      .select(CLASS_BRANCH_ID_SELECT)
+      .from(classes)
+      .where(eq(classes.id, id))
+      .limit(1),
+    getTenantBranchIds(tenantId),
+    db
+      .select(CLASS_SESSION_WITH_INSTRUCTOR_SELECT)
+      .from(classSessions)
+      .leftJoin(employees, eq(classSessions.instructorId, employees.id))
+      .where(
+        and(
+          eq(classSessions.classId, id),
+          gte(classSessions.sessionDate, startDate),
+          lte(classSessions.sessionDate, endDate)
+        )
+      )
+      .orderBy(classSessions.sessionDate, classSessions.startTime),
+  ]);
 
   if (!classItem) {
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, classItem.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
-
-  if (!branch) {
+  if (!branchIds.includes(classItem.branchId)) {
     return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
 
-  const sessions = await db
-    .select({
-      session: classSessions,
-      instructor: {
-        id: employees.id,
-        fullName: employees.fullName,
-      },
-    })
-    .from(classSessions)
-    .leftJoin(employees, eq(classSessions.instructorId, employees.id))
-    .where(
-      and(
-        eq(classSessions.classId, id),
-        gte(classSessions.sessionDate, startDate),
-        lte(classSessions.sessionDate, endDate)
-      )
-    )
-    .orderBy(classSessions.sessionDate, classSessions.startTime);
+  const data = new Array(sessions.length);
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    data[i] = {
+      ...s.session,
+      instructor: s.instructor,
+    };
+  }
 
   return c.json({
     success: true,
-    data: sessions.map(s => ({
-      ...s.session,
-      instructor: s.instructor,
-    })),
+    data,
   });
 });
 
@@ -260,27 +327,24 @@ app.post('/schedules', zValidator('json', createScheduleSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, data.branchId), eq(branches.tenantId, tenantId)))
-    .limit(1);
+  const [tenantBranchIds, [classItem]] = await Promise.all([
+    getTenantBranchIds(tenantId),
+    db
+      .select(CLASS_BRANCH_ID_SELECT)
+      .from(classes)
+      .where(eq(classes.id, data.classId))
+      .limit(1),
+  ]);
 
-  if (!branch) {
+  if (!tenantBranchIds.includes(data.branchId)) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
-
-  const [classItem] = await db
-    .select()
-    .from(classes)
-    .where(eq(classes.id, data.classId))
-    .limit(1);
 
   if (!classItem || classItem.branchId !== data.branchId) {
     return c.json({ success: false, error: '無效的課程' }, 400);
   }
 
-  const [newSchedule] = await db.insert(classSchedules).values(data).returning();
+  const [newSchedule] = await db.insert(classSchedules).values(data).returning(CLASS_SCHEDULE_RETURNING);
 
   return c.json({ success: true, data: newSchedule }, 201);
 });

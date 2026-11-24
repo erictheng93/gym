@@ -1,3 +1,31 @@
+<script lang="ts">
+import { MESSAGES, PAGES, STATUS } from '~/constants'
+
+// Cached Intl formatter for exports
+const exportDateFormatter = new Intl.DateTimeFormat('zh-TW')
+
+// Status options
+const statusOptions = [
+  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
+  { value: 'DRAFT', label: STATUS.CONTRACT.DRAFT },
+  { value: 'ACTIVE', label: STATUS.CONTRACT.ACTIVE },
+  { value: 'PAUSED', label: STATUS.CONTRACT.PAUSED },
+  { value: 'EXPIRED', label: STATUS.CONTRACT.EXPIRED },
+  { value: 'TERMINATED', label: STATUS.CONTRACT.TERMINATED }
+]
+
+// Table columns configuration
+const columns = [
+  { key: 'contract_no', label: PAGES.CONTRACTS.CONTRACT_NUMBER, slot: 'contractNo' },
+  { key: 'member_id.full_name', label: PAGES.CONTRACTS.MEMBER, slot: 'member' },
+  { key: 'plan_id.name', label: PAGES.CONTRACTS.PLAN },
+  { key: 'start_date', label: PAGES.CONTRACTS.PERIOD, slot: 'period', hideOnMobile: true },
+  { key: 'total_amount', label: PAGES.CONTRACTS.AMOUNT, slot: 'amount', hideOnMobile: true },
+  { key: 'payment_status', label: PAGES.CONTRACTS.PAYMENT_STATUS, slot: 'paymentStatus' },
+  { key: 'contract_status', label: PAGES.CONTRACTS.CONTRACT_STATUS, slot: 'contractStatus' }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 合約管理頁面
@@ -5,7 +33,7 @@
  * 使用 @gym-nexus/ui 組件庫重構
  * 支援批量選擇和操作
  */
-import { MESSAGES, PAGES, STATUS, TIMING } from '~/constants'
+import { PAGES, TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
@@ -26,33 +54,12 @@ const stats = ref({ active: 0, expired: 0, draft: 0 })
 // Batch selection state
 const selectedIds = ref<string[]>([])
 
-// Status options
-const statusOptions = [
-  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
-  { value: 'DRAFT', label: STATUS.CONTRACT.DRAFT },
-  { value: 'ACTIVE', label: STATUS.CONTRACT.ACTIVE },
-  { value: 'PAUSED', label: STATUS.CONTRACT.PAUSED },
-  { value: 'EXPIRED', label: STATUS.CONTRACT.EXPIRED },
-  { value: 'TERMINATED', label: STATUS.CONTRACT.TERMINATED }
-]
-
 // Stats configuration for StatsGrid
 const statsConfig = computed(() => [
   { label: PAGES.CONTRACTS.ACTIVE_CONTRACTS, value: stats.value.active, icon: 'check' as const, variant: 'success' as const },
   { label: PAGES.CONTRACTS.EXPIRED_CONTRACTS, value: stats.value.expired, icon: 'alert' as const, variant: 'error' as const },
   { label: PAGES.CONTRACTS.DRAFT_CONTRACTS, value: stats.value.draft, icon: 'file' as const, variant: 'default' as const }
 ])
-
-// Table columns configuration
-const columns = [
-  { key: 'contract_no', label: PAGES.CONTRACTS.CONTRACT_NUMBER, slot: 'contractNo' },
-  { key: 'member_id.full_name', label: PAGES.CONTRACTS.MEMBER, slot: 'member' },
-  { key: 'plan_id.name', label: PAGES.CONTRACTS.PLAN },
-  { key: 'start_date', label: PAGES.CONTRACTS.PERIOD, slot: 'period', hideOnMobile: true },
-  { key: 'total_amount', label: PAGES.CONTRACTS.AMOUNT, slot: 'amount', hideOnMobile: true },
-  { key: 'payment_status', label: PAGES.CONTRACTS.PAYMENT_STATUS, slot: 'paymentStatus' },
-  { key: 'contract_status', label: PAGES.CONTRACTS.CONTRACT_STATUS, slot: 'contractStatus' }
-]
 
 // Load contracts
 const loadContracts = async () => {
@@ -80,13 +87,16 @@ const handleSearch = () => {
 // Watch filters
 watch([selectedBranch, selectedStatus], () => {
   selectedIds.value = [] // Clear selection on filter change
-  loadContracts()
-  loadStats()
+  Promise.all([loadContracts(), loadStats()])
 })
 
 // Initial load
 onMounted(async () => {
   await Promise.all([loadContracts(), loadStats(), fetchBranches()])
+})
+
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
 })
 
 // Row click handler
@@ -114,8 +124,7 @@ const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'PAUSED' | 'TERMINATED
     )
     toast.success(`成功更新 ${selectedIds.value.length} 份合約狀態`)
     selectedIds.value = []
-    await loadContracts()
-    await loadStats()
+    await Promise.all([loadContracts(), loadStats()])
   } catch (error) {
     console.error('Failed to batch update:', error)
     toast.error('批量更新失敗')
@@ -124,14 +133,15 @@ const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'PAUSED' | 'TERMINATED
 
 const handleExportSelected = () => {
   // Export selected contracts to CSV
-  const selectedContracts = contracts.value.filter(c => selectedIds.value.includes(c.id))
+  const selectedSet = new Set(selectedIds.value)
+  const selectedContracts = contracts.value.filter(c => selectedSet.has(c.id))
   const headers = ['合約編號', '會員', '方案', '開始日期', '結束日期', '金額', '付款狀態', '合約狀態']
   const rows = selectedContracts.map(c => [
     c.contract_no,
     c.member?.full_name || '',
     c.plan?.name || '',
-    c.start_date ? new Date(c.start_date).toLocaleDateString('zh-TW') : '',
-    c.end_date ? new Date(c.end_date).toLocaleDateString('zh-TW') : '',
+    c.start_date ? exportDateFormatter.format(new Date(c.start_date)) : '',
+    c.end_date ? exportDateFormatter.format(new Date(c.end_date)) : '',
     c.total_amount,
     c.payment_status,
     c.contract_status
@@ -141,7 +151,7 @@ const handleExportSelected = () => {
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `contracts_export_${new Date().toISOString().split('T')[0]}.csv`
+  link.download = `contracts_export_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
 
   toast.success(`成功匯出 ${selectedContracts.length} 份合約資料`)

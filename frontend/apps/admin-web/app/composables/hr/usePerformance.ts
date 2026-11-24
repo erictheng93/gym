@@ -69,6 +69,11 @@ export interface TeamDashboard {
   }>
 }
 
+const inFlightReviewsMap = new Map<string, Promise<void>>()
+const inFlightSingleReviewMap = new Map<string, Promise<void>>()
+let inFlightKPITemplatesPromise: Promise<void> | null = null
+const inFlightTeamDashboardMap = new Map<string, Promise<TeamDashboard | null>>()
+
 export const usePerformance = () => {
   const config = useRuntimeConfig()
   const { handleError } = useErrorHandler()
@@ -94,60 +99,79 @@ export const usePerformance = () => {
     page?: number
     limit?: number
   }) => {
-    isLoading.value = true
-    const { page = 1, limit = 20, ...filters } = options || {}
+    const key = JSON.stringify(options || {})
+    const existing = inFlightReviewsMap.get(key)
+    if (existing) return existing
 
-    try {
-      const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value)
-      })
-      params.append('limit', limit.toString())
-      params.append('offset', ((page - 1) * limit).toString())
+    const promise = (async () => {
+      isLoading.value = true
+      const { page = 1, limit = 20, ...filters } = options || {}
 
-      const response = await $fetch<{
-        success: boolean
-        data: PerformanceReview[]
-        meta: { total: number }
-      }>(`${apiUrl}/performance/reviews?${params}`)
+      try {
+        const params = new URLSearchParams()
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value) params.append(key, value)
+        })
+        params.append('limit', limit.toString())
+        params.append('offset', ((page - 1) * limit).toString())
 
-      if (response.success) {
-        reviews.value = response.data
-        totalCount.value = response.meta.total
+        const response = await $fetch<{
+          success: boolean
+          data: PerformanceReview[]
+          meta: { total: number }
+        }>(`${apiUrl}/performance/reviews?${params}`)
+
+        if (response.success) {
+          reviews.value = response.data
+          totalCount.value = response.meta.total
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePerformance.fetchReviews',
+          customMessage: '取得績效考核列表失敗'
+        })
+        reviews.value = []
+        totalCount.value = 0
+      } finally {
+        isLoading.value = false
+        inFlightReviewsMap.delete(key)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePerformance.fetchReviews',
-        customMessage: '取得績效考核列表失敗'
-      })
-      reviews.value = []
-      totalCount.value = 0
-    } finally {
-      isLoading.value = false
-    }
+    })()
+
+    inFlightReviewsMap.set(key, promise)
+    return promise
   }
 
   /**
    * Fetch single review
    */
   const fetchReview = async (id: string) => {
-    isLoading.value = true
-    try {
-      const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-        `${apiUrl}/performance/reviews/${id}`
-      )
-      if (response.success) {
-        currentReview.value = response.data
+    const existing = inFlightSingleReviewMap.get(id)
+    if (existing) return existing
+
+    const promise = (async () => {
+      isLoading.value = true
+      try {
+        const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
+          `${apiUrl}/performance/reviews/${id}`
+        )
+        if (response.success) {
+          currentReview.value = response.data
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePerformance.fetchReview',
+          customMessage: '取得績效考核詳情失敗'
+        })
+        currentReview.value = null
+      } finally {
+        isLoading.value = false
+        inFlightSingleReviewMap.delete(id)
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePerformance.fetchReview',
-        customMessage: '取得績效考核詳情失敗'
-      })
-      currentReview.value = null
-    } finally {
-      isLoading.value = false
-    }
+    })()
+
+    inFlightSingleReviewMap.set(id, promise)
+    return promise
   }
 
   /**
@@ -243,20 +267,28 @@ export const usePerformance = () => {
    * Fetch KPI templates
    */
   const fetchKPITemplates = async () => {
-    try {
-      const response = await $fetch<{ success: boolean; data: KPITemplate[] }>(
-        `${apiUrl}/performance/kpi-templates`
-      )
-      if (response.success) {
-        kpiTemplates.value = response.data
+    if (inFlightKPITemplatesPromise) return inFlightKPITemplatesPromise
+
+    inFlightKPITemplatesPromise = (async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: KPITemplate[] }>(
+          `${apiUrl}/performance/kpi-templates`
+        )
+        if (response.success) {
+          kpiTemplates.value = response.data
+        }
+      } catch (error) {
+        handleError(error, {
+          context: 'usePerformance.fetchKPITemplates',
+          customMessage: '取得 KPI 範本失敗'
+        })
+        kpiTemplates.value = []
+      } finally {
+        inFlightKPITemplatesPromise = null
       }
-    } catch (error) {
-      handleError(error, {
-        context: 'usePerformance.fetchKPITemplates',
-        customMessage: '取得 KPI 範本失敗'
-      })
-      kpiTemplates.value = []
-    }
+    })()
+
+    return inFlightKPITemplatesPromise
   }
 
   /**
@@ -300,22 +332,33 @@ export const usePerformance = () => {
     branch_id?: string
     period?: string
   }): Promise<TeamDashboard | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (options?.branch_id) params.append('branch_id', options.branch_id)
-      if (options?.period) params.append('period', options.period)
+    const key = JSON.stringify(options || {})
+    const existing = inFlightTeamDashboardMap.get(key)
+    if (existing) return existing
 
-      const response = await $fetch<{ success: boolean; data: TeamDashboard }>(
-        `${apiUrl}/performance/team-dashboard?${params}`
-      )
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'usePerformance.fetchTeamDashboard',
-        customMessage: '取得團隊儀表板失敗'
-      })
-      return null
-    }
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (options?.branch_id) params.append('branch_id', options.branch_id)
+        if (options?.period) params.append('period', options.period)
+
+        const response = await $fetch<{ success: boolean; data: TeamDashboard }>(
+          `${apiUrl}/performance/team-dashboard?${params}`
+        )
+        return response.success ? response.data : null
+      } catch (error) {
+        handleError(error, {
+          context: 'usePerformance.fetchTeamDashboard',
+          customMessage: '取得團隊儀表板失敗'
+        })
+        return null
+      } finally {
+        inFlightTeamDashboardMap.delete(key)
+      }
+    })()
+
+    inFlightTeamDashboardMap.set(key, promise)
+    return promise
   }
 
   // Helper functions

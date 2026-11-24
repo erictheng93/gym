@@ -16,6 +16,100 @@ import type { MemberVariables } from '../middleware/index.js';
 const app = new Hono<{ Variables: MemberVariables }>();
 
 // -----------------------------------------------------------------------------
+// Hoisted Query Projections
+// -----------------------------------------------------------------------------
+
+const BOOKING_ELIGIBILITY_SELECT = {
+  id: bookings.id,
+  memberId: bookings.memberId,
+  sessionId: bookings.sessionId,
+  bookingStatus: bookings.bookingStatus,
+  attendedAt: bookings.attendedAt,
+  sessionDate: classSessions.sessionDate,
+  sessionStatus: classSessions.sessionStatus,
+  classId: classSessions.classId,
+  className: classes.name,
+};
+
+const CLASS_REVIEW_ID_SELECT = {
+  id: classReviews.id,
+};
+
+const BOOKING_CREATE_REVIEW_SELECT = {
+  id: bookings.id,
+  memberId: bookings.memberId,
+  sessionId: bookings.sessionId,
+  bookingStatus: bookings.bookingStatus,
+  classId: classSessions.classId,
+  sessionStatus: classSessions.sessionStatus,
+  sessionDate: classSessions.sessionDate,
+  tenantId: classes.branchId, // Will get actual tenantId from class
+};
+
+const CLASS_REVIEW_INSERT_RETURNING = {
+  id: classReviews.id,
+  rating: classReviews.rating,
+  comment: classReviews.comment,
+  isAnonymous: classReviews.isAnonymous,
+  createdAt: classReviews.createdAt,
+};
+
+const CLASS_REVIEW_OWNER_SELECT = {
+  id: classReviews.id,
+  memberId: classReviews.memberId,
+  createdAt: classReviews.createdAt,
+};
+
+const CLASS_REVIEW_UPDATE_RETURNING = {
+  id: classReviews.id,
+  rating: classReviews.rating,
+  comment: classReviews.comment,
+  isAnonymous: classReviews.isAnonymous,
+  updatedAt: classReviews.updatedAt,
+};
+
+const CLASS_INFO_SELECT = {
+  id: classes.id,
+  name: classes.name,
+};
+
+const CLASS_REVIEW_STATS_SELECT = {
+  avgRating: avg(classReviews.rating),
+  totalReviews: count(classReviews.id),
+};
+
+const CLASS_REVIEW_PUBLIC_LIST_SELECT = {
+  id: classReviews.id,
+  rating: classReviews.rating,
+  comment: classReviews.comment,
+  isAnonymous: classReviews.isAnonymous,
+  createdAt: classReviews.createdAt,
+  staffResponse: classReviews.staffResponse,
+  staffResponseAt: classReviews.staffResponseAt,
+  memberFullName: members.fullName,
+};
+
+const CLASS_REVIEW_TOTAL_COUNT_SELECT = {
+  total: count(classReviews.id),
+};
+
+const CLASS_REVIEW_MY_LIST_SELECT = {
+  id: classReviews.id,
+  rating: classReviews.rating,
+  comment: classReviews.comment,
+  isAnonymous: classReviews.isAnonymous,
+  status: classReviews.status,
+  createdAt: classReviews.createdAt,
+  updatedAt: classReviews.updatedAt,
+  staffResponse: classReviews.staffResponse,
+  staffResponseAt: classReviews.staffResponseAt,
+  classId: classReviews.classId,
+  className: classes.name,
+  sessionId: classReviews.sessionId,
+  sessionDate: classSessions.sessionDate,
+};
+
+// -----------------------------------------------------------------------------
 // Validation Schemas
 // -----------------------------------------------------------------------------
 
@@ -54,24 +148,21 @@ app.get('/eligibility/:bookingId', async (c) => {
   const memberInfo = c.get('member')!;
   const bookingId = c.req.param('bookingId');
 
-  // Get booking with session info
-  const [booking] = await db
-    .select({
-      id: bookings.id,
-      memberId: bookings.memberId,
-      sessionId: bookings.sessionId,
-      bookingStatus: bookings.bookingStatus,
-      attendedAt: bookings.attendedAt,
-      sessionDate: classSessions.sessionDate,
-      sessionStatus: classSessions.sessionStatus,
-      classId: classSessions.classId,
-      className: classes.name,
-    })
-    .from(bookings)
-    .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-    .innerJoin(classes, eq(classSessions.classId, classes.id))
-    .where(eq(bookings.id, bookingId))
-    .limit(1);
+  // Concurrently fetch booking with session info and check if already reviewed
+  const [[booking], [existingReview]] = await Promise.all([
+    db
+      .select(BOOKING_ELIGIBILITY_SELECT)
+      .from(bookings)
+      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+      .innerJoin(classes, eq(classSessions.classId, classes.id))
+      .where(eq(bookings.id, bookingId))
+      .limit(1),
+    db
+      .select(CLASS_REVIEW_ID_SELECT)
+      .from(classReviews)
+      .where(eq(classReviews.bookingId, bookingId))
+      .limit(1),
+  ]);
 
   if (!booking) {
     return c.json({
@@ -89,13 +180,6 @@ app.get('/eligibility/:bookingId', async (c) => {
       code: 'FORBIDDEN',
     }, 403);
   }
-
-  // Check if already reviewed
-  const [existingReview] = await db
-    .select({ id: classReviews.id })
-    .from(classReviews)
-    .where(eq(classReviews.bookingId, bookingId))
-    .limit(1);
 
   if (existingReview) {
     return c.json({
@@ -176,23 +260,21 @@ app.post(
     const memberInfo = c.get('member')!;
     const { bookingId, rating, comment, isAnonymous } = c.req.valid('json');
 
-    // Verify eligibility (same logic as eligibility endpoint)
-    const [booking] = await db
-      .select({
-        id: bookings.id,
-        memberId: bookings.memberId,
-        sessionId: bookings.sessionId,
-        bookingStatus: bookings.bookingStatus,
-        classId: classSessions.classId,
-        sessionStatus: classSessions.sessionStatus,
-        sessionDate: classSessions.sessionDate,
-        tenantId: classes.branchId, // Will get actual tenantId from class
-      })
-      .from(bookings)
-      .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
-      .innerJoin(classes, eq(classSessions.classId, classes.id))
-      .where(eq(bookings.id, bookingId))
-      .limit(1);
+    // Concurrently verify eligibility and check for existing review
+    const [[booking], [existingReview]] = await Promise.all([
+      db
+        .select(BOOKING_CREATE_REVIEW_SELECT)
+        .from(bookings)
+        .innerJoin(classSessions, eq(bookings.sessionId, classSessions.id))
+        .innerJoin(classes, eq(classSessions.classId, classes.id))
+        .where(eq(bookings.id, bookingId))
+        .limit(1),
+      db
+        .select(CLASS_REVIEW_ID_SELECT)
+        .from(classReviews)
+        .where(eq(classReviews.bookingId, bookingId))
+        .limit(1),
+    ]);
 
     if (!booking) {
       return c.json({
@@ -218,13 +300,6 @@ app.post(
       }, 400);
     }
 
-    // Check for existing review
-    const [existingReview] = await db
-      .select({ id: classReviews.id })
-      .from(classReviews)
-      .where(eq(classReviews.bookingId, bookingId))
-      .limit(1);
-
     if (existingReview) {
       return c.json({
         success: false,
@@ -243,7 +318,7 @@ app.post(
       comment: comment || null,
       isAnonymous,
       tenantId: memberInfo.tenantId,
-    }).returning();
+    }).returning(CLASS_REVIEW_INSERT_RETURNING);
 
     return c.json({
       success: true,
@@ -275,11 +350,7 @@ app.put(
 
     // Get review
     const [review] = await db
-      .select({
-        id: classReviews.id,
-        memberId: classReviews.memberId,
-        createdAt: classReviews.createdAt,
-      })
+      .select(CLASS_REVIEW_OWNER_SELECT)
       .from(classReviews)
       .where(eq(classReviews.id, reviewId))
       .limit(1);
@@ -307,7 +378,7 @@ app.put(
         success: false,
         error: '已超過編輯期限（24 小時）',
         code: 'EDIT_PERIOD_EXPIRED',
-      }, 400);
+        }, 400);
     }
 
     // Update review
@@ -318,7 +389,7 @@ app.put(
         updatedAt: new Date(),
       })
       .where(eq(classReviews.id, reviewId))
-      .returning();
+      .returning(CLASS_REVIEW_UPDATE_RETURNING);
 
     return c.json({
       success: true,
@@ -344,34 +415,37 @@ app.delete('/:id', async (c) => {
   const memberInfo = c.get('member')!;
   const reviewId = c.req.param('id');
 
-  // Get review
-  const [review] = await db
-    .select({
-      id: classReviews.id,
-      memberId: classReviews.memberId,
-    })
-    .from(classReviews)
-    .where(eq(classReviews.id, reviewId))
-    .limit(1);
+  // Fast-path: atomic delete with ownership check
+  const [deletedReview] = await db
+    .delete(classReviews)
+    .where(and(
+      eq(classReviews.id, reviewId),
+      eq(classReviews.memberId, memberInfo.id),
+    ))
+    .returning(CLASS_REVIEW_ID_SELECT);
 
-  if (!review) {
+  if (!deletedReview) {
+    // Check if review exists to distinguish 403 vs 404
+    const [existing] = await db
+      .select(CLASS_REVIEW_ID_SELECT)
+      .from(classReviews)
+      .where(eq(classReviews.id, reviewId))
+      .limit(1);
+
+    if (existing) {
+      return c.json({
+        success: false,
+        error: '無權限',
+        code: 'FORBIDDEN',
+      }, 403);
+    }
+
     return c.json({
       success: false,
       error: '評價不存在',
       code: 'NOT_FOUND',
     }, 404);
   }
-
-  if (review.memberId !== memberInfo.id) {
-    return c.json({
-      success: false,
-      error: '無權限',
-      code: 'FORBIDDEN',
-    }, 403);
-  }
-
-  // Delete review
-  await db.delete(classReviews).where(eq(classReviews.id, reviewId));
 
   return c.json({
     success: true,
@@ -391,15 +465,34 @@ app.get(
     const { page, limit } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    // Get class info
-    const [classInfo] = await db
-      .select({
-        id: classes.id,
-        name: classes.name,
-      })
-      .from(classes)
-      .where(eq(classes.id, classId))
-      .limit(1);
+    // Concurrently get class info, review stats, and reviews list
+    const [[classInfo], [stats], reviews] = await Promise.all([
+      db
+        .select(CLASS_INFO_SELECT)
+        .from(classes)
+        .where(eq(classes.id, classId))
+        .limit(1),
+      db
+        .select(CLASS_REVIEW_STATS_SELECT)
+        .from(classReviews)
+        .where(and(
+          eq(classReviews.classId, classId),
+          eq(classReviews.status, 'published'),
+          eq(classReviews.isPublic, true),
+        )),
+      db
+        .select(CLASS_REVIEW_PUBLIC_LIST_SELECT)
+        .from(classReviews)
+        .leftJoin(members, eq(classReviews.memberId, members.id))
+        .where(and(
+          eq(classReviews.classId, classId),
+          eq(classReviews.status, 'published'),
+          eq(classReviews.isPublic, true),
+        ))
+        .orderBy(desc(classReviews.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     if (!classInfo) {
       return c.json({
@@ -408,42 +501,6 @@ app.get(
         code: 'CLASS_NOT_FOUND',
       }, 404);
     }
-
-    // Get review stats
-    const [stats] = await db
-      .select({
-        avgRating: avg(classReviews.rating),
-        totalReviews: count(classReviews.id),
-      })
-      .from(classReviews)
-      .where(and(
-        eq(classReviews.classId, classId),
-        eq(classReviews.status, 'published'),
-        eq(classReviews.isPublic, true),
-      ));
-
-    // Get reviews
-    const reviews = await db
-      .select({
-        id: classReviews.id,
-        rating: classReviews.rating,
-        comment: classReviews.comment,
-        isAnonymous: classReviews.isAnonymous,
-        createdAt: classReviews.createdAt,
-        staffResponse: classReviews.staffResponse,
-        staffResponseAt: classReviews.staffResponseAt,
-        memberFullName: members.fullName,
-      })
-      .from(classReviews)
-      .leftJoin(members, eq(classReviews.memberId, members.id))
-      .where(and(
-        eq(classReviews.classId, classId),
-        eq(classReviews.status, 'published'),
-        eq(classReviews.isPublic, true),
-      ))
-      .orderBy(desc(classReviews.createdAt))
-      .limit(limit)
-      .offset(offset);
 
     return c.json({
       success: true,
@@ -490,36 +547,22 @@ app.get(
     const { page, limit } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: count(classReviews.id) })
-      .from(classReviews)
-      .where(eq(classReviews.memberId, memberInfo.id));
-
-    // Get reviews
-    const reviews = await db
-      .select({
-        id: classReviews.id,
-        rating: classReviews.rating,
-        comment: classReviews.comment,
-        isAnonymous: classReviews.isAnonymous,
-        status: classReviews.status,
-        createdAt: classReviews.createdAt,
-        updatedAt: classReviews.updatedAt,
-        staffResponse: classReviews.staffResponse,
-        staffResponseAt: classReviews.staffResponseAt,
-        classId: classReviews.classId,
-        className: classes.name,
-        sessionId: classReviews.sessionId,
-        sessionDate: classSessions.sessionDate,
-      })
-      .from(classReviews)
-      .leftJoin(classes, eq(classReviews.classId, classes.id))
-      .leftJoin(classSessions, eq(classReviews.sessionId, classSessions.id))
-      .where(eq(classReviews.memberId, memberInfo.id))
-      .orderBy(desc(classReviews.createdAt))
-      .limit(limit)
-      .offset(offset);
+    // Concurrently get total count and reviews list
+    const [[{ total }], reviews] = await Promise.all([
+      db
+        .select(CLASS_REVIEW_TOTAL_COUNT_SELECT)
+        .from(classReviews)
+        .where(eq(classReviews.memberId, memberInfo.id)),
+      db
+        .select(CLASS_REVIEW_MY_LIST_SELECT)
+        .from(classReviews)
+        .leftJoin(classes, eq(classReviews.classId, classes.id))
+        .leftJoin(classSessions, eq(classReviews.sessionId, classSessions.id))
+        .where(eq(classReviews.memberId, memberInfo.id))
+        .orderBy(desc(classReviews.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     return c.json({
       success: true,

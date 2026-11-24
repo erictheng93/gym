@@ -1,10 +1,24 @@
+<script lang="ts">
+import { MESSAGES, PAGES } from '~/constants'
+
+// Status options
+const statusOptions = [
+  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
+  { value: 'CONFIRMED', label: PAGES.CLASS_BOOKINGS.CONFIRMED },
+  { value: 'WAITLIST', label: PAGES.CLASS_BOOKINGS.WAITLIST },
+  { value: 'ATTENDED', label: PAGES.CLASS_BOOKINGS.ATTENDED },
+  { value: 'NO_SHOW', label: PAGES.CLASS_BOOKINGS.NO_SHOW },
+  { value: 'CANCELLED', label: PAGES.CLASS_BOOKINGS.CANCELLED }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 課程預約管理頁面
  *
  * 管理會員課程預約、簽到
  */
-import { MESSAGES, PAGES, PAGINATION, TIMING } from '~/constants'
+import { PAGINATION, TIMING } from '~/constants'
 import { getBookingStatusBadge, formatDate } from '@gym-nexus/shared'
 import type { Booking } from '~/types/schema'
 
@@ -37,16 +51,6 @@ const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 // Stats
 const stats = ref({ confirmed: 0, waitlist: 0, attended: 0, noShow: 0, cancelled: 0 })
 
-// Status options
-const statusOptions = [
-  { value: '', label: MESSAGES.COMMON.ALL_STATUS },
-  { value: 'CONFIRMED', label: PAGES.CLASS_BOOKINGS.CONFIRMED },
-  { value: 'WAITLIST', label: PAGES.CLASS_BOOKINGS.WAITLIST },
-  { value: 'ATTENDED', label: PAGES.CLASS_BOOKINGS.ATTENDED },
-  { value: 'NO_SHOW', label: PAGES.CLASS_BOOKINGS.NO_SHOW },
-  { value: 'CANCELLED', label: PAGES.CLASS_BOOKINGS.CANCELLED }
-]
-
 // Date options
 const dateOptions = computed(() => {
   const options = [
@@ -58,7 +62,7 @@ const dateOptions = computed(() => {
   for (let i = 1; i <= 7; i++) {
     const date = new Date()
     date.setDate(date.getDate() + i)
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = date.toISOString().slice(0, 10)
     options.push({
       value: dateStr,
       label: formatDateLabel(date)
@@ -69,7 +73,7 @@ const dateOptions = computed(() => {
 })
 
 function getTodayDate() {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().slice(0, 10)
 }
 
 function formatDateLabel(date: Date) {
@@ -125,6 +129,10 @@ watch(currentPage, () => {
 // Initial load
 onMounted(async () => {
   await loadBookings()
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(searchTimeout)
 })
 
 // Cancel booking handler

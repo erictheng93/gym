@@ -43,12 +43,12 @@ function base64urlDecode(str: string): string {
   return Buffer.from(base64, 'base64').toString('utf8');
 }
 
+const JWT_HEADER_ENCODED = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+
 // Sign JWT
 function signJwt(payload: Record<string, unknown>): string {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const headerEncoded = base64urlEncode(JSON.stringify(header));
   const payloadEncoded = base64urlEncode(JSON.stringify(payload));
-  const signatureInput = `${headerEncoded}.${payloadEncoded}`;
+  const signatureInput = `${JWT_HEADER_ENCODED}.${payloadEncoded}`;
   const signature = createHmac('sha256', JWT_SECRET)
     .update(signatureInput)
     .digest();
@@ -176,14 +176,14 @@ export function verifyMemberRefreshToken(token: string): { memberId: string; jti
 }
 
 /**
- * Generate a password reset token (1 hour expiry)
+ * Generate a secure account recovery token (used for password reset flows)
  */
-export function generatePasswordResetToken(memberId: string): { token: string; hash: string } {
+export function generateRecoveryToken(memberId: string): { token: string; hash: string } {
   const now = Math.floor(Date.now() / 1000);
   const tokenId = randomBytes(32).toString('hex');
 
   const payload = {
-    type: 'password_reset',
+    type: 'recovery_token',
     sub: memberId,
     jti: tokenId,
     iat: now,
@@ -201,12 +201,12 @@ export function generatePasswordResetToken(memberId: string): { token: string; h
 }
 
 /**
- * Verify a password reset token
+ * Verify an account recovery token
  */
-export function verifyPasswordResetToken(token: string): { memberId: string; jti: string } | null {
+export function verifyRecoveryToken(token: string): { memberId: string; jti: string } | null {
   const payload = verifyJwt<{ type: string; sub: string; jti: string }>(token);
 
-  if (!payload || payload.type !== 'password_reset') {
+  if (!payload || (payload.type !== 'recovery_token' && payload.type !== 'password_reset')) {
     return null;
   }
 
@@ -217,18 +217,26 @@ export function verifyPasswordResetToken(token: string): { memberId: string; jti
 }
 
 /**
- * Get token hash for verification against stored hash
+ * Get recovery token hash for verification against stored hash
  */
-export function getTokenHash(jti: string): string {
+export function getRecoveryTokenHash(jti: string): string {
   return createHmac('sha256', JWT_SECRET)
     .update(jti)
     .digest('hex');
 }
 
+// Backwards compatibility aliases
+export const generatePasswordResetToken = generateRecoveryToken;
+export const verifyPasswordResetToken = verifyRecoveryToken;
+export const getTokenHash = getRecoveryTokenHash;
+
 export const memberJwtService = {
   generateTokens: generateMemberTokens,
   verifyAccessToken: verifyMemberAccessToken,
   verifyRefreshToken: verifyMemberRefreshToken,
+  generateRecoveryToken,
+  verifyRecoveryToken,
+  getRecoveryTokenHash,
   generatePasswordResetToken,
   verifyPasswordResetToken,
   getTokenHash,

@@ -1,8 +1,60 @@
+<script lang="ts">
+import { PAGES } from '~/constants'
+
+const MAKEUP_TYPE_LABEL_MAP: Record<string, string> = {
+  CHECK_IN: PAGES.HR.MAKEUP.CHECK_IN,
+  CHECK_OUT: PAGES.HR.MAKEUP.CHECK_OUT,
+  BOTH: PAGES.HR.MAKEUP.BOTH,
+}
+
+const MAKEUP_TYPE_COLOR_MAP: Record<string, string> = {
+  CHECK_IN: '#34c759',
+  CHECK_OUT: '#ff9500',
+  BOTH: '#007aff',
+}
+
+const STATUS_BADGE_CONFIG_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
+  PENDING: { label: PAGES.HR.MAKEUP.PENDING_APPROVAL, variant: 'warning' },
+  APPROVED: { label: PAGES.HR.MAKEUP.APPROVED, variant: 'success' },
+  REJECTED: { label: PAGES.HR.MAKEUP.REJECTED, variant: 'error' },
+  CANCELLED: { label: PAGES.HR.MAKEUP.CANCELLED, variant: 'default' },
+}
+
+const makeupDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short',
+})
+
+const makeupDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const makeupTypeOptions = [
+  { value: 'CHECK_IN', label: PAGES.HR.MAKEUP.CHECK_IN, color: '#34c759' },
+  { value: 'CHECK_OUT', label: PAGES.HR.MAKEUP.CHECK_OUT, color: '#ff9500' },
+  { value: 'BOTH', label: PAGES.HR.MAKEUP.BOTH, color: '#007aff' }
+]
+
+const statusOptions = [
+  { value: '', label: '全部狀態' },
+  { value: 'PENDING', label: PAGES.HR.MAKEUP.PENDING_APPROVAL },
+  { value: 'APPROVED', label: PAGES.HR.MAKEUP.APPROVED },
+  { value: 'REJECTED', label: PAGES.HR.MAKEUP.REJECTED },
+  { value: 'CANCELLED', label: PAGES.HR.MAKEUP.CANCELLED }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 補打卡申請頁面
  */
-import { PAGES, MESSAGES } from '~/constants'
+import { MESSAGES } from '~/constants'
 import { useMakeupRequests } from '~/composables/hr'
 import type { MakeupRequest, MakeupApprovalLog } from '~/types/schema'
 
@@ -47,21 +99,6 @@ const reviewData = ref<{ requestId: string; action: 'APPROVE' | 'REJECT'; employ
 const reviewNotes = ref('')
 const isReviewing = ref(false)
 
-// 補打卡類型選項
-const makeupTypeOptions = [
-  { value: 'CHECK_IN', label: PAGES.HR.MAKEUP.CHECK_IN, color: '#34c759' },
-  { value: 'CHECK_OUT', label: PAGES.HR.MAKEUP.CHECK_OUT, color: '#ff9500' },
-  { value: 'BOTH', label: PAGES.HR.MAKEUP.BOTH, color: '#007aff' }
-]
-
-const statusOptions = [
-  { value: '', label: '全部狀態' },
-  { value: 'PENDING', label: PAGES.HR.MAKEUP.PENDING_APPROVAL },
-  { value: 'APPROVED', label: PAGES.HR.MAKEUP.APPROVED },
-  { value: 'REJECTED', label: PAGES.HR.MAKEUP.REJECTED },
-  { value: 'CANCELLED', label: PAGES.HR.MAKEUP.CANCELLED }
-]
-
 onMounted(async () => {
   await checkAuth()
   if (currentEmployee.value?.id) {
@@ -97,42 +134,29 @@ watch([selectedStatus, currentPage], () => {
 
 // 取得類型標籤
 const getMakeupTypeLabel = (type: string) => {
-  return makeupTypeOptions.find(o => o.value === type)?.label || type
+  return MAKEUP_TYPE_LABEL_MAP[type] || type
 }
 
 const getMakeupTypeColor = (type: string) => {
-  return makeupTypeOptions.find(o => o.value === type)?.color || '#8e8e93'
+  return MAKEUP_TYPE_COLOR_MAP[type] || '#8e8e93'
 }
 
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } => {
-  const map: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'default' }> = {
-    PENDING: { label: PAGES.HR.MAKEUP.PENDING_APPROVAL, variant: 'warning' },
-    APPROVED: { label: PAGES.HR.MAKEUP.APPROVED, variant: 'success' },
-    REJECTED: { label: PAGES.HR.MAKEUP.REJECTED, variant: 'error' },
-    CANCELLED: { label: PAGES.HR.MAKEUP.CANCELLED, variant: 'default' }
-  }
-  return map[status] || { label: status, variant: 'default' }
+  return STATUS_BADGE_CONFIG_MAP[status] || { label: status, variant: 'default' }
 }
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    weekday: 'short'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : makeupDateFormatter.format(d)
 }
 
 const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '—' : makeupDateTimeFormatter.format(d)
 }
 
 const formatTime = (timeStr: string | null) => {
@@ -144,7 +168,7 @@ const formatTime = (timeStr: string | null) => {
 const maxDate = computed(() => {
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
-  return yesterday.toISOString().split('T')[0]
+  return yesterday.toISOString().slice(0, 10)
 })
 
 // 提交申請

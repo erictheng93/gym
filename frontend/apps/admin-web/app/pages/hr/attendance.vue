@@ -1,3 +1,32 @@
+<script lang="ts">
+// 格式化器快取
+const attendanceTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false
+})
+
+const attendanceDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long'
+})
+
+const attendanceTimeOnlyFormatter = new Intl.DateTimeFormat('zh-TW', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false
+})
+
+const attendanceDateShortFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short'
+})
+</script>
+
 <script setup lang="ts">
 /**
  * 考勤打卡頁面
@@ -35,6 +64,8 @@ const isClient = ref(false)
 
 // 更新當前時間
 let timeInterval: ReturnType<typeof setInterval>
+let successAnimationTimer: ReturnType<typeof setTimeout> | null = null
+
 onMounted(async () => {
   // 標記已在客戶端
   isClient.value = true
@@ -44,8 +75,10 @@ onMounted(async () => {
     currentTime.value = new Date()
   }, 1000)
 
-  await checkAuth()
-  await fetchBranches()
+  await Promise.all([
+    checkAuth(),
+    fetchBranches()
+  ])
   await loadAttendanceData()
 
   // 取得位置資訊
@@ -54,6 +87,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearInterval(timeInterval)
+  if (successAnimationTimer) {
+    clearTimeout(successAnimationTimer)
+    successAnimationTimer = null
+  }
 })
 
 // 載入考勤資料
@@ -107,39 +144,10 @@ const fetchLocationInfo = async () => {
 }
 
 // 格式化時間
-const formatTime = (date: Date) => {
-  return date.toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-}
-
-const formatDate = (date: Date) => {
-  return date.toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long'
-  })
-}
-
-const formatTimeOnly = (dateStr: string) => {
-  return new Date(dateStr).toLocaleTimeString('zh-TW', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-}
-
-const formatDateShort = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric',
-    weekday: 'short'
-  })
-}
+const formatTime = (date: Date) => attendanceTimeFormatter.format(date)
+const formatDate = (date: Date) => attendanceDateFormatter.format(date)
+const formatTimeOnly = (dateStr: string) => attendanceTimeOnlyFormatter.format(new Date(dateStr))
+const formatDateShort = (dateStr: string) => attendanceDateShortFormatter.format(new Date(dateStr))
 
 // 計算工時
 const calculateWorkHours = computed(() => {
@@ -181,8 +189,10 @@ const handleCheckIn = async () => {
     todayAttendance.value = result
     successMessage.value = PAGES.HR.ATTENDANCE.CHECK_IN + '成功'
     showSuccessAnimation.value = true
-    setTimeout(() => {
+    if (successAnimationTimer) clearTimeout(successAnimationTimer)
+    successAnimationTimer = setTimeout(() => {
       showSuccessAnimation.value = false
+      successAnimationTimer = null
     }, 2000)
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : '打卡失敗'
@@ -201,8 +211,10 @@ const handleCheckOut = async () => {
     todayAttendance.value = result
     successMessage.value = PAGES.HR.ATTENDANCE.CHECK_OUT + '成功'
     showSuccessAnimation.value = true
-    setTimeout(() => {
+    if (successAnimationTimer) clearTimeout(successAnimationTimer)
+    successAnimationTimer = setTimeout(() => {
       showSuccessAnimation.value = false
+      successAnimationTimer = null
     }, 2000)
     // 重新取得紀錄
     if (currentEmployee.value?.id) {
@@ -216,16 +228,18 @@ const handleCheckOut = async () => {
   }
 }
 
+// 狀態 Badge 靜態對照表
+const STATUS_BADGE_MAP: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
+  PRESENT: { label: PAGES.HR.ATTENDANCE.PRESENT, variant: 'success' },
+  LATE: { label: PAGES.HR.ATTENDANCE.LATE, variant: 'warning' },
+  EARLY_LEAVE: { label: PAGES.HR.ATTENDANCE.EARLY_LEAVE, variant: 'warning' },
+  ABSENT: { label: PAGES.HR.ATTENDANCE.ABSENT, variant: 'error' },
+  LEAVE: { label: PAGES.HR.ATTENDANCE.ON_LEAVE, variant: 'info' }
+}
+
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' } => {
-  const map: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
-    PRESENT: { label: PAGES.HR.ATTENDANCE.PRESENT, variant: 'success' },
-    LATE: { label: PAGES.HR.ATTENDANCE.LATE, variant: 'warning' },
-    EARLY_LEAVE: { label: PAGES.HR.ATTENDANCE.EARLY_LEAVE, variant: 'warning' },
-    ABSENT: { label: PAGES.HR.ATTENDANCE.ABSENT, variant: 'error' },
-    LEAVE: { label: PAGES.HR.ATTENDANCE.ON_LEAVE, variant: 'info' }
-  }
-  return map[status] || { label: status, variant: 'default' }
+  return STATUS_BADGE_MAP[status] || { label: status, variant: 'default' }
 }
 
 // 當前分店名稱

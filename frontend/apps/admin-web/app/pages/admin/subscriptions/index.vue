@@ -160,6 +160,31 @@
   </div>
 </template>
 
+<script>
+const SUBSCRIPTION_PLAN_LABELS = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+}
+
+const SUBSCRIPTION_STATUS_LABELS = {
+  active: '活跃',
+  canceled: '已取消',
+  past_due: '逾期',
+}
+
+const subscriptionDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+})
+
+const subscriptionCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+})
+</script>
+
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useAuth } from '~/composables/useAuth'
@@ -266,35 +291,18 @@ const cancelSubscription = async (subscriptionId) => {
   }
 }
 
-const getPlanLabel = (planType) => {
-  const labels = {
-    starter: 'Starter',
-    professional: 'Professional',
-    enterprise: 'Enterprise'
-  }
-  return labels[planType] || planType
-}
-
-const getStatusLabel = (status) => {
-  const labels = {
-    active: '活跃',
-    canceled: '已取消',
-    past_due: '逾期'
-  }
-  return labels[status] || status
-}
+const getPlanLabel = (planType) => SUBSCRIPTION_PLAN_LABELS[planType] || planType
+const getStatusLabel = (status) => SUBSCRIPTION_STATUS_LABELS[status] || status
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : subscriptionDateFormatter.format(d)
 }
 
 const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD'
-  }).format(amount)
+  return subscriptionCurrencyFormatter.format(amount)
 }
 
 onMounted(() => {

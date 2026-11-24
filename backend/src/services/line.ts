@@ -123,6 +123,12 @@ export function isLineEnabled(): boolean {
 // Branch-Specific Config (Multi-Tenant Support)
 // -----------------------------------------------------------------------------
 
+const BRANCH_LINE_CONFIG_SELECT = {
+  lineChannelAccessToken: branchNotificationConfig.lineChannelAccessToken,
+  lineChannelSecret: branchNotificationConfig.lineChannelSecret,
+  lineEnabled: branchNotificationConfig.lineEnabled,
+};
+
 /**
  * Get LINE config for a specific branch
  */
@@ -136,11 +142,7 @@ export async function getConfigForBranch(branchId?: string): Promise<LineConfig>
 
   try {
     const [row] = await db
-      .select({
-        lineChannelAccessToken: branchNotificationConfig.lineChannelAccessToken,
-        lineChannelSecret: branchNotificationConfig.lineChannelSecret,
-        lineEnabled: branchNotificationConfig.lineEnabled,
-      })
+      .select(BRANCH_LINE_CONFIG_SELECT)
       .from(branchNotificationConfig)
       .where(
         and(

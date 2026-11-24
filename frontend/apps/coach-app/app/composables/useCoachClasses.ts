@@ -6,6 +6,7 @@
  */
 
 import type { ClassBooking } from '../types/coach'
+import { deduplicateRequest } from '../utils/debounce'
 
 interface ClassesResponse {
   success: boolean
@@ -89,6 +90,7 @@ export const useCoachClasses = () => {
     limit?: number
     offset?: number
   }): Promise<void> => {
+    const dedupKey = `coach:fetchClasses:${JSON.stringify(params || {})}`
     loading.value = true
     isOfflineData.value = false
     const cacheKey = `${CACHE_KEYS.classes}:${JSON.stringify(params || {})}`
@@ -109,10 +111,12 @@ export const useCoachClasses = () => {
       }
 
       // Online: fetch + cache
-      const response = await $fetch<ClassesResponse>(`${apiUrl}/api/coach/classes`, {
-        headers: getAuthHeader(),
-        query: params,
-      })
+      const response = await deduplicateRequest(dedupKey, () =>
+        $fetch<ClassesResponse>(`${apiUrl}/api/coach/classes`, {
+          headers: getAuthHeader(),
+          query: params,
+        })
+      )
 
       if (response.success) {
         classes.value = response.data
@@ -139,29 +143,31 @@ export const useCoachClasses = () => {
    * Get class details with offline cache fallback
    */
   const getClass = async (id: string): Promise<ClassDetailResponse['data'] | null> => {
-    const cacheKey = `${CACHE_KEYS.classDetail}:${id}`
+    return deduplicateRequest(`coach:classDetail:${id}`, async () => {
+      const cacheKey = `${CACHE_KEYS.classDetail}:${id}`
 
-    try {
-      if (!isOnline.value) {
+      try {
+        if (!isOnline.value) {
+          return await getCache<ClassDetailResponse['data']>(cacheKey)
+        }
+
+        const response = await $fetch<ClassDetailResponse>(
+          `${apiUrl}/api/coach/classes/${id}`,
+          {
+            headers: getAuthHeader(),
+          }
+        )
+
+        if (response.success) {
+          await setCache(cacheKey, response.data, CACHE_TTL.classDetail)
+          return response.data
+        }
+        return null
+      } catch {
+        // Network error: fallback to cache
         return await getCache<ClassDetailResponse['data']>(cacheKey)
       }
-
-      const response = await $fetch<ClassDetailResponse>(
-        `${apiUrl}/api/coach/classes/${id}`,
-        {
-          headers: getAuthHeader(),
-        }
-      )
-
-      if (response.success) {
-        await setCache(cacheKey, response.data, CACHE_TTL.classDetail)
-        return response.data
-      }
-      return null
-    } catch {
-      // Network error: fallback to cache
-      return await getCache<ClassDetailResponse['data']>(cacheKey)
-    }
+    })
   }
 
   /**
@@ -188,12 +194,14 @@ export const useCoachClasses = () => {
         return null
       }
 
-      const response = await $fetch<ScheduleResponse>(
-        `${apiUrl}/api/coach/schedule`,
-        {
-          headers: getAuthHeader(),
-          query: params,
-        }
+      const response = await deduplicateRequest(`coach:schedule:${JSON.stringify(params || {})}`, () =>
+        $fetch<ScheduleResponse>(
+          `${apiUrl}/api/coach/schedule`,
+          {
+            headers: getAuthHeader(),
+            query: params,
+          }
+        )
       )
 
       if (response.success) {

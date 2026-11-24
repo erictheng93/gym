@@ -323,7 +323,7 @@ export class GoogleSheetsExporter {
    * Export revenue report to Google Sheets
    */
   async exportRevenueReport(data: any[], filename?: string): Promise<SpreadsheetCreateResponse> {
-    const title = filename || `營收報表_${new Date().toISOString().split('T')[0]}`
+    const title = filename || `營收報表_${new Date().toISOString().slice(0, 10)}`
 
     const fieldMapping = {
       payment_day: '日期',
@@ -354,7 +354,7 @@ export class GoogleSheetsExporter {
    * Export member growth report to Google Sheets
    */
   async exportMemberGrowthReport(data: any[], filename?: string): Promise<SpreadsheetCreateResponse> {
-    const title = filename || `會員成長報表_${new Date().toISOString().split('T')[0]}`
+    const title = filename || `會員成長報表_${new Date().toISOString().slice(0, 10)}`
 
     const fieldMapping = {
       join_day: '日期',
@@ -381,7 +381,7 @@ export class GoogleSheetsExporter {
    * Export contract expiry report to Google Sheets
    */
   async exportContractExpiryReport(data: any[], filename?: string): Promise<SpreadsheetCreateResponse> {
-    const title = filename || `合約到期提醒_${new Date().toISOString().split('T')[0]}`
+    const title = filename || `合約到期提醒_${new Date().toISOString().slice(0, 10)}`
 
     const fieldMapping = {
       contract_no: '合約編號',
@@ -415,7 +415,7 @@ export class GoogleSheetsExporter {
    * Export member activity report to Google Sheets
    */
   async exportMemberActivityReport(data: any[], filename?: string): Promise<SpreadsheetCreateResponse> {
-    const title = filename || `會員活躍度報表_${new Date().toISOString().split('T')[0]}`
+    const title = filename || `會員活躍度報表_${new Date().toISOString().slice(0, 10)}`
 
     const fieldMapping = {
       activity_day: '日期',

@@ -8,19 +8,43 @@ import { eq, and } from 'drizzle-orm';
 import { requireAuth, authRateLimiter } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
+const EMPLOYEE_WITH_RELATIONS_SELECT = {
+  id: employees.id,
+  fullName: employees.fullName,
+  employeeCode: employees.employeeCode,
+  phone: employees.phone,
+  branchId: employees.branchId,
+  branchName: branches.name,
+  jobTitleId: employees.jobTitleId,
+  jobTitleName: jobTitles.name,
+};
+
+const AUTH_USER_SELECT = {
+  id: users.id,
+  email: users.email,
+  role: users.role,
+  passwordHash: users.passwordHash,
+  employeeId: users.employeeId,
+  tenantId: users.tenantId,
+};
+
+const PASSWORD_HASH_SELECT = {
+  passwordHash: users.passwordHash,
+};
+
+const EMPLOYEE_PERMISSIONS_SELECT = {
+  id: employees.id,
+  status: employees.status,
+  customPermissions: employees.customPermissions,
+  jobTitleId: employees.jobTitleId,
+  jobTitleName: jobTitles.name,
+  permissionsConfig: jobTitles.permissionsConfig,
+};
+
 // Helper to fetch employee with relations
 async function getEmployeeWithRelations(employeeId: string) {
   const [result] = await db
-    .select({
-      id: employees.id,
-      fullName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      phone: employees.phone,
-      branchId: employees.branchId,
-      branchName: branches.name,
-      jobTitleId: employees.jobTitleId,
-      jobTitleName: jobTitles.name,
-    })
+    .select(EMPLOYEE_WITH_RELATIONS_SELECT)
     .from(employees)
     .leftJoin(branches, eq(employees.branchId, branches.id))
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
@@ -46,7 +70,7 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
   const { email, password } = c.req.valid('json');
 
   const [user] = await db
-    .select()
+    .select(AUTH_USER_SELECT)
     .from(users)
     .where(and(eq(users.email, email.toLowerCase()), eq(users.isActive, true)))
     .limit(1);
@@ -60,15 +84,14 @@ app.post('/login', authRateLimiter, zValidator('json', loginSchema), async (c) =
     return c.json({ success: false, error: '電子郵件或密碼錯誤' }, 401);
   }
 
-  const session = await lucia.createSession(user.id, {});
+  const [session, , employee] = await Promise.all([
+    lucia.createSession(user.id, {}),
+    db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id)),
+    user.employeeId ? getEmployeeWithRelations(user.employeeId) : Promise.resolve(null),
+  ]);
+
   const sessionCookie = lucia.createSessionCookie(session.id);
   c.header('Set-Cookie', sessionCookie.serialize());
-
-  await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
-
-  const employee = user.employeeId
-    ? await getEmployeeWithRelations(user.employeeId)
-    : null;
 
   return c.json({
     success: true,
@@ -153,7 +176,7 @@ app.post('/change-password', requireAuth, zValidator('json', changePasswordSchem
   }
 
   const [dbUser] = await db
-    .select()
+    .select(PASSWORD_HASH_SELECT)
     .from(users)
     .where(eq(users.id, user.id))
     .limit(1);
@@ -232,14 +255,7 @@ app.get('/me/permissions', requireAuth, async (c) => {
 
   // Get employee with job title permissions
   const [result] = await db
-    .select({
-      id: employees.id,
-      status: employees.status,
-      customPermissions: employees.customPermissions,
-      jobTitleId: employees.jobTitleId,
-      jobTitleName: jobTitles.name,
-      permissionsConfig: jobTitles.permissionsConfig,
-    })
+    .select(EMPLOYEE_PERMISSIONS_SELECT)
     .from(employees)
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .where(eq(employees.id, user.employeeId))

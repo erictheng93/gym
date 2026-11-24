@@ -1,3 +1,12 @@
+<script lang="ts">
+const colorOptions = [
+  '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981',
+  '#3B82F6', '#6366F1', '#8B5CF6', '#DC2626', '#06B6D4'
+]
+
+const CODE_REGEX = /^[a-z][a-z0-9_]*$/
+</script>
+
 <script setup lang="ts">
 /**
  * 編輯課程類別頁面
@@ -37,12 +46,6 @@ const isLoading = ref(true)
 const isSubmitting = ref(false)
 const rootCategories = ref<ClassCategory[]>([])
 
-// Predefined colors
-const colorOptions = [
-  '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981',
-  '#3B82F6', '#6366F1', '#8B5CF6', '#DC2626', '#06B6D4'
-]
-
 // Validation
 const errors = ref<Record<string, string>>({})
 
@@ -55,7 +58,7 @@ const validate = () => {
 
   if (!form.value.code.trim()) {
     errors.value.code = PAGES.CLASS_CATEGORIES.ERROR_CODE_REQUIRED
-  } else if (!/^[a-z][a-z0-9_]*$/.test(form.value.code)) {
+  } else if (!CODE_REGEX.test(form.value.code)) {
     errors.value.code = '代碼只能包含小寫字母、數字和底線，且必須以字母開頭'
   }
 
@@ -116,11 +119,13 @@ const handleSubmit = async () => {
 // Load data
 onMounted(async () => {
   try {
-    // Load root categories excluding current one (to prevent circular reference)
-    const allRoots = await fetchRootCategories()
+    // Load root categories (excluding current one), branches, and category concurrently
+    const [allRoots] = await Promise.all([
+      fetchRootCategories(),
+      fetchBranches(),
+      loadCategory()
+    ])
     rootCategories.value = allRoots.filter(c => c.id !== categoryId.value)
-    await fetchBranches()
-    await loadCategory()
   } catch (error) {
     console.error('Failed to load data:', error)
   }

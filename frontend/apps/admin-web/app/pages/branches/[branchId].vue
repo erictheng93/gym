@@ -1,3 +1,13 @@
+<script lang="ts">
+const branchDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
 import type { Branch, Employee } from '~/types/schema'
@@ -26,8 +36,12 @@ const branchId = computed(() => route.params.branchId as string)
 const loadBranch = async () => {
   isLoading.value = true
   try {
-    branch.value = await fetchBranch(branchId.value)
-    employees.value = await fetchBranchEmployees(branchId.value)
+    const [branchData, employeesData] = await Promise.all([
+      fetchBranch(branchId.value),
+      fetchBranchEmployees(branchId.value),
+    ])
+    branch.value = branchData
+    employees.value = employeesData
   } catch (error) {
     console.error('Failed to load branch:', error)
     useToast().error(MESSAGES.ERRORS.BRANCH_LOAD_FAILED)
@@ -40,13 +54,9 @@ onMounted(loadBranch)
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
+  return branchDateFormatter.format(d)
 }
 
 const branchTypeLabel = (type: string) => {

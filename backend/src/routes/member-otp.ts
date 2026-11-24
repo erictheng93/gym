@@ -1,8 +1,8 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
-import { eq, and, gt, desc } from 'drizzle-orm';
+import { eq, and, gt, desc, sql } from 'drizzle-orm';
 import { rateLimiter } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
@@ -14,10 +14,49 @@ import { emailService } from '../services/email.js';
 // Endpoints: /send, /verify, /refresh
 
 type OtpVariables = {
-  requestBody?: { identifier?: string };
+  otpRateKey: string;
 };
 
 const app = new Hono<{ Variables: OtpVariables }>();
+
+const OTP_VERIFY_SELECT = {
+  id: otpTokens.id,
+  code: otpTokens.code,
+  attempts: otpTokens.attempts,
+  maxAttempts: otpTokens.maxAttempts,
+};
+
+const MEMBER_OTP_AUTH_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  branchId: members.branchId,
+  tenantId: members.tenantId,
+  fullName: members.fullName,
+  status: members.status,
+};
+
+const BRANCH_OTP_AUTH_SELECT = {
+  id: branches.id,
+  name: branches.name,
+  tenantId: branches.tenantId,
+};
+
+const OTP_MEMBER_SELECT = {
+  id: members.id,
+  phone: members.phone,
+  email: members.email,
+  fullName: members.fullName,
+  status: members.status,
+};
+
+const OTP_REFRESH_MEMBER_JOIN_SELECT = {
+  id: members.id,
+  memberCode: members.memberCode,
+  branchId: members.branchId,
+  tenantId: members.tenantId,
+  status: members.status,
+  branchTenantId: branches.tenantId,
+};
 
 // -----------------------------------------------------------------------------
 // Rate Limiters
@@ -27,10 +66,7 @@ const app = new Hono<{ Variables: OtpVariables }>();
 const otpSendRateLimiter = rateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: process.env.NODE_ENV === 'test' ? 100 : 1,
-  keyGenerator: (c) => {
-    const body = c.get('requestBody') as { identifier?: string } | undefined;
-    return `otp:send:${body?.identifier || 'unknown'}`;
-  },
+  keyGenerator: (c) => `otp:send:${c.get('otpRateKey')}`,
   message: '發送過於頻繁，請 1 分鐘後再試',
 });
 
@@ -38,10 +74,7 @@ const otpSendRateLimiter = rateLimiter({
 const otpSendHourlyRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: process.env.NODE_ENV === 'test' ? 100 : 5,
-  keyGenerator: (c) => {
-    const body = c.get('requestBody') as { identifier?: string } | undefined;
-    return `otp:send:hourly:${body?.identifier || 'unknown'}`;
-  },
+  keyGenerator: (c) => `otp:send:hourly:${c.get('otpRateKey')}`,
   message: '今日發送次數已達上限，請稍後再試',
 });
 
@@ -49,10 +82,7 @@ const otpSendHourlyRateLimiter = rateLimiter({
 const otpVerifyRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.NODE_ENV === 'test' ? 100 : 5,
-  keyGenerator: (c) => {
-    const body = c.get('requestBody') as { identifier?: string } | undefined;
-    return `otp:verify:${body?.identifier || 'unknown'}`;
-  },
+  keyGenerator: (c) => `otp:verify:${c.get('otpRateKey')}`,
   message: '驗證次數過多，請 15 分鐘後再試',
 });
 
@@ -60,16 +90,29 @@ const otpVerifyRateLimiter = rateLimiter({
 // Validation Schemas
 // -----------------------------------------------------------------------------
 
-const sendOtpSchema = z.object({
-  identifier: z.string().min(1, '請輸入手機號碼或 Email'),
-  type: z.enum(['phone', 'email']),
-});
+const otpIdentifierSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('phone'),
+    identifier: z.string().trim().regex(/^09\d{2}[- ]?\d{3}[- ]?\d{3}$/, '請輸入有效的手機號碼')
+      .transform(phone => phone.replace(/[- ]/g, '')),
+  }),
+  z.object({
+    type: z.literal('email'),
+    identifier: z.string().min(1, '請輸入手機號碼或 Email'),
+  }),
+]);
 
-const verifyOtpSchema = z.object({
-  identifier: z.string().min(1, '請輸入手機號碼或 Email'),
-  type: z.enum(['phone', 'email']),
+const setOtpRateKey: MiddlewareHandler<
+  { Variables: OtpVariables }, string, { out: { json: z.infer<typeof otpIdentifierSchema> } }
+> = async (c, next) => {
+  const { type, identifier } = c.req.valid('json');
+  c.set('otpRateKey', `${type}:${identifier}`);
+  await next();
+};
+
+const verifyOtpSchema = otpIdentifierSchema.and(z.object({
   code: z.string().length(6, 'OTP 必須是 6 位數'),
-});
+}));
 
 const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, '請提供 refresh token'),
@@ -83,30 +126,24 @@ function generateOtp(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
-  return c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-         c.req.header('x-real-ip') ||
-         'unknown';
+function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+         c.req.header('x-real-ip');
+  return ip || undefined;
 }
 
-// Store request body for rate limiter
-app.use('*', async (c, next) => {
-  if (c.req.method === 'POST') {
-    try {
-      const body = await c.req.json();
-      c.set('requestBody', body);
-      // Reset request body for validators
-      c.req.raw = new Request(c.req.url, {
-        method: c.req.method,
-        headers: c.req.raw.headers,
-        body: JSON.stringify(body),
-      });
-    } catch {
-      // Body parsing failed, continue
-    }
-  }
-  return next();
-});
+function memberIdentifierMatches(type: 'phone' | 'email', identifier: string) {
+  return type === 'phone'
+    ? eq(sql`translate(${members.phone}, '- ', '')`, identifier)
+    : eq(members.email, identifier);
+}
+
+function tokenIdentifierMatches(type: 'phone' | 'email', identifier: string) {
+  // Pending phone tokens issued before normalization may still contain separators.
+  return type === 'phone'
+    ? eq(sql`translate(${otpTokens.identifier}, '- ', '')`, identifier)
+    : eq(otpTokens.identifier, identifier);
+}
 
 // -----------------------------------------------------------------------------
 // POST /api/member/otp/send - Send OTP
@@ -114,29 +151,20 @@ app.use('*', async (c, next) => {
 
 app.post(
   '/send',
+  zValidator('json', otpIdentifierSchema),
+  setOtpRateKey,
   otpSendRateLimiter,
   otpSendHourlyRateLimiter,
-  zValidator('json', sendOtpSchema),
   async (c) => {
     const { identifier, type } = c.req.valid('json');
     const ipAddress = getClientIp(c);
     const userAgent = c.req.header('user-agent') || '';
 
     // Find member by phone or email
-    const whereClause = type === 'phone'
-      ? eq(members.phone, identifier)
-      : eq(members.email, identifier);
-
     const [member] = await db
-      .select({
-        id: members.id,
-        phone: members.phone,
-        email: members.email,
-        fullName: members.fullName,
-        status: members.status,
-      })
+      .select(OTP_MEMBER_SELECT)
       .from(members)
-      .where(whereClause)
+      .where(memberIdentifierMatches(type, identifier))
       .limit(1);
 
     // Always return success to prevent enumeration
@@ -161,11 +189,11 @@ app.post(
     const code = generateOtp();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    // Delete any existing OTP for this identifier
+    // Delete any existing OTP for this identifier (both raw and normalized)
     await db
       .delete(otpTokens)
       .where(and(
-        eq(otpTokens.identifier, identifier),
+        tokenIdentifierMatches(type, identifier),
         eq(otpTokens.identifierType, type),
       ));
 
@@ -217,8 +245,14 @@ app.post(
     return c.json({
       success: true,
       message: '如果此帳號存在，驗證碼已發送',
-      // In development, return code for testing
-      ...(process.env.NODE_ENV === 'development' && { _devCode: code }),
+      // In development/test, return code for testing and frontend display
+      ...((process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') && {
+        _devCode: code,
+        data: {
+          otp: code,
+          expiresIn: 300,
+        },
+      }),
     });
   }
 );
@@ -229,17 +263,18 @@ app.post(
 
 app.post(
   '/verify',
-  otpVerifyRateLimiter,
   zValidator('json', verifyOtpSchema),
+  setOtpRateKey,
+  otpVerifyRateLimiter,
   async (c) => {
     const { identifier, type, code } = c.req.valid('json');
 
     // Find valid OTP
     const [otp] = await db
-      .select()
+      .select(OTP_VERIFY_SELECT)
       .from(otpTokens)
       .where(and(
-        eq(otpTokens.identifier, identifier),
+        tokenIdentifierMatches(type, identifier),
         eq(otpTokens.identifierType, type),
         eq(otpTokens.verified, false),
         gt(otpTokens.expiresAt, new Date()),
@@ -290,21 +325,10 @@ app.post(
       .where(eq(otpTokens.id, otp.id));
 
     // Find member
-    const whereClause = type === 'phone'
-      ? eq(members.phone, identifier)
-      : eq(members.email, identifier);
-
     const [member] = await db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-        fullName: members.fullName,
-        status: members.status,
-      })
+      .select(MEMBER_OTP_AUTH_SELECT)
       .from(members)
-      .where(whereClause)
+      .where(memberIdentifierMatches(type, identifier))
       .limit(1);
 
     if (!member) {
@@ -325,11 +349,7 @@ app.post(
 
     // Get branch info
     const [branch] = await db
-      .select({
-        id: branches.id,
-        name: branches.name,
-        tenantId: branches.tenantId,
-      })
+      .select(BRANCH_OTP_AUTH_SELECT)
       .from(branches)
       .where(eq(branches.id, member.branchId))
       .limit(1);
@@ -389,16 +409,11 @@ app.post(
       }, 401);
     }
 
-    // Get member
+    // Get member with branch in single query
     const [member] = await db
-      .select({
-        id: members.id,
-        memberCode: members.memberCode,
-        branchId: members.branchId,
-        tenantId: members.tenantId,
-        status: members.status,
-      })
+      .select(OTP_REFRESH_MEMBER_JOIN_SELECT)
       .from(members)
+      .leftJoin(branches, eq(members.branchId, branches.id))
       .where(eq(members.id, tokenData.memberId))
       .limit(1);
 
@@ -418,19 +433,12 @@ app.post(
       }, 403);
     }
 
-    // Get branch for tenantId
-    const [branch] = await db
-      .select({ tenantId: branches.tenantId })
-      .from(branches)
-      .where(eq(branches.id, member.branchId))
-      .limit(1);
-
     // Generate new tokens
     const tokens = memberJwtService.generateTokens({
       id: member.id,
       memberCode: member.memberCode,
       branchId: member.branchId,
-      tenantId: member.tenantId || branch?.tenantId || '',
+      tenantId: member.tenantId || member.branchTenantId || '',
     });
 
     return c.json({

@@ -53,6 +53,16 @@ const form = reactive({
   applicable_days: ['MON', 'TUE', 'WED', 'THU', 'FRI'] as string[]
 })
 
+const WEEKDAY_LABEL_MAP: Record<string, string> = {
+  MON: '一',
+  TUE: '二',
+  WED: '三',
+  THU: '四',
+  FRI: '五',
+  SAT: '六',
+  SUN: '日',
+}
+
 const weekdays = [
   { value: 'MON', label: '一' },
   { value: 'TUE', label: '二' },
@@ -61,7 +71,7 @@ const weekdays = [
   { value: 'FRI', label: '五' },
   { value: 'SAT', label: '六' },
   { value: 'SUN', label: '日' }
-]
+] as const
 
 onMounted(async () => {
   await Promise.all([fetchShiftSchedules(), fetchBranches()])
@@ -178,7 +188,7 @@ const getDayLabels = (days: string[]) => {
   if (!days || days.length === 0) return '—'
   if (days.length === 7) return '每天'
   if (days.length === 5 && !days.includes('SAT') && !days.includes('SUN')) return '週一至週五'
-  return days.map(d => weekdays.find(w => w.value === d)?.label).filter(Boolean).join('、')
+  return days.map(d => WEEKDAY_LABEL_MAP[d]).filter(Boolean).join('、')
 }
 
 const toggleDay = (day: string) => {
@@ -193,7 +203,7 @@ const toggleDay = (day: string) => {
 // Employee Assignment Functions
 const openAssignModal = async (schedule: ShiftSchedule) => {
   assigningSchedule.value = schedule
-  assignEffectiveDate.value = new Date().toISOString().split('T')[0]!
+  assignEffectiveDate.value = new Date().toISOString().slice(0, 10)!
   selectedEmployees.value = []
   isLoadingEmployees.value = true
   showAssignModal.value = true

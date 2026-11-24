@@ -1,3 +1,25 @@
+<script lang="ts">
+const employeeDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+})
+
+const employeeCurrencyFormatter = new Intl.NumberFormat('zh-TW')
+
+const EMPLOYEE_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  ACTIVE: { label: '在職', class: 'badge-success' },
+  RESIGNED: { label: '離職', class: 'badge-error' },
+  LEAVE: { label: '留停', class: 'badge-warning' }
+}
+
+const EMPLOYEE_EMPLOYMENT_TYPE_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  FULL_TIME: { label: '正職', class: 'badge-info' },
+  PART_TIME: { label: '兼職', class: 'badge-secondary' },
+  FREELANCE: { label: '外包', class: 'badge-secondary' }
+}
+</script>
+
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { MESSAGES } from '~/constants'
@@ -42,35 +64,23 @@ onMounted(loadEmployee)
 
 const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return dateStr
+  return employeeDateFormatter.format(d)
 }
 
 const formatCurrency = (amount?: number | null) => {
   if (amount === null || amount === undefined) return '—'
-  return `NT$ ${amount.toLocaleString()}`
+  return `NT$ ${employeeCurrencyFormatter.format(amount)}`
 }
 
 const getStatusBadge = (status: string) => {
   const normalizedStatus = status?.toUpperCase()
-  const map: Record<string, { label: string; class: string }> = {
-    ACTIVE: { label: '在職', class: 'badge-success' },
-    RESIGNED: { label: '離職', class: 'badge-error' },
-    LEAVE: { label: '留停', class: 'badge-warning' }
-  }
-  return map[normalizedStatus] || { label: status, class: '' }
+  return EMPLOYEE_STATUS_BADGE_MAP[normalizedStatus] || { label: status, class: '' }
 }
 
 const getEmploymentTypeBadge = (type?: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    FULL_TIME: { label: '正職', class: 'badge-info' },
-    PART_TIME: { label: '兼職', class: 'badge-secondary' },
-    FREELANCE: { label: '外包', class: 'badge-secondary' }
-  }
-  return map[type || ''] || { label: type || '—', class: '' }
+  return EMPLOYEE_EMPLOYMENT_TYPE_BADGE_MAP[type || ''] || { label: type || '—', class: '' }
 }
 
 const handleDelete = async () => {

@@ -1,8 +1,19 @@
+<script lang="ts">
+import { PAGES } from '~/constants'
+
+// Difficulty options
+const difficultyOptions = [
+  { value: 'BEGINNER', label: PAGES.CLASSES.DIFFICULTY_BEGINNER },
+  { value: 'INTERMEDIATE', label: PAGES.CLASSES.DIFFICULTY_INTERMEDIATE },
+  { value: 'ADVANCED', label: PAGES.CLASSES.DIFFICULTY_ADVANCED }
+]
+</script>
+
 <script setup lang="ts">
 /**
  * 新增課程頁面
  */
-import { MESSAGES, PAGES } from '~/constants'
+import { MESSAGES } from '~/constants'
 import type { ClassCategory, Employee } from '~/types/schema'
 
 definePageMeta({
@@ -35,13 +46,6 @@ const form = ref({
 const isSubmitting = ref(false)
 const categories = ref<ClassCategory[]>([])
 const instructors = ref<Employee[]>([])
-
-// Difficulty options
-const difficultyOptions = [
-  { value: 'BEGINNER', label: PAGES.CLASSES.DIFFICULTY_BEGINNER },
-  { value: 'INTERMEDIATE', label: PAGES.CLASSES.DIFFICULTY_INTERMEDIATE },
-  { value: 'ADVANCED', label: PAGES.CLASSES.DIFFICULTY_ADVANCED }
-]
 
 // Validation
 const errors = ref<Record<string, string>>({})

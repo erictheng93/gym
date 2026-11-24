@@ -1,3 +1,25 @@
+<script lang="ts">
+const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+})
+
+const currencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0
+})
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: '現金',
+  CREDIT_CARD: '信用卡',
+  LINE_PAY: 'LINE Pay',
+  TRANSFER: '轉帳'
+}
+</script>
+
 <script setup lang="ts">
 import { useFetch } from '~/composables/core/useFetch'
 
@@ -76,43 +98,32 @@ onMounted(() => {
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return paymentDateFormatter.format(d)
 }
 
 const formatAmount = (amount: number, type: 'INCOME' | 'REFUND') => {
-  const formatted = new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-
+  const formatted = currencyFormatter.format(amount)
   return type === 'REFUND' ? `-${formatted}` : formatted
 }
 
-const methodLabels: Record<string, string> = {
-  CASH: '現金',
-  CREDIT_CARD: '信用卡',
-  LINE_PAY: 'LINE Pay',
-  TRANSFER: '轉帳'
-}
+const methodLabels = PAYMENT_METHOD_LABELS
 
 // Calculate totals
 const totals = computed(() => {
   let income = 0
   let refund = 0
+  const list = payments.value
 
-  payments.value.forEach(p => {
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i]!
     if (p.payment_type === 'INCOME') {
       income += p.amount
     } else {
       refund += p.amount
     }
-  })
+  }
 
   return {
     income,
@@ -124,16 +135,20 @@ const totals = computed(() => {
 // Group payments by month
 const groupedPayments = computed(() => {
   const groups: Record<string, Payment[]> = {}
+  const list = payments.value
 
-  payments.value.forEach(payment => {
+  for (let i = 0; i < list.length; i++) {
+    const payment = list[i]!
     const date = payment.payment_date ? new Date(payment.payment_date) : new Date()
     const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`
 
-    if (!groups[monthKey]) {
-      groups[monthKey] = []
+    const group = groups[monthKey]
+    if (group) {
+      group.push(payment)
+    } else {
+      groups[monthKey] = [payment]
     }
-    groups[monthKey].push(payment)
-  })
+  }
 
   return Object.entries(groups).map(([month, items]) => ({
     month,

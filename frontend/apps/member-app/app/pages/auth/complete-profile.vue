@@ -299,7 +299,7 @@ const proceedToVerify = () => {
 const maxBirthday = computed(() => {
   const date = new Date()
   date.setFullYear(date.getFullYear() - 16)
-  return date.toISOString().split('T')[0]
+  return date.toISOString().slice(0, 10)
 })
 
 // 步驟進度

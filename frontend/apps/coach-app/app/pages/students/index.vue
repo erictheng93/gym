@@ -159,6 +159,16 @@
   </div>
 </template>
 
+<script lang="ts">
+const GOAL_TEXTS: Record<string, string> = {
+  WEIGHT_LOSS: '減重',
+  MUSCLE_GAIN: '增肌',
+  BODY_SHAPE: '體態雕塑',
+  HEALTH: '健康維持',
+  OTHER: '其他',
+}
+</script>
+
 <script setup lang="ts">
 definePageMeta({
   middleware: 'auth',
@@ -248,16 +258,11 @@ const getRoleBadgeClass = (role: string) => {
   return role === 'PRIMARY' ? 'badge-primary' : 'badge-secondary'
 }
 
-const getGoalText = (goalType: string) => {
-  const goals: Record<string, string> = {
-    WEIGHT_LOSS: '減重',
-    MUSCLE_GAIN: '增肌',
-    BODY_SHAPE: '體態雕塑',
-    HEALTH: '健康維持',
-    OTHER: '其他',
-  }
-  return goals[goalType] || goalType
-}
+const getGoalText = (goalType: string) => GOAL_TEXTS[goalType] || goalType
+
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
 
 onMounted(() => {
   loadStudents()

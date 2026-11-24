@@ -4,6 +4,18 @@
  */
 
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
+
+const RATING_LABELS: Record<number, string> = {
+  5: '非常滿意',
+  4: '滿意',
+  3: '普通',
+  2: '不滿意',
+  1: '非常不滿意',
+}
+
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const reviewDateFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'short', day: 'numeric' })
 
 export interface Review {
   id: string
@@ -70,19 +82,21 @@ export const useReviews = () => {
    * Check if member can review a specific booking
    */
   const checkEligibility = async (bookingId: string): Promise<ReviewEligibility> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: ReviewEligibility }>(
-        `${apiUrl}/api/member/reviews/eligibility/${bookingId}`,
-        { headers: getAuthHeader() }
-      )
-      return response.data
-    } catch {
-      return {
-        can_review: false,
-        reason: '無法確認評價資格',
-        existing_review: null,
+    return deduplicateRequest(`member:review:eligibility:${bookingId}`, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: ReviewEligibility }>(
+          `${apiUrl}/api/member/reviews/eligibility/${bookingId}`,
+          { headers: getAuthHeader() }
+        )
+        return response.data
+      } catch {
+        return {
+          can_review: false,
+          reason: '無法確認評價資格',
+          existing_review: null,
+        }
       }
-    }
+    })
   }
 
   /**
@@ -167,49 +181,53 @@ export const useReviews = () => {
     classId: string,
     options?: { limit?: number; offset?: number }
   ): Promise<{ reviews: Review[]; summary: ReviewSummary } | null> => {
-    try {
-      const params = new URLSearchParams()
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
+    return deduplicateRequest(`member:reviews:class:${classId}:${JSON.stringify(options)}`, async () => {
+      try {
+        const params = new URLSearchParams()
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
 
-      const queryString = params.toString()
-      const url = `${apiUrl}/api/member/reviews/class/${classId}${queryString ? '?' + queryString : ''}`
+        const queryString = params.toString()
+        const url = `${apiUrl}/api/member/reviews/class/${classId}${queryString ? '?' + queryString : ''}`
 
-      const response = await $fetch<ClassReviewsResponse>(url)
+        const response = await $fetch<ClassReviewsResponse>(url)
 
-      return response.success ? response.data : null
-    } catch {
-      return null
-    }
+        return response.success ? response.data : null
+      } catch {
+        return null
+      }
+    })
   }
 
   /**
    * Get member's own reviews
    */
   const fetchMyReviews = async (options?: { limit?: number; offset?: number }) => {
-    isLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
+    return deduplicateRequest(`member:reviews:my:${JSON.stringify(options)}`, async () => {
+      isLoading.value = true
+      try {
+        const params = new URLSearchParams()
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
 
-      const queryString = params.toString()
-      const url = `${apiUrl}/api/member/reviews/my${queryString ? '?' + queryString : ''}`
+        const queryString = params.toString()
+        const url = `${apiUrl}/api/member/reviews/my${queryString ? '?' + queryString : ''}`
 
-      const response = await $fetch<{ success: boolean; data: Review[] }>(
-        url,
-        { headers: getAuthHeader() }
-      )
+        const response = await $fetch<{ success: boolean; data: Review[] }>(
+          url,
+          { headers: getAuthHeader() }
+        )
 
-      if (response.success) {
-        myReviews.value = response.data
+        if (response.success) {
+          myReviews.value = response.data
+        }
+        return response.data
+      } catch {
+        return []
+      } finally {
+        isLoading.value = false
       }
-      return response.data
-    } catch {
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
@@ -223,21 +241,16 @@ export const useReviews = () => {
    * Get rating label
    */
   const getRatingLabel = (rating: number): string => {
-    const labels: Record<number, string> = {
-      5: '非常滿意',
-      4: '滿意',
-      3: '普通',
-      2: '不滿意',
-      1: '非常不滿意',
-    }
-    return labels[rating] || ''
+    return RATING_LABELS[rating] || ''
   }
 
   /**
    * Format review date
    */
   const formatReviewDate = (dateStr: string): string => {
+    if (!dateStr) return '—'
     const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return '—'
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
@@ -246,7 +259,7 @@ export const useReviews = () => {
     if (diffDays === 1) return '昨天'
     if (diffDays < 7) return `${diffDays} 天前`
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} 週前`
-    return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })
+    return reviewDateFormatter.format(date)
   }
 
   return {

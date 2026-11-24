@@ -1,10 +1,20 @@
+<script lang="ts">
+import { ISSUE_TYPES } from '../../../schemas/issue.schema'
+import type { IssueType } from '../../../schemas/issue.schema'
+
+// Issue types for selection
+const issueTypes = Object.entries(ISSUE_TYPES).map(([value, label]) => ({
+  value: value as IssueType,
+  label,
+}))
+</script>
+
 <script setup lang="ts">
 /**
  * New Issue Page
  * Submit a new issue report
  */
-import { createIssueSchema, ISSUE_TYPES } from '../../../schemas/issue.schema'
-import type { IssueType } from '../../../schemas/issue.schema'
+import { createIssueSchema } from '../../../schemas/issue.schema'
 
 definePageMeta({
   middleware: 'auth',
@@ -22,12 +32,6 @@ const form = reactive({
 })
 const isSubmitting = ref(false)
 const errors = reactive<Record<string, string>>({})
-
-// Issue types for selection
-const issueTypes = Object.entries(ISSUE_TYPES).map(([value, label]) => ({
-  value: value as IssueType,
-  label,
-}))
 
 // Validation
 const validateForm = () => {

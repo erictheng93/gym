@@ -1,3 +1,7 @@
+<script lang="ts">
+const paymentNumberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
 // Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
@@ -22,7 +26,7 @@ const form = reactive({
   amount: 0,
   payment_method: 'CASH' as 'CASH' | 'CREDIT_CARD' | 'LINE_PAY' | 'TRANSFER',
   payment_type: 'INCOME' as 'INCOME' | 'REFUND',
-  payment_date: new Date().toISOString().split('T')[0]!,
+  payment_date: new Date().toISOString().slice(0, 10)!,
   branch_id: '',
   notes: ''
 })
@@ -67,19 +71,23 @@ watch(() => form.contract_id, () => {
 
 onMounted(async () => {
   isLoading.value = true
-  await Promise.all([
+  const initialPromises: Promise<unknown>[] = [
     fetchMembers({ limit: 100 }),
-    fetchBranches()
-  ])
+    fetchBranches(),
+  ]
+  if (form.member_id) {
+    initialPromises.push(fetchContracts({ memberId: form.member_id }))
+  }
+
+  await Promise.all(initialPromises)
 
   // 預設選擇第一個分店
   if (branches.value.length > 0 && !form.branch_id) {
     form.branch_id = branches.value[0]!.id
   }
 
-  // 如果有預設會員 ID，載入合約
+  // 如果有預設會員 ID，更新合約列表
   if (form.member_id) {
-    await fetchContracts({ memberId: form.member_id })
     memberContracts.value = contracts.value
   }
 
@@ -131,7 +139,7 @@ const handleSubmit = async () => {
 }
 
 const formatCurrency = (amount: number) => {
-  return `NT$ ${amount.toLocaleString()}`
+  return `NT$ ${paymentNumberFormatter.format(amount)}`
 }
 </script>
 

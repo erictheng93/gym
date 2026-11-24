@@ -11,6 +11,35 @@ import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 
 type Variables = AuthVariables & TenantVariables;
 
+const FILE_RETURNING = {
+  id: files.id,
+  createdAt: files.createdAt,
+  updatedAt: files.updatedAt,
+  tenantId: files.tenantId,
+  uploadedBy: files.uploadedBy,
+  filename: files.filename,
+  originalFilename: files.originalFilename,
+  mimeType: files.mimeType,
+  size: files.size,
+  storageKey: files.storageKey,
+  folder: files.folder,
+  title: files.title,
+  description: files.description,
+  width: files.width,
+  height: files.height,
+  metadata: files.metadata,
+};
+
+const FILE_ID_SELECT = {
+  id: files.id,
+};
+
+const FILE_STORAGE_STATS_SELECT = {
+  size: files.size,
+  mimeType: files.mimeType,
+  folder: files.folder,
+};
+
 const app = new Hono<{ Variables: Variables }>();
 
 /**
@@ -31,7 +60,7 @@ app.get('/', async (c) => {
   }
 
   const allFiles = await db
-    .select()
+    .select(FILE_RETURNING)
     .from(files)
     .where(and(...conditions))
     .orderBy(desc(files.createdAt))
@@ -63,7 +92,7 @@ app.get('/:id', async (c) => {
   const { id } = c.req.param();
 
   const [file] = await db
-    .select()
+    .select(FILE_RETURNING)
     .from(files)
     .where(
       and(
@@ -96,7 +125,7 @@ app.get('/:id/download', async (c) => {
   const { expires = '3600' } = c.req.query();
 
   const [file] = await db
-    .select()
+    .select(FILE_ID_SELECT)
     .from(files)
     .where(
       and(
@@ -211,21 +240,6 @@ app.patch('/:id', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { id } = c.req.param();
 
-  const [existingFile] = await db
-    .select()
-    .from(files)
-    .where(
-      and(
-        eq(files.id, id),
-        eq(files.tenantId, tenantId)
-      )
-    )
-    .limit(1);
-
-  if (!existingFile) {
-    return c.json({ success: false, error: '檔案不存在' }, 404);
-  }
-
   const body = await c.req.json<{
     title?: string;
     description?: string;
@@ -240,8 +254,17 @@ app.patch('/:id', async (c) => {
       folder: body.folder,
       updatedAt: new Date(),
     })
-    .where(eq(files.id, id))
-    .returning();
+    .where(
+      and(
+        eq(files.id, id),
+        eq(files.tenantId, tenantId)
+      )
+    )
+    .returning(FILE_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '檔案不存在' }, 404);
+  }
 
   return c.json({
     success: true,
@@ -261,7 +284,7 @@ app.delete('/:id', async (c) => {
   const { id } = c.req.param();
 
   const [existingFile] = await db
-    .select()
+    .select(FILE_ID_SELECT)
     .from(files)
     .where(
       and(
@@ -292,11 +315,7 @@ app.get('/stats', async (c) => {
   const tenantId = c.get('tenantId')!;
 
   const allFiles = await db
-    .select({
-      size: files.size,
-      mimeType: files.mimeType,
-      folder: files.folder,
-    })
+    .select(FILE_STORAGE_STATS_SELECT)
     .from(files)
     .where(eq(files.tenantId, tenantId));
 

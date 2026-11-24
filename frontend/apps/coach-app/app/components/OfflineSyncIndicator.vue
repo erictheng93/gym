@@ -1,3 +1,7 @@
+<script lang="ts">
+const syncTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+</script>
+
 <script setup lang="ts">
 /**
  * OfflineSyncIndicator Component
@@ -65,8 +69,10 @@ const statusColor = computed(() => {
 
 // Format timestamp for display
 const formatTime = (ts: number) => {
+  if (!ts) return '—'
   const date = new Date(ts)
-  return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+  if (Number.isNaN(date.getTime())) return '—'
+  return syncTimeFormatter.format(date)
 }
 </script>
 

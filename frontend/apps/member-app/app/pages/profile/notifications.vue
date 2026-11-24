@@ -1,49 +1,24 @@
-<script setup lang="ts">
-definePageMeta({
-  middleware: 'auth'
+<script lang="ts">
+const notificationDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
 })
 
-const { addToast } = useToast()
+const NOTIFICATION_STATUS_LABEL_MAP: Record<string, string> = {
+  sent: '已發送',
+  delivered: '已送達',
+  failed: '失敗',
+  pending: '待發送',
+}
 
-// Push notifications composable (existing)
-const {
-  isSupported: pushSupported,
-  isSubscribed: pushSubscribed,
-  isLoading: pushLoading,
-  canSubscribe: pushCanSubscribe,
-  isDenied: pushDenied,
-  subscribe: subscribePush,
-  unsubscribe: unsubscribePush,
-} = usePushNotifications()
-
-// Multi-channel notification preferences (new)
-const {
-  preferences,
-  availableChannels,
-  channelDetails,
-  history,
-  isLoading,
-  fetchPreferences,
-  updatePreferences,
-  togglePreference,
-  fetchChannelDetails,
-  fetchHistory,
-  loadMoreHistory,
-  hasMoreHistory,
-  getChannelLabel,
-  getNotificationTypeLabel,
-} = useNotificationPreferences()
-
-const isSaving = ref(false)
-const activeTab = ref<'settings' | 'history'>('settings')
-
-// Load data on mount
-onMounted(async () => {
-  await Promise.all([
-    fetchPreferences(),
-    fetchChannelDetails(),
-  ])
-})
+const NOTIFICATION_STATUS_CLASS_MAP: Record<string, string> = {
+  sent: 'status-success',
+  delivered: 'status-success',
+  failed: 'status-error',
+  pending: 'status-pending',
+}
 
 // Channel icons
 const channelIcons = {
@@ -113,6 +88,54 @@ const notificationTypes: Array<{
     icon: 'info',
   },
 ]
+</script>
+
+<script setup lang="ts">
+definePageMeta({
+  middleware: 'auth'
+})
+
+const { addToast } = useToast()
+
+// Push notifications composable (existing)
+const {
+  isSupported: pushSupported,
+  isSubscribed: pushSubscribed,
+  isLoading: pushLoading,
+  canSubscribe: pushCanSubscribe,
+  isDenied: pushDenied,
+  subscribe: subscribePush,
+  unsubscribe: unsubscribePush,
+} = usePushNotifications()
+
+// Multi-channel notification preferences (new)
+const {
+  preferences,
+  availableChannels,
+  channelDetails,
+  history,
+  isLoading,
+  fetchPreferences,
+  updatePreferences,
+  togglePreference,
+  fetchChannelDetails,
+  fetchHistory,
+  loadMoreHistory,
+  hasMoreHistory,
+  getChannelLabel,
+  getNotificationTypeLabel,
+} = useNotificationPreferences()
+
+const isSaving = ref(false)
+const activeTab = ref<'settings' | 'history'>('settings')
+
+// Load data on mount
+onMounted(async () => {
+  await Promise.all([
+    fetchPreferences(),
+    fetchChannelDetails(),
+  ])
+})
 
 // Handle push subscription
 const handlePushSubscribe = async () => {
@@ -229,39 +252,20 @@ watch(activeTab, async (tab) => {
 
 // Format date for display
 const formatDate = (dateStr: string) => {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-TW', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '-'
+  return notificationDateFormatter.format(d)
 }
 
 // Get status badge class
 const getStatusClass = (status: string) => {
-  switch (status) {
-    case 'sent':
-    case 'delivered':
-      return 'status-success'
-    case 'failed':
-      return 'status-error'
-    case 'pending':
-      return 'status-pending'
-    default:
-      return 'status-default'
-  }
+  return NOTIFICATION_STATUS_CLASS_MAP[status] || 'status-default'
 }
 
 // Get status label
 const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    sent: '已發送',
-    delivered: '已送達',
-    failed: '失敗',
-    pending: '待發送',
-  }
-  return labels[status] || status
+  return NOTIFICATION_STATUS_LABEL_MAP[status] || status
 }
 </script>
 

@@ -227,8 +227,44 @@
   </div>
 </template>
 
+<script>
+const ACTION_LABELS = {
+  create: '创建',
+  update: '更新',
+  delete: '删除',
+  login: '登录',
+  logout: '登出',
+}
+
+const RESOURCE_LABELS = {
+  members: '会员',
+  contracts: '合约',
+  payments: '支付',
+  employees: '员工',
+  branches: '分店',
+  users: '用户',
+}
+
+const SEVERITY_LABELS = {
+  info: '信息',
+  warning: '警告',
+  error: '错误',
+  critical: '严重',
+}
+
+const auditNumberFormatter = new Intl.NumberFormat('zh-TW')
+const auditDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+</script>
+
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 
 const { apiCall } = useAuth()
@@ -359,47 +395,19 @@ const changePage = (newPage) => {
   }
 }
 
-const getActionLabel = (action) => {
-  const labels = {
-    create: '创建',
-    update: '更新',
-    delete: '删除',
-    login: '登录',
-    logout: '登出'
-  }
-  return labels[action] || action
-}
-
-const getResourceLabel = (resourceType) => {
-  const labels = {
-    members: '会员',
-    contracts: '合约',
-    payments: '支付',
-    employees: '员工',
-    branches: '分店',
-    users: '用户'
-  }
-  return labels[resourceType] || resourceType
-}
-
-const getSeverityLabel = (severity) => {
-  const labels = {
-    info: '信息',
-    warning: '警告',
-    error: '错误',
-    critical: '严重'
-  }
-  return labels[severity] || severity
-}
+const getActionLabel = (action) => ACTION_LABELS[action] || action
+const getResourceLabel = (resourceType) => RESOURCE_LABELS[resourceType] || resourceType
+const getSeverityLabel = (severity) => SEVERITY_LABELS[severity] || severity
 
 const formatNumber = (num) => {
   if (num === null || num === undefined) return '0'
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return auditNumberFormatter.format(num)
 }
 
 const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : auditDateTimeFormatter.format(d)
 }
 
 const formatJSON = (obj) => {
@@ -420,6 +428,12 @@ const truncate = (str, length) => {
 onMounted(() => {
   loadStats()
   loadLogs()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
 })
 </script>
 

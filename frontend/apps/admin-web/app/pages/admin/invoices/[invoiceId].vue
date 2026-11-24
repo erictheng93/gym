@@ -203,6 +203,36 @@
   </div>
 </template>
 
+<script>
+const PLAN_LABELS = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+}
+
+const INVOICE_STATUS_LABELS = {
+  draft: '草稿',
+  open: '待付款',
+  paid: '已付款',
+  void: '作废',
+  uncollectible: '无法收款',
+}
+
+const invoiceDateFormatter = new Intl.DateTimeFormat('zh-TW')
+const invoiceDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+})
+const invoiceCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
+  style: 'currency',
+  currency: 'TWD',
+})
+</script>
+
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -245,7 +275,6 @@ const loadInvoice = async () => {
     const response = await apiCall(`/gym/billing/invoices?invoice_id=${invoiceId.value}`)
     if (response.success && response.data.invoices.length > 0) {
       invoice.value = response.data.invoices[0]
-      loadTransactions()
     } else {
       error.value = '账单不存在'
     }
@@ -279,7 +308,7 @@ const markAsPaid = async () => {
     })
 
     if (response.success) {
-      await loadInvoice()
+      await Promise.all([loadInvoice(), loadTransactions()])
     } else {
       alert(response.message || '操作失败')
     }
@@ -289,45 +318,32 @@ const markAsPaid = async () => {
 }
 
 const getPlanLabel = (planType) => {
-  const labels = {
-    starter: 'Starter',
-    professional: 'Professional',
-    enterprise: 'Enterprise'
-  }
-  return labels[planType] || planType
+  return PLAN_LABELS[planType] || planType
 }
 
 const getStatusLabel = (status) => {
-  const labels = {
-    draft: '草稿',
-    open: '待付款',
-    paid: '已付款',
-    void: '作废',
-    uncollectible: '无法收款'
-  }
-  return labels[status] || status
+  return INVOICE_STATUS_LABELS[status] || status
 }
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : invoiceDateFormatter.format(d)
 }
 
 const formatDateTime = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleString('zh-TW')
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : invoiceDateTimeFormatter.format(d)
 }
 
 const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-'
-  return new Intl.NumberFormat('zh-TW', {
-    style: 'currency',
-    currency: 'TWD'
-  }).format(amount)
+  return invoiceCurrencyFormatter.format(amount)
 }
 
 onMounted(() => {
-  loadInvoice()
+  Promise.all([loadInvoice(), loadTransactions()])
 })
 </script>
 

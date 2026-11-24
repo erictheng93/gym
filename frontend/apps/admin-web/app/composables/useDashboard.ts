@@ -149,6 +149,11 @@ export interface RevenueTarget {
   target_amount: number
 }
 
+// In-flight deduplication maps
+const inFlightKPIs = new Map<string, Promise<DashboardKPIs | null>>()
+const inFlightContractAlerts = new Map<string, Promise<ContractAlertsResponse | null>>()
+const inFlightRevenueTargets = new Map<string, Promise<RevenueTarget[]>>()
+
 // ============================================
 // Composable
 // ============================================
@@ -189,27 +194,37 @@ export const useDashboard = () => {
     period: 'today' | 'week' | 'month' | 'year' = 'today',
     branchId?: string
   ): Promise<DashboardKPIs | null> => {
-    isLoading.value = true
-    try {
-      const params = new URLSearchParams()
-      params.append('period', period)
-      if (branchId) params.append('branch_id', branchId)
+    const key = `${period}:${branchId || ''}`
+    const existing = inFlightKPIs.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/admin/dashboard/kpis?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const promise = (async () => {
+      isLoading.value = true
+      try {
+        const params = new URLSearchParams()
+        params.append('period', period)
+        if (branchId) params.append('branch_id', branchId)
 
-      const data = await response.json()
-      kpis.value = data
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useDashboard.fetchKPIs',
-        customMessage: MESSAGES.ERRORS.DASHBOARD_LOAD_FAILED
-      })
-      return null
-    } finally {
-      isLoading.value = false
-    }
+        const response = await authFetch(`${baseURL}/api/admin/dashboard/kpis?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        const data = await response.json()
+        kpis.value = data
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useDashboard.fetchKPIs',
+          customMessage: MESSAGES.ERRORS.DASHBOARD_LOAD_FAILED
+        })
+        return null
+      } finally {
+        isLoading.value = false
+        inFlightKPIs.delete(key)
+      }
+    })()
+
+    inFlightKPIs.set(key, promise)
+    return promise
   }
 
   /**
@@ -220,25 +235,36 @@ export const useDashboard = () => {
     branchId?: string,
     limit: number = 50
   ): Promise<ContractAlertsResponse | null> => {
-    try {
-      const params = new URLSearchParams()
-      params.append('days_ahead', daysAhead.toString())
-      if (branchId) params.append('branch_id', branchId)
-      params.append('limit', limit.toString())
+    const key = `${daysAhead}:${branchId || ''}:${limit}`
+    const existing = inFlightContractAlerts.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/admin/dashboard/contract-alerts?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        params.append('days_ahead', daysAhead.toString())
+        if (branchId) params.append('branch_id', branchId)
+        params.append('limit', limit.toString())
 
-      const data = await response.json()
-      contractAlerts.value = data
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useDashboard.fetchContractAlerts',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return null
-    }
+        const response = await authFetch(`${baseURL}/api/admin/dashboard/contract-alerts?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        const data = await response.json()
+        contractAlerts.value = data
+        return data
+      } catch (error) {
+        handleError(error, {
+          context: 'useDashboard.fetchContractAlerts',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return null
+      } finally {
+        inFlightContractAlerts.delete(key)
+      }
+    })()
+
+    inFlightContractAlerts.set(key, promise)
+    return promise
   }
 
   /**
@@ -248,24 +274,35 @@ export const useDashboard = () => {
     year?: number,
     branchId?: string
   ): Promise<RevenueTarget[]> => {
-    try {
-      const params = new URLSearchParams()
-      if (year) params.append('year', year.toString())
-      if (branchId) params.append('branch_id', branchId)
+    const key = `${year || ''}:${branchId || ''}`
+    const existing = inFlightRevenueTargets.get(key)
+    if (existing) return existing
 
-      const response = await authFetch(`${baseURL}/api/admin/dashboard/revenue-targets?${params}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams()
+        if (year) params.append('year', year.toString())
+        if (branchId) params.append('branch_id', branchId)
 
-      const data = await response.json()
-      revenueTargets.value = data.targets || []
-      return revenueTargets.value
-    } catch (error) {
-      handleError(error, {
-        context: 'useDashboard.fetchRevenueTargets',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return []
-    }
+        const response = await authFetch(`${baseURL}/api/admin/dashboard/revenue-targets?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        const data = await response.json()
+        revenueTargets.value = data.targets || []
+        return revenueTargets.value
+      } catch (error) {
+        handleError(error, {
+          context: 'useDashboard.fetchRevenueTargets',
+          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+        })
+        return []
+      } finally {
+        inFlightRevenueTargets.delete(key)
+      }
+    })()
+
+    inFlightRevenueTargets.set(key, promise)
+    return promise
   }
 
   /**
@@ -438,7 +475,7 @@ export const useDashboard = () => {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${type}-${new Date().toISOString().split('T')[0]}.${format}`
+      a.download = `${type}-${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)

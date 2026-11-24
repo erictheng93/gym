@@ -1,3 +1,40 @@
+<script lang="ts">
+import { STATUS, LABELS } from '~/constants'
+
+const contractDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+})
+
+const contractCurrencyFormatter = new Intl.NumberFormat('zh-TW')
+
+const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
+  ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
+  PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
+  EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
+  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
+}
+
+const PAYMENT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  UNPAID: { label: STATUS.PAYMENT.UNPAID, class: 'badge-error' },
+  PARTIAL: { label: STATUS.PAYMENT.PARTIAL, class: 'badge-warning' },
+  PAID: { label: STATUS.PAYMENT.PAID, class: 'badge-success' }
+}
+
+const LOG_TYPE_LABEL_MAP: Record<string, string> = {
+  PAUSE: LABELS.LOG_TYPE.PAUSE,
+  RESUME: LABELS.LOG_TYPE.RESUME,
+  EXTEND: LABELS.LOG_TYPE.EXTENSION,
+  EXTENSION: LABELS.LOG_TYPE.EXTENSION,
+  TRANSFER: LABELS.LOG_TYPE.TRANSFER,
+  CANCEL: LABELS.LOG_TYPE.CANCEL,
+  RENEWAL: LABELS.LOG_TYPE.RENEWAL,
+  CLASS_USED: LABELS.LOG_TYPE.CLASS_USED
+}
+</script>
+
 <script setup lang="ts">
 import type { ContractLog, Member } from '~/types/schema'
 import { MESSAGES, PAGES, STATUS, LABELS, TIMING } from '~/constants'
@@ -28,7 +65,7 @@ const showRenewModal = ref(false)
 const isProcessing = ref(false)
 
 const pauseForm = reactive({
-  startDate: new Date().toISOString().split('T')[0],
+  startDate: new Date().toISOString().slice(0, 10),
   endDate: '',
   reason: ''
 })
@@ -59,6 +96,13 @@ const memberSearchResults = ref<Member[]>([])
 const selectedMember = ref<Member | null>(null)
 const isSearching = ref(false)
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+    searchTimeout = null
+  }
+})
 
 // 會員搜尋 (debounced)
 const searchMembers = async (query: string) => {
@@ -132,12 +176,16 @@ const contractId = computed(() => route.params.contractId as string)
 const loadContract = async () => {
   isLoading.value = true
   try {
-    contract.value = await getContract(contractId.value)
-    await fetchPayments({ contractId: contractId.value })
+    const promises: Promise<unknown>[] = [
+      getContract(contractId.value),
+      fetchPayments({ contractId: contractId.value }),
+    ]
     // 確保有當前員工資訊（用於記錄操作者）
     if (!currentEmployee.value) {
-      await fetchCurrentEmployee()
+      promises.push(fetchCurrentEmployee())
     }
+    const [contractData] = await Promise.all(promises)
+    contract.value = contractData as any
   } catch (error) {
     console.error('Failed to load contract:', error)
     useToast().error(MESSAGES.ERRORS.CONTRACT_LOAD_FAILED)
@@ -148,37 +196,25 @@ const loadContract = async () => {
 
 onMounted(loadContract)
 
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+})
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  return contractDateFormatter.format(new Date(dateStr))
 }
 
 const formatCurrency = (amount: number | null) => {
-  return `NT$ ${(amount || 0).toLocaleString()}`
+  return `NT$ ${contractCurrencyFormatter.format(amount || 0)}`
 }
 
 const getStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    DRAFT: { label: STATUS.CONTRACT.DRAFT, class: '' },
-    ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
-    PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
-    EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-    TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
-  }
-  return map[status] || { label: status, class: '' }
+  return CONTRACT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 
 const getPaymentStatusBadge = (status: string) => {
-  const map: Record<string, { label: string; class: string }> = {
-    UNPAID: { label: STATUS.PAYMENT.UNPAID, class: 'badge-error' },
-    PARTIAL: { label: STATUS.PAYMENT.PARTIAL, class: 'badge-warning' },
-    PAID: { label: STATUS.PAYMENT.PAID, class: 'badge-success' }
-  }
-  return map[status] || { label: status, class: '' }
+  return PAYMENT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
 
 const getPlanTypeLabel = (type: string) => {
@@ -186,17 +222,7 @@ const getPlanTypeLabel = (type: string) => {
 }
 
 const getLogTypeLabel = (type: string) => {
-  const map: Record<string, string> = {
-    PAUSE: LABELS.LOG_TYPE.PAUSE,
-    RESUME: LABELS.LOG_TYPE.RESUME,
-    EXTEND: LABELS.LOG_TYPE.EXTENSION,
-    EXTENSION: LABELS.LOG_TYPE.EXTENSION,
-    TRANSFER: LABELS.LOG_TYPE.TRANSFER,
-    CANCEL: LABELS.LOG_TYPE.CANCEL,
-    RENEWAL: LABELS.LOG_TYPE.RENEWAL,
-    CLASS_USED: LABELS.LOG_TYPE.CLASS_USED
-  }
-  return map[type] || type
+  return LOG_TYPE_LABEL_MAP[type] || type
 }
 
 // 暫停合約
@@ -229,7 +255,7 @@ const handlePause = async () => {
     // 更新合約狀態
     await updateContract(contract.value.id, {
       contract_status: 'PAUSED',
-      end_date: newEndDate.toISOString().split('T')[0]
+      end_date: newEndDate.toISOString().slice(0, 10)
     })
 
     showPauseModal.value = false
@@ -315,7 +341,7 @@ const extendedEndDate = computed(() => {
   if (!contract.value?.end_date || !extendForm.days) return ''
   const end = new Date(contract.value.end_date)
   end.setDate(end.getDate() + extendForm.days)
-  return end.toISOString().split('T')[0]
+  return end.toISOString().slice(0, 10)
 })
 
 // 轉讓合約
@@ -375,7 +401,7 @@ const handleTerminate = async () => {
         member_id: contract.value.member?.id,
         amount: terminateForm.refundAmount,
         payment_type: 'REFUND',
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: new Date().toISOString().slice(0, 10),
         branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null,
         received_by: currentEmployee.value?.id || null,
         notes: `合約終止退款 - ${terminateForm.reason}`
@@ -441,7 +467,7 @@ const handleRenew = async () => {
     const startDate = new Date(renewForm.startDate)
     const durationMonths = contract.value.plan?.duration_months || 0
     startDate.setMonth(startDate.getMonth() + durationMonths)
-    const newEndDate = startDate.toISOString().split('T')[0]
+    const newEndDate = startDate.toISOString().slice(0, 10)
 
     // 建立續約紀錄（在舊合約上）
     await createItem<ContractLog>('contract_logs', {
@@ -461,7 +487,7 @@ const handleRenew = async () => {
       start_date: renewForm.startDate,
       end_date: newEndDate,
       original_end_date: newEndDate,
-      sign_date: new Date().toISOString().split('T')[0],
+      sign_date: new Date().toISOString().slice(0, 10),
       total_amount: renewForm.amount || contract.value.plan?.price || 0,
       contract_status: 'ACTIVE',
       payment_status: 'UNPAID',
@@ -506,9 +532,9 @@ const openRenewModal = () => {
   if (contract.value?.end_date) {
     const nextDay = new Date(contract.value.end_date)
     nextDay.setDate(nextDay.getDate() + 1)
-    renewForm.startDate = nextDay.toISOString().split('T')[0]!
+    renewForm.startDate = nextDay.toISOString().slice(0, 10)!
   } else {
-    renewForm.startDate = new Date().toISOString().split('T')[0]!
+    renewForm.startDate = new Date().toISOString().slice(0, 10)!
   }
   renewForm.amount = contract.value?.plan?.price || 0
   showRenewModal.value = true

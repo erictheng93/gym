@@ -5,10 +5,18 @@
 
 import type { MeasurementSource } from '../schemas/measurement.schema'
 import { extractErrorMessage } from '../utils/apiHelpers'
+import { deduplicateRequest } from '../utils/debounce'
 
 // Cache settings
 const CACHE_KEY_MEASUREMENTS = 'member:measurements'
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// Reusable date formatter to avoid re-instantiating Intl.DateTimeFormat on each call
+const measurementDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
 
 export interface Measurement {
   id: string
@@ -71,7 +79,7 @@ export const useMeasurements = () => {
   const isOfflineData = useState('measurements_is_offline', () => false)
 
   /**
-   * Fetch member's measurements with optional date filter
+   * Fetch member's measurements with optional date filter (with request deduplication)
    */
   const fetchMeasurements = async (options?: {
     start_date?: string
@@ -81,14 +89,42 @@ export const useMeasurements = () => {
   }) => {
     if (!member.value) return []
 
-    isLoading.value = true
-    isOfflineData.value = false
+    const dedupKey = `measurements:${member.value.id}:${JSON.stringify(options || {})}`
+    return deduplicateRequest(dedupKey, async () => {
+      isLoading.value = true
+      isOfflineData.value = false
 
-    const cacheKey = `${CACHE_KEY_MEASUREMENTS}:${member.value.id}:${JSON.stringify(options || {})}`
+      const cacheKey = `${CACHE_KEY_MEASUREMENTS}:${member.value!.id}:${JSON.stringify(options || {})}`
 
-    try {
-      // If offline, try cached data
-      if (!isOnline.value) {
+      try {
+        // If offline, try cached data
+        if (!isOnline.value) {
+          const cached = await getCache<Measurement[]>(cacheKey)
+          if (cached) {
+            measurements.value = cached
+            isOfflineData.value = true
+            return cached
+          }
+          return []
+        }
+
+        const params = new URLSearchParams()
+        if (options?.start_date) params.append('start_date', options.start_date)
+        if (options?.end_date) params.append('end_date', options.end_date)
+        if (options?.limit) params.append('limit', String(options.limit))
+        if (options?.offset) params.append('offset', String(options.offset))
+
+        const response = await $fetch<MeasurementsResponse>(`${apiUrl}/api/member/measurements?${params}`, {
+          headers: getAuthHeader(),
+        })
+
+        if (response.success) {
+          measurements.value = response.data
+          await setCache(cacheKey, response.data, CACHE_TTL)
+        }
+        return response.data
+      } catch {
+        // Try cached data on network error
         const cached = await getCache<Measurement[]>(cacheKey)
         if (cached) {
           measurements.value = cached
@@ -96,77 +132,58 @@ export const useMeasurements = () => {
           return cached
         }
         return []
+      } finally {
+        isLoading.value = false
       }
-
-      const params = new URLSearchParams()
-      if (options?.start_date) params.append('start_date', options.start_date)
-      if (options?.end_date) params.append('end_date', options.end_date)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
-
-      const response = await $fetch<MeasurementsResponse>(`${apiUrl}/api/member/measurements?${params}`, {
-        headers: getAuthHeader(),
-      })
-
-      if (response.success) {
-        measurements.value = response.data
-        await setCache(cacheKey, response.data, CACHE_TTL)
-      }
-      return response.data
-    } catch {
-      // Try cached data on network error
-      const cached = await getCache<Measurement[]>(cacheKey)
-      if (cached) {
-        measurements.value = cached
-        isOfflineData.value = true
-        return cached
-      }
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
   /**
-   * Get the latest measurement
+   * Get the latest measurement (with request deduplication)
    */
   const fetchLatestMeasurement = async (): Promise<Measurement | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<{ success: boolean; data: Measurement | null }>(
-        `${apiUrl}/api/member/measurements/latest`,
-        { headers: getAuthHeader() }
-      )
+    const dedupKey = `measurement-latest:${member.value.id}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<{ success: boolean; data: Measurement | null }>(
+          `${apiUrl}/api/member/measurements/latest`,
+          { headers: getAuthHeader() }
+        )
 
-      if (response.success) {
-        latestMeasurement.value = response.data
+        if (response.success) {
+          latestMeasurement.value = response.data
+        }
+        return response.data
+      } catch {
+        return null
       }
-      return response.data
-    } catch {
-      return null
-    }
+    })
   }
 
   /**
-   * Get measurement statistics (trends)
+   * Get measurement statistics (trends) (with request deduplication)
    */
   const fetchStats = async (period: string = '30'): Promise<MeasurementStats | null> => {
     if (!member.value) return null
 
-    try {
-      const response = await $fetch<StatsResponse>(
-        `${apiUrl}/api/member/measurements/stats?period=${period}`,
-        { headers: getAuthHeader() }
-      )
+    const dedupKey = `measurement-stats:${member.value.id}:${period}`
+    return deduplicateRequest(dedupKey, async () => {
+      try {
+        const response = await $fetch<StatsResponse>(
+          `${apiUrl}/api/member/measurements/stats?period=${period}`,
+          { headers: getAuthHeader() }
+        )
 
-      if (response.success) {
-        stats.value = response.data.stats
+        if (response.success) {
+          stats.value = response.data.stats
+        }
+        return response.data.stats
+      } catch {
+        return null
       }
-      return response.data.stats
-    } catch {
-      return null
-    }
+    })
   }
 
   /**
@@ -241,12 +258,9 @@ export const useMeasurements = () => {
    * Format measurement date for display
    */
   const formatDate = (dateStr: string): string => {
+    if (!dateStr) return '—'
     const date = new Date(dateStr)
-    return date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return isNaN(date.getTime()) ? '—' : measurementDateFormatter.format(date)
   }
 
   /**

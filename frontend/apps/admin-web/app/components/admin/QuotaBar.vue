@@ -1,3 +1,7 @@
+<script lang="ts">
+const quotaNumberFormatter = new Intl.NumberFormat('zh-TW')
+</script>
+
 <script setup lang="ts">
 interface Props {
   current: number
@@ -22,7 +26,7 @@ const color = computed(() => {
 })
 
 const formatNumber = (num: number) => {
-  return new Intl.NumberFormat('zh-TW').format(num)
+  return quotaNumberFormatter.format(num)
 }
 </script>
 
