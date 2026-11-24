@@ -34,7 +34,8 @@ const UPDATE_CHUNK_SIZE = 500;
 const checkInAggSelect = (since: Date) => ({
   memberId: checkIns.memberId,
   lastTime: max(checkIns.checkInTime),
-  frequency: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${since})`,
+  // Raw sql params bypass Drizzle's column mapping; postgres-js can't bind a Date here
+  frequency: sql<number>`count(*) filter (where ${checkIns.checkInTime} >= ${since.toISOString()}::timestamptz)`,
 });
 
 const MONETARY_AGG_SELECT = {
