@@ -27,7 +27,7 @@ const typeOptions = [
  *
  * 使用 @gym-nexus/ui 組件庫重構
  */
-import { MESSAGES, PAGES, LABELS, PAGINATION, TIMING } from '~/constants'
+import { MESSAGES, PAGINATION, TIMING } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'

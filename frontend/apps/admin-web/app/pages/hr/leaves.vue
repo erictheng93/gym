@@ -46,7 +46,7 @@ const statusOptions = [
  *
  * 使用 @gym-nexus/ui 組件庫重構
  */
-import { PAGES, MESSAGES } from '~/constants'
+import { MESSAGES } from '~/constants'
 import { useLeaveRequests } from '~/composables/hr'
 import type { LeaveRequest, LeaveApprovalLog } from '~/types/schema'
 
@@ -177,6 +177,9 @@ const LEAVE_TYPE_COLOR_MAP: Record<string, string> = {
   BEREAVEMENT: '#8e8e93',
   OTHER: '#5856d6',
 }
+
+const getLeaveTypeLabel = (type: string) => LEAVE_TYPE_LABEL_MAP[type] || type
+const getLeaveTypeColor = (type: string) => LEAVE_TYPE_COLOR_MAP[type] || '#8e8e93'
 
 // 取得狀態 Badge
 const getStatusBadgeConfig = (status: string): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } => {

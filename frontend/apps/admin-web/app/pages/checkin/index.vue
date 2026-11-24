@@ -39,7 +39,7 @@ const ATTENDANCE_STATUS_LABEL_MAP: Record<string, string> = {
 </script>
 
 <script setup lang="ts">
-import { MESSAGES, PAGES, STATUS } from '~/constants'
+import { MESSAGES, PAGES } from '~/constants'
 import type { VerificationMethod } from '~/components/VerificationMethodSelector.vue'
 import { useAttendance } from '~/composables/hr/useAttendance'
 

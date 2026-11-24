@@ -22,13 +22,13 @@ const formatCurrency = (amount: number) => {
   return CAMPAIGN_CURRENCY_FORMATTER.format(amount)
 }
 
-const STATUS_OPTIONS = Object.freeze([
+const STATUS_OPTIONS = [
   { value: 'DRAFT', label: '草稿' },
   { value: 'SCHEDULED', label: '已排程' },
   { value: 'ACTIVE', label: '進行中' },
   { value: 'PAUSED', label: '已暫停' },
   { value: 'ENDED', label: '已結束' }
-])
+]
 </script>
 
 <script setup lang="ts">

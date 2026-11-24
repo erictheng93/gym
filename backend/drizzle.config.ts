@@ -5,7 +5,7 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:15432/gym_nexus',
+    url: process.env.DATABASE_URL || 'postgresql://gym_nexus:gym_nexus_dev@localhost:15432/gym_nexus',
   },
   verbose: true,
   strict: true,

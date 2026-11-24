@@ -11,7 +11,7 @@ const STRENGTH_LEVELS = [
   { level: 2, label: '普通', color: 'fair' },
   { level: 3, label: '良好', color: 'good' },
   { level: 4, label: '強', color: 'strong' },
-]
+] as const
 </script>
 
 <script setup lang="ts">
