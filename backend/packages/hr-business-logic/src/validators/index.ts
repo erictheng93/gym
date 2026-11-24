@@ -8,13 +8,13 @@ export {
   validateApprovalPermission,
   canReviewLeaveRequest,
   canCancelLeaveRequest
-} from './leaveValidator'
+} from './leaveValidator.js'
 
 export {
   validateCheckIn,
   validateCheckOut,
   validateMakeupRequest,
   isWorkDay
-} from './attendanceValidator'
+} from './attendanceValidator.js'
 
-export type { ICheckValidationResult } from './attendanceValidator'
+export type { ICheckValidationResult } from './attendanceValidator.js'

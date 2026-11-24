@@ -12,13 +12,13 @@ import type {
   ILateCheckResult,
   CheckType,
   AttendanceStatus
-} from '../types'
-import type { IAttendanceRepository, IShiftRepository } from '../interfaces'
+} from '../types/index.js'
+import type { IAttendanceRepository, IShiftRepository } from '../interfaces/index.js'
 import {
   calculateWorkHoursWithShift,
   checkLateWithShift
-} from '../calculations'
-import { validateCheckIn, validateCheckOut } from '../validators'
+} from '../calculations/index.js'
+import { validateCheckIn, validateCheckOut } from '../validators/index.js'
 
 /**
  * 考勤服務配置

@@ -2,7 +2,7 @@
  * 休假餘額計算函數
  */
 
-import type { ILeaveBalance, LeaveType, HalfDayType } from '../types'
+import type { ILeaveBalance, LeaveType, HalfDayType } from '../types/index.js'
 
 /**
  * 假別中文名稱對照表

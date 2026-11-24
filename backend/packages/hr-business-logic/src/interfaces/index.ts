@@ -2,4 +2,4 @@
  * HR Business Logic Interfaces
  */
 
-export * from './IHRRepository'
+export * from './IHRRepository.js'

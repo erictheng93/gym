@@ -2,7 +2,7 @@
  * 考勤驗證器
  */
 
-import type { IAttendanceRecord, CheckType } from '../types'
+import type { IAttendanceRecord, CheckType } from '../types/index.js'
 
 /**
  * 驗證打卡結果

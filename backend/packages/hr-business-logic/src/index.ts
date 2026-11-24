@@ -30,16 +30,16 @@
  */
 
 // Types
-export * from './types'
+export * from './types/index.js'
 
 // Interfaces
-export * from './interfaces'
+export * from './interfaces/index.js'
 
 // Calculations
-export * from './calculations'
+export * from './calculations/index.js'
 
 // Validators
-export * from './validators'
+export * from './validators/index.js'
 
 // Services
-export * from './services'
+export * from './services/index.js'

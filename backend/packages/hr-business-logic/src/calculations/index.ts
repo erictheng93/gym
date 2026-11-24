@@ -12,7 +12,7 @@ export {
   calculateWorkHoursWithShift,
   parseTimeString,
   formatMinutesToTime
-} from './workHours'
+} from './workHours.js'
 
 // Late Minutes
 export {
@@ -22,7 +22,7 @@ export {
   checkLateWithShift,
   buildScheduledStartTime,
   buildScheduledEndTime
-} from './lateMinutes'
+} from './lateMinutes.js'
 
 // Leave Balance
 export {
@@ -36,4 +36,4 @@ export {
   calculateCarryOverDays,
   isBalanceExpired,
   getLeaveTypeLimit
-} from './leaveBalance'
+} from './leaveBalance.js'

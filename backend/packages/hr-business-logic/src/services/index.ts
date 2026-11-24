@@ -3,7 +3,7 @@
  * 導出所有服務
  */
 
-export { AttendanceService } from './AttendanceService'
-export type { IAttendanceServiceConfig } from './AttendanceService'
+export { AttendanceService } from './AttendanceService.js'
+export type { IAttendanceServiceConfig } from './AttendanceService.js'
 
-export { LeaveApprovalService } from './LeaveApprovalService'
+export { LeaveApprovalService } from './LeaveApprovalService.js'

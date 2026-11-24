@@ -13,20 +13,20 @@ import type {
   LeaveType,
   LeaveStatus,
   ApprovalAction
-} from '../types'
+} from '../types/index.js'
 import type {
   ILeaveRequestRepository,
   ILeaveBalanceRepository,
   ILeaveApprovalLogRepository,
   IEmployeeRepository
-} from '../interfaces'
-import { calculateLeaveDays, calculateBalanceUpdate } from '../calculations'
+} from '../interfaces/index.js'
+import { calculateLeaveDays, calculateBalanceUpdate } from '../calculations/index.js'
 import {
   validateLeaveRequest,
   validateApprovalPermission,
   canReviewLeaveRequest,
   canCancelLeaveRequest
-} from '../validators'
+} from '../validators/index.js'
 
 /**
  * 休假審核服務

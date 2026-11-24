@@ -320,7 +320,7 @@ pub struct UpdateBookingRequest {
     booking_status: Option<String>,
     #[serde(rename = "waitlistPosition")]
     #[serde(alias = "waitlist_position")]
-    #[serde(default)]
+    #[serde(default, deserialize_with = "nullable_waitlist_position")]
     waitlist_position: Option<Option<i32>>,
 }
 
@@ -417,6 +417,13 @@ where
         None | Some("") => Ok(None),
         Some(value) => Uuid::parse_str(value).map(Some).map_err(de::Error::custom),
     }
+}
+
+fn nullable_waitlist_position<'de, D>(deserializer: D) -> Result<Option<Option<i32>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<i32>::deserialize(deserializer).map(Some)
 }
 
 fn empty_nested_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Option<Uuid>>, D::Error>
@@ -1673,6 +1680,18 @@ fn paginated<T: Serialize + Clone>(data: Vec<T>, page: Option<i64>, limit: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distinguishes_waitlist_position_patch_values() {
+        for (json, expected) in [
+            (r#"{}"#, None),
+            (r#"{"waitlistPosition":null}"#, Some(None)),
+            (r#"{"waitlist_position":2}"#, Some(Some(2))),
+        ] {
+            let patch: UpdateBookingRequest = serde_json::from_str(json).unwrap();
+            assert_eq!(patch.waitlist_position, expected);
+        }
+    }
 
     #[test]
     fn rejects_invalid_time_range() {

@@ -93,17 +93,17 @@ export const useStudents = () => {
     loading.value = true
     const dedupKey = `coach:students:${JSON.stringify(params || {})}`
     try {
-      await deduplicateRequest(dedupKey, async () => {
-        const response = await $fetch<StudentsResponse>(`${apiUrl}/api/coach/students`, {
+      const response = await deduplicateRequest(dedupKey, () =>
+        $fetch<StudentsResponse>(`${apiUrl}/api/coach/students`, {
           headers: getAuthHeader(),
           query: params,
         })
+      )
 
-        if (response.success) {
-          students.value = response.data
-          total.value = response.meta.total
-        }
-      })
+      if (response.success) {
+        students.value = response.data
+        total.value = response.meta.total
+      }
     } catch (error) {
       console.error('Failed to fetch students:', error)
       students.value = []

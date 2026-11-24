@@ -8,13 +8,13 @@ import type {
   LeaveType,
   ILeaveValidationResult,
   IApplyLeaveParams
-} from '../types'
+} from '../types/index.js'
 import {
   calculateLeaveDays,
   calculateAvailableDays,
   getLeaveTypeLimit,
   getLeaveTypeName
-} from '../calculations'
+} from '../calculations/index.js'
 
 /**
  * 驗證休假申請參數

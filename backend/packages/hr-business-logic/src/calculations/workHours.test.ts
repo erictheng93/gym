@@ -8,7 +8,7 @@ import {
   calculateOvertimeHours,
   parseTimeString,
   formatMinutesToTime
-} from './workHours'
+} from './workHours.js'
 
 describe('calculateWorkHours', () => {
   it('should calculate work hours correctly', () => {

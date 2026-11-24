@@ -2,8 +2,8 @@
  * 遲到計算函數
  */
 
-import type { AttendanceStatus, ILateCheckResult, IShiftSchedule } from '../types'
-import { parseTimeString } from './workHours'
+import type { AttendanceStatus, ILateCheckResult, IShiftSchedule } from '../types/index.js'
+import { parseTimeString } from './workHours.js'
 
 /**
  * 預設寬限時間 (分鐘)

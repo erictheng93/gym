@@ -8,8 +8,8 @@ import {
   calculateEarlyLeaveMinutes,
   checkLateWithShift,
   buildScheduledStartTime
-} from './lateMinutes'
-import type { IShiftSchedule } from '../types'
+} from './lateMinutes.js'
+import type { IShiftSchedule } from '../types/index.js'
 
 describe('calculateLateMinutes', () => {
   it('should return 0 when on time', () => {

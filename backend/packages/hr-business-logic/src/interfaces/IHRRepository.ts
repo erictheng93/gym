@@ -10,7 +10,7 @@ import type {
   ILeaveBalance,
   ILeaveApprovalLog,
   LeaveType
-} from '../types'
+} from '../types/index.js'
 
 /**
  * 考勤數據存取接口

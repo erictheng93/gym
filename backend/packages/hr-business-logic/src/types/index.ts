@@ -2,5 +2,5 @@
  * HR Business Logic Types
  */
 
-export * from './attendance'
-export * from './leave'
+export * from './attendance.js'
+export * from './leave.js'

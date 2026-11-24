@@ -12,8 +12,8 @@ import {
   calculateCarryOverDays,
   getLeaveTypeName,
   getLeaveTypeLimit
-} from './leaveBalance'
-import type { ILeaveBalance } from '../types'
+} from './leaveBalance.js'
+import type { ILeaveBalance } from '../types/index.js'
 
 describe('calculateLeaveDays', () => {
   it('should calculate single day leave', () => {

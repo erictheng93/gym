@@ -283,9 +283,8 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     });
   }
 
-  // Concurrently create check-in and deduct session for COUNT_BASED contracts
-  const [[newCheckIn]] = await Promise.all([
-    db.insert(checkIns).values({
+  const newCheckIn = await db.transaction(async (tx) => {
+    const [entry] = await tx.insert(checkIns).values({
       memberId: data.memberId,
       branchId: data.branchId,
       contractId: data.contractId || activeContract?.id,
@@ -293,17 +292,17 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       checkInTime: new Date(),
       processedById: user.employeeId,
       notes: data.notes,
-    }).returning(CHECK_IN_RETURNING),
-    activePlan?.planType === 'COUNT_BASED' && activeContract
-      ? db
-          .update(contracts)
-          .set({
-            remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)))
-      : Promise.resolve(null),
-  ]);
+    }).returning(CHECK_IN_RETURNING);
+    if (activePlan?.planType === 'COUNT_BASED' && activeContract) {
+      await tx.update(contracts)
+        .set({
+          remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)));
+    }
+    return entry;
+  });
 
   return c.json({
     success: true,

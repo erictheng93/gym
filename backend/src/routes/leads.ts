@@ -201,7 +201,7 @@ app.post('/', zValidator('json', createLeadSchema), async (c) => {
   // Verify branch
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (!branchIds.includes(data.branchId)) {
+  if (!branchIds.includes(data.branchId.toLowerCase())) {
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 

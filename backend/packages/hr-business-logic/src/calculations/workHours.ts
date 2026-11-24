@@ -2,7 +2,7 @@
  * 工時計算函數
  */
 
-import type { AttendanceStatus, IWorkHoursResult, IShiftSchedule } from '../types'
+import type { AttendanceStatus, IWorkHoursResult, IShiftSchedule } from '../types/index.js'
 
 /**
  * 預設配置
