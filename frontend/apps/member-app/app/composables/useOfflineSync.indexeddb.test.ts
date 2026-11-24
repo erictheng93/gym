@@ -377,6 +377,118 @@ describe('useOfflineSync with IndexedDB', () => {
     })
   })
 
+  describe('FIFO ordering of dependent mutations', () => {
+    const base = 'http://localhost:8056/api/member'
+
+    it('sends a create before a later update even when the create is slower', async () => {
+      const { queueRequest, syncPendingRequests, isOnline } = useOfflineSync()
+      isOnline.value = true
+
+      const calls: string[] = []
+      let inFlight = 0
+      let maxInFlight = 0
+      mockFetch.mockImplementation(async (url: string, opts: { method: string }) => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        if (opts.method === 'POST') await new Promise(r => setTimeout(r, 30))
+        calls.push(`${opts.method} ${url}`)
+        inFlight--
+        return { success: true }
+      })
+
+      await queueRequest({ url: `${base}/workouts`, method: 'POST', maxRetries: 3, type: 'workout' })
+      await queueRequest({ url: `${base}/workouts/w1`, method: 'PUT', maxRetries: 3, type: 'workout' })
+      await queueRequest({ url: `${base}/workouts/w1`, method: 'DELETE', maxRetries: 3, type: 'workout' })
+
+      const result = await syncPendingRequests()
+
+      expect(result.synced).toBe(3)
+      expect(maxInFlight).toBe(1)
+      expect(calls).toEqual([
+        `POST ${base}/workouts`,
+        `PUT ${base}/workouts/w1`,
+        `DELETE ${base}/workouts/w1`,
+      ])
+    })
+
+    it('holds back later requests to the same resource after a retryable failure, but not unrelated ones', async () => {
+      const { queueRequest, syncPendingRequests, getPendingRequests, isOnline } = useOfflineSync()
+      isOnline.value = true
+
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/workouts/w1') && mockFetch.mock.calls.length === 1) {
+          throw Object.assign(new Error('Bad gateway'), { statusCode: 502 })
+        }
+        return { success: true }
+      })
+
+      await queueRequest({ url: `${base}/workouts/w1`, method: 'PUT', maxRetries: 3, type: 'workout' })
+      await queueRequest({ url: `${base}/workouts/w1`, method: 'DELETE', maxRetries: 3, type: 'workout' })
+      await queueRequest({ url: `${base}/bookings/b1`, method: 'DELETE', maxRetries: 3, type: 'booking' })
+
+      const result = await syncPendingRequests()
+
+      expect(mockFetch).toHaveBeenCalledTimes(2) // PUT w1 (failed) + DELETE b1
+      expect(result.synced).toBe(1)
+      expect(result.failed).toBe(2)
+
+      const pending = await getPendingRequests()
+      expect(pending.map(p => p.method)).toEqual(['PUT', 'DELETE'])
+      expect(pending[0]!.retryCount).toBe(1)
+      expect(pending[1]!.retryCount).toBe(0) // held back, not counted as an attempt
+    })
+
+    it('does not hold back later requests after a non-retryable 4xx failure', async () => {
+      const { queueRequest, syncPendingRequests, isOnline } = useOfflineSync()
+      isOnline.value = true
+
+      mockFetch
+        .mockRejectedValueOnce(Object.assign(new Error('Unprocessable'), { statusCode: 422 }))
+        .mockResolvedValue({ success: true })
+
+      await queueRequest({ url: `${base}/workouts/w1`, method: 'PUT', maxRetries: 3, type: 'workout' })
+      await queueRequest({ url: `${base}/workouts/w1`, method: 'DELETE', maxRetries: 3, type: 'workout' })
+
+      const result = await syncPendingRequests()
+
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(result.synced).toBe(1)
+      expect(result.failed).toBe(1)
+    })
+
+    it('resolves an offline temp id to the server id for later queued requests', async () => {
+      const { queueCreateWorkout, queueUpdateWorkout, queueDeleteWorkout, syncPendingRequests, isOnline } = useOfflineSync()
+      isOnline.value = true
+
+      const tempId = await queueCreateWorkout({ notes: 'a' })
+      await queueUpdateWorkout(tempId, { notes: 'b' })
+      await queueDeleteWorkout(tempId)
+
+      mockFetch.mockImplementation(async (_url: string, opts: { method: string }) =>
+        opts.method === 'POST' ? { success: true, data: { id: 'server-1' } } : { success: true })
+
+      const result = await syncPendingRequests()
+
+      expect(result.synced).toBe(3)
+      expect(mockFetch.mock.calls[1]![0]).toBe(`${base}/workouts/server-1`)
+      expect(mockFetch.mock.calls[2]![0]).toBe(`${base}/workouts/server-1`)
+    })
+
+    it('holds back follow-ups that reference a temp id whose create failed transiently', async () => {
+      const { queueCreateWorkout, queueUpdateWorkout, syncPendingRequests, getPendingRequests, isOnline } = useOfflineSync()
+      isOnline.value = true
+
+      const tempId = await queueCreateWorkout({ notes: 'a' })
+      await queueUpdateWorkout(tempId, { notes: 'b' })
+      mockFetch.mockRejectedValue(new Error('Network error'))
+
+      await syncPendingRequests()
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(await getPendingRequests()).toHaveLength(2)
+    })
+  })
+
   describe('High-level Helpers', () => {
     it('should queue booking cancellation', async () => {
       const { queueCancelBooking, getPendingRequests } = useOfflineSync()

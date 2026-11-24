@@ -30,5 +30,4 @@ export interface OfflineSyncConfig {
   dbName: string
   stateKeyPrefix: string
   getAuthHeaders: () => Record<string, string>
-  concurrency?: number
 }
