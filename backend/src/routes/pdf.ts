@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { authMiddleware, requireAuth } from '../middleware/index.js';
-import type { AuthVariables } from '../middleware/index.js';
+import { authMiddleware, requireAuth, requireTenant } from '../middleware/index.js';
+import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { generateContractPdf, generateInvoicePdf } from '../services/pdf.js';
 
 // =============================================================================
@@ -8,10 +8,10 @@ import { generateContractPdf, generateInvoicePdf } from '../services/pdf.js';
 // =============================================================================
 // Endpoints for generating PDF documents
 
-const app = new Hono<{ Variables: AuthVariables }>();
+const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
 // Apply auth middleware
-app.use('*', authMiddleware, requireAuth);
+app.use('*', authMiddleware, requireAuth, requireTenant);
 
 // -----------------------------------------------------------------------------
 // GET /api/contracts/:id/pdf - Download Contract PDF
@@ -19,8 +19,13 @@ app.use('*', authMiddleware, requireAuth);
 
 app.get('/contracts/:id/pdf', async (c) => {
   const contractId = c.req.param('id');
+  const tenantId = c.get('tenantId')!;
 
-  const result = await generateContractPdf(contractId);
+  const result = await generateContractPdf(contractId, tenantId);
+
+  if (!result.success && result.notFound) {
+    return c.json({ success: false, error: result.error || 'Not found' }, 404);
+  }
 
   if (!result.success || !result.buffer) {
     return c.json({ success: false, error: result.error || 'Failed to generate PDF' }, 500);
@@ -40,8 +45,13 @@ app.get('/contracts/:id/pdf', async (c) => {
 
 app.get('/invoices/:id/pdf', async (c) => {
   const paymentId = c.req.param('id');
+  const tenantId = c.get('tenantId')!;
 
-  const result = await generateInvoicePdf(paymentId);
+  const result = await generateInvoicePdf(paymentId, tenantId);
+
+  if (!result.success && result.notFound) {
+    return c.json({ success: false, error: result.error || 'Not found' }, 404);
+  }
 
   if (!result.success || !result.buffer) {
     return c.json({ success: false, error: result.error || 'Failed to generate PDF' }, 500);

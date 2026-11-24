@@ -1,6 +1,6 @@
 // Note: Run `pnpm add puppeteer` to install PDF generation dependencies
 import { db, contracts, members, membershipPlans, branches, payments } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 // Browser instance for PDF generation (puppeteer)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -12,6 +12,22 @@ type Browser = any;
 // Generates PDFs for contracts, invoices, and receipts using Puppeteer
 
 // -----------------------------------------------------------------------------
+// HTML escaping
+// -----------------------------------------------------------------------------
+
+/**
+ * Escape a DB-sourced value before interpolating it into an HTML template
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// -----------------------------------------------------------------------------
 // Types
 // -----------------------------------------------------------------------------
 
@@ -19,6 +35,7 @@ export interface PdfGenerationResult {
   success: boolean;
   buffer?: Buffer;
   error?: string;
+  notFound?: boolean;
 }
 
 interface ContractData {
@@ -142,17 +159,17 @@ const PDF_INVOICE_BRANCH_SELECT = {
 /**
  * Generate contract PDF
  */
-export async function generateContractPdf(contractId: string): Promise<PdfGenerationResult> {
+export async function generateContractPdf(contractId: string, tenantId: string): Promise<PdfGenerationResult> {
   try {
     // Fetch contract data
     const [contract] = await db
       .select(PDF_CONTRACT_SELECT)
       .from(contracts)
-      .where(eq(contracts.id, contractId))
+      .where(and(eq(contracts.id, contractId), eq(contracts.tenantId, tenantId)))
       .limit(1);
 
     if (!contract) {
-      return { success: false, error: 'Contract not found' };
+      return { success: false, error: 'Contract not found', notFound: true };
     }
 
     // Fetch related data in parallel
@@ -160,17 +177,17 @@ export async function generateContractPdf(contractId: string): Promise<PdfGenera
       db
         .select(PDF_CONTRACT_MEMBER_SELECT)
         .from(members)
-        .where(eq(members.id, contract.memberId))
+        .where(and(eq(members.id, contract.memberId), eq(members.tenantId, tenantId)))
         .limit(1),
       db
         .select(PDF_CONTRACT_PLAN_SELECT)
         .from(membershipPlans)
-        .where(eq(membershipPlans.id, contract.planId))
+        .where(and(eq(membershipPlans.id, contract.planId), eq(membershipPlans.tenantId, tenantId)))
         .limit(1),
       db
         .select(PDF_CONTRACT_BRANCH_SELECT)
         .from(branches)
-        .where(eq(branches.id, contract.branchId))
+        .where(and(eq(branches.id, contract.branchId), eq(branches.tenantId, tenantId)))
         .limit(1),
     ]);
 
@@ -313,27 +330,27 @@ function generateContractHtml(data: ContractData): string {
       </div>
 
       <div class="contract-no">
-        合約編號：${data.contractNo}
+        合約編號：${escapeHtml(data.contractNo)}
       </div>
 
       <div class="section">
         <div class="section-title">會員資料</div>
         <div class="info-row">
           <span class="info-label">會員姓名：</span>
-          <span class="info-value">${data.memberName}</span>
+          <span class="info-value">${escapeHtml(data.memberName)}</span>
         </div>
         <div class="info-row">
           <span class="info-label">會員編號：</span>
-          <span class="info-value">${data.memberCode}</span>
+          <span class="info-value">${escapeHtml(data.memberCode)}</span>
         </div>
         <div class="info-row">
           <span class="info-label">聯絡電話：</span>
-          <span class="info-value">${data.memberPhone}</span>
+          <span class="info-value">${escapeHtml(data.memberPhone)}</span>
         </div>
         ${data.memberEmail ? `
         <div class="info-row">
           <span class="info-label">電子郵件：</span>
-          <span class="info-value">${data.memberEmail}</span>
+          <span class="info-value">${escapeHtml(data.memberEmail)}</span>
         </div>
         ` : ''}
       </div>
@@ -342,24 +359,24 @@ function generateContractHtml(data: ContractData): string {
         <div class="section-title">合約內容</div>
         <div class="info-row">
           <span class="info-label">方案名稱：</span>
-          <span class="info-value">${data.planName}</span>
+          <span class="info-value">${escapeHtml(data.planName)}</span>
         </div>
         <div class="info-row">
           <span class="info-label">方案類型：</span>
-          <span class="info-value">${planTypeText}</span>
+          <span class="info-value">${escapeHtml(planTypeText)}</span>
         </div>
         <div class="info-row">
           <span class="info-label">合約期間：</span>
-          <span class="info-value">${data.startDate} 至 ${data.endDate}</span>
+          <span class="info-value">${escapeHtml(data.startDate)} 至 ${escapeHtml(data.endDate)}</span>
         </div>
         <div class="info-row">
           <span class="info-label">簽約分店：</span>
-          <span class="info-value">${data.branchName}</span>
+          <span class="info-value">${escapeHtml(data.branchName)}</span>
         </div>
         ${data.branchAddress ? `
         <div class="info-row">
           <span class="info-label">分店地址：</span>
-          <span class="info-value">${data.branchAddress}</span>
+          <span class="info-value">${escapeHtml(data.branchAddress)}</span>
         </div>
         ` : ''}
       </div>
@@ -402,17 +419,17 @@ function generateContractHtml(data: ContractData): string {
 /**
  * Generate invoice PDF for a payment
  */
-export async function generateInvoicePdf(paymentId: string): Promise<PdfGenerationResult> {
+export async function generateInvoicePdf(paymentId: string, tenantId: string): Promise<PdfGenerationResult> {
   try {
     // Fetch payment data
     const [payment] = await db
       .select(PDF_PAYMENT_SELECT)
       .from(payments)
-      .where(eq(payments.id, paymentId))
+      .where(and(eq(payments.id, paymentId), eq(payments.tenantId, tenantId)))
       .limit(1);
 
     if (!payment) {
-      return { success: false, error: 'Payment not found' };
+      return { success: false, error: 'Payment not found', notFound: true };
     }
 
     // Fetch related data in parallel
@@ -420,12 +437,12 @@ export async function generateInvoicePdf(paymentId: string): Promise<PdfGenerati
       db
         .select(PDF_INVOICE_MEMBER_SELECT)
         .from(members)
-        .where(eq(members.id, payment.memberId))
+        .where(and(eq(members.id, payment.memberId), eq(members.tenantId, tenantId)))
         .limit(1),
       db
         .select(PDF_INVOICE_BRANCH_SELECT)
         .from(branches)
-        .where(eq(branches.id, payment.branchId))
+        .where(and(eq(branches.id, payment.branchId), eq(branches.tenantId, tenantId)))
         .limit(1),
     ]);
 
@@ -592,21 +609,21 @@ function generateInvoiceHtml(data: InvoiceData): string {
       <div class="header">
         <div class="company-info">
           <h1>Gym Nexus</h1>
-          <p>${data.branchName}</p>
-          ${data.branchAddress ? `<p>${data.branchAddress}</p>` : ''}
-          ${data.branchTaxId ? `<p>統一編號：${data.branchTaxId}</p>` : ''}
+          <p>${escapeHtml(data.branchName)}</p>
+          ${data.branchAddress ? `<p>${escapeHtml(data.branchAddress)}</p>` : ''}
+          ${data.branchTaxId ? `<p>統一編號：${escapeHtml(data.branchTaxId)}</p>` : ''}
         </div>
         <div class="invoice-info">
           <h2>收據</h2>
-          <p><strong>單號：</strong>${data.invoiceNo}</p>
-          <p><strong>日期：</strong>${data.paymentDate}</p>
+          <p><strong>單號：</strong>${escapeHtml(data.invoiceNo)}</p>
+          <p><strong>日期：</strong>${escapeHtml(data.paymentDate)}</p>
         </div>
       </div>
 
       <div class="client-info">
         <h3>會員資料</h3>
-        <p><strong>姓名：</strong>${data.memberName}</p>
-        <p><strong>會員編號：</strong>${data.memberCode}</p>
+        <p><strong>姓名：</strong>${escapeHtml(data.memberName)}</p>
+        <p><strong>會員編號：</strong>${escapeHtml(data.memberCode)}</p>
       </div>
 
       <table class="items-table">
@@ -618,7 +635,7 @@ function generateInvoiceHtml(data: InvoiceData): string {
         </thead>
         <tbody>
           <tr>
-            <td>${data.description}</td>
+            <td>${escapeHtml(data.description)}</td>
             <td class="amount">NT$ ${data.amount.toLocaleString()}</td>
           </tr>
         </tbody>
@@ -633,8 +650,8 @@ function generateInvoiceHtml(data: InvoiceData): string {
 
       <div class="payment-info">
         <h3>付款資訊</h3>
-        <p><strong>付款方式：</strong>${data.paymentMethod}</p>
-        <p><strong>付款日期：</strong>${data.paymentDate}</p>
+        <p><strong>付款方式：</strong>${escapeHtml(data.paymentMethod)}</p>
+        <p><strong>付款日期：</strong>${escapeHtml(data.paymentDate)}</p>
         <p><strong>付款狀態：</strong>已付款</p>
       </div>
 
@@ -651,11 +668,26 @@ function generateInvoiceHtml(data: InvoiceData): string {
 // Helper Functions
 // -----------------------------------------------------------------------------
 
+export function isAllowedPdfRequest(url: string): boolean {
+  return url.startsWith('data:') || url.startsWith('about:');
+}
+
 async function generatePdfFromHtml(html: string): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
 
   try {
+    // Templates are self-contained: no JS, and no network access beyond data:/about:
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', (request: { url(): string; abort(): Promise<void>; continue(): Promise<void> }) => {
+      if (isAllowedPdfRequest(request.url())) {
+        void request.continue();
+      } else {
+        void request.abort();
+      }
+    });
+
     await page.setContent(html, { waitUntil: 'load' });
 
     const pdfBuffer = await page.pdf({
