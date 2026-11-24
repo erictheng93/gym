@@ -210,7 +210,10 @@ function calculateSegment(recency: number, frequency: number, monetary: number):
 function updateRFMTag(tags: string[], newSegment: RFMSegment): string[] {
   // Remove any existing RFM segment tags
   const rfmSegments = ['CHAMPION', 'LOYAL', 'POTENTIAL', 'AT_RISK', 'HIBERNATING', 'LOST'];
-  const filtered = tags.filter(tag => !rfmSegments.includes(tag));
+  const filtered = tags.filter(tag => {
+    const name = typeof tag === 'string' && tag.startsWith('RFM:') ? tag.slice(4) : tag;
+    return !rfmSegments.includes(name);
+  });
 
   // Add new segment tag
   return [...filtered, `RFM:${newSegment}`];
