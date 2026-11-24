@@ -341,7 +341,7 @@ describe('Users API', () => {
     });
 
     it('should return 404 for non-existent user', async () => {
-      const response = await authRequest('/api/users/00000000-0000-0000-0000-000000000000', {
+      const response = await authRequest('/api/users/00000000-0000-4000-8000-000000000000', {
         method: 'GET',
         token: adminToken,
       });
@@ -705,7 +705,7 @@ describe('Users API', () => {
     });
 
     it('should return 404 for non-existent user', async () => {
-      const response = await authRequest('/api/users/00000000-0000-0000-0000-000000000000', {
+      const response = await authRequest('/api/users/00000000-0000-4000-8000-000000000000', {
         method: 'PATCH',
         token: adminToken,
         body: JSON.stringify({
@@ -846,7 +846,7 @@ describe('Users API', () => {
     });
 
     it('should return 404 for non-existent user', async () => {
-      const response = await authRequest('/api/users/00000000-0000-0000-0000-000000000000', {
+      const response = await authRequest('/api/users/00000000-0000-4000-8000-000000000000', {
         method: 'DELETE',
         token: adminToken,
       });
@@ -965,7 +965,7 @@ describe('Users API', () => {
     });
 
     it('should return 404 for non-existent user', async () => {
-      const response = await authRequest('/api/users/00000000-0000-0000-0000-000000000000/reset-password', {
+      const response = await authRequest('/api/users/00000000-0000-4000-8000-000000000000/reset-password', {
         method: 'POST',
         token: adminToken,
         body: JSON.stringify({

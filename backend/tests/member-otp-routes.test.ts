@@ -259,7 +259,7 @@ describe('Member OTP Routes', () => {
       if (!dbAvailable) return;
 
       const tokens = generateMemberTokens({
-        id: '00000000-0000-0000-0000-ffffffffffff',
+        id: '00000000-0000-4000-8000-ffffffffffff',
         memberCode: 'GHOST',
         branchId: TEST_BRANCH_ID,
         tenantId: TEST_TENANT_ID,

@@ -102,7 +102,7 @@ describe('Membership Plans API', () => {
     });
 
     it('should return 404 for non-existent plan', async () => {
-      const response = await authRequest('/api/membership-plans/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/membership-plans/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -207,7 +207,7 @@ describe('Membership Plans API', () => {
           planType: 'TIME_BASED',
           durationMonths: 1,
           price: 500,
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
         }),
       });
 
@@ -246,7 +246,7 @@ describe('Membership Plans API', () => {
     });
 
     it('should return 404 for non-existent plan', async () => {
-      const response = await authRequest('/api/membership-plans/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/membership-plans/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ name: 'Ghost' }),
@@ -279,7 +279,7 @@ describe('Membership Plans API', () => {
     });
 
     it('should return 404 for non-existent plan', async () => {
-      const response = await authRequest('/api/membership-plans/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/membership-plans/00000000-0000-4000-8000-999999999999', {
         method: 'DELETE',
         token: authToken,
       });

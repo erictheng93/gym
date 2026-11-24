@@ -108,7 +108,7 @@ describe('Member Reviews API', () => {
     });
 
     it('should return 404 for non-existent booking', async () => {
-      const response = await memberAuthRequest('/api/member/reviews/eligibility/00000000-0000-0000-0000-999999999999', {
+      const response = await memberAuthRequest('/api/member/reviews/eligibility/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: memberToken,
       });
@@ -211,7 +211,7 @@ describe('Member Reviews API', () => {
     });
 
     it('should return 404 for non-existent review', async () => {
-      const response = await memberAuthRequest('/api/member/reviews/00000000-0000-0000-0000-999999999999', {
+      const response = await memberAuthRequest('/api/member/reviews/00000000-0000-4000-8000-999999999999', {
         method: 'PUT',
         token: memberToken,
         body: JSON.stringify({
@@ -246,7 +246,7 @@ describe('Member Reviews API', () => {
     });
 
     it('should return 404 for non-existent class', async () => {
-      const response = await memberAuthRequest('/api/member/reviews/class/00000000-0000-0000-0000-999999999999', {
+      const response = await memberAuthRequest('/api/member/reviews/class/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: memberToken,
       });
@@ -314,7 +314,7 @@ describe('Member Reviews API', () => {
     });
 
     it('should return 404 for non-existent review', async () => {
-      const response = await memberAuthRequest('/api/member/reviews/00000000-0000-0000-0000-999999999999', {
+      const response = await memberAuthRequest('/api/member/reviews/00000000-0000-4000-8000-999999999999', {
         method: 'DELETE',
         token: memberToken,
       });

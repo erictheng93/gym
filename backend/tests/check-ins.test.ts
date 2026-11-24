@@ -148,7 +148,7 @@ describe('Check-ins API', () => {
         token: authToken,
         body: JSON.stringify({
           memberId: TEST_MEMBER_ID,
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
         }),
       });
 
@@ -295,7 +295,7 @@ describe('Check-ins API', () => {
     });
 
     it('should return 404 for non-existent check-in', async () => {
-      const response = await authRequest('/api/check-ins/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/check-ins/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });

@@ -72,7 +72,7 @@ describe('Contract Logs API', () => {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          contractId: '00000000-0000-0000-0000-999999999999',
+          contractId: '00000000-0000-4000-8000-999999999999',
           logType: 'EXTEND',
           startDate: today,
           endDate: today,
@@ -172,7 +172,7 @@ describe('Contract Logs API', () => {
     });
 
     it('should return 404 for non-existent contract', async () => {
-      const response = await authRequest('/api/contract-logs/contract/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/contract-logs/contract/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -199,7 +199,7 @@ describe('Contract Logs API', () => {
     });
 
     it('should return 404 for non-existent log', async () => {
-      const response = await authRequest('/api/contract-logs/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/contract-logs/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });

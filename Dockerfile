@@ -4,29 +4,27 @@
 # Multi-stage build for optimized production image
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build
+# Stage 1: Build (bun installs from bun.lock, the same lockfile CI tests)
 # -----------------------------------------------------------------------------
-FROM node:22-alpine AS builder
+FROM oven/bun:1.4.3-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Copy source code
 COPY . .
+RUN bun run build
 
-# Build TypeScript
-RUN pnpm build
+# -----------------------------------------------------------------------------
+# Stage 1b: Production dependencies only
+# -----------------------------------------------------------------------------
+FROM oven/bun:1.4.3-alpine AS prod-deps
 
-# Prune dev dependencies
-RUN pnpm prune --prod
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 # -----------------------------------------------------------------------------
 # Stage 2: Production
@@ -55,7 +53,7 @@ WORKDIR /app
 
 # Copy built files and production dependencies
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
 
 # Set environment

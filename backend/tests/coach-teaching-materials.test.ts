@@ -199,7 +199,7 @@ describe('Coach Teaching Materials API', () => {
 
     it('should return 404 for non-existent material', async () => {
       const response = await makeCoachRequest(
-        '/api/coach/teaching-materials/00000000-0000-0000-0000-999999999999'
+        '/api/coach/teaching-materials/00000000-0000-4000-8000-999999999999'
       );
 
       expect(response.status).toBe(404);
@@ -287,7 +287,7 @@ describe('Coach Teaching Materials API', () => {
 
     it('should return 404 when updating non-existent material', async () => {
       const response = await makeCoachRequest(
-        '/api/coach/teaching-materials/00000000-0000-0000-0000-999999999999',
+        '/api/coach/teaching-materials/00000000-0000-4000-8000-999999999999',
         {
           method: 'PATCH',
           body: JSON.stringify({
@@ -332,7 +332,7 @@ describe('Coach Teaching Materials API', () => {
 
     it('should return 404 when deleting non-existent material', async () => {
       const response = await makeCoachRequest(
-        '/api/coach/teaching-materials/00000000-0000-0000-0000-999999999999',
+        '/api/coach/teaching-materials/00000000-0000-4000-8000-999999999999',
         {
           method: 'DELETE',
         }

@@ -1,0 +1,16 @@
+# Applies only to hr-service/docker/Dockerfile (BuildKit). The build context is
+# the repo root, so allow-list just what the image needs.
+*
+!hr-service/package.json
+!hr-service/bun.lock
+!hr-service/tsconfig.json
+!hr-service/src
+!hr-service/migrations
+!backend/packages/hr-business-logic/package.json
+!backend/packages/hr-business-logic/bun.lock
+!backend/packages/hr-business-logic/tsconfig.json
+!backend/packages/hr-business-logic/src
+
+**/node_modules
+**/dist
+**/.env*

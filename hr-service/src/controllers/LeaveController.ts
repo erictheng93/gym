@@ -11,7 +11,7 @@ import {
   LeaveApprovalLogRepository,
   EmployeeRepository
 } from '../repositories/index.js'
-import { NotFoundError, ForbiddenError } from '../middleware/index.js'
+import { NotFoundError, ForbiddenError, ValidationError } from '../middleware/index.js'
 
 // Validation schemas
 const applyLeaveSchema = z.object({
@@ -129,14 +129,19 @@ export class LeaveController {
    */
   static async getLeaveRequests(req: Request, res: Response, next: NextFunction) {
     try {
-      const { employeeId, status } = req.query
+      const targetId = (req.query.id || req.query.employeeId || req.user?.employeeId) as string | undefined
+      const { status } = req.query
 
-      if (!employeeId) {
-        throw new NotFoundError('employeeId is required')
+      if (!targetId) {
+        throw new ValidationError('employeeId is required')
+      }
+
+      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+        throw new ForbiddenError('You can only view your own leave requests')
       }
 
       const requests = await leaveRequestRepo.findByEmployeeId(
-        employeeId as string,
+        targetId,
         status as string | undefined
       )
 
@@ -219,10 +224,19 @@ export class LeaveController {
    */
   static async getLeaveBalance(req: Request, res: Response, next: NextFunction) {
     try {
-      const { employeeId } = req.params
+      const targetId = (req.params.id || req.params.employeeId || req.user?.employeeId) as string
+
+      if (!targetId) {
+        throw new ValidationError('Employee ID is required')
+      }
+
+      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+        throw new ForbiddenError('You can only view your own leave balance')
+      }
+
       const year = parseInt(req.query.year as string) || new Date().getFullYear()
 
-      const balances = await balanceRepo.findAllByEmployeeAndYear(employeeId, year)
+      const balances = await balanceRepo.findAllByEmployeeAndYear(targetId, year)
 
       res.json({
         data: balances,

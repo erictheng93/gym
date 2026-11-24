@@ -230,7 +230,7 @@ describe('Bookings API', () => {
     });
 
     it('should return 404 for non-existent booking', async () => {
-      const response = await authRequest('/api/bookings/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/bookings/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -595,7 +595,7 @@ describe('Bookings API', () => {
     });
 
     it('should return 404 for non-existent booking', async () => {
-      const response = await authRequest('/api/bookings/00000000-0000-0000-0000-999999999999/attend', {
+      const response = await authRequest('/api/bookings/00000000-0000-4000-8000-999999999999/attend', {
         method: 'POST',
         token: authToken,
       });

@@ -82,7 +82,7 @@ describe('Employees API', () => {
     });
 
     it('should return 404 for non-existent employee', async () => {
-      const response = await authRequest('/api/employees/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/employees/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -123,7 +123,7 @@ describe('Employees API', () => {
         token: authToken,
         body: JSON.stringify({
           fullName: 'Bad Employee',
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
           jobTitleId: TEST_JOB_TITLE_ID,
           employmentType: 'FULL_TIME',
         }),
@@ -169,7 +169,7 @@ describe('Employees API', () => {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
         }),
       });
 
@@ -177,7 +177,7 @@ describe('Employees API', () => {
     });
 
     it('should return 404 for non-existent employee', async () => {
-      const response = await authRequest('/api/employees/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/employees/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ fullName: 'Ghost' }),
@@ -211,8 +211,8 @@ describe('Employees API', () => {
 
     it('should deactivate linked user when deleting employee', async () => {
       // Create a user+employee pair with linked userId via DB
-      const linkedUserId = '00000000-0000-0000-0000-0000000000f1';
-      const linkedEmployeeId = '00000000-0000-0000-0000-0000000000f2';
+      const linkedUserId = '00000000-0000-4000-8000-0000000000f1';
+      const linkedEmployeeId = '00000000-0000-4000-8000-0000000000f2';
       const passwordHash = await hash('TestPass123!');
 
       await db.insert(users).values({
@@ -262,7 +262,7 @@ describe('Employees API', () => {
     });
 
     it('should return 404 for non-existent employee', async () => {
-      const response = await authRequest('/api/employees/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/employees/00000000-0000-4000-8000-999999999999', {
         method: 'DELETE',
         token: authToken,
       });

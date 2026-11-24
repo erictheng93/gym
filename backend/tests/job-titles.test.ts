@@ -53,7 +53,7 @@ describe('Job Titles API', () => {
     });
 
     it('should return 404 for non-existent job title', async () => {
-      const response = await authRequest('/api/job-titles/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/job-titles/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -137,7 +137,7 @@ describe('Job Titles API', () => {
     });
 
     it('should return 404 for non-existent job title', async () => {
-      const response = await authRequest('/api/job-titles/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/job-titles/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ name: 'Ghost' }),
@@ -169,7 +169,7 @@ describe('Job Titles API', () => {
     });
 
     it('should return 404 for non-existent job title', async () => {
-      const response = await authRequest('/api/job-titles/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/job-titles/00000000-0000-4000-8000-999999999999', {
         method: 'DELETE',
         token: authToken,
       });

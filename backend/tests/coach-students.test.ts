@@ -204,7 +204,7 @@ describe('Coach Students API', () => {
 
     it('should return 403 for unassigned member', async () => {
       // Use a UUID that is not assigned to the test coach
-      const unassignedId = '00000000-0000-0000-0000-ffffffffffff';
+      const unassignedId = '00000000-0000-4000-8000-ffffffffffff';
       const response = await makeCoachRequest(`/api/coach/students/${unassignedId}`, {
         method: 'GET',
       });
@@ -282,7 +282,7 @@ describe('Coach Students API', () => {
       });
 
       it('should reject creating a note for unassigned member', async () => {
-        const unassignedId = '00000000-0000-0000-0000-ffffffffffff';
+        const unassignedId = '00000000-0000-4000-8000-ffffffffffff';
         const response = await makeCoachRequest(`/api/coach/students/${unassignedId}/notes`, {
           method: 'POST',
           body: JSON.stringify({
@@ -413,7 +413,7 @@ describe('Coach Students API', () => {
       });
 
       it('should return 403 for unassigned member notes', async () => {
-        const unassignedId = '00000000-0000-0000-0000-ffffffffffff';
+        const unassignedId = '00000000-0000-4000-8000-ffffffffffff';
         const response = await makeCoachRequest(
           `/api/coach/students/${unassignedId}/notes`,
           { method: 'GET' }
@@ -489,7 +489,7 @@ describe('Coach Students API', () => {
       });
 
       it('should return 404 for non-existent note', async () => {
-        const nonExistentNoteId = '00000000-0000-0000-0000-ffffffffffff';
+        const nonExistentNoteId = '00000000-0000-4000-8000-ffffffffffff';
         const response = await makeCoachRequest(
           `/api/coach/students/${TEST_MEMBER_ID}/notes/${nonExistentNoteId}`,
           {
@@ -527,7 +527,7 @@ describe('Coach Students API', () => {
       });
 
       it('should return 404 when deleting non-existent note', async () => {
-        const nonExistentNoteId = '00000000-0000-0000-0000-ffffffffffff';
+        const nonExistentNoteId = '00000000-0000-4000-8000-ffffffffffff';
         const response = await makeCoachRequest(
           `/api/coach/students/${TEST_MEMBER_ID}/notes/${nonExistentNoteId}`,
           { method: 'DELETE' }

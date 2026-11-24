@@ -791,11 +791,52 @@ impl From<QrContractRow> for QrContractResponse {
     }
 }
 
+const MAX_QR_PAYLOAD_LEN: usize = 4096;
+
 fn normalize_qr_payload(payload: Value) -> Result<Value, AppError> {
     match payload {
-        Value::String(value) => serde_json::from_str(&value)
-            .map_err(|_| AppError::Validation("QR payload is invalid".into())),
+        Value::String(value) => {
+            if value.is_empty() || value.len() > MAX_QR_PAYLOAD_LEN {
+                return Err(AppError::Validation("QR payload length is invalid".into()));
+            }
+            serde_json::from_str(&value)
+                .map_err(|_| AppError::Validation("QR payload is invalid".into()))
+        }
         Value::Object(_) => Ok(payload),
         _ => Err(AppError::Validation("QR payload is invalid".into())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_normalize_qr_payload_valid_object() {
+        let obj = json!({"token": "abc-123"});
+        let result = normalize_qr_payload(obj.clone()).unwrap();
+        assert_eq!(result, obj);
+    }
+
+    #[test]
+    fn test_normalize_qr_payload_valid_string() {
+        let raw = r#"{"token":"abc-123"}"#;
+        let result = normalize_qr_payload(Value::String(raw.into())).unwrap();
+        assert_eq!(result["token"], "abc-123");
+    }
+
+    #[test]
+    fn test_normalize_qr_payload_oversized_string() {
+        let oversized = "a".repeat(MAX_QR_PAYLOAD_LEN + 1);
+        let result = normalize_qr_payload(Value::String(oversized));
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn test_normalize_qr_payload_empty_string() {
+        let result = normalize_qr_payload(Value::String("".into()));
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+}
+

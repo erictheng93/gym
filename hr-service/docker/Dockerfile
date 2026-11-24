@@ -1,33 +1,53 @@
 # HR Service Dockerfile
-# Multi-stage build for optimized production image
+# Multi-stage build. Build context is the REPO ROOT (it needs the local
+# @gym-nexus/hr-business-logic package from backend/packages):
+#   docker build -f hr-service/docker/Dockerfile .
+# Files sent to the build are allow-listed in Dockerfile.dockerignore.
 
 # ============================================
-# Stage 1: Build stage
+# Stage 1: Build the shared hr-business-logic package
 # ============================================
-FROM node:20-alpine AS builder
+FROM oven/bun:1.4.3-alpine AS hr-logic
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /src/backend/packages/hr-business-logic
 
-WORKDIR /app
+COPY backend/packages/hr-business-logic/package.json backend/packages/hr-business-logic/bun.lock ./
+RUN bun install --frozen-lockfile
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
-
-# Copy the hr-business-logic package (local dependency)
-COPY ../backend/packages/hr-business-logic ../backend/packages/hr-business-logic
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Copy source code
-COPY . .
-
-# Build TypeScript
-RUN pnpm build
+COPY backend/packages/hr-business-logic/ ./
+RUN bun run build && rm -rf node_modules
 
 # ============================================
-# Stage 2: Production stage
+# Stage 2: Build hr-service
+# ============================================
+FROM oven/bun:1.4.3-alpine AS builder
+
+WORKDIR /src/hr-service
+
+COPY --from=hr-logic /src/backend/packages/hr-business-logic /src/backend/packages/hr-business-logic
+COPY hr-service/package.json hr-service/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY hr-service/ ./
+RUN bun run build
+
+# ============================================
+# Stage 3: Production dependencies only
+# ============================================
+FROM oven/bun:1.4.3-alpine AS prod-deps
+
+WORKDIR /src/hr-service
+
+COPY --from=hr-logic /src/backend/packages/hr-business-logic /src/backend/packages/hr-business-logic
+COPY hr-service/package.json hr-service/bun.lock ./
+RUN bun install --frozen-lockfile --production \
+  # bun links file: deps back to /src/...; dereference so the runtime image is self-contained
+  && cp -rL node_modules/@gym-nexus/hr-business-logic /tmp/hr-business-logic \
+  && rm -rf node_modules/@gym-nexus/hr-business-logic \
+  && mv /tmp/hr-business-logic node_modules/@gym-nexus/hr-business-logic
+
+# ============================================
+# Stage 4: Runtime
 # ============================================
 FROM node:20-alpine AS runner
 
@@ -37,24 +57,10 @@ RUN adduser --system --uid 1001 hrservice
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
-
-# Copy the hr-business-logic package
-COPY --from=builder /backend/packages/hr-business-logic ../backend/packages/hr-business-logic
-
-# Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile
-
-# Copy built files
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/migrations ./migrations
-
-# Change ownership
-RUN chown -R hrservice:nodejs /app
+COPY --from=prod-deps --chown=hrservice:nodejs /src/hr-service/node_modules ./node_modules
+COPY --from=builder --chown=hrservice:nodejs /src/hr-service/dist ./dist
+COPY --chown=hrservice:nodejs hr-service/migrations ./migrations
+COPY --chown=hrservice:nodejs hr-service/package.json ./
 
 # Switch to non-root user
 USER hrservice

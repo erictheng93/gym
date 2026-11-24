@@ -10,9 +10,9 @@ node_modules/
 dist/
 
 # Development
-.env
-.env.local
-.env.*.local
+# Never bake env files (incl. .env.production) into image layers
+.env*
+!.env.example
 
 # IDE
 .idea/
