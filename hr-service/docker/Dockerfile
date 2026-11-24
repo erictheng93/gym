@@ -62,6 +62,10 @@ COPY --from=builder --chown=hrservice:nodejs /src/hr-service/dist ./dist
 COPY --chown=hrservice:nodejs hr-service/migrations ./migrations
 COPY --chown=hrservice:nodejs hr-service/package.json ./
 
+# Without this the logger falls back to the dev-only pino-pretty transport
+# (not installed with --production) and the service crashes at startup.
+ENV NODE_ENV=production
+
 # Switch to non-root user
 USER hrservice
 
