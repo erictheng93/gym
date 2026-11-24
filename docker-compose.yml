@@ -90,10 +90,10 @@ services:
       DATABASE_URL: "postgresql://${DB_USER:-gym_nexus}:${DB_PASSWORD:-gym_nexus_dev}@database:5432/${DB_DATABASE:-gym_nexus}"
 
       # Auth
-      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required}"
-      SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET is required}"
-      MEMBER_JWT_SECRET: "${MEMBER_JWT_SECRET:?MEMBER_JWT_SECRET is required}"
-      COACH_JWT_SECRET: "${COACH_JWT_SECRET:?COACH_JWT_SECRET is required}"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      SESSION_SECRET: "${SESSION_SECRET:-change-me-in-production}"
+      MEMBER_JWT_SECRET: "${MEMBER_JWT_SECRET:-change-me-in-production}"
+      COACH_JWT_SECRET: "${COACH_JWT_SECRET:-change-me-in-production}"
 
       # CORS
       CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004,http://127.0.0.1:3005}"
