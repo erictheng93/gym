@@ -74,7 +74,7 @@ vi.mock('../src/db/index.js', () => ({
   contracts: {
     id: 'contracts.id', contractNo: 'contractNo', totalAmount: 'totalAmount',
     paymentStatus: 'paymentStatus', updatedAt: 'updatedAt', status: 'status',
-    tenantId: 'contracts.tenantId',
+    tenantId: 'contracts.tenantId', memberId: 'contracts.memberId',
   },
   members: {
     id: 'members.id', fullName: 'fullName', memberCode: 'memberCode',
@@ -468,10 +468,33 @@ describe('Payment Routes', () => {
       expect(chainFns.where).toHaveBeenCalledWith({
         _op: 'and',
         args: [
-          { _op: 'eq', a: 'contracts.id', b: CONTRACT_ID },
-          { _op: 'eq', a: 'contracts.tenantId', b: TEST_TENANT_ID },
+          {
+            _op: 'and',
+            args: [
+              { _op: 'eq', a: 'contracts.id', b: CONTRACT_ID },
+              { _op: 'eq', a: 'contracts.tenantId', b: TEST_TENANT_ID },
+            ],
+          },
+          { _op: 'eq', a: 'contracts.memberId', b: MEMBER_ID },
         ],
       });
+      expect(chainFns.insert).not.toHaveBeenCalled();
+      expect(chainFns.update).not.toHaveBeenCalled();
+    });
+
+    it('合約不屬於指定會員時應該返回 404 且不建立付款', async () => {
+      const OTHER_MEMBER_ID = 'ffffffff-ffff-4fff-afff-ffffffffffff';
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([{ id: OTHER_MEMBER_ID }]);
+      dbResults.push([]); // contract lookup requires contracts.memberId = memberId → not found
+
+      const res = await postPayment({ ...validBody, memberId: OTHER_MEMBER_ID });
+      const json = await res.json() as any;
+
+      expect(res.status).toBe(404);
+      expect(json.error).toBe('合約不存在');
+      const contractWhere = chainFns.where.mock.calls[2]![0];
+      expect(contractWhere.args).toContainEqual({ _op: 'eq', a: 'contracts.memberId', b: OTHER_MEMBER_ID });
       expect(chainFns.insert).not.toHaveBeenCalled();
       expect(chainFns.update).not.toHaveBeenCalled();
     });

@@ -386,7 +386,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   const [contract] = await db
     .select(CONTRACT_TOTAL_AMOUNT_SELECT)
     .from(contracts)
-    .where(contractCondition)
+    .where(and(contractCondition, eq(contracts.memberId, data.memberId)))
     .limit(1);
 
   if (!contract) {
