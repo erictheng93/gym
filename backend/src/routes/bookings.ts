@@ -269,96 +269,93 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
 
-  const [[session], branchIds, [member], [existingBooking]] = await Promise.all([
-    db
+  const branchIds = await getTenantBranchIds(tenantId);
+  return db.transaction(async (tx) => {
+    const [session] = await tx
       .select(BOOKING_CREATE_SESSION_SELECT)
       .from(classSessions)
       .where(eq(classSessions.id, data.sessionId))
-      .limit(1),
-    getTenantBranchIds(tenantId),
-    db
-      .select(BOOKING_CREATE_MEMBER_SELECT)
-      .from(members)
-      .where(eq(members.id, data.memberId))
-      .limit(1),
-    db
-      .select(BOOKING_ID_SELECT)
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.sessionId, data.sessionId),
-          eq(bookings.memberId, data.memberId),
-          or(
-            eq(bookings.bookingStatus, 'CONFIRMED'),
-            eq(bookings.bookingStatus, 'WAITLIST')
+      .limit(1).for('update');
+    const [[member], [existingBooking]] = await Promise.all([
+      tx
+        .select(BOOKING_CREATE_MEMBER_SELECT)
+        .from(members)
+        .where(eq(members.id, data.memberId))
+        .limit(1),
+      tx
+        .select(BOOKING_ID_SELECT)
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.sessionId, data.sessionId),
+            eq(bookings.memberId, data.memberId),
+            or(
+              eq(bookings.bookingStatus, 'CONFIRMED'),
+              eq(bookings.bookingStatus, 'WAITLIST')
+            )
           )
         )
-      )
-      .limit(1),
-  ]);
+        .limit(1),
+    ]);
 
-  if (!session) {
-    return c.json({ success: false, error: '課程場次不存在' }, 404);
-  }
+    if (!session) {
+      return c.json({ success: false, error: '課程場次不存在' }, 404);
+    }
 
-  if (!branchIds.includes(session.branchId)) {
-    return c.json({ success: false, error: '無權限預約此課程' }, 403);
-  }
+    if (!branchIds.includes(session.branchId)) {
+      return c.json({ success: false, error: '無權限預約此課程' }, 403);
+    }
 
-  if (session.sessionStatus !== 'SCHEDULED') {
-    return c.json({ success: false, error: '此課程已取消或已結束' }, 400);
-  }
+    if (session.sessionStatus !== 'SCHEDULED') {
+      return c.json({ success: false, error: '此課程已取消或已結束' }, 400);
+    }
 
-  const sessionDate = new Date(session.sessionDate);
-  if (sessionDate < new Date()) {
-    return c.json({ success: false, error: '無法預約過去的課程' }, 400);
-  }
+    const sessionDate = new Date(session.sessionDate);
+    if (sessionDate < new Date()) {
+      return c.json({ success: false, error: '無法預約過去的課程' }, 400);
+    }
 
-  if (!member || member.status !== 'ACTIVE') {
-    return c.json({ success: false, error: '會員不存在或狀態無效' }, 400);
-  }
+    if (!member || member.status !== 'ACTIVE') {
+      return c.json({ success: false, error: '會員不存在或狀態無效' }, 400);
+    }
 
-  if (existingBooking) {
-    return c.json({ success: false, error: '您已預約此課程' }, 400);
-  }
+    if (existingBooking) {
+      return c.json({ success: false, error: '您已預約此課程' }, 400);
+    }
 
-  let bookingStatus: 'CONFIRMED' | 'WAITLIST' = 'CONFIRMED';
-  let waitlistPosition: number | null = null;
+    let bookingStatus: 'CONFIRMED' | 'WAITLIST' = 'CONFIRMED';
+    let waitlistPosition: number | null = null;
 
-  const currentCount = session.currentCount ?? 0;
-  const waitlistCount = session.waitlistCount ?? 0;
+    const currentCount = session.currentCount ?? 0;
+    const waitlistCount = session.waitlistCount ?? 0;
 
-  if (currentCount >= session.maxCapacity) {
-    bookingStatus = 'WAITLIST';
-    waitlistPosition = waitlistCount + 1;
-  }
+    if (currentCount >= session.maxCapacity) {
+      bookingStatus = 'WAITLIST';
+      waitlistPosition = waitlistCount + 1;
+    }
 
-  const [[newBooking]] = await Promise.all([
-    db.insert(bookings).values({
+    const [newBooking] = await tx.insert(bookings).values({
       sessionId: data.sessionId,
       memberId: data.memberId,
       contractId: data.contractId,
       bookingStatus,
       waitlistPosition,
-    }).returning(BOOKING_CREATE_RETURNING),
-    bookingStatus === 'CONFIRMED'
-      ? db.update(classSessions).set({
-          currentCount: currentCount + 1,
-          updatedAt: new Date(),
-        }).where(eq(classSessions.id, data.sessionId))
-      : db.update(classSessions).set({
-          waitlistCount: waitlistCount + 1,
-          updatedAt: new Date(),
-        }).where(eq(classSessions.id, data.sessionId)),
-  ]);
+    }).returning(BOOKING_CREATE_RETURNING);
+    await tx.update(classSessions).set({
+      ...(bookingStatus === 'CONFIRMED'
+        ? { currentCount: currentCount + 1 }
+        : { waitlistCount: waitlistCount + 1 }),
+      updatedAt: new Date(),
+    }).where(eq(classSessions.id, data.sessionId));
 
-  return c.json({
-    success: true,
-    data: newBooking,
-    message: bookingStatus === 'CONFIRMED'
-      ? '預約成功！'
-      : `已加入候補名單，目前排序第 ${waitlistPosition} 位`,
-  }, 201);
+    return c.json({
+      success: true,
+      data: newBooking,
+      message: bookingStatus === 'CONFIRMED'
+        ? '預約成功！'
+        : `已加入候補名單，目前排序第 ${waitlistPosition} 位`,
+    }, 201);
+  });
 });
 
 app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {

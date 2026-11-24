@@ -209,20 +209,8 @@ export default defineNuxtConfig({
       // 執行時快取策略
       runtimeCaching: [
         {
-          // API 請求快取策略 - Network First with timeout for offline/slow network support
-          urlPattern: /\/api\/.*/i,
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'api-cache',
-            expiration: {
-              maxEntries: 100,
-              maxAgeSeconds: 60 * 60 * 24 // 24 小時
-            },
-            cacheableResponse: {
-              statuses: [0, 200]
-            },
-            networkTimeoutSeconds: 5,
-          }
+          urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+          handler: 'NetworkOnly',
         },
         {
           // 圖片快取策略 - Cache First

@@ -111,7 +111,8 @@ app.use('*', cors({
     // Wildcard pattern match (e.g., https://*.pages.dev or *.gym-nexus.com)
     for (const pattern of configuredCorsOrigins) {
       if (pattern.includes('*')) {
-        const regexStr = '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$';
+        const escaped = pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const regexStr = '^' + escaped.join('.*') + '$';
         if (new RegExp(regexStr, 'i').test(normalized)) return origin;
       }
     }

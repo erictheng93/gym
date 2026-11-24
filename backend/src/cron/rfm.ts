@@ -137,22 +137,20 @@ export async function runRFMSegmentation() {
         });
 
         // Update member tags with segment only if changed
-        if (member.tenantId) {
-          const existingTags = Array.isArray(member.tags) ? (member.tags as string[]) : [];
-          const updatedTags = updateRFMTag(existingTags, segment);
-          const tagsChanged =
-            existingTags.length !== updatedTags.length ||
-            existingTags.some((t, i) => t !== updatedTags[i]);
+        const existingTags = Array.isArray(member.tags) ? (member.tags as string[]) : [];
+        const updatedTags = updateRFMTag(existingTags, segment);
+        const tagsChanged =
+          existingTags.length !== updatedTags.length ||
+          existingTags.some((t, i) => t !== updatedTags[i]);
 
-          if (tagsChanged) {
-            await db
-              .update(members)
-              .set({
-                tags: updatedTags,
-                updatedAt: new Date(),
-              })
-              .where(eq(members.id, member.id));
-          }
+        if (tagsChanged) {
+          await db
+            .update(members)
+            .set({
+              tags: updatedTags,
+              updatedAt: new Date(),
+            })
+            .where(eq(members.id, member.id));
         }
       } catch (error) {
         console.error(`[RFM] Failed to analyze member ${member.id}:`, error);
