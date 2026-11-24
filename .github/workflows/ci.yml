@@ -82,3 +82,39 @@ jobs:
         run: bunx vitest run
       - name: Build
         run: bun run build
+
+  # Build the production images and start them: install/symlink/dependency
+  # problems in images often only show up at startup, not at build time.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgis/postgis:17-3.4
+        env:
+          POSTGRES_USER: gym_nexus
+          # Throwaway runner-local container: no password needed
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: gym_nexus
+        ports: ['15432:5432']
+        options: >-
+          --health-cmd "pg_isready -U gym_nexus"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: |
+          docker build -t gym-api:ci backend
+          docker build -f hr-service/docker/Dockerfile -t hr-api:ci .
+      - name: Start images and check health
+        run: |
+          db=postgresql://gym_nexus@localhost:15432/gym_nexus
+          docker run -d --name api --network host -e DATABASE_URL=$db gym-api:ci
+          docker run -d --name hr --network host -e DATABASE_URL=$db -e PORT=3001 \
+            -e JWT_SECRET="$(openssl rand -hex 32)" hr-api:ci
+          for url in http://localhost:8056/health http://localhost:3001/api/health; do
+            for i in $(seq 1 30); do curl -fsS "$url" && echo && continue 2; sleep 2; done
+            echo "::error::$url did not become healthy"
+            docker logs api; docker logs hr
+            exit 1
+          done

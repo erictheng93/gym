@@ -9,8 +9,9 @@ services:
   # ============================================
   hr-api:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      # Repo root: the image also needs backend/packages/hr-business-logic
+      context: ../..
+      dockerfile: hr-service/docker/Dockerfile
     container_name: hr-api
     restart: unless-stopped
     ports:

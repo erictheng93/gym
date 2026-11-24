@@ -6,6 +6,10 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mockGlobalFetch, mockHandleError } from '@test/setup'
+// Load useAuth at collection time: a cold transform inside the first test can
+// exceed the 5s test timeout under full-suite load, leaving the user logged in
+// and cascading into the next test. In-test `await import()` hits this cache.
+import '~/composables/useAuth'
 
 // Helper to create a mock fetch response
 const mockFetchResponse = (data: any, ok = true) => ({

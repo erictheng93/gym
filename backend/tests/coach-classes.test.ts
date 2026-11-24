@@ -191,7 +191,7 @@ describe('Coach Profile, Schedule & Classes API', () => {
     });
 
     it('GET /api/coach/classes/:id for non-existent session should return 404', async () => {
-      const fakeId = '00000000-0000-0000-0000-ffffffffffff';
+      const fakeId = '00000000-0000-4000-8000-ffffffffffff';
       const response = await makeCoachRequest(`/api/coach/classes/${fakeId}`);
 
       expect(response.status).toBe(404);
@@ -255,7 +255,7 @@ describe('Coach Profile, Schedule & Classes API', () => {
     });
 
     it('POST /api/coach/classes/:id/attendance for non-existent booking should return 404', async () => {
-      const fakeBookingId = '00000000-0000-0000-0000-ffffffffffff';
+      const fakeBookingId = '00000000-0000-4000-8000-ffffffffffff';
       const response = await makeCoachRequest(`/api/coach/classes/${fakeBookingId}/attendance`, {
         method: 'POST',
         body: JSON.stringify({

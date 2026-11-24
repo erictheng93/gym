@@ -17,7 +17,10 @@ router.post('/:id/check-out', AttendanceController.checkOut)
 
 // Query
 router.get('/today', AttendanceController.getTodayAttendances)
+router.get('/my/today', AttendanceController.getEmployeeTodayAttendance)
+router.get('/employee/:id/today', AttendanceController.getEmployeeTodayAttendance)
 router.get('/employee/:employeeId/today', AttendanceController.getEmployeeTodayAttendance)
+router.get('/employee/:id', AttendanceController.getEmployeeAttendances)
 router.get('/employee/:employeeId', AttendanceController.getEmployeeAttendances)
 router.get('/:id', AttendanceController.getById)
 

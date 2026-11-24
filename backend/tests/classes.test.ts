@@ -80,7 +80,7 @@ describe('Classes API', () => {
     });
 
     it('should return 404 for non-existent class', async () => {
-      const response = await authRequest('/api/classes/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/classes/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -123,7 +123,7 @@ describe('Classes API', () => {
         token: authToken,
         body: JSON.stringify({
           name: 'Bad Class',
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
         }),
       });
 
@@ -166,7 +166,7 @@ describe('Classes API', () => {
     });
 
     it('should return 404 for non-existent class', async () => {
-      const response = await authRequest('/api/classes/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/classes/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({
@@ -228,7 +228,7 @@ describe('Classes API', () => {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          classId: '00000000-0000-0000-0000-999999999999',
+          classId: '00000000-0000-4000-8000-999999999999',
           branchId: TEST_BRANCH_ID,
           dayOfWeek: 1,
           startTime: '09:00',

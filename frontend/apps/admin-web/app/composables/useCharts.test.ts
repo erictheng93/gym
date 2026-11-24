@@ -291,7 +291,7 @@ describe('useCharts', () => {
 
     it('應該處理創建錯誤', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      MockChart.mockImplementationOnce(() => {
+      MockChart.mockImplementationOnce(function () {
         throw new Error('Chart creation failed')
       })
 
@@ -407,7 +407,7 @@ describe('useCharts', () => {
 
     it('應該處理創建錯誤', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      MockChart.mockImplementationOnce(() => {
+      MockChart.mockImplementationOnce(function () {
         throw new Error('Chart creation failed')
       })
 
@@ -527,7 +527,7 @@ describe('useCharts', () => {
 
     it('應該處理創建錯誤', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      MockChart.mockImplementationOnce(() => {
+      MockChart.mockImplementationOnce(function () {
         throw new Error('Chart creation failed')
       })
 

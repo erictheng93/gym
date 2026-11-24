@@ -4,6 +4,32 @@ import { dirname, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// Vendor chunk splitting for the client bundle only (vite.$client below).
+// Applied to the server build too, it breaks Nuxt's inlined style chunks (Nuxt 4.7).
+const manualChunks = (id: string) => {
+  // Core Vue/Nuxt - loaded on every page
+  if (id.includes('node_modules/vue') ||
+      id.includes('node_modules/@vue') ||
+      id.includes('node_modules/nuxt')) {
+    return 'vue-core'
+  }
+
+  // Sentry - Error tracking, can be loaded async
+  if (id.includes('node_modules/@sentry')) {
+    return 'sentry-vendor'
+  }
+
+  // Zod - Schema validation
+  if (id.includes('node_modules/zod')) {
+    return 'zod-vendor'
+  }
+
+  // QR scanning
+  if (id.includes('node_modules/jsqr')) {
+    return 'qr-vendor'
+  }
+}
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -238,6 +264,9 @@ export default defineNuxtConfig({
 
   // Vite configuration with chunk splitting
   vite: {
+    $client: {
+      build: { rollupOptions: { output: { manualChunks } } },
+    },
     server: {
       fs: {
         strict: false,
@@ -245,33 +274,6 @@ export default defineNuxtConfig({
       }
     },
     build: {
-      rollupOptions: {
-        output: {
-          manualChunks: (id: string) => {
-            // Core Vue/Nuxt - loaded on every page
-            if (id.includes('node_modules/vue') ||
-                id.includes('node_modules/@vue') ||
-                id.includes('node_modules/nuxt')) {
-              return 'vue-core'
-            }
-
-            // Sentry - Error tracking, can be loaded async
-            if (id.includes('node_modules/@sentry')) {
-              return 'sentry-vendor'
-            }
-
-            // Zod - Schema validation
-            if (id.includes('node_modules/zod')) {
-              return 'zod-vendor'
-            }
-
-            // QR scanning
-            if (id.includes('node_modules/jsqr')) {
-              return 'qr-vendor'
-            }
-          }
-        }
-      },
       chunkSizeWarningLimit: 550
     }
   }

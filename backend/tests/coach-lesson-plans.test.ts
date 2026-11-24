@@ -133,7 +133,7 @@ describe('Coach Lesson Plans API', () => {
 
     it('should return 404 for non-existent plan', async () => {
       const res = await makeCoachRequest(
-        '/api/coach/lesson-plans/00000000-0000-0000-0000-999999999999'
+        '/api/coach/lesson-plans/00000000-0000-4000-8000-999999999999'
       );
 
       expect(res.status).toBe(404);
@@ -225,7 +225,7 @@ describe('Coach Lesson Plans API', () => {
 
     it('should return 404 for non-existent plan', async () => {
       const res = await makeCoachRequest(
-        '/api/coach/lesson-plans/00000000-0000-0000-0000-999999999999',
+        '/api/coach/lesson-plans/00000000-0000-4000-8000-999999999999',
         {
           method: 'PATCH',
           body: JSON.stringify({
@@ -309,7 +309,7 @@ describe('Coach Lesson Plans API', () => {
 
     it('should return 404 for non-existent plan', async () => {
       const res = await makeCoachRequest(
-        '/api/coach/lesson-plans/00000000-0000-0000-0000-999999999999',
+        '/api/coach/lesson-plans/00000000-0000-4000-8000-999999999999',
         {
           method: 'DELETE',
         }

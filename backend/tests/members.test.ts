@@ -84,7 +84,7 @@ describe('Members API', () => {
     });
 
     it('should return 404 for non-existent member', async () => {
-      const response = await authRequest('/api/members/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/members/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -139,7 +139,7 @@ describe('Members API', () => {
         body: JSON.stringify({
           fullName: 'Bad Branch Member',
           phone: '0912345678',
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
         }),
       });
 
@@ -190,7 +190,7 @@ describe('Members API', () => {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
         }),
       });
 
@@ -198,7 +198,7 @@ describe('Members API', () => {
     });
 
     it('should return 404 for non-existent member', async () => {
-      const response = await authRequest('/api/members/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/members/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ fullName: 'Ghost' }),
@@ -237,7 +237,7 @@ describe('Members API', () => {
     });
 
     it('should return 404 for non-existent member', async () => {
-      const response = await authRequest('/api/members/00000000-0000-0000-0000-999999999999/contracts', {
+      const response = await authRequest('/api/members/00000000-0000-4000-8000-999999999999/contracts', {
         method: 'GET',
         token: authToken,
       });
@@ -328,7 +328,7 @@ describe('Members API', () => {
     });
 
     it('should return 404 when deleting non-existent member', async () => {
-      const response = await authRequest('/api/members/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/members/00000000-0000-4000-8000-999999999999', {
         method: 'DELETE',
         token: authToken,
       });

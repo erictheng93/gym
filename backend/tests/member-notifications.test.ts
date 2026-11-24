@@ -220,7 +220,7 @@ describe('Member Notification Routes', () => {
       if (!dbAvailable) return;
 
       const res = await memberRequest(
-        '/api/member/notifications/00000000-0000-0000-0000-000000099999/read',
+        '/api/member/notifications/00000000-0000-4000-8000-000000099999/read',
         { method: 'POST' }
       );
 

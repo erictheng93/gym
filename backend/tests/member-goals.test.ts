@@ -201,7 +201,7 @@ describe('Member Goals Routes', () => {
       if (!dbAvailable) return;
 
       const res = await memberRequest(
-        '/api/member/goals/00000000-0000-0000-0000-000000099999'
+        '/api/member/goals/00000000-0000-4000-8000-000000099999'
       );
 
       expect(res.status).toBe(404);
@@ -249,7 +249,7 @@ describe('Member Goals Routes', () => {
       if (!dbAvailable) return;
 
       const res = await memberRequest(
-        '/api/member/goals/00000000-0000-0000-0000-000000099999',
+        '/api/member/goals/00000000-0000-4000-8000-000000099999',
         {
           method: 'PUT',
           body: JSON.stringify({ notes: 'test' }),

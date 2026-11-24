@@ -4,12 +4,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Constants
 // =============================================================================
 
-const TEST_TENANT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const TEST_TENANT_ID = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
 const TEST_USER = { id: 'user-1', employeeId: 'emp-1', username: 'testuser' };
-const BRANCH_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-const MEMBER_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-const CONTRACT_ID = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-const PAYMENT_ID = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+const BRANCH_ID = 'bbbbbbbb-bbbb-4bbb-abbb-bbbbbbbbbbbb';
+const MEMBER_ID = 'cccccccc-cccc-4ccc-accc-cccccccccccc';
+const CONTRACT_ID = 'dddddddd-dddd-4ddd-addd-dddddddddddd';
+const PAYMENT_ID = 'eeeeeeee-eeee-4eee-aeee-eeeeeeeeeeee';
 
 // =============================================================================
 // Mock middleware (pass-through, sets auth context)

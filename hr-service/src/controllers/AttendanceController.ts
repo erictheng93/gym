@@ -6,7 +6,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { AttendanceService } from '@gym-nexus/hr-business-logic'
 import { AttendanceRepository, ShiftRepository } from '../repositories/index.js'
-import { NotFoundError, ValidationError } from '../middleware/index.js'
+import { NotFoundError, ValidationError, ForbiddenError } from '../middleware/index.js'
 
 // Validation schemas
 const checkInSchema = z.object({
@@ -105,9 +105,17 @@ export class AttendanceController {
    */
   static async getEmployeeTodayAttendance(req: Request, res: Response, next: NextFunction) {
     try {
-      const { employeeId } = req.params
+      const targetId = (req.params.id || req.params.employeeId) || req.user?.employeeId
 
-      const attendance = await attendanceService.getTodayAttendance(employeeId)
+      if (!targetId) {
+        throw new ValidationError('Employee ID is required')
+      }
+
+      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+        throw new ForbiddenError('You can only view your own attendance records')
+      }
+
+      const attendance = await attendanceService.getTodayAttendance(targetId)
 
       if (!attendance) {
         throw new NotFoundError('No attendance record found for today')
@@ -124,15 +132,23 @@ export class AttendanceController {
    */
   static async getEmployeeAttendances(req: Request, res: Response, next: NextFunction) {
     try {
-      const { employeeId } = req.params
+      const targetId = (req.params.id || req.params.employeeId) || req.user?.employeeId
       const { startDate, endDate } = req.query
+
+      if (!targetId) {
+        throw new ValidationError('Employee ID is required')
+      }
+
+      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+        throw new ForbiddenError('You can only view your own attendance records')
+      }
 
       if (!startDate || !endDate) {
         throw new ValidationError('startDate and endDate are required')
       }
 
       const attendances = await attendanceRepo.findByDateRange(
-        employeeId,
+        targetId,
         startDate as string,
         endDate as string
       )

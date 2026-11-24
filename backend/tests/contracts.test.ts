@@ -81,7 +81,7 @@ describe('Contracts API', () => {
     });
 
     it('should return 404 for non-existent contract', async () => {
-      const response = await authRequest('/api/contracts/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/contracts/00000000-0000-4000-8000-999999999999', {
         method: 'GET',
         token: authToken,
       });
@@ -140,7 +140,7 @@ describe('Contracts API', () => {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          memberId: '00000000-0000-0000-0000-999999999999',
+          memberId: '00000000-0000-4000-8000-999999999999',
           planId: TEST_PLAN_ID,
           branchId: TEST_BRANCH_ID,
           startDate: today,
@@ -160,7 +160,7 @@ describe('Contracts API', () => {
         body: JSON.stringify({
           memberId: TEST_MEMBER_ID,
           planId: TEST_PLAN_ID,
-          branchId: '00000000-0000-0000-0000-999999999999',
+          branchId: '00000000-0000-4000-8000-999999999999',
           startDate: today,
           totalAmount: 1000,
         }),
@@ -177,7 +177,7 @@ describe('Contracts API', () => {
         token: authToken,
         body: JSON.stringify({
           memberId: TEST_MEMBER_ID,
-          planId: '00000000-0000-0000-0000-999999999999',
+          planId: '00000000-0000-4000-8000-999999999999',
           branchId: TEST_BRANCH_ID,
           startDate: today,
           totalAmount: 1000,
@@ -208,7 +208,7 @@ describe('Contracts API', () => {
     });
 
     it('should return 404 for non-existent contract', async () => {
-      const response = await authRequest('/api/contracts/00000000-0000-0000-0000-999999999999', {
+      const response = await authRequest('/api/contracts/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ notes: 'Ghost' }),
@@ -269,7 +269,7 @@ describe('Contracts API', () => {
     });
 
     it('should return 404 for non-existent contract', async () => {
-      const response = await authRequest('/api/contracts/00000000-0000-0000-0000-999999999999/activate', {
+      const response = await authRequest('/api/contracts/00000000-0000-4000-8000-999999999999/activate', {
         method: 'POST',
         token: authToken,
       });
@@ -374,7 +374,7 @@ describe('Contracts API', () => {
     it('should return 404 for non-existent contract', async () => {
       const today = new Date().toISOString().split('T')[0];
 
-      const response = await authRequest('/api/contracts/00000000-0000-0000-0000-999999999999/pause', {
+      const response = await authRequest('/api/contracts/00000000-0000-4000-8000-999999999999/pause', {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
@@ -459,7 +459,7 @@ describe('Contracts API', () => {
     });
 
     it('should return 404 for non-existent contract', async () => {
-      const response = await authRequest('/api/contracts/00000000-0000-0000-0000-999999999999/resume', {
+      const response = await authRequest('/api/contracts/00000000-0000-4000-8000-999999999999/resume', {
         method: 'POST',
         token: authToken,
       });
