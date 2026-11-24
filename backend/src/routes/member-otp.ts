@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
@@ -102,6 +102,14 @@ const otpIdentifierSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+const setOtpRateKey: MiddlewareHandler<
+  { Variables: OtpVariables }, string, { out: { json: z.infer<typeof otpIdentifierSchema> } }
+> = async (c, next) => {
+  const { type, identifier } = c.req.valid('json');
+  c.set('otpRateKey', `${type}:${identifier}`);
+  await next();
+};
+
 const verifyOtpSchema = otpIdentifierSchema.and(z.object({
   code: z.string().length(6, 'OTP 必須是 6 位數'),
 }));
@@ -143,9 +151,8 @@ function tokenIdentifierMatches(type: 'phone' | 'email', identifier: string) {
 
 app.post(
   '/send',
-  zValidator('json', otpIdentifierSchema, (result, c) => {
-    if (result.success) c.set('otpRateKey', `${result.data.type}:${result.data.identifier}`);
-  }),
+  zValidator('json', otpIdentifierSchema),
+  setOtpRateKey,
   otpSendRateLimiter,
   otpSendHourlyRateLimiter,
   async (c) => {
@@ -256,9 +263,8 @@ app.post(
 
 app.post(
   '/verify',
-  zValidator('json', verifyOtpSchema, (result, c) => {
-    if (result.success) c.set('otpRateKey', `${result.data.type}:${result.data.identifier}`);
-  }),
+  zValidator('json', verifyOtpSchema),
+  setOtpRateKey,
   otpVerifyRateLimiter,
   async (c) => {
     const { identifier, type, code } = c.req.valid('json');
