@@ -474,6 +474,30 @@ describe('useOfflineSync with IndexedDB', () => {
       expect(mockFetch.mock.calls[2]![0]).toBe(`${base}/workouts/server-1`)
     })
 
+    it('persists the server id into queued follow-ups so a later sync still resolves it', async () => {
+      const { queueCreateWorkout, queueUpdateWorkout, syncPendingRequests, getPendingRequests, isOnline } = useOfflineSync()
+      isOnline.value = true
+
+      const tempId = await queueCreateWorkout({ notes: 'a' })
+      await queueUpdateWorkout(tempId, { notes: 'b' })
+
+      // Create succeeds, the follow-up update hits a transient 502 in the same run
+      mockFetch
+        .mockResolvedValueOnce({ success: true, data: { id: 'server-1' } })
+        .mockRejectedValueOnce(Object.assign(new Error('Bad gateway'), { statusCode: 502 }))
+      await syncPendingRequests()
+
+      const pending = await getPendingRequests()
+      expect(pending).toHaveLength(1)
+      expect(pending[0]!.url).toBe(`${base}/workouts/server-1`)
+
+      // Next sync (fresh run, no in-memory state) sends the server id
+      mockFetch.mockResolvedValueOnce({ success: true })
+      const result = await syncPendingRequests()
+      expect(result.synced).toBe(1)
+      expect(mockFetch.mock.calls[2]![0]).toBe(`${base}/workouts/server-1`)
+    })
+
     it('holds back follow-ups that reference a temp id whose create failed transiently', async () => {
       const { queueCreateWorkout, queueUpdateWorkout, syncPendingRequests, getPendingRequests, isOnline } = useOfflineSync()
       isOnline.value = true

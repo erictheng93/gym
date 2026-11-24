@@ -42,6 +42,21 @@ const isRetryableError = (error: unknown): boolean => {
   return status === undefined || status === 408 || status === 429 || status >= 500
 }
 
+// Returns a copy with tempId replaced by serverId in url/body, or null if not referenced
+const replaceTempId = (
+  request: QueuedRequest,
+  tempId: string,
+  serverId: string
+): QueuedRequest | null => {
+  const bodyJson = request.body === undefined ? undefined : JSON.stringify(request.body)
+  if (!request.url.includes(tempId) && !bodyJson?.includes(tempId)) return null
+  return {
+    ...request,
+    url: request.url.split(tempId).join(serverId),
+    body: bodyJson === undefined ? undefined : JSON.parse(bodyJson.split(tempId).join(serverId)),
+  }
+}
+
 const extractServerId = (response: unknown): string | undefined => {
   const data = (response as { data?: { id?: unknown } } | null)?.data
   const id = data?.id
@@ -217,27 +232,15 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
     // ---- Sync ----
 
     const executeRequest = async (
-      request: QueuedRequest,
-      idMap: Map<string, string>
+      request: QueuedRequest
     ): Promise<{ ok: true; data: unknown } | { ok: false; retryable: boolean }> => {
       try {
         // Get fresh auth headers at sync time (fixes stale token issue)
         const freshHeaders = getAuthHeaders()
-        // Replace offline temp IDs (queue ids of earlier creates) with server IDs
-        let url = request.url
-        let body = request.body
-        if (idMap.size > 0) {
-          let bodyJson = body === undefined ? undefined : JSON.stringify(body)
-          for (const [tempId, serverId] of idMap) {
-            url = url.split(tempId).join(serverId)
-            if (bodyJson !== undefined) bodyJson = bodyJson.split(tempId).join(serverId)
-          }
-          if (bodyJson !== undefined) body = JSON.parse(bodyJson)
-        }
-        const data = await $fetch(url, {
+        const data = await $fetch(request.url, {
           method: request.method,
           headers: freshHeaders,
-          body: body as Record<string, unknown> | undefined,
+          body: request.body as Record<string, unknown> | undefined,
         })
         return { ok: true, data }
       } catch (error) {
@@ -255,6 +258,24 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
 
         putRequest.onsuccess = () => resolve()
         putRequest.onerror = () => reject(putRequest.error)
+      })
+    }
+
+    // Remove a synced request and persist its dependents (temp id -> server id) in one
+    // transaction, so a crash can neither re-send the create nor strand a temp id.
+    const commitSynced = async (id: string, dependents: QueuedRequest[]): Promise<void> => {
+      const db = await initDB(dbName)
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORES.queue, 'readwrite')
+        const store = tx.objectStore(STORES.queue)
+        store.delete(id)
+        for (const dependent of dependents) store.put(dependent)
+        tx.oncomplete = () => {
+          pendingCount.value = Math.max(0, pendingCount.value - 1)
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error)
       })
     }
 
@@ -290,11 +311,10 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
           // (create -> update -> delete of the same entity) never race.
           actionable.sort((x, y) => x.timestamp - y.timestamp)
 
-          const idMap = new Map<string, string>() // offline temp id (queue id) -> server id
           const blockedPaths = new Set<string>() // paths with a retryable failure this run
           const blockedTempIds = new Set<string>() // queue ids of failed creates
 
-          for (const request of actionable) {
+          for (const [index, request] of actionable.entries()) {
             const path = getPath(request.url)
             const isBlocked = blockedPaths.has(path)
               || [...blockedTempIds].some(id => request.url.includes(id))
@@ -309,11 +329,21 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
             }
 
             try {
-              const outcome = await executeRequest(request, idMap)
+              const outcome = await executeRequest(request)
               if (outcome.ok) {
-                await removeFromQueue(request.id)
+                // Later requests may reference this request's queue id as an offline temp id
                 const serverId = extractServerId(outcome.data)
-                if (serverId) idMap.set(request.id, serverId)
+                const dependents: QueuedRequest[] = []
+                if (serverId) {
+                  for (const later of actionable.slice(index + 1)) {
+                    const rewritten = replaceTempId(later, request.id, serverId)
+                    if (rewritten) {
+                      Object.assign(later, rewritten)
+                      dependents.push(later)
+                    }
+                  }
+                }
+                await commitSynced(request.id, dependents)
                 result.synced++
               } else {
                 await updateRetryCount(request)
