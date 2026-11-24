@@ -139,6 +139,7 @@ const BOOKING_ATTEND_SELECT = {
     countDeduction: classes.countDeduction,
   },
   contract: {
+    id: contracts.id,
     remainingCounts: contracts.remainingCounts,
   },
 };

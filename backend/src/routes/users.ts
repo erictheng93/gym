@@ -408,14 +408,11 @@ app.post('/:id/reset-password', zValidator('json', changePasswordSchema), async 
     parallelism: 1,
   });
 
-  // Update password and invalidate all sessions concurrently for security and performance
-  await Promise.all([
-    db.update(users).set({
-      passwordHash,
-      updatedAt: new Date(),
-    }).where(eq(users.id, id)),
-    lucia.invalidateUserSessions(id),
-  ]);
+  await db.update(users).set({
+    passwordHash,
+    updatedAt: new Date(),
+  }).where(eq(users.id, id));
+  await lucia.invalidateUserSessions(id);
 
   return c.json({ success: true, message: '密碼已重設' });
 });

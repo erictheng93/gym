@@ -94,7 +94,8 @@ app.get('/', async (c) => {
     db
       .select(BRANCH_MEM_AGG_SELECT)
       .from(members)
-      .where(and(eq(members.tenantId, tenantId), eq(members.status, 'ACTIVE')))
+      .innerJoin(branches, eq(members.branchId, branches.id))
+      .where(and(eq(branches.tenantId, tenantId), eq(members.status, 'ACTIVE')))
       .groupBy(members.branchId),
   ]);
 

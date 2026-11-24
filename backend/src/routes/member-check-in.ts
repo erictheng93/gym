@@ -80,8 +80,8 @@ const CHECK_IN_STATS_BRANCH_SELECT = {
 
 const createCheckInCountStatsSelect = (monthStart: Date, thirtyDaysAgo: Date) => ({
   total: sql<number>`count(*)`,
-  thisMonth: sql<number>`count(case when ${checkIns.checkInTime} >= ${monthStart} then 1 end)`,
-  last30Days: sql<number>`count(case when ${checkIns.checkInTime} >= ${thirtyDaysAgo} then 1 end)`,
+  thisMonth: sql<number>`count(case when ${gte(checkIns.checkInTime, monthStart)} then 1 end)`,
+  last30Days: sql<number>`count(case when ${gte(checkIns.checkInTime, thirtyDaysAgo)} then 1 end)`,
 });
 
 // Apply auth middleware
