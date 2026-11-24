@@ -1,12 +1,14 @@
-# Gym Nexus - 智慧健身房管理系統 (CRM/ERP)
+# Gym Nexus - 智慧健身房全方位管理系統 (CRM/ERP)
 
 [![Hono.js](https://img.shields.io/badge/Backend-Hono.js-E36002?style=flat-square&logo=hono)](https://hono.dev/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2017-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
-[![Nuxt](https://img.shields.io/badge/Frontend-Nuxt%203-00DC82?style=flat-square&logo=nuxt.js)](https://nuxt.com/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2017%2F18-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![Nuxt](https://img.shields.io/badge/Frontend-Nuxt%204-00DC82?style=flat-square&logo=nuxt.js)](https://nuxt.com/)
+[![Bun](https://img.shields.io/badge/Runtime-Bun%201.x-fbf0df?style=flat-square&logo=bun)](https://bun.sh/)
 [![Drizzle](https://img.shields.io/badge/ORM-Drizzle-C5F74F?style=flat-square)](https://orm.drizzle.team/)
+[![Playwright](https://img.shields.io/badge/E2E-Playwright-2EAD33?style=flat-square&logo=playwright)](https://playwright.dev/)
 [![License](https://img.shields.io/badge/License-Proprietary-red?style=flat-square)]()
 
-**Gym Nexus** 是一個基於現代化技術堆疊構建的健身房全方位管理系統。本專案採用 Hono.js + Drizzle ORM 後端架構，搭配 Nuxt 3 前端 Monorepo，確保開發效率與系統擴充性。
+**Gym Nexus** 是一個基於現代化全端技術堆疊構建的高效能、多場館健身房營運管理系統 (SaaS CRM/ERP)。本專案採用 **Hono.js + Drizzle ORM + PostgreSQL** 的輕量高效後端架構，搭配 **Nuxt 4 + Bun Monorepo** 前端，具備離線優先 (Offline-first PWA)、高並發保護與嚴謹的資料一致性設計。
 
 ---
 
@@ -14,25 +16,27 @@
 
 | 文件 | 說明 | 適合讀者 |
 |------|------|----------|
-| **[CLAUDE.md](./CLAUDE.md)** | AI 開發助理指引 - 專案結構與開發命令 | AI 工具、新進開發者 |
-| **[backend/README.md](./backend/README.md)** | 後端 API 文件 - 路由、服務、架構 | 後端開發者 |
-| **[docs/](./docs/)** | 其他技術文件 | 各類開發者 |
+| **[CLAUDE.md](./CLAUDE.md)** | AI 開發助理指引 - 專案結構、開發規範與命令 | AI 工具、新進開發者 |
+| **[backend/README.md](./backend/README.md)** | 後端 API 文件 - 路由清單、服務架構、資料庫綱要 | 後端開發者 |
+| **[docs/README.md](./docs/README.md)** | 技術文件索引與架構規範總覽 | 全端工程師、架構師 |
+| **[docs/testing/E2E-TEST-SETUP.md](./docs/testing/E2E-TEST-SETUP.md)** | Playwright E2E 測試設定與執行手冊 | QA、全端開發者 |
+| **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | 雲端部署指南 (Cloudflare Pages + Dokploy VPS) | DevOps、SRE |
 
 ---
 
 ## 🎯 專案目標 (Project Goals)
 
 ### 商業目標
-- 建立可擴展架構，支援 **50+ 間分店** 的數據量與查詢效能
-- 減少人工作業錯誤，合約異動 (請假/轉讓) **自動計算到期日**
-- 提供精準的權限分級，確保 **資料隔離** (總部 → 店長 → 教練)
-- 整合 HR 與財務模組，產出 **即時營運報表**
+- **多場館擴展**：支援 **50+ 間分店** 規模的數據隔離與高頻查詢效能。
+- **合約生命週期自動化**：精準計算會籍到期日、請假順延、轉讓、逾期與扣點核銷。
+- **權限與資料隔離**：總部 (HQ) 與各分店 (Branch) 資料嚴格隔離，支援多租戶與角色權限管控 (RBAC)。
+- **全渠道通知與金流**：整合台灣在地簡訊 (三竹 Mitake)、LINE Messaging API、Email、Web Push 及多元支付 (Stripe / ECPay / LINE Pay)。
 
 ### 技術目標
-- 採用 Hono.js + Drizzle ORM，輕量高效能 API
-- 實現多租戶架構 (Multi-tenancy)
-- 支援 PWA，一套代碼部署 Web + Mobile
-- Type-safe 全端開發體驗
+- **高並發與資料一致性 (Data Integrity)**：金流 Webhook 交易事務保護與冪等性、防止併發重複扣款與展期。
+- **離線優先 (Offline-First)**：PWA + IndexedDB 離線快取與 FIFO 順序佇列同步機制。
+- **防踩踏單飛互斥鎖 (Single-Flight Lock)**：Token 刷新競爭自動合併，杜絕多 API 同時 401 造成的連鎖登出。
+- **極致響應速度**：後端平均延遲 < 50ms，高頻查詢全複合索引優化，大數據分群批次平行聚合。
 
 ---
 
@@ -41,89 +45,97 @@
 ### Backend
 | 技術 | 用途 | 版本 |
 |------|------|------|
-| **Hono.js** | 輕量 Web 框架 | v4.x |
-| **Drizzle ORM** | Type-safe 資料庫存取 | v0.38.x |
-| **Lucia Auth** | 員工認證 (Session-based) | v3.x |
-| **PostgreSQL + PostGIS** | 核心資料庫 + 地理空間 | v17 + 3.4 |
-| **Node.js** | Runtime | v22 LTS |
+| **Hono.js** | 輕量、超高速 Web 框架 | v4.x |
+| **Drizzle ORM** | Type-safe 資料庫 ORM | v0.45.x |
+| **Lucia Auth** | 員工 Session 狀態管理 | v3.x |
+| **PostgreSQL + PostGIS** | 核心資料庫與地理空間運算 | v17 / 18 + PostGIS 3.4 |
+| **Zod** | API 請求驗證 | v4.x |
+| **Bun** | 套件管理、開發與測試執行 | v1.4.x |
+| **Node.js** | 正式環境執行 (Docker runtime) | v22 |
 
 ### Frontend
 | 技術 | 用途 | 版本 |
 |------|------|------|
-| **Nuxt** | SSR/SSG 框架 | v3.x |
-| **Vue** | UI 框架 | v3.5 |
-| **Tailwind CSS** | 樣式系統 | v3.x |
+| **Nuxt** | SSR / SSG / PWA 現代化全端框架 | v4.x |
+| **Vue** | 響應式 UI 核心 | v3.5 |
+| **原生 CSS + 設計 Token** | 樣式系統（`assets/css/main.css`，依 [設計系統](./docs/UIUX-DESIGN-SYSTEM.md)） | — |
+| **Bun** | 套件管理與測試執行 (Workspaces) | v1.4.x |
+| **Playwright** | 跨瀏覽器端到端 (E2E) 自動化測試 | v1.57+ |
+| **Vitest** | 單元與整合測試框架 | v4.x |
 
-### Infrastructure
+### Infrastructure & DevOps
 | 服務 | 用途 |
 |------|------|
-| **Cloudflare Pages** | 前端靜態部署 |
-| **Cloudflare R2** | 檔案儲存 (合約 PDF、簽名圖檔) |
-| **Dokploy (VPS)** | Backend 容器部署 |
-| **Docker** | 本地開發環境 |
+| **Cloudflare Pages** | 前端三端 App 邊緣託管與自動化部署 |
+| **Cloudflare R2** | 相容 S3 之物件儲存 (合約 PDF、數位簽名、證照照片) |
+| **Docker / Dokploy** | 本地容器化開發環境與正式 VPS 部署 |
+| **GitHub Actions** | CI：測試、型別檢查、Lint、建置與 Docker 映像健康檢查 |
+| **Lighthouse CI** | 效能預算與 PWA 指標自動化稽核 |
 
 ---
 
-## 📚 核心功能 (Core Features)
+## 📚 核心功能與架構特色 (Core Features & Architecture)
 
-### 1. 多場館架構 (Multi-Tenancy)
-- 支援總部 (HEADQUARTER) 與分店 (BRANCH) 階層
-- 資料與報表依 `branch_id` 自動隔離
-- 總部可查看全域報表，分店僅見自身數據
+### 1. 多租戶架構 (Multi-Tenancy)
+- 支援總部 (HEADQUARTER) 與分店 (BRANCH) 多層級架構。
+- 透過 `tenantContextMiddleware` 與 `branch_id` 自動隔離資料與報表。
 
-### 2. 會員全生命週期管理 (CRM)
-- 會員狀態自動化：根據合約狀態更新 (Active → Expired)
-- 標籤系統：VIP、高流失風險、舊生回歸等
-- 跨店入場紀錄追蹤
+### 2. 會員全生命週期 CRM
+- 會員狀態自動化：合約生效/暫停/過期自動連動會員權限。
+- RFM 價值分群：日排程自動針對消費額度、入場頻率與近期活動評分，以平行聚合加速批次標籤標註。
+- 跨店與多門市入場簽到、體態測量紀錄與目標管理。
 
-### 3. 彈性合約引擎
-- **期限制** (TIME_BASED)：月費、年費會籍
-- **點數制** (COUNT_BASED)：私人教練課程包
-- 內建異動邏輯：請假順延、轉讓、延期
+### 3. 三端應用程式 (Apps)
+- **Admin Web** (預設 `http://localhost:3001` 或 `3000`) - 櫃檯簽到、會員與合約管理、營運與 HR 報表。
+- **Member App** (預設 `http://localhost:3002`) - 會員 PWA、電子會員卡、合約與扣點預覽、線上預約課程。
+- **Coach App** (預設 `http://localhost:3003`) - 教練課表、學員管理、課程點名與課單教案設計。
 
-### 4. 三端應用程式
-- **Admin Web** (localhost:3001) - 員工後台管理
-- **Member App** (localhost:3002) - 會員端 PWA
-- **Coach App** (localhost:3003) - 教練端應用
-
-### 5. 通知系統
-- Email (SMTP)
-- Web Push Notifications (VAPID)
-- LINE Messaging API
-- SMS (Mitake 三竹簡訊)
+### 4. 系統強韌度與高並發防護 (Hardened Concurrency)
+- **金流 Webhook 冪等性與 Transaction 事務**：確保每筆第三方支付通知僅入帳一次，更新收款與合約啟動全程包裹於資料庫交易內。
+- **離線同步 FIFO 順序佇列**：解決離線資料同步時先建後修的依賴亂序問題。
+- **防踩踏單飛互斥鎖 (Token Stampede Mutex)**：多 API 同時觸發 401 時自動合併 Refresh 請求，保護使用者 Session 不被重複輪換作廢。
+- **櫃檯簽到遠端搜尋與防抖取消**：250ms 防抖搜尋結合 `AbortController`，防止快速輸入時過時回應覆蓋最新結果。
+- **資料庫複合索引優化**：針對 `check_ins` (`member_id, check_in_time`) 與 `payments` (`branch_id, type, payment_date`) 建立專屬複合索引。
 
 ---
 
 ## 🛠️ 專案結構 (Project Structure)
 
 ```
-gym-nexus/
-├── backend/                    # Hono.js API
+gym/
+├── backend/                    # Hono.js 後端 API (bun)
 │   ├── src/
-│   │   ├── routes/            # API 路由 (46 個)
-│   │   ├── services/          # 業務邏輯 (9 個服務)
-│   │   ├── middleware/        # 認證、CSRF、Rate Limiting (7 個)
-│   │   ├── db/                # Drizzle Schema (51 張表)
-│   │   ├── hooks/             # 業務事件鉤子 (7 個)
-│   │   └── cron/              # 排程任務 (4 個)
-│   ├── docker-compose.yml
-│   └── Dockerfile
+│   │   ├── routes/            # API 路由模組 (49 個檔案)
+│   │   ├── services/          # 核心業務邏輯 (Email, Push, LINE, SMS, Payment, PDF, Storage...)
+│   │   ├── middleware/        # 認證、CSRF、Rate Limiting、Tenant 隔離
+│   │   ├── db/                # Drizzle Schema (53 張表) 與 Migration
+│   │   ├── hooks/             # 業務事件鉤子 (合約、支付、簽到觸發連動)
+│   │   └── cron/              # 定時排程 (月結帳、日營收統計、RFM 分群、合約到期)
+│   ├── tests/                 # Vitest 後端整合與單元測試套件
+│   ├── docker-compose.yml     # PostgreSQL + PostGIS 本地容器
+│   ├── packages/hr-business-logic/  # 人資共用業務邏輯 (hr-service 依賴)
+│   ├── package.json
+│   └── bun.lock               # bun lockfile
 │
-├── frontend/                   # Nuxt 3 Monorepo
+├── frontend/                   # Nuxt 4 Monorepo 前端 (bun)
 │   ├── apps/
-│   │   ├── admin-web/         # 員工後台 (Port 3001)
-│   │   ├── member-app/        # 會員 PWA (Port 3002)
-│   │   └── coach-app/         # 教練 App (Port 3003)
+│   │   ├── admin-web/         # 員工後台管理系統 (Port 3001)
+│   │   ├── member-app/        # 會員專用 PWA (Port 3002)
+│   │   └── coach-app/         # 教練端行動應用 (Port 3003)
 │   ├── packages/
-│   │   ├── ui/                # 共用 UI 元件
-│   │   ├── shared/            # 共用型別與工具
-│   │   ├── hr-core/           # HR 功能核心邏輯
-│   │   └── hr-composables/    # HR 功能 Composables
-│   ├── tests/                 # 整合測試
-│   └── e2e/                   # Playwright E2E 測試
+│   │   ├── ui/                # 共用 UI 元件庫 (Layer 機制)
+│   │   ├── shared/            # 共用型別、Composables (離線同步、網路請求)
+│   │   ├── hr-core/           # 人資考勤核心運算邏輯
+│   │   └── hr-composables/    # 人資考勤 Composables
+│   ├── e2e/                   # Playwright 完整業務流 E2E 自動化測試 (15 套 + 教練端 6 套)
+│   ├── package.json           # bun workspaces 管理
+│   └── bun.lock               # bun lockfile
 │
-├── docs/                       # 技術文件
-├── CLAUDE.md                   # AI 開發助理指引
+├── hr-service/                 # 人資 API 服務 (Express, bun)
+├── rust-backend/               # Rust 後端服務 (Cargo)
+├── .github/workflows/          # CI 與 CodeQL
+├── docs/                       # 系統技術文件與架構手冊
+├── CLAUDE.md                   # AI 助理開發指南與指令總覽
 └── README.md                   # 本文件
 ```
 
@@ -132,44 +144,46 @@ gym-nexus/
 ## ⚡ 快速開始 (Quick Start)
 
 ### 環境需求
-- Node.js >= 22.x
-- Docker & Docker Compose
-- pnpm (必須使用 pnpm)
+- **Bun** >= 1.4（全專案唯一套件管理器，請勿使用 npm / yarn / pnpm）
+- **Node.js** >= 22（部分工具與正式環境執行）
+- **Docker & Docker Compose** (用於 PostgreSQL 容器)
 
 ### 1. Clone 專案
 ```bash
-git clone https://github.com/your-org/gym-nexus.git
-cd gym-nexus
+git clone https://github.com/erictheng93/gym.git
+cd gym
 ```
 
-### 2. 啟動 Backend
+### 2. 啟動後端 (Backend)
 ```bash
 cd backend
 
-# 複製環境變數
+# 1. 建立環境變數檔案
 cp .env.example .env
 
-# 啟動 PostgreSQL
+# 2. 啟動 PostgreSQL 容器
 docker compose up database -d
 
-# 安裝依賴並啟動
-pnpm install
-pnpm dev
+# 3. 安裝依賴並推播 Schema
+bun install
+bun run db:push
 
-# API: http://localhost:8056
+# 4. 啟動後端開發伺服器 (預設 Port 8056)
+bun run dev
 ```
+後端 API 伺服器將在 `http://localhost:8056` 運行。
 
-### 3. 啟動 Frontend
+### 3. 啟動前端 (Frontend)
 ```bash
 cd frontend
 
-# 安裝依賴
-pnpm install
+# 1. 使用 Bun 安裝 Monorepo 依賴
+bun install
 
-# 啟動所有應用 (或選擇單一應用)
-pnpm dev:admin    # Admin Web - http://localhost:3001
-pnpm dev:member   # Member App - http://localhost:3002
-pnpm dev:coach    # Coach App  - http://localhost:3003
+# 2. 啟動各端應用程式 (可個別啟動或同時啟動)
+bun run dev:admin    # Admin Web  -> http://localhost:3001
+bun run dev:member   # Member App -> http://localhost:3002
+bun run dev:coach    # Coach App  -> http://localhost:3003
 ```
 
 ---
@@ -251,56 +265,101 @@ GET  /api/reports/*
 
 ---
 
-## 🧪 測試 (Testing)
+## 🧪 測試體系 (Testing & Quality Assurance)
+
+專案具備多層級的自動化測試防護網：
+
+### 後端單元與整合測試 (Backend Unit & Integration)
+```bash
+cd backend
+# 需先啟動資料庫：docker compose up database -d，並執行 bun run db:push
+bunx vitest run        # 執行全套 Vitest 測試 (42 個測試檔案、804 項測試)
+bun run test:coverage  # 產生程式碼覆蓋率報告
+bun run typecheck      # 執行 TypeScript 嚴格型別檢查
+```
+
+### 前端單元與組件測試 (Frontend Unit & Component)
+```bash
+cd frontend
+bunx vitest run        # 執行全套 Vitest 單元測試 (81 個測試檔案、1,905 項測試)
+bun run typecheck      # 執行 Nuxt 全端型別檢查
+bun run lint           # ESLint 程式碼品質檢查
+```
+
+### 端到端自動化測試 (Playwright E2E)
+```bash
+cd frontend
+# 執行所有 E2E 測試 (涵蓋登入、合約、付款、人資、跨店作業等流程)
+bun run test:e2e
+
+# 啟動 Playwright UI 互動介面
+bun run test:e2e:ui
+
+# 執行指定測試流程 (以登入流程為例)
+BASE_URL=http://localhost:3001 bunx playwright test e2e/01-auth-flow.spec.ts
+```
+
+### 效能與 PWA 稽核 (Lighthouse CI)
+```bash
+cd frontend
+bun run lighthouse:admin
+bun run lighthouse:member
+```
+
+### 持續整合 (CI)
+每個 Pull Request 與 `main` 的推送都會執行 `.github/workflows/ci.yml`：
+
+| Job | 內容 |
+|-----|------|
+| `backend` | PostGIS 17 測試資料庫、`bun install --frozen-lockfile`、Lint、`tsc`、Schema 推播、全套測試 |
+| `frontend` | Lint、三端 App 型別檢查、全套測試、正式建置 |
+| `hr-service` | `hr-business-logic` 建置與測試、hr-service 型別檢查與測試 |
+| `docker` | 建置兩個正式映像並啟動，確認健康檢查端點回應 |
+
+另有 CodeQL 安全掃描與 GitGuardian 機密掃描。
+
+---
+
+## 🐳 正式部署映像 (Docker)
+
+映像在建置階段使用 **bun** 依 `bun.lock` 安裝依賴（與 CI 測試的版本完全相同），執行階段使用 **Node.js**。
 
 ```bash
-# Backend 測試
-cd backend
-pnpm test              # 執行測試
-pnpm test:coverage     # 執行測試並產生覆蓋率報告
+# 後端 API（建置路徑：backend/）
+docker build -t gym-api backend
 
-# Frontend 單元測試
-cd frontend
-pnpm test              # Vitest 單元測試
-
-# Frontend E2E 測試
-pnpm test:e2e          # Playwright E2E 測試
-
-# 型別檢查
-cd backend && pnpm typecheck
-cd frontend && pnpm typecheck
+# 人資服務（建置路徑必須是 repo 根目錄，因為需要 backend/packages/hr-business-logic）
+docker build -f hr-service/docker/Dockerfile -t hr-api .
 ```
 
 ---
 
-## 📝 開發規範 (Development Guidelines)
+## 📝 開發與協作規範 (Development Guidelines)
 
 ### 命名慣例
-- **資料庫表/欄位**: snake_case (`member_code`, `branch_id`)
-- **TypeScript/Vue**: camelCase (`memberCode`, `branchId`)
-- **元件檔名**: PascalCase (`MemberCard.vue`)
+- **資料庫表與欄位**: `snake_case`（例如 `member_code`, `check_in_time`）
+- **TypeScript / Vue**: `camelCase`（例如 `memberCode`, `checkInTime`）
+- **Vue 組件名稱**: `PascalCase`（例如 `VerificationMethodSelector.vue`）
 
-### Git Commit 格式
+### Git Commit 訊息格式
+依循 Conventional Commits 規範：
 ```
 <type>(<scope>): <subject>
 
-feat(contract): add pause functionality
-fix(member): resolve status update issue
-docs(readme): update project structure
+feat(checkin): implement debounced remote search with AbortController
+fix(webhook): ensure idempotency and wrap operations in transaction
+perf(cron): batch parallel pre-aggregation for RFM segmentation
+docs(readme): update repository info, bun instructions, and testing guide
 ```
 
-### 語言慣例
-- **文件/UI**: 繁體中文 (Traditional Chinese)
-- **程式碼/註解**: 英文 (English)
+### 語言政策
+- **文件 / 使用者介面 (UI)**: 繁體中文 (Traditional Chinese)
+- **程式碼、變數名、註解**: 英文 (English)
 
 ---
 
-## 📄 授權 (License)
+## 📞 聯絡與支援 (Contact & Support)
 
-本專案為私有專案，版權所有。未經授權不得複製、修改或散佈。
-
----
-
-## 📞 聯絡方式 (Contact)
-
-- **Issue Tracker**: [GitHub Issues](https://github.com/your-org/gym-nexus/issues)
+- **專案儲存庫**: [GitHub - erictheng93/gym](https://github.com/erictheng93/gym)
+- **問題追蹤**: [GitHub Issues](https://github.com/erictheng93/gym/issues)
+- **專案授權**: Proprietary (版權所有，未經授權禁止散布)
