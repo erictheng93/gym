@@ -7,8 +7,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const mockVerifyStripe = vi.fn();
 const mockVerifyECPay = vi.fn();
 const mockVerifyLinePay = vi.fn();
+const mockIsGatewayEnabled = vi.fn();
 
 vi.mock('../src/services/payment.js', () => ({
+  isGatewayEnabled: (...args: unknown[]) => mockIsGatewayEnabled(...args),
   verifyStripeWebhook: (...args: unknown[]) => mockVerifyStripe(...args),
   verifyECPayWebhook: (...args: unknown[]) => mockVerifyECPay(...args),
   verifyLinePayWebhook: (...args: unknown[]) => mockVerifyLinePay(...args),
@@ -34,6 +36,7 @@ function setupMockDefaults() {
   mockUpdate.mockImplementation(() => ({ set: mockUpdateSet }));
   mockUpdateSet.mockImplementation(() => ({ where: mockUpdateWhere }));
   mockUpdateWhere.mockResolvedValue(undefined);
+  mockIsGatewayEnabled.mockReturnValue(true);
 }
 
 vi.mock('../src/db/index.js', () => ({
@@ -50,12 +53,28 @@ vi.mock('../src/db/index.js', () => ({
     receiptNo: 'receiptNo',
     notes: 'notes',
     contractId: 'contractId',
+    tenantId: 'tenantId',
   },
   contracts: {
-    id: 'id',
-    status: 'status',
+    id: 'contracts.id',
+    status: 'contracts.status',
+    totalAmount: 'contracts.totalAmount',
+    tenantId: 'contracts.tenantId',
   },
 }));
+
+// =============================================================================
+// Mock drizzle-orm helpers (inspectable conditions)
+// =============================================================================
+
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn((a: unknown, b: unknown) => ({ _op: 'eq', a, b })),
+  and: vi.fn((...args: unknown[]) => ({ _op: 'and', args })),
+}));
+
+// handlePaymentSuccess query results
+const PAYMENT_ROW = { amount: '5000', contractId: 'contract-1', tenantId: 'tenant-1' };
+const CONTRACT_ROW = { totalAmount: '5000' };
 
 // =============================================================================
 // Mock global fetch (for LINE Pay confirm API)
@@ -116,8 +135,8 @@ describe('Payment Webhook Routes', () => {
 
     it('checkout.session.completed + paid 應該觸發 handlePaymentSuccess', async () => {
       mockVerifyStripe.mockReturnValue(true);
-      // handlePaymentSuccess: select contractId
-      mockSelectLimit.mockResolvedValueOnce([{ contractId: 'contract-1' }]);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
 
       const event = {
         type: 'checkout.session.completed',
@@ -126,6 +145,7 @@ describe('Payment Webhook Routes', () => {
             id: 'cs_123',
             metadata: { payment_id: 'payment-1' },
             payment_status: 'paid',
+            amount_total: 500000, // smallest currency unit (5000.00)
           },
         },
       };
@@ -274,6 +294,7 @@ describe('Payment Webhook Routes', () => {
 
     it('handlePaymentSuccess 拋出錯誤應該返回 500', async () => {
       mockVerifyStripe.mockReturnValue(true);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
       mockUpdateWhere.mockRejectedValueOnce(new Error('DB error'));
 
       const event = {
@@ -283,6 +304,7 @@ describe('Payment Webhook Routes', () => {
             id: 'cs_123',
             metadata: { payment_id: 'payment-1' },
             payment_status: 'paid',
+            amount_total: 500000,
           },
         },
       };
@@ -318,14 +340,15 @@ describe('Payment Webhook Routes', () => {
 
     it('RtnCode=1 應該觸發 handlePaymentSuccess (JSON)', async () => {
       mockVerifyECPay.mockReturnValue(true);
-      // handlePaymentSuccess: select contractId
-      mockSelectLimit.mockResolvedValueOnce([{ contractId: 'contract-1' }]);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
 
       const params = {
         RtnCode: '1',
         RtnMsg: 'Succeeded',
         TradeNo: '2024010112345',
         MerchantTradeNo: 'GN1234567890',
+        TradeAmt: '5000',
         CustomField1: 'payment-1',
       };
 
@@ -343,12 +366,14 @@ describe('Payment Webhook Routes', () => {
 
     it('form-urlencoded 格式應該正確解析', async () => {
       mockVerifyECPay.mockReturnValue(true);
-      mockSelectLimit.mockResolvedValueOnce([{ contractId: 'contract-1' }]);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
 
       const params = new URLSearchParams({
         RtnCode: '1',
         RtnMsg: 'Succeeded',
         TradeNo: '2024010112345',
+        TradeAmt: '5000',
         CustomField1: 'payment-1',
       });
 
@@ -415,9 +440,10 @@ describe('Payment Webhook Routes', () => {
 
     it('處理錯誤應該返回 0|ErrorMessage', async () => {
       mockVerifyECPay.mockReturnValue(true);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
       mockUpdateWhere.mockRejectedValueOnce(new Error('DB error'));
 
-      const params = { RtnCode: '1', TradeNo: '123', CustomField1: 'payment-1' };
+      const params = { RtnCode: '1', TradeNo: '123', TradeAmt: '5000', CustomField1: 'payment-1' };
 
       const res = await app.request('/ecpay', {
         method: 'POST',
@@ -431,12 +457,13 @@ describe('Payment Webhook Routes', () => {
 
     it('有 TradeNo 時應優先使用 TradeNo 作為 transactionId', async () => {
       mockVerifyECPay.mockReturnValue(true);
-      mockSelectLimit.mockResolvedValueOnce([]); // no contract
+      mockSelectLimit.mockResolvedValueOnce([{ ...PAYMENT_ROW, contractId: null }]); // no contract
 
       const params = {
         RtnCode: '1',
         TradeNo: 'trade-123',
         MerchantTradeNo: 'merchant-456',
+        TradeAmt: '5000',
         CustomField1: 'payment-1',
       };
 
@@ -455,11 +482,12 @@ describe('Payment Webhook Routes', () => {
 
     it('沒有 TradeNo 時應該 fallback 到 MerchantTradeNo', async () => {
       mockVerifyECPay.mockReturnValue(true);
-      mockSelectLimit.mockResolvedValueOnce([]);
+      mockSelectLimit.mockResolvedValueOnce([{ ...PAYMENT_ROW, contractId: null }]);
 
       const params = {
         RtnCode: '1',
         MerchantTradeNo: 'merchant-456',
+        TradeAmt: '5000',
         CustomField1: 'payment-1',
       };
 
@@ -474,6 +502,58 @@ describe('Payment Webhook Routes', () => {
       expect(mockUpdateSet).toHaveBeenCalledWith(
         expect.objectContaining({ receiptNo: 'merchant-456' }),
       );
+    });
+
+    it('ECPay 未設定 HashKey/HashIV 時應該拒絕 (fail closed)', async () => {
+      mockIsGatewayEnabled.mockReturnValue(false);
+      mockVerifyECPay.mockReturnValue(true);
+
+      const res = await app.request('/ecpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ RtnCode: '1', TradeAmt: '5000', CustomField1: 'payment-1' }),
+      });
+
+      expect(await res.text()).toBe('0|ErrorMessage=Invalid CheckMacValue');
+      expect(mockIsGatewayEnabled).toHaveBeenCalledWith('ecpay');
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('SimulatePaid=1 (模擬付款) 不應該啟用合約', async () => {
+      mockVerifyECPay.mockReturnValue(true);
+
+      const params = {
+        RtnCode: '1',
+        TradeNo: 'trade-123',
+        TradeAmt: '5000',
+        SimulatePaid: '1',
+        CustomField1: 'payment-1',
+      };
+
+      const res = await app.request('/ecpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+
+      expect(await res.text()).toBe('1|OK');
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('TradeAmt 少於應付金額時不應該更新付款或合約', async () => {
+      mockVerifyECPay.mockReturnValue(true);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+
+      const params = { RtnCode: '1', TradeNo: 'trade-123', TradeAmt: '1', CustomField1: 'payment-1' };
+
+      const res = await app.request('/ecpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+
+      expect(await res.text()).toBe('1|OK');
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -519,10 +599,12 @@ describe('Payment Webhook Routes', () => {
         json: async () => ({
           returnCode: '0000',
           returnMessage: 'Success',
-          info: { orderId: 'GNpayment-1', transactionId: 'tx_123' },
+          info: { orderId: 'GNpayment-1', transactionId: 'tx_123', payInfo: [{ amount: 5000 }] },
         }),
       });
-      mockSelectLimit.mockResolvedValueOnce([{ contractId: 'contract-1' }]);
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]); // confirm: expected amount
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
 
       const res = await app.request(
         '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
@@ -533,10 +615,66 @@ describe('Payment Webhook Routes', () => {
       const location = res.headers.get('location')!;
       expect(location).toContain('/payment/success');
       expect(location).toContain('transaction_id=tx_123');
-      expect(mockUpdate).toHaveBeenCalled();
+      expect(mockUpdate).toHaveBeenCalledTimes(2);
+      // Confirm must send the expected amount, not 0
+      const [, init] = mockFetch.mock.calls[0]!;
+      expect(JSON.parse(init.body)).toEqual({ amount: 5000, currency: 'TWD' });
+    });
+
+    it('找不到付款記錄應該重定向到錯誤頁且不呼叫 LINE Pay', async () => {
+      mockSelectLimit.mockResolvedValueOnce([]);
+
+      const res = await app.request(
+        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        { method: 'POST' },
+      );
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toContain('/payment/error');
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('LINE Pay 回傳的 orderId 不符時不應該更新付款', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({
+          returnCode: '0000',
+          returnMessage: 'Success',
+          info: { orderId: 'GNother-payment', transactionId: 'tx_123' },
+        }),
+      });
+
+      const res = await app.request(
+        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        { method: 'POST' },
+      );
+
+      expect(res.headers.get('location')).toContain('/payment/error');
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('payInfo 金額不足時不應該更新付款或合約', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({
+          returnCode: '0000',
+          returnMessage: 'Success',
+          info: { orderId: 'GNpayment-1', payInfo: [{ amount: 1 }] },
+        }),
+      });
+
+      await app.request(
+        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        { method: 'POST' },
+      );
+
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('非 0000 returnCode 應該重定向到錯誤頁', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
       mockFetch.mockResolvedValueOnce({
         json: async () => ({
           returnCode: '1172',
@@ -556,6 +694,7 @@ describe('Payment Webhook Routes', () => {
     });
 
     it('fetch 失敗應該重定向到錯誤頁', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const res = await app.request(
@@ -575,6 +714,7 @@ describe('Payment Webhook Routes', () => {
           info: {},
         }),
       });
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
       mockSelectLimit.mockResolvedValueOnce([]);
 
       await app.request(
@@ -601,7 +741,8 @@ describe('Payment Webhook Routes', () => {
           info: {},
         }),
       });
-      mockSelectLimit.mockResolvedValueOnce([]);
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
+      mockSelectLimit.mockResolvedValueOnce([{ ...PAYMENT_ROW, contractId: null }]);
 
       await app.request(
         '/linepay/confirm?transactionId=tx_123&orderId=GNpay-abc-123',
@@ -610,6 +751,7 @@ describe('Payment Webhook Routes', () => {
 
       // handlePaymentSuccess is called → db.update(payments).set({...}).where(eq(payments.id, 'pay-abc-123'))
       // The receiptNo should be the transactionId
+      expect(mockUpdateWhere).toHaveBeenCalledWith({ _op: 'eq', a: 'id', b: 'pay-abc-123' });
       expect(mockUpdateSet).toHaveBeenCalledWith(
         expect.objectContaining({
           receiptNo: 'tx_123',
@@ -636,7 +778,9 @@ describe('Payment Webhook Routes', () => {
       expect(res.status).toBe(401);
     });
 
-    it('沒有 signature 應該正常處理', async () => {
+    it('沒有 signature 應該返回 401 (#4)', async () => {
+      mockVerifyLinePay.mockReturnValue(true);
+
       const event = {
         type: 'payment',
         result: { transactionId: 'tx_123', returnCode: '0000' },
@@ -647,9 +791,10 @@ describe('Payment Webhook Routes', () => {
         body: JSON.stringify(event),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
       const json = await res.json();
-      expect(json.received).toBe(true);
+      expect(json.error).toBe('Invalid or missing signature');
+      expect(mockVerifyLinePay).not.toHaveBeenCalled();
     });
 
     it('有效 signature 的 payment 事件應該返回 200', async () => {
@@ -672,6 +817,7 @@ describe('Payment Webhook Routes', () => {
     });
 
     it('refund 事件應該返回 200', async () => {
+      mockVerifyLinePay.mockReturnValue(true);
       const event = {
         type: 'refund',
         result: { transactionId: 'tx_refund' },
@@ -679,6 +825,7 @@ describe('Payment Webhook Routes', () => {
 
       const res = await app.request('/linepay', {
         method: 'POST',
+        headers: { 'X-Line-Signature': 'valid_sig' },
         body: JSON.stringify(event),
       });
 
@@ -686,10 +833,12 @@ describe('Payment Webhook Routes', () => {
     });
 
     it('未知事件類型應該返回 200', async () => {
+      mockVerifyLinePay.mockReturnValue(true);
       const event = { type: 'unknown_event', result: {} };
 
       const res = await app.request('/linepay', {
         method: 'POST',
+        headers: { 'X-Line-Signature': 'valid_sig' },
         body: JSON.stringify(event),
       });
 
@@ -697,8 +846,10 @@ describe('Payment Webhook Routes', () => {
     });
 
     it('無效 JSON 應該返回 500', async () => {
+      mockVerifyLinePay.mockReturnValue(true);
       const res = await app.request('/linepay', {
         method: 'POST',
+        headers: { 'X-Line-Signature': 'valid_sig' },
         body: 'not json',
       });
 
@@ -709,71 +860,15 @@ describe('Payment Webhook Routes', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // GET /:id/status
+  // GET /:id/status (removed: public payment info leak, #5)
   // ---------------------------------------------------------------------------
 
   describe('GET /:id/status', () => {
-    it('INCOME 類型應該返回 completed 狀態', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{
-        id: 'payment-1',
-        amount: '5000',
-        paymentMethod: 'CASH',
-        paymentDate: '2024-01-15',
-        type: 'INCOME',
-        receiptNo: 'R001',
-        notes: 'Monthly payment',
-      }]);
-
+    it('公開的付款狀態端點已移除，應該返回 404 且不查詢 DB', async () => {
       const res = await app.request('/payment-1/status', { method: 'GET' });
-
-      expect(res.status).toBe(200);
-      const json = await res.json() as any;
-      expect(json.success).toBe(true);
-      expect(json.data.id).toBe('payment-1');
-      expect(json.data.amount).toBe(5000);
-      expect(json.data.status).toBe('completed');
-      expect(json.data.payment_method).toBe('CASH');
-      expect(json.data.receipt_no).toBe('R001');
-    });
-
-    it('REFUND 類型應該返回 refunded 狀態', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{
-        id: 'refund-1',
-        amount: '3000',
-        paymentMethod: 'CASH',
-        paymentDate: '2024-01-20',
-        type: 'REFUND',
-        receiptNo: null,
-        notes: 'Refund',
-      }]);
-
-      const res = await app.request('/refund-1/status', { method: 'GET' });
-
-      expect(res.status).toBe(200);
-      const json = await res.json() as any;
-      expect(json.data.status).toBe('refunded');
-    });
-
-    it('找不到付款記錄應該返回 404', async () => {
-      mockSelectLimit.mockResolvedValueOnce([]);
-
-      const res = await app.request('/nonexistent/status', { method: 'GET' });
 
       expect(res.status).toBe(404);
-      const json = await res.json() as any;
-      expect(json.success).toBe(false);
-      expect(json.error).toBe('Payment not found');
-    });
-
-    it('DB 錯誤應該返回 500', async () => {
-      mockSelectLimit.mockRejectedValueOnce(new Error('Connection timeout'));
-
-      const res = await app.request('/payment-1/status', { method: 'GET' });
-
-      expect(res.status).toBe(500);
-      const json = await res.json() as any;
-      expect(json.success).toBe(false);
-      expect(json.error).toBe('Failed to get payment status');
+      expect(mockSelect).not.toHaveBeenCalled();
     });
   });
 
@@ -782,7 +877,7 @@ describe('Payment Webhook Routes', () => {
   // ---------------------------------------------------------------------------
 
   describe('handlePaymentSuccess', () => {
-    function makeStripeRequest(paymentId: string) {
+    function makeStripeRequest(paymentId: string, amountTotal: number | null = 500000) {
       mockVerifyStripe.mockReturnValue(true);
       return app.request('/stripe', {
         method: 'POST',
@@ -794,6 +889,7 @@ describe('Payment Webhook Routes', () => {
               id: 'cs_tx_123',
               metadata: { payment_id: paymentId },
               payment_status: 'paid',
+              amount_total: amountTotal,
             },
           },
         }),
@@ -801,17 +897,63 @@ describe('Payment Webhook Routes', () => {
     }
 
     it('有 contractId 時應該同時更新 payment 和 contract', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{ contractId: 'contract-1' }]);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
 
       const res = await makeStripeRequest('payment-1');
       expect(res.status).toBe(200);
 
       // 2 updates: payment receiptNo/notes + contract status
       expect(mockUpdate).toHaveBeenCalledTimes(2);
+      expect(mockUpdateSet).toHaveBeenLastCalledWith({ status: 'ACTIVE' });
+    });
+
+    it('只會將 DRAFT 合約啟用 (冪等，限定同 tenant)', async () => {
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
+
+      await makeStripeRequest('payment-1');
+
+      const contractWhere = mockUpdateWhere.mock.calls[1]![0] as { _op: string; args: unknown[] };
+      expect(contractWhere._op).toBe('and');
+      expect(contractWhere.args).toEqual(expect.arrayContaining([
+        { _op: 'eq', a: 'contracts.id', b: 'contract-1' },
+        { _op: 'eq', a: 'contracts.tenantId', b: 'tenant-1' },
+        { _op: 'eq', a: 'contracts.status', b: 'DRAFT' },
+      ]));
+    });
+
+    it('Stripe amount_total 少於應付金額時不應該更新付款或啟用合約 (#5)', async () => {
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+
+      const res = await makeStripeRequest('payment-1', 100); // 1.00 instead of 5000.00
+      expect(res.status).toBe(200);
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Stripe 缺少 amount_total 時應該 fail closed', async () => {
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+
+      const res = await makeStripeRequest('payment-1', null);
+      expect(res.status).toBe(200);
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('付款金額足夠但不足合約總額時只更新 payment，不啟用合約', async () => {
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([{ totalAmount: '10000' }]);
+
+      const res = await makeStripeRequest('payment-1');
+      expect(res.status).toBe(200);
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      expect(mockUpdateSet).not.toHaveBeenCalledWith({ status: 'ACTIVE' });
     });
 
     it('contractId 為 null 時應該只更新 payment', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{ contractId: null }]);
+      mockSelectLimit.mockResolvedValueOnce([{ ...PAYMENT_ROW, contractId: null }]);
 
       const res = await makeStripeRequest('payment-1');
       expect(res.status).toBe(200);
@@ -820,16 +962,17 @@ describe('Payment Webhook Routes', () => {
       expect(mockUpdate).toHaveBeenCalledTimes(1);
     });
 
-    it('查無 payment 記錄時應該只更新 payment (不更新 contract)', async () => {
+    it('查無 payment 記錄時不應該更新任何資料', async () => {
       mockSelectLimit.mockResolvedValueOnce([]);
 
       const res = await makeStripeRequest('payment-1');
       expect(res.status).toBe(200);
 
-      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('DB 錯誤應該向上拋出導致 500', async () => {
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
       mockUpdateWhere.mockRejectedValueOnce(new Error('Write failed'));
 
       const res = await makeStripeRequest('payment-1');
