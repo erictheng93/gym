@@ -22,6 +22,10 @@ function resolveJwtSecret(): string {
         `COACH_JWT_SECRET must be a non-default secret of at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production`,
       );
     }
+    // A shared key would let a member token pass as a coach token's signature
+    if (secret === process.env.MEMBER_JWT_SECRET) {
+      throw new Error('COACH_JWT_SECRET must differ from MEMBER_JWT_SECRET in production');
+    }
     return secret;
   }
   return secret || process.env.JWT_SECRET || DEV_FALLBACK_SECRET;

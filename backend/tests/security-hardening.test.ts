@@ -75,4 +75,15 @@ describe('JWT secrets in production (#9)', () => {
     vi.resetModules();
     await expect(import('../src/services/member-jwt.js')).resolves.toBeDefined();
   });
+
+  it('rejects a coach secret equal to the member secret in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('MEMBER_JWT_SECRET', good);
+    vi.stubEnv('COACH_JWT_SECRET', good);
+    vi.resetModules();
+    await expect(import('../src/services/coach-jwt.js')).rejects.toThrow('must differ');
+    vi.stubEnv('COACH_JWT_SECRET', 'y'.repeat(40));
+    vi.resetModules();
+    await expect(import('../src/services/coach-jwt.js')).resolves.toBeDefined();
+  });
 });
