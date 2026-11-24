@@ -105,7 +105,7 @@ export function generateCsv(
     // Header row
     const headerParts = new Array(colCount);
     for (let c = 0; c < colCount; c++) {
-      headerParts[c] = escapeCSVField(columns[c].header);
+      headerParts[c] = escapeCSVField(neutralizeFormula(columns[c].header));
     }
     rows[0] = headerParts.join(',');
 
@@ -115,7 +115,10 @@ export function generateCsv(
       const cellValues = new Array(colCount);
       for (let c = 0; c < colCount; c++) {
         const value = formatCellValue(row[columns[c].key]);
-        cellValues[c] = escapeCSVField(String(value ?? ''));
+        // Only strings can carry formulas; real numbers stay untouched
+        cellValues[c] = escapeCSVField(
+          typeof value === 'string' ? neutralizeFormula(value) : String(value ?? ''),
+        );
       }
       rows[r + 1] = cellValues.join(',');
     }
@@ -137,6 +140,16 @@ export function generateCsv(
 // -----------------------------------------------------------------------------
 
 const CSV_SPECIAL_CHARS = /[",\r\n]/;
+
+const CSV_FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/;
+
+/**
+ * Prefix cells that spreadsheets would evaluate as formulas (CSV injection)
+ */
+function neutralizeFormula(value: string): string {
+  return CSV_FORMULA_TRIGGER.test(value) && !PLAIN_NUMBER.test(value) ? `'${value}` : value;
+}
 
 /**
  * Escape CSV field value

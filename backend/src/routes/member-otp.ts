@@ -1,3 +1,4 @@
+import { randomInt, timingSafeEqual } from 'node:crypto';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
@@ -122,8 +123,14 @@ const refreshTokenSchema = z.object({
 // Helpers
 // -----------------------------------------------------------------------------
 
-function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+export function generateOtp(): string {
+  return String(randomInt(100000, 1000000));
+}
+
+function otpCodeMatches(expected: string, provided: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
@@ -290,8 +297,18 @@ app.post(
       }, 400);
     }
 
-    // Check attempts
-    if ((otp.attempts || 0) >= (otp.maxAttempts || 3)) {
+    // Atomically count this attempt; fails once max attempts is reached
+    const maxAttempts = otp.maxAttempts || 3;
+    const [counted] = await db
+      .update(otpTokens)
+      .set({ attempts: sql`coalesce(${otpTokens.attempts}, 0) + 1` })
+      .where(and(
+        eq(otpTokens.id, otp.id),
+        sql`coalesce(${otpTokens.attempts}, 0) < ${maxAttempts}`,
+      ))
+      .returning({ attempts: otpTokens.attempts });
+
+    if (!counted) {
       return c.json({
         success: false,
         error: '驗證次數過多，請重新獲取驗證碼',
@@ -299,30 +316,33 @@ app.post(
       }, 400);
     }
 
-    // Increment attempts
-    await db
-      .update(otpTokens)
-      .set({ attempts: (otp.attempts || 0) + 1 })
-      .where(eq(otpTokens.id, otp.id));
-
-    // Verify code
-    if (otp.code !== code) {
+    // Verify code (constant-time)
+    if (!otpCodeMatches(otp.code, code)) {
       return c.json({
         success: false,
         error: '驗證碼錯誤',
         code: 'WRONG_CODE',
-        attemptsRemaining: (otp.maxAttempts || 3) - (otp.attempts || 0) - 1,
+        attemptsRemaining: maxAttempts - (counted.attempts || 0),
       }, 400);
     }
 
-    // Mark as verified
-    await db
+    // Consume the OTP atomically so concurrent requests cannot reuse it
+    const [consumed] = await db
       .update(otpTokens)
       .set({
         verified: true,
         verifiedAt: new Date(),
       })
-      .where(eq(otpTokens.id, otp.id));
+      .where(and(eq(otpTokens.id, otp.id), eq(otpTokens.verified, false)))
+      .returning({ id: otpTokens.id });
+
+    if (!consumed) {
+      return c.json({
+        success: false,
+        error: '驗證碼無效或已過期',
+        code: 'INVALID_OTP',
+      }, 400);
+    }
 
     // Find member
     const [member] = await db
