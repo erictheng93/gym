@@ -398,109 +398,87 @@
 
 ---
 
-## 14\. Tailwind CSS 快速參考 (Quick Reference)
+## 14\. 樣式快速參考 (Quick Reference)
+
+> 專案**未安裝 Tailwind CSS**。樣式一律以純 CSS 寫在 Vue SFC 的 `<style scoped>` 中，數值優先使用設計 Token（CSS 自訂屬性），定義於 `packages/ui/assets/css/main.css`（共用，coach-app 透過 `@import` 載入）與 admin-web 的 `assets/css/main.css`。**member-app 目前未匯入共用 Token 檔**，只有部分 Token；在 member-app 使用前請先確認 Token 已定義。本文件其他章節出現的 Tailwind class 名稱（如 `rounded-2xl`、`gap-4`）僅作為數值速記，不代表可直接使用。
 
 ### 14.1 常用組合
 
-/\* 頁面背景 \*/
+```css
+/* 頁面背景 */
+.page { background: #F2F2F7; min-height: 100vh; }
 
-.page { @apply bg-\[\#F2F2F7\] min-h-screen; }
-
-/\* 主要卡片 \*/
-
-.card { @apply bg-white rounded-2xl p-4 shadow-\[0\_4px\_16px\_rgb(0,0,0,0.06)\]; }
-
-/\* 區塊標題 \*/
-
-.section-title { @apply text-xl font-semibold text-gray-900; }
-
-/\* 膠囊按鈕-選中 \*/
-
-.pill-active { @apply px-4 py-2 rounded-full bg-blue-500 text-white text-sm font-medium; }
-
-/\* 膠囊按鈕-未選中 \*/
-
-.pill-inactive { @apply px-4 py-2 rounded-full bg-gray-100 text-gray-600 text-sm font-medium; }
-
-/\* 分類標籤 \*/
-
-.badge { @apply px-2 py-0.5 rounded-md text-xs font-medium; }
-
-/\* 底部導覽列 \*/
-
-.tab-bar { @apply fixed bottom-0 w-full bg-white/80 backdrop-blur-xl border-t border-gray-200/50 px-6 py-2; }
-
-/\* 課程漸層色塊 \*/
-
-.course-block { @apply rounded-xl bg-gradient-to-b from-purple-200/70 to-purple-50/30 p-3; }
-
-/\* 柔和分隔線 \*/
-
-.divider { @apply border-t border-gray-100; }
-
-/\* 圓形操作按鈕 \*/
-
-.circle-btn { @apply w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center; }
-
-### 14.2 自定義陰影 (tailwind.config.js)
-
-module.exports \= {
-
-  theme: {
-
-    extend: {
-
-      boxShadow: {
-
-        'card-sm': '0 2px 8px rgba(0, 0, 0, 0.04)',
-
-        'card': '0 4px 16px rgba(0, 0, 0, 0.06)',
-
-        'card-lg': '0 8px 30px rgba(0, 0, 0, 0.08)',
-
-        'card-float': '0 12px 40px rgba(0, 0, 0, 0.1)',
-
-      },
-
-      colors: {
-
-        'ios-bg': '\#F2F2F7',
-
-        'ios-card': '\#FFFFFF',
-
-        'ios-text': '\#1C1C1E',
-
-        'ios-secondary': '\#8E8E93',
-
-        'ios-tertiary': '\#AEAEB2',
-
-        'ios-separator': '\#E5E5EA',
-
-        'ios-blue': '\#007AFF',
-
-        'ios-green': '\#34C759',
-
-        'ios-orange': '\#FF9500',
-
-        'ios-red': '\#FF3B30',
-
-        'ios-teal': '\#30B0C7',
-
-      },
-
-      borderRadius: {
-
-        'ios': '20px',
-
-        'ios-lg': '24px',
-
-      }
-
-    }
-
-  }
-
+/* 主要卡片 */
+.card {
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-xl);   /* 20px */
+  padding: var(--space-md);          /* 16px */
+  box-shadow: var(--shadow-md);
 }
+
+/* 區塊標題 */
+.section-title { font-size: 20px; font-weight: 600; color: var(--color-text-primary); }
+
+/* 膠囊按鈕 */
+.pill {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 500;
+}
+.pill.is-active   { background: var(--color-accent); color: #fff; }
+.pill:not(.is-active) { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+
+/* 分類標籤 */
+.badge { padding: 2px var(--space-sm); border-radius: 6px; font-size: 12px; font-weight: 500; }
+
+/* 底部導覽列（玻璃材質，僅局部使用） */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-bg-elevated);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* 課程漸層色塊 */
+.course-block {
+  border-radius: var(--radius-md);   /* 12px */
+  padding: 12px;
+  background: linear-gradient(to bottom, rgb(233 213 255 / 0.7), rgb(250 245 255 / 0.3));
+}
+
+/* 柔和分隔線 */
+.divider { height: 1px; background: rgb(0 0 0 / 0.04); }
+
+/* 圓形操作按鈕 */
+.circle-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+```
+
+### 14.2 設計 Token
+
+規範數值透過 `packages/ui/assets/css/main.css`（共用，coach-app 透過 `@import` 載入）與 admin-web 的 `assets/css/main.css` 的 CSS 自訂屬性實作，請直接使用 Token，不要在元件中重複寫死數值：
+
+| 類別 | Token | 規範數值 |
+|------|-------|----------|
+| 卡片陰影 | `--shadow-xs` / `--shadow-sm` / `--shadow-md` | 柔和擴散，透明度 ≤ 8% |
+| 卡片背景 | `--color-bg-primary` | `#FFFFFF` |
+| 主要文字 | `--color-text-primary` | `#1C1C1E`（避免純黑） |
+| 次要 / 三級文字 | `--color-text-secondary` / `--color-text-tertiary` | `#8E8E93` / `#AEAEB2` |
+| 強調色 | `--color-accent` | `#007AFF` |
+| 狀態色 | `--color-success` / `--color-warning` / `--color-error` | `#34C759` / `#FF9500` / `#FF3B30` |
+| 圓角 | `--radius-xl` / `--radius-2xl` / `--radius-full` | 20px / 24px+ / 膠囊 |
+| 間距 | `--space-sm` / `--space-md` / `--space-lg` | 8px / 16px / 24px |
 
 ---
 
@@ -562,7 +540,7 @@ module.exports \= {
 
 【輸出要求】
 
-使用 Vue \+ Tailwind CSS 輸出，套用上述 class 組合。確認符合設計檢查清單後再輸出。
+使用 Vue SFC 與純 CSS（`<style scoped>` 搭配第 14 節的設計 Token）輸出，套用第 14 節的樣式組合。確認符合設計檢查清單後再輸出。
 
 ---
 
