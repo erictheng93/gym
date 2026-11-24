@@ -354,6 +354,7 @@ app.post('/:id/convert', async (c) => {
     memberCode,
     branchId: lead.branchId,
     status: 'ACTIVE',
+    notes: lead.source ? `來源: ${lead.source}` : undefined,
     joinDate: new Date().toISOString().slice(0, 10),
   }).returning(NEW_MEMBER_RETURNING);
 

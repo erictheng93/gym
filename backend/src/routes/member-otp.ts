@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
-import { eq, and, gt, desc, or, sql } from 'drizzle-orm';
+import { eq, and, gt, desc, sql } from 'drizzle-orm';
 import { rateLimiter } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
@@ -14,7 +14,7 @@ import { emailService } from '../services/email.js';
 // Endpoints: /send, /verify, /refresh
 
 type OtpVariables = {
-  requestBody?: { identifier?: string };
+  otpRateKey: string;
 };
 
 const app = new Hono<{ Variables: OtpVariables }>();
@@ -66,10 +66,7 @@ const OTP_REFRESH_MEMBER_JOIN_SELECT = {
 const otpSendRateLimiter = rateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: process.env.NODE_ENV === 'test' ? 100 : 1,
-  keyGenerator: (c) => {
-    const body = c.get('requestBody') as { identifier?: string } | undefined;
-    return `otp:send:${body?.identifier || 'unknown'}`;
-  },
+  keyGenerator: (c) => `otp:send:${c.get('otpRateKey')}`,
   message: '發送過於頻繁，請 1 分鐘後再試',
 });
 
@@ -77,10 +74,7 @@ const otpSendRateLimiter = rateLimiter({
 const otpSendHourlyRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: process.env.NODE_ENV === 'test' ? 100 : 5,
-  keyGenerator: (c) => {
-    const body = c.get('requestBody') as { identifier?: string } | undefined;
-    return `otp:send:hourly:${body?.identifier || 'unknown'}`;
-  },
+  keyGenerator: (c) => `otp:send:hourly:${c.get('otpRateKey')}`,
   message: '今日發送次數已達上限，請稍後再試',
 });
 
@@ -88,10 +82,7 @@ const otpSendHourlyRateLimiter = rateLimiter({
 const otpVerifyRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.NODE_ENV === 'test' ? 100 : 5,
-  keyGenerator: (c) => {
-    const body = c.get('requestBody') as { identifier?: string } | undefined;
-    return `otp:verify:${body?.identifier || 'unknown'}`;
-  },
+  keyGenerator: (c) => `otp:verify:${c.get('otpRateKey')}`,
   message: '驗證次數過多，請 15 分鐘後再試',
 });
 
@@ -99,16 +90,21 @@ const otpVerifyRateLimiter = rateLimiter({
 // Validation Schemas
 // -----------------------------------------------------------------------------
 
-const sendOtpSchema = z.object({
-  identifier: z.string().min(1, '請輸入手機號碼或 Email'),
-  type: z.enum(['phone', 'email']),
-});
+const otpIdentifierSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('phone'),
+    identifier: z.string().trim().regex(/^09\d{2}[- ]?\d{3}[- ]?\d{3}$/, '請輸入有效的手機號碼')
+      .transform(phone => phone.replace(/[- ]/g, '')),
+  }),
+  z.object({
+    type: z.literal('email'),
+    identifier: z.string().min(1, '請輸入手機號碼或 Email'),
+  }),
+]);
 
-const verifyOtpSchema = z.object({
-  identifier: z.string().min(1, '請輸入手機號碼或 Email'),
-  type: z.enum(['phone', 'email']),
+const verifyOtpSchema = otpIdentifierSchema.and(z.object({
   code: z.string().length(6, 'OTP 必須是 6 位數'),
-});
+}));
 
 const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, '請提供 refresh token'),
@@ -128,24 +124,18 @@ function getClientIp(c: { req: { header: (name: string) => string | undefined } 
   return ip || undefined;
 }
 
-// Store request body for rate limiter
-app.use('*', async (c, next) => {
-  if (c.req.method === 'POST') {
-    try {
-      const body = await c.req.json();
-      c.set('requestBody', body);
-      // Reset request body for validators
-      c.req.raw = new Request(c.req.url, {
-        method: c.req.method,
-        headers: c.req.raw.headers,
-        body: JSON.stringify(body),
-      });
-    } catch {
-      // Body parsing failed, continue
-    }
-  }
-  return next();
-});
+function memberIdentifierMatches(type: 'phone' | 'email', identifier: string) {
+  return type === 'phone'
+    ? eq(sql`translate(${members.phone}, '- ', '')`, identifier)
+    : eq(members.email, identifier);
+}
+
+function tokenIdentifierMatches(type: 'phone' | 'email', identifier: string) {
+  // Pending phone tokens issued before normalization may still contain separators.
+  return type === 'phone'
+    ? eq(sql`translate(${otpTokens.identifier}, '- ', '')`, identifier)
+    : eq(otpTokens.identifier, identifier);
+}
 
 // -----------------------------------------------------------------------------
 // POST /api/member/otp/send - Send OTP
@@ -153,34 +143,21 @@ app.use('*', async (c, next) => {
 
 app.post(
   '/send',
+  zValidator('json', otpIdentifierSchema, (result, c) => {
+    if (result.success) c.set('otpRateKey', `${result.data.type}:${result.data.identifier}`);
+  }),
   otpSendRateLimiter,
   otpSendHourlyRateLimiter,
-  zValidator('json', sendOtpSchema),
   async (c) => {
     const { identifier, type } = c.req.valid('json');
     const ipAddress = getClientIp(c);
     const userAgent = c.req.header('user-agent') || '';
 
-    const cleanDigits = identifier.replace(/\D/g, '');
-    const isPhone = type === 'phone' || (cleanDigits.startsWith('09') && cleanDigits.length === 10);
-    const dashedPhone = isPhone && cleanDigits.length === 10
-      ? `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}`
-      : identifier;
-
     // Find member by phone or email
-    const whereClause = type === 'phone'
-      ? or(
-          eq(members.phone, identifier),
-          eq(members.phone, cleanDigits),
-          eq(members.phone, dashedPhone),
-          eq(sql`replace(${members.phone}, '-', '')`, cleanDigits)
-        )
-      : eq(members.email, identifier);
-
     const [member] = await db
       .select(OTP_MEMBER_SELECT)
       .from(members)
-      .where(whereClause)
+      .where(memberIdentifierMatches(type, identifier))
       .limit(1);
 
     // Always return success to prevent enumeration
@@ -209,11 +186,7 @@ app.post(
     await db
       .delete(otpTokens)
       .where(and(
-        or(
-          eq(otpTokens.identifier, identifier),
-          eq(otpTokens.identifier, cleanDigits),
-          eq(otpTokens.identifier, dashedPhone)
-        ),
+        tokenIdentifierMatches(type, identifier),
         eq(otpTokens.identifierType, type),
       ));
 
@@ -283,27 +256,19 @@ app.post(
 
 app.post(
   '/verify',
+  zValidator('json', verifyOtpSchema, (result, c) => {
+    if (result.success) c.set('otpRateKey', `${result.data.type}:${result.data.identifier}`);
+  }),
   otpVerifyRateLimiter,
-  zValidator('json', verifyOtpSchema),
   async (c) => {
     const { identifier, type, code } = c.req.valid('json');
-
-    const cleanDigits = identifier.replace(/\D/g, '');
-    const isPhone = type === 'phone' || (cleanDigits.startsWith('09') && cleanDigits.length === 10);
-    const dashedPhone = isPhone && cleanDigits.length === 10
-      ? `${cleanDigits.slice(0, 4)}-${cleanDigits.slice(4, 7)}-${cleanDigits.slice(7)}`
-      : identifier;
 
     // Find valid OTP
     const [otp] = await db
       .select(OTP_VERIFY_SELECT)
       .from(otpTokens)
       .where(and(
-        or(
-          eq(otpTokens.identifier, identifier),
-          eq(otpTokens.identifier, cleanDigits),
-          eq(otpTokens.identifier, dashedPhone)
-        ),
+        tokenIdentifierMatches(type, identifier),
         eq(otpTokens.identifierType, type),
         eq(otpTokens.verified, false),
         gt(otpTokens.expiresAt, new Date()),
@@ -354,19 +319,10 @@ app.post(
       .where(eq(otpTokens.id, otp.id));
 
     // Find member
-    const whereClause = type === 'phone'
-      ? or(
-          eq(members.phone, identifier),
-          eq(members.phone, cleanDigits),
-          eq(members.phone, dashedPhone),
-          eq(sql`replace(${members.phone}, '-', '')`, cleanDigits)
-        )
-      : eq(members.email, identifier);
-
     const [member] = await db
       .select(MEMBER_OTP_AUTH_SELECT)
       .from(members)
-      .where(whereClause)
+      .where(memberIdentifierMatches(type, identifier))
       .limit(1);
 
     if (!member) {

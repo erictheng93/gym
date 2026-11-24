@@ -137,7 +137,7 @@ app.get('/', zValidator('query', querySchema), async (c) => {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
 
-  if (branchId && !branchIds.includes(branchId)) {
+  if (branchId && !branchIds.includes(branchId.toLowerCase())) {
     return c.json({ success: true, data: [], meta: { total: 0, page, limit, totalPages: 0 } });
   }
 
@@ -211,7 +211,7 @@ app.get('/export', async (c) => {
   const branchIds = tenantBranches.map(b => b.id);
   const branchMap = new Map(tenantBranches.map(b => [b.id, b.name]));
 
-  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId.toLowerCase()))) {
     const result = generateCsv(membersColumns, []);
     return new Response(result.buffer, {
       headers: {

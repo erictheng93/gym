@@ -61,9 +61,9 @@ export function isSessionValid(timestamp: number): boolean {
  * Save session data to sessionStorage (protected)
  */
 export function saveSession(user: User, employee: CurrentEmployee | null): void {
-  if (typeof window === 'undefined' || !window.sessionStorage) return
-
   try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return
+
     const sessionData: SessionData = {
       user,
       employee,
@@ -81,9 +81,9 @@ export function saveSession(user: User, employee: CurrentEmployee | null): void 
  * Returns null if no valid session exists
  */
 export function loadSession(): SessionData | null {
-  if (typeof window === 'undefined' || !window.sessionStorage) return null
-
   try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null
+
     const stored = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
     if (!stored) {
       // Clear legacy storage if exists

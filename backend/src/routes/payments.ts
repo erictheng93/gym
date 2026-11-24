@@ -124,7 +124,7 @@ app.get('/', async (c) => {
   let conditions: SQL[] = [];
 
   if (branchId) {
-    if (!branchIds.includes(branchId)) {
+    if (!branchIds.includes(branchId.toLowerCase())) {
       return c.json({ success: true, data: [], meta: { total: 0, page, limit } });
     }
     conditions.push(eq(payments.branchId, branchId));
@@ -197,7 +197,7 @@ app.get('/summary', async (c) => {
   let conditions: SQL[] = [];
 
   if (branchId) {
-    if (!branchIds.includes(branchId)) {
+    if (!branchIds.includes(branchId.toLowerCase())) {
       return c.json({
         success: true,
         data: { totalIncome: 0, totalRefund: 0, netIncome: 0, paymentCount: 0 },
@@ -249,7 +249,7 @@ app.get('/export', async (c) => {
 
   const branchIds = await getTenantBranchIds(tenantId);
 
-  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
+  if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId.toLowerCase()))) {
     const result = generateCsv(paymentsColumns, []);
     return new Response(result.buffer, {
       headers: {

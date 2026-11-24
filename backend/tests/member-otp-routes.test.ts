@@ -23,6 +23,16 @@ describe('Member OTP Routes', () => {
   // Validation Tests (no DB needed)
   // ---------------------------------------------------------------------------
 
+  it.each(['send', 'verify'])('rejects malformed phones before the %s limiter', async endpoint => {
+    const res = await app.request(`/api/member/otp/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: '0912345678x', type: 'phone', code: '000000' }),
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.has('X-RateLimit-Remaining')).toBe(false);
+  });
+
   describe('POST /api/member/otp/send - validation', () => {
     it('should reject empty body', async () => {
       const res = await app.request('/api/member/otp/send', {
@@ -167,6 +177,36 @@ describe('Member OTP Routes', () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(true);
+    });
+
+    it('uses one quota and token identity for dashed and plain phone numbers', async () => {
+      if (!dbAvailable) return;
+      const request = (endpoint: string, identifier: string, code?: string) =>
+        app.request(`/api/member/otp/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'phone', identifier, code }),
+        });
+
+      const plain = await request('send', '0912345678');
+      const dashed = await request('send', '0912-345-678');
+      expect(plain.status).toBe(200);
+      expect(dashed.status).toBe(200);
+      expect(Number(dashed.headers.get('X-RateLimit-Remaining')))
+        .toBe(Number(plain.headers.get('X-RateLimit-Remaining')) - 1);
+
+      const { db, otpTokens } = await import('../src/db/index.js');
+      const { eq } = await import('drizzle-orm');
+      const tokens = await db.select({ code: otpTokens.code }).from(otpTokens)
+        .where(eq(otpTokens.identifier, '0912345678'));
+      expect(tokens).toEqual([{ code: (await dashed.json())._devCode }]);
+
+      const wrong = await request('verify', '0912-345-678', '000000');
+      const verified = await request('verify', '0912345678', tokens[0].code);
+      expect(wrong.status).toBe(400);
+      expect(verified.status).toBe(200);
+      expect(Number(verified.headers.get('X-RateLimit-Remaining')))
+        .toBe(Number(wrong.headers.get('X-RateLimit-Remaining')) - 1);
     });
 
     it('POST /send should accept valid email OTP request', async () => {
