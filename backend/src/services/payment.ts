@@ -639,22 +639,41 @@ async function processManualPayment(
 /**
  * Verify Stripe webhook signature
  */
+/** Stripe's default tolerance for the signed timestamp (seconds) */
+const STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
+
 export function verifyStripeWebhook(payload: string, signature: string): boolean {
   if (!config.stripe.webhookSecret) return false;
 
   try {
-    const timestamp = signature.split(',').find(s => s.startsWith('t='))?.split('=')[1];
-    const expectedSig = signature.split(',').find(s => s.startsWith('v1='))?.split('=')[1];
+    const parts = signature.split(',');
+    const timestamp = parts.find(s => s.startsWith('t='))?.slice(2);
+    // Stripe may send several v1 signatures (e.g. during secret rotation)
+    const receivedSigs = parts.filter(s => s.startsWith('v1=')).map(s => s.slice(3));
 
-    if (!timestamp || !expectedSig) return false;
+    if (!timestamp || receivedSigs.length === 0) return false;
+
+    const timestampSeconds = Number(timestamp);
+    if (
+      !Number.isFinite(timestampSeconds) ||
+      Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) > STRIPE_WEBHOOK_TOLERANCE_SECONDS
+    ) {
+      return false;
+    }
 
     const signedPayload = `${timestamp}.${payload}`;
-    const expectedSignature = crypto
-      .createHmac('sha256', config.stripe.webhookSecret)
-      .update(signedPayload)
-      .digest('hex');
+    const expectedSignature = Buffer.from(
+      crypto
+        .createHmac('sha256', config.stripe.webhookSecret)
+        .update(signedPayload)
+        .digest('hex'),
+    );
 
-    return expectedSig === expectedSignature;
+    return receivedSigs.some((sig) => {
+      const received = Buffer.from(sig);
+      return received.length === expectedSignature.length &&
+        crypto.timingSafeEqual(received, expectedSignature);
+    });
   /* v8 ignore start -- defensive: standard crypto ops unlikely to throw */
   } catch {
     return false;

@@ -222,6 +222,50 @@ describe('Payment Service', () => {
       expect(verifyStripeWebhook(payload, signature)).toBe(false);
     });
 
+    function signStripe(payload: string, timestamp: string, secret = webhookSecret) {
+      return crypto.createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
+    }
+
+    it('應該拒絕時間戳記超過 300 秒容許範圍的有效簽名 (replay)', () => {
+      const payload = '{"type":"checkout.session.completed"}';
+      const staleTimestamp = (Math.floor(Date.now() / 1000) - 301).toString();
+      const signature = `t=${staleTimestamp},v1=${signStripe(payload, staleTimestamp)}`;
+
+      expect(verifyStripeWebhook(payload, signature)).toBe(false);
+    });
+
+    it('應該拒絕未來超過 300 秒的時間戳記', () => {
+      const payload = '{}';
+      const futureTimestamp = (Math.floor(Date.now() / 1000) + 301).toString();
+      const signature = `t=${futureTimestamp},v1=${signStripe(payload, futureTimestamp)}`;
+
+      expect(verifyStripeWebhook(payload, signature)).toBe(false);
+    });
+
+    it('時間戳記在容許範圍內但簽名錯誤 (同長度) 應該拒絕', () => {
+      const payload = '{}';
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const wrongSig = signStripe(payload, timestamp, 'whsec_other_secret');
+
+      expect(verifyStripeWebhook(payload, `t=${timestamp},v1=${wrongSig}`)).toBe(false);
+    });
+
+    it('多個 v1 簽名中只要有一個有效就應該接受 (secret rotation)', () => {
+      const payload = '{"type":"checkout.session.completed"}';
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const oldSig = signStripe(payload, timestamp, 'whsec_old_secret');
+      const signature = `t=${timestamp},v1=${oldSig},v1=${signStripe(payload, timestamp)}`;
+
+      expect(verifyStripeWebhook(payload, signature)).toBe(true);
+    });
+
+    it('非數字的時間戳記應該拒絕', () => {
+      const payload = '{}';
+      const signature = `t=abc,v1=${signStripe(payload, 'abc')}`;
+
+      expect(verifyStripeWebhook(payload, signature)).toBe(false);
+    });
+
     it('應該拒絕被竄改的 payload', () => {
       const originalPayload = '{"type":"checkout.session.completed"}';
       const timestamp = Math.floor(Date.now() / 1000).toString();
