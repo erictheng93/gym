@@ -369,7 +369,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   const [member] = await db
     .select(MEMBER_ID_SELECT)
     .from(members)
-    .where(eq(members.id, data.memberId))
+    .where(and(eq(members.id, data.memberId), eq(members.tenantId, tenantId)))
     .limit(1);
 
   if (!member) {
@@ -379,6 +379,18 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
   // contractId is required in schema
   if (!data.contractId) {
     return c.json({ success: false, error: '必須指定合約' }, 400);
+  }
+
+  const contractCondition = and(eq(contracts.id, data.contractId), eq(contracts.tenantId, tenantId));
+
+  const [contract] = await db
+    .select(CONTRACT_TOTAL_AMOUNT_SELECT)
+    .from(contracts)
+    .where(contractCondition)
+    .limit(1);
+
+  if (!contract) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
   }
 
   const [newPayment] = await db.insert(payments).values({
@@ -394,42 +406,31 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
     tenantId,
   }).returning(PAYMENT_RETURNING);
 
-  if (data.contractId) {
-    const [existingPayments, [contract]] = await Promise.all([
-      db
-        .select(PAYMENT_TOTAL_AMOUNT_SELECT)
-        .from(payments)
-        .where(
-          and(
-            eq(payments.contractId, data.contractId),
-            eq(payments.type, 'INCOME')
-          )
-        ),
-      db
-        .select(CONTRACT_TOTAL_AMOUNT_SELECT)
-        .from(contracts)
-        .where(eq(contracts.id, data.contractId))
-        .limit(1),
-    ]);
+  const existingPayments = await db
+    .select(PAYMENT_TOTAL_AMOUNT_SELECT)
+    .from(payments)
+    .where(
+      and(
+        eq(payments.contractId, data.contractId),
+        eq(payments.tenantId, tenantId),
+        eq(payments.type, 'INCOME')
+      )
+    );
 
-    const totalPaid = Number(existingPayments[0]?.total || 0);
+  const totalPaid = Number(existingPayments[0]?.total || 0);
+  const totalAmount = Number(contract.totalAmount || 0);
+  let paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' = 'UNPAID';
 
-    if (contract) {
-      const totalAmount = Number(contract.totalAmount || 0);
-      let paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' = 'UNPAID';
-
-      if (totalPaid >= totalAmount) {
-        paymentStatus = 'PAID';
-      } else if (totalPaid > 0) {
-        paymentStatus = 'PARTIAL';
-      }
-
-      await db.update(contracts).set({
-        paymentStatus,
-        updatedAt: new Date(),
-      }).where(eq(contracts.id, data.contractId));
-    }
+  if (totalPaid >= totalAmount) {
+    paymentStatus = 'PAID';
+  } else if (totalPaid > 0) {
+    paymentStatus = 'PARTIAL';
   }
+
+  await db.update(contracts).set({
+    paymentStatus,
+    updatedAt: new Date(),
+  }).where(contractCondition);
 
   return c.json({ success: true, data: newPayment }, 201);
 });
