@@ -246,7 +246,7 @@ app.post(
       success: true,
       message: '如果此帳號存在，驗證碼已發送',
       // In development/test, return code for testing and frontend display
-      ...(process.env.NODE_ENV !== 'production' && {
+      ...((process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') && {
         _devCode: code,
         data: {
           otp: code,
