@@ -436,14 +436,13 @@ pub async fn qr_verify(
     let tenant_id = require_tenant(&auth)?;
     let qr = normalize_qr_payload(payload.payload)?;
     let member_code = qr
-        .get("m")
-        .and_then(Value::as_str)
+        .m
+        .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::Validation("QR payload missing member code".into()))?;
     let timestamp_ms = qr
-        .get("t")
-        .and_then(Value::as_i64)
+        .t
         .ok_or_else(|| AppError::Validation("QR payload missing timestamp".into()))?;
     let generated_at = Utc
         .timestamp_millis_opt(timestamp_ms)
@@ -462,8 +461,8 @@ pub async fn qr_verify(
     ensure_branch_scope(&state.db, tenant_id, branch_id).await?;
 
     let requested_contract_id = qr
-        .get("c")
-        .and_then(Value::as_str)
+        .c
+        .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(Uuid::parse_str)
@@ -793,16 +792,25 @@ impl From<QrContractRow> for QrContractResponse {
 
 const MAX_QR_PAYLOAD_LEN: usize = 4096;
 
-fn normalize_qr_payload(payload: Value) -> Result<Value, AppError> {
+/// Member QR payload: `m` member code, `t` generation time (ms), `c` optional contract id.
+/// Fields stay optional so qr_verify can report which one is missing.
+#[derive(Debug, Deserialize, PartialEq)]
+struct QrPayload {
+    m: Option<String>,
+    t: Option<i64>,
+    c: Option<String>,
+}
+
+fn normalize_qr_payload(payload: Value) -> Result<QrPayload, AppError> {
+    let invalid = |_| AppError::Validation("QR payload is invalid".into());
     match payload {
         Value::String(value) => {
             if value.is_empty() || value.len() > MAX_QR_PAYLOAD_LEN {
                 return Err(AppError::Validation("QR payload length is invalid".into()));
             }
-            serde_json::from_str(&value)
-                .map_err(|_| AppError::Validation("QR payload is invalid".into()))
+            serde_json::from_str::<QrPayload>(&value).map_err(invalid)
         }
-        Value::Object(_) => Ok(payload),
+        Value::Object(_) => serde_json::from_value::<QrPayload>(payload).map_err(invalid),
         _ => Err(AppError::Validation("QR payload is invalid".into())),
     }
 }
@@ -814,16 +822,26 @@ mod tests {
 
     #[test]
     fn test_normalize_qr_payload_valid_object() {
-        let obj = json!({"token": "abc-123"});
-        let result = normalize_qr_payload(obj.clone()).unwrap();
-        assert_eq!(result, obj);
+        let obj = json!({"m": "M001", "t": 1_700_000_000_000_i64, "c": "x"});
+        let result = normalize_qr_payload(obj).unwrap();
+        assert_eq!(
+            result,
+            QrPayload { m: Some("M001".into()), t: Some(1_700_000_000_000), c: Some("x".into()) }
+        );
     }
 
     #[test]
     fn test_normalize_qr_payload_valid_string() {
-        let raw = r#"{"token":"abc-123"}"#;
+        let raw = r#"{"m":"M001","t":1700000000000}"#;
         let result = normalize_qr_payload(Value::String(raw.into())).unwrap();
-        assert_eq!(result["token"], "abc-123");
+        assert_eq!(result.m.as_deref(), Some("M001"));
+        assert_eq!(result.c, None);
+    }
+
+    #[test]
+    fn test_normalize_qr_payload_wrong_field_type() {
+        let result = normalize_qr_payload(json!({"m": 42, "t": "soon"}));
+        assert!(matches!(result, Err(AppError::Validation(_))));
     }
 
     #[test]
