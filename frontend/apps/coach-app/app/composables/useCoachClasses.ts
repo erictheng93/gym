@@ -91,52 +91,52 @@ export const useCoachClasses = () => {
     offset?: number
   }): Promise<void> => {
     const dedupKey = `coach:fetchClasses:${JSON.stringify(params || {})}`
-    return deduplicateRequest(dedupKey, async () => {
-      loading.value = true
-      isOfflineData.value = false
-      const cacheKey = `${CACHE_KEYS.classes}:${JSON.stringify(params || {})}`
+    loading.value = true
+    isOfflineData.value = false
+    const cacheKey = `${CACHE_KEYS.classes}:${JSON.stringify(params || {})}`
 
-      try {
-        if (!isOnline.value) {
-          const cached = await getCache<ClassesResponse>(cacheKey)
-          if (cached) {
-            classes.value = cached.data
-            total.value = cached.meta.total
-            isOfflineData.value = true
-            return
-          }
-          // No cache available
-          classes.value = []
-          total.value = 0
-          return
-        }
-
-        // Online: fetch + cache
-        const response = await $fetch<ClassesResponse>(`${apiUrl}/api/coach/classes`, {
-          headers: getAuthHeader(),
-          query: params,
-        })
-
-        if (response.success) {
-          classes.value = response.data
-          total.value = response.meta.total
-          await setCache(cacheKey, response, CACHE_TTL.classes)
-        }
-      } catch {
-        // Network error: fallback to cache
+    try {
+      if (!isOnline.value) {
         const cached = await getCache<ClassesResponse>(cacheKey)
         if (cached) {
           classes.value = cached.data
           total.value = cached.meta.total
           isOfflineData.value = true
-        } else {
-          classes.value = []
-          total.value = 0
+          return
         }
-      } finally {
-        loading.value = false
+        // No cache available
+        classes.value = []
+        total.value = 0
+        return
       }
-    })
+
+      // Online: fetch + cache
+      const response = await deduplicateRequest(dedupKey, () =>
+        $fetch<ClassesResponse>(`${apiUrl}/api/coach/classes`, {
+          headers: getAuthHeader(),
+          query: params,
+        })
+      )
+
+      if (response.success) {
+        classes.value = response.data
+        total.value = response.meta.total
+        await setCache(cacheKey, response, CACHE_TTL.classes)
+      }
+    } catch {
+      // Network error: fallback to cache
+      const cached = await getCache<ClassesResponse>(cacheKey)
+      if (cached) {
+        classes.value = cached.data
+        total.value = cached.meta.total
+        isOfflineData.value = true
+      } else {
+        classes.value = []
+        total.value = 0
+      }
+    } finally {
+      loading.value = false
+    }
   }
 
   /**
@@ -177,43 +177,11 @@ export const useCoachClasses = () => {
     start_date?: string
     end_date?: string
   }): Promise<ScheduleResponse['data'] | null> => {
-    return deduplicateRequest(`coach:schedule:${JSON.stringify(params || {})}`, async () => {
-      loading.value = true
-      const cacheKey = `${CACHE_KEYS.schedule}:${JSON.stringify(params || {})}`
+    loading.value = true
+    const cacheKey = `${CACHE_KEYS.schedule}:${JSON.stringify(params || {})}`
 
-      try {
-        if (!isOnline.value) {
-          const cached = await getCache<ScheduleResponse['data']>(cacheKey)
-          if (cached) {
-            schedule.value = {
-              classes: cached.bookings,
-              availability: cached.availability,
-            }
-            isOfflineData.value = true
-            return cached
-          }
-          return null
-        }
-
-        const response = await $fetch<ScheduleResponse>(
-          `${apiUrl}/api/coach/schedule`,
-          {
-            headers: getAuthHeader(),
-            query: params,
-          }
-        )
-
-        if (response.success) {
-          schedule.value = {
-            classes: response.data.bookings,
-            availability: response.data.availability,
-          }
-          await setCache(cacheKey, response.data, CACHE_TTL.schedule)
-          return response.data
-        }
-        return null
-      } catch {
-        // Network error: fallback to cache
+    try {
+      if (!isOnline.value) {
         const cached = await getCache<ScheduleResponse['data']>(cacheKey)
         if (cached) {
           schedule.value = {
@@ -223,12 +191,44 @@ export const useCoachClasses = () => {
           isOfflineData.value = true
           return cached
         }
-        schedule.value = null
         return null
-      } finally {
-        loading.value = false
       }
-    })
+
+      const response = await deduplicateRequest(`coach:schedule:${JSON.stringify(params || {})}`, () =>
+        $fetch<ScheduleResponse>(
+          `${apiUrl}/api/coach/schedule`,
+          {
+            headers: getAuthHeader(),
+            query: params,
+          }
+        )
+      )
+
+      if (response.success) {
+        schedule.value = {
+          classes: response.data.bookings,
+          availability: response.data.availability,
+        }
+        await setCache(cacheKey, response.data, CACHE_TTL.schedule)
+        return response.data
+      }
+      return null
+    } catch {
+      // Network error: fallback to cache
+      const cached = await getCache<ScheduleResponse['data']>(cacheKey)
+      if (cached) {
+        schedule.value = {
+          classes: cached.bookings,
+          availability: cached.availability,
+        }
+        isOfflineData.value = true
+        return cached
+      }
+      schedule.value = null
+      return null
+    } finally {
+      loading.value = false
+    }
   }
 
   /**

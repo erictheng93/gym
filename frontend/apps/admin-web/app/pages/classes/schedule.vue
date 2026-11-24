@@ -89,9 +89,8 @@ const sessionsByDate = computed(() => {
 })
 
 // Check if date is today
-const todayDateStr = new Date().toDateString()
 const isToday = (date: Date) => {
-  return date.toDateString() === todayDateStr
+  return date.toDateString() === new Date().toDateString()
 }
 
 // Navigate week

@@ -137,22 +137,20 @@ export async function runRFMSegmentation() {
         });
 
         // Update member tags with segment only if changed
-        if (member.tenantId) {
-          const existingTags = Array.isArray(member.tags) ? (member.tags as string[]) : [];
-          const updatedTags = updateRFMTag(existingTags, segment);
-          const tagsChanged =
-            existingTags.length !== updatedTags.length ||
-            existingTags.some((t, i) => t !== updatedTags[i]);
+        const existingTags = Array.isArray(member.tags) ? (member.tags as string[]) : [];
+        const updatedTags = updateRFMTag(existingTags, segment);
+        const tagsChanged =
+          existingTags.length !== updatedTags.length ||
+          existingTags.some((t, i) => t !== updatedTags[i]);
 
-          if (tagsChanged) {
-            await db
-              .update(members)
-              .set({
-                tags: updatedTags,
-                updatedAt: new Date(),
-              })
-              .where(eq(members.id, member.id));
-          }
+        if (tagsChanged) {
+          await db
+            .update(members)
+            .set({
+              tags: updatedTags,
+              updatedAt: new Date(),
+            })
+            .where(eq(members.id, member.id));
         }
       } catch (error) {
         console.error(`[RFM] Failed to analyze member ${member.id}:`, error);
@@ -212,7 +210,10 @@ function calculateSegment(recency: number, frequency: number, monetary: number):
 function updateRFMTag(tags: string[], newSegment: RFMSegment): string[] {
   // Remove any existing RFM segment tags
   const rfmSegments = ['CHAMPION', 'LOYAL', 'POTENTIAL', 'AT_RISK', 'HIBERNATING', 'LOST'];
-  const filtered = tags.filter(tag => !rfmSegments.includes(tag));
+  const filtered = tags.filter(tag => {
+    const name = typeof tag === 'string' && tag.startsWith('RFM:') ? tag.slice(4) : tag;
+    return !rfmSegments.includes(name);
+  });
 
   // Add new segment tag
   return [...filtered, `RFM:${newSegment}`];
