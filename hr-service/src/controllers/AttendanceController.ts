@@ -111,7 +111,7 @@ export class AttendanceController {
         throw new ValidationError('Employee ID is required')
       }
 
-      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+      if (!req.user?.isAdmin && req.user?.employeeId !== targetId) {
         throw new ForbiddenError('You can only view your own attendance records')
       }
 
@@ -139,7 +139,7 @@ export class AttendanceController {
         throw new ValidationError('Employee ID is required')
       }
 
-      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+      if (!req.user?.isAdmin && req.user?.employeeId !== targetId) {
         throw new ForbiddenError('You can only view your own attendance records')
       }
 

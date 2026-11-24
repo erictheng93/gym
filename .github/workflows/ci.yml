@@ -83,6 +83,27 @@ jobs:
       - name: Build
         run: bun run build
 
+  hr-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: hr-business-logic (build + test)
+        working-directory: backend/packages/hr-business-logic
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          bunx vitest run
+      - name: hr-service (install, typecheck/build, test)
+        working-directory: hr-service
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          bunx vitest run
+
   # Build the production images and start them: install/symlink/dependency
   # problems in images often only show up at startup, not at build time.
   docker:

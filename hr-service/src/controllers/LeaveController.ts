@@ -136,7 +136,7 @@ export class LeaveController {
         throw new ValidationError('employeeId is required')
       }
 
-      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+      if (!req.user?.isAdmin && req.user?.employeeId !== targetId) {
         throw new ForbiddenError('You can only view your own leave requests')
       }
 
@@ -230,7 +230,7 @@ export class LeaveController {
         throw new ValidationError('Employee ID is required')
       }
 
-      if (req.user && !req.user.isAdmin && req.user.employeeId !== targetId) {
+      if (!req.user?.isAdmin && req.user?.employeeId !== targetId) {
         throw new ForbiddenError('You can only view your own leave balance')
       }
 
