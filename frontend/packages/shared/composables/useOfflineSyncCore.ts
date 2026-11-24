@@ -1,6 +1,6 @@
 /**
  * Shared offline sync core factory
- * Provides IndexedDB caching and request queuing with fresh auth tokens and parallel sync
+ * Provides IndexedDB caching and request queuing with fresh auth tokens and strict FIFO sync
  */
 import type { QueuedRequest, CacheEntry, SyncResult, OfflineSyncConfig } from '../types/offline-sync'
 
@@ -14,6 +14,54 @@ const STORES = {
 const dbInstances = new Map<string, IDBDatabase>()
 const listenersInitializedSet = new Set<string>()
 const activeSyncPromises = new Map<string, Promise<SyncResult>>()
+// Strictly increasing queue timestamps per dbName, so FIFO order survives same-millisecond enqueues
+const lastTimestamps = new Map<string, number>()
+
+const nextTimestamp = (dbName: string): number => {
+  const ts = Math.max(Date.now(), (lastTimestamps.get(dbName) ?? 0) + 1)
+  lastTimestamps.set(dbName, ts)
+  return ts
+}
+
+const getPath = (url: string): string => {
+  try {
+    return new URL(url, 'http://local').pathname
+  } catch {
+    return url.split('?')[0] ?? url
+  }
+}
+
+const getErrorStatus = (error: unknown): number | undefined => {
+  const e = error as { statusCode?: number; status?: number; response?: { status?: number } } | null
+  return e?.statusCode ?? e?.status ?? e?.response?.status
+}
+
+// Network failures (no status), timeouts, rate limits and 5xx are transient; other 4xx are not
+const isRetryableError = (error: unknown): boolean => {
+  const status = getErrorStatus(error)
+  return status === undefined || status === 408 || status === 429 || status >= 500
+}
+
+// Returns a copy with tempId replaced by serverId in url/body, or null if not referenced
+const replaceTempId = (
+  request: QueuedRequest,
+  tempId: string,
+  serverId: string
+): QueuedRequest | null => {
+  const bodyJson = request.body === undefined ? undefined : JSON.stringify(request.body)
+  if (!request.url.includes(tempId) && !bodyJson?.includes(tempId)) return null
+  return {
+    ...request,
+    url: request.url.split(tempId).join(serverId),
+    body: bodyJson === undefined ? undefined : JSON.parse(bodyJson.split(tempId).join(serverId)),
+  }
+}
+
+const extractServerId = (response: unknown): string | undefined => {
+  const data = (response as { data?: { id?: unknown } } | null)?.data
+  const id = data?.id
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : undefined
+}
 
 const initDB = (dbName: string): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -63,7 +111,7 @@ const generateId = (): string => {
  * Factory that creates an offline sync composable scoped to a specific app/db
  */
 export const createOfflineSync = (config: OfflineSyncConfig) => {
-  const { dbName, stateKeyPrefix, getAuthHeaders, concurrency = 3 } = config
+  const { dbName, stateKeyPrefix, getAuthHeaders } = config
 
   return () => {
     const isOnline = useState<boolean>(`${stateKeyPrefix}online`, () =>
@@ -117,7 +165,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       const queuedRequest: QueuedRequest = {
         ...request,
         id: generateId(),
-        timestamp: Date.now(),
+        timestamp: nextTimestamp(dbName),
         retryCount: 0,
       }
 
@@ -183,18 +231,20 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
 
     // ---- Sync ----
 
-    const executeRequest = async (request: QueuedRequest): Promise<boolean> => {
+    const executeRequest = async (
+      request: QueuedRequest
+    ): Promise<{ ok: true; data: unknown } | { ok: false; retryable: boolean }> => {
       try {
         // Get fresh auth headers at sync time (fixes stale token issue)
         const freshHeaders = getAuthHeaders()
-        await $fetch(request.url, {
+        const data = await $fetch(request.url, {
           method: request.method,
           headers: freshHeaders,
           body: request.body as Record<string, unknown> | undefined,
         })
-        return true
-      } catch {
-        return false
+        return { ok: true, data }
+      } catch (error) {
+        return { ok: false, retryable: isRetryableError(error) }
       }
     }
 
@@ -208,6 +258,24 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
 
         putRequest.onsuccess = () => resolve()
         putRequest.onerror = () => reject(putRequest.error)
+      })
+    }
+
+    // Remove a synced request and persist its dependents (temp id -> server id) in one
+    // transaction, so a crash can neither re-send the create nor strand a temp id.
+    const commitSynced = async (id: string, dependents: QueuedRequest[]): Promise<void> => {
+      const db = await initDB(dbName)
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORES.queue, 'readwrite')
+        const store = tx.objectStore(STORES.queue)
+        store.delete(id)
+        for (const dependent of dependents) store.put(dependent)
+        tx.oncomplete = () => {
+          pendingCount.value = Math.max(0, pendingCount.value - 1)
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error)
       })
     }
 
@@ -239,40 +307,56 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
             }
           }
 
-          // Process in parallel chunks
-          const processRequest = async (request: QueuedRequest) => {
-            const success = await executeRequest(request)
-            if (success) {
-              await removeFromQueue(request.id)
-              return { success: true, id: request.id }
-            } else {
-              await updateRetryCount(request)
-              return { success: false, id: request.id }
+          // Strict FIFO: one request at a time, oldest first, so dependent mutations
+          // (create -> update -> delete of the same entity) never race.
+          actionable.sort((x, y) => x.timestamp - y.timestamp)
+
+          const blockedPaths = new Set<string>() // paths with a retryable failure this run
+          const blockedTempIds = new Set<string>() // queue ids of failed creates
+
+          for (const [index, request] of actionable.entries()) {
+            const path = getPath(request.url)
+            const isBlocked = blockedPaths.has(path)
+              || [...blockedTempIds].some(id => request.url.includes(id))
+
+            // A transient failure earlier in this run: hold back later mutations on the
+            // same resource (left untouched in the queue, retried on the next sync)
+            if (isBlocked) {
+              blockedPaths.add(path)
+              result.failed++
+              result.errors.push({ id: request.id, error: '前置請求失敗，已暫緩同步' })
+              continue
             }
-          }
 
-          for (let i = 0; i < actionable.length; i += concurrency) {
-            const chunk = actionable.slice(i, i + concurrency)
-            const results = await Promise.allSettled(chunk.map(processRequest))
-
-            for (const settledResult of results) {
-              if (settledResult.status === 'fulfilled') {
-                if (settledResult.value.success) {
-                  result.synced++
-                } else {
-                  result.failed++
-                  result.errors.push({
-                    id: settledResult.value.id,
-                    error: '同步失敗，將稍後重試',
-                  })
+            try {
+              const outcome = await executeRequest(request)
+              if (outcome.ok) {
+                // Later requests may reference this request's queue id as an offline temp id
+                const serverId = extractServerId(outcome.data)
+                const dependents: QueuedRequest[] = []
+                if (serverId) {
+                  for (const later of actionable.slice(index + 1)) {
+                    const rewritten = replaceTempId(later, request.id, serverId)
+                    if (rewritten) {
+                      Object.assign(later, rewritten)
+                      dependents.push(later)
+                    }
+                  }
                 }
+                await commitSynced(request.id, dependents)
+                result.synced++
               } else {
+                await updateRetryCount(request)
+                if (outcome.retryable) {
+                  blockedPaths.add(path)
+                  blockedTempIds.add(request.id)
+                }
                 result.failed++
-                result.errors.push({
-                  id: 'unknown',
-                  error: '同步過程發生錯誤',
-                })
+                result.errors.push({ id: request.id, error: '同步失敗，將稍後重試' })
               }
+            } catch {
+              result.failed++
+              result.errors.push({ id: request.id, error: '同步過程發生錯誤' })
             }
           }
 
