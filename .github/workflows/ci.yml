@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgis/postgis:17-3.4
+        env:
+          POSTGRES_USER: gym_nexus
+          # Throwaway runner-local container: no password needed
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: gym_nexus
+        ports: ['15432:5432']
+        options: >-
+          --health-cmd "pg_isready -U gym_nexus"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://gym_nexus@localhost:15432/gym_nexus
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - name: Create schema
+        run: bunx drizzle-kit push --force
+      - name: Test
+        run: bunx vitest run
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - name: Typecheck app code
+        # ponytail: test files carry ~350 pre-existing type errors, so only
+        # non-test errors fail the build; drop the filter once tests are clean.
+        run: |
+          status=0
+          for app in admin-web member-app coach-app; do
+            code=0
+            (cd "apps/$app" && bunx nuxi typecheck) > "/tmp/tc-$app.log" 2>&1 || code=$?
+            if [ "$code" -ne 0 ] && ! grep -q "error TS" "/tmp/tc-$app.log"; then
+              echo "::error::$app typecheck crashed (exit $code) without reporting type errors"
+              tail -30 "/tmp/tc-$app.log"
+              status=1
+              continue
+            fi
+            grep "error TS" "/tmp/tc-$app.log" | grep -v '\.test\.ts' > "/tmp/tc-$app.txt" || true
+            if [ -s "/tmp/tc-$app.txt" ]; then
+              echo "::error::$app has $(wc -l < /tmp/tc-$app.txt) type errors in app code"
+              cat "/tmp/tc-$app.txt"
+              status=1
+            fi
+          done
+          exit $status
+      - name: Test
+        run: bunx vitest run
+      - name: Build
+        run: bun run build
