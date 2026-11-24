@@ -230,6 +230,7 @@ export const MESSAGES = {
     CONTRACT_LOAD_FAILED: '載入合約資料失敗，請稍後再試',
     CONTRACT_PAUSE_FAILED: '暫停合約失敗，請稍後再試',
     CONTRACT_RESUME_FAILED: '恢復合約失敗，請稍後再試',
+    CONTRACT_ACTIVATE_FAILED: '啟用合約失敗，請稍後再試',
     CONTRACT_TRANSFER_FAILED: '轉讓合約失敗，請稍後再試',
     CONTRACT_TERMINATE_FAILED: '終止合約失敗，請稍後再試',
     CONTRACT_EXTEND_FAILED: '延期合約失敗，請稍後再試',
@@ -318,6 +319,7 @@ export const MESSAGES = {
     CONTRACT_DELETED: '合約刪除成功',
     CONTRACT_PAUSED: '合約已暫停',
     CONTRACT_RESUMED: '合約已恢復',
+    CONTRACT_ACTIVATED: '合約已啟用',
     CONTRACT_TRANSFERRED: '合約轉讓成功',
     CONTRACT_TERMINATED: '合約已終止',
     CONTRACT_EXTENDED: '合約延期成功',
@@ -519,6 +521,7 @@ export const PAGES = {
     // Actions
     PAUSE_CONTRACT: '暫停合約',
     RESUME_CONTRACT: '恢復合約',
+    ACTIVATE_CONTRACT: '啟用合約',
     TRANSFER_CONTRACT: '轉讓合約',
     TERMINATE_CONTRACT: '終止合約',
     EXTEND_CONTRACT: '延期合約',

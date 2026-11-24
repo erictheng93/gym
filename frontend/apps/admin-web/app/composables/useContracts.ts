@@ -9,7 +9,7 @@ const inFlightSingleContractMap = new Map<string, Promise<Contract | null>>()
 const inFlightContractStatsMap = new Map<string, Promise<{ active: number; expired: number; draft: number }>>()
 
 export const useContracts = () => {
-  const { readItems, readItem, createItem, updateItem } = useFetch()
+  const { apiFetch, readItems, readItem, createItem, updateItem } = useFetch()
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
   const contracts = useState<Contract[]>('contracts', () => [])
@@ -121,6 +121,21 @@ export const useContracts = () => {
     }
   }
 
+  // 啟用草稿合約（DRAFT → ACTIVE，後端同時將會員設為 ACTIVE）
+  const activateContract = async (id: string) => {
+    try {
+      const { data } = await apiFetch<Contract>(`/contracts/${id}/activate`, { method: 'POST' })
+      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useContracts.activateContract',
+        customMessage: MESSAGES.ERRORS.CONTRACT_ACTIVATE_FAILED
+      })
+      return null
+    }
+  }
+
   // 統計資料
   const getContractStats = async (branchId?: string, force = false) => {
     const defaultStats = { active: 0, expired: 0, draft: 0 }
@@ -186,6 +201,7 @@ export const useContracts = () => {
     getContract,
     createContract,
     updateContract,
+    activateContract,
     getContractStats
   }
 }

@@ -49,7 +49,8 @@ definePageMeta({
 const route = useRoute()
 const router = useRouter()
 const { readItems, createItem } = useFetch()
-const { getContract, updateContract } = useContracts()
+const { getContract, updateContract, activateContract } = useContracts()
+const { confirm } = useConfirm()
 const { fetchPayments, payments } = usePayments()
 const { currentEmployee, fetchCurrentEmployee } = useAuth()
 
@@ -299,6 +300,34 @@ const handleResume = async () => {
     isProcessing.value = false
   }
 }
+
+// 啟用草稿合約（金流只付部分金額時不會自動啟用，由櫃台確認後手動啟用）
+const handleActivate = async () => {
+  if (!contract.value) return
+
+  const confirmed = await confirm({
+    title: PAGES.CONTRACTS.ACTIVATE_CONTRACT,
+    message: '請確認款項已收妥。啟用後會員即可報到使用。',
+    confirmText: PAGES.CONTRACTS.ACTIVATE_CONTRACT,
+    type: 'info',
+    confirmVariant: 'primary'
+  })
+  if (!confirmed) return
+
+  isProcessing.value = true
+  try {
+    // 失敗時 activateContract 已顯示錯誤提示
+    if (await activateContract(contract.value.id)) {
+      useToast().success(MESSAGES.SUCCESS.CONTRACT_ACTIVATED)
+      await loadContract()
+    }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+// 檢查是否可以啟用
+const canActivate = computed(() => contract.value?.contract_status === 'DRAFT')
 
 // 檢查是否可以暫停
 const canPause = computed(() => {
@@ -559,6 +588,12 @@ const openRenewModal = () => {
           {{ MESSAGES.ACTIONS.BACK }}
         </button>
         <div class="header-actions">
+          <button v-if="canActivate" class="btn btn-primary" :disabled="isProcessing" @click="handleActivate">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
+            </svg>
+            {{ PAGES.CONTRACTS.ACTIVATE_CONTRACT }}
+          </button>
           <button v-if="canPause" class="btn btn-secondary" @click="showPauseModal = true">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="14" y="4" width="4" height="16" rx="1" /><rect x="6" y="4" width="4" height="16" rx="1" />
