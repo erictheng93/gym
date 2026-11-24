@@ -463,8 +463,8 @@ const getStatusBadge = (status: string) => {
 }
 
 .stat-icon.members {
-  background: rgba(0, 113, 227, 0.1);
-  color: #0071e3;
+  background: rgba(0, 122, 255, 0.1);
+  color: #007aff;
 }
 
 .stat-icon.active {
@@ -479,7 +479,7 @@ const getStatusBadge = (status: string) => {
 
 .stat-icon.revenue {
   background: rgba(255, 159, 10, 0.1);
-  color: #ff9f0a;
+  color: #ff9500;
 }
 
 .stat-value {
@@ -609,7 +609,7 @@ const getStatusBadge = (status: string) => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;
@@ -706,7 +706,7 @@ const getStatusBadge = (status: string) => {
 }
 
 .action-icon.add-member {
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
   color: white;
 }
 
@@ -721,7 +721,7 @@ const getStatusBadge = (status: string) => {
 }
 
 .action-icon.reports {
-  background: linear-gradient(135deg, #ff9f0a, #ff375f);
+  background: linear-gradient(135deg, #ff9500, #ff375f);
   color: white;
 }
 

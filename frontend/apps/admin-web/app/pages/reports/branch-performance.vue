@@ -457,7 +457,7 @@ onMounted(async () => {
 }
 
 .summary-icon.blue {
-  background: rgba(0, 113, 227, 0.1);
+  background: rgba(0, 122, 255, 0.1);
   color: var(--color-accent);
 }
 

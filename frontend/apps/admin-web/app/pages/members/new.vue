@@ -392,7 +392,7 @@ const handleSubmit = async () => {
 }
 
 .hero-icon--blue {
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
 }
 
 /* Form Sections */

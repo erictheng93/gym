@@ -30,7 +30,7 @@ const setupCanvas = () => {
   if (!ctx) return
 
   ctx.scale(dpr, dpr)
-  ctx.strokeStyle = '#1d1d1f'
+  ctx.strokeStyle = '#1c1c1e'
   ctx.lineWidth = 2.5
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'

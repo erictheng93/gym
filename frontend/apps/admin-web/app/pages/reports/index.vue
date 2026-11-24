@@ -566,7 +566,7 @@ onMounted(async () => {
 }
 
 .metric-icon.blue {
-  background: rgba(0, 113, 227, 0.1);
+  background: rgba(0, 122, 255, 0.1);
   color: var(--color-accent);
 }
 
@@ -675,7 +675,7 @@ onMounted(async () => {
 
 .bar {
   width: 60%;
-  background: linear-gradient(180deg, var(--color-accent), rgba(0, 113, 227, 0.6));
+  background: linear-gradient(180deg, var(--color-accent), rgba(0, 122, 255, 0.6));
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   position: relative;
   min-height: 20px;

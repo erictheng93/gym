@@ -466,7 +466,7 @@ onUnmounted(() => {
   --bg-input: #F0F0F5;
   --bg-hover: #E8E8ED;
 
-  --text-primary: #1D1D1F;
+  --text-primary: #1c1c1e;
   --text-secondary: #86868B;
   --text-muted: #AEAEB2;
 

@@ -166,7 +166,7 @@ export default defineNuxtConfig({
         { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
         { name: 'apple-mobile-web-app-title', content: 'Gym Nexus' },
         { name: 'mobile-web-app-capable', content: 'yes' },
-        { name: 'msapplication-TileColor', content: '#0071e3' },
+        { name: 'msapplication-TileColor', content: '#007aff' },
         { name: 'msapplication-tap-highlight', content: 'no' },
         // Theme Color (支援深色模式)
         { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#ffffff' },
@@ -190,7 +190,7 @@ export default defineNuxtConfig({
       short_name: 'Gym Nexus',
       description: '多據點健身房會員管理、預約課程、電子合約系統',
       lang: 'zh-TW',
-      theme_color: '#0071e3',
+      theme_color: '#007aff',
       background_color: '#ffffff',
       display: 'standalone',
       orientation: 'portrait',

@@ -110,10 +110,10 @@ export const useCharts = () => {
 
   // Default colors
   const colors: ChartColors = {
-    primary: '#0071e3',
+    primary: '#007aff',
     secondary: '#5856d6',
     success: '#34c759',
-    warning: '#ff9f0a',
+    warning: '#ff9500',
     error: '#ff3b30',
     info: '#5ac8fa',
     accent: '#af52de'
@@ -453,11 +453,11 @@ export const useCharts = () => {
     if (ratio < 0.5) {
       // 從 min 到 mid
       const r = ratio * 2
-      return `rgba(0, 113, 227, ${0.1 + r * 0.4})`
+      return `rgba(0, 122, 255, ${0.1 + r * 0.4})`
     } else {
       // 從 mid 到 max
       const r = (ratio - 0.5) * 2
-      return `rgba(0, 113, 227, ${0.5 + r * 0.5})`
+      return `rgba(0, 122, 255, ${0.5 + r * 0.5})`
     }
   }
 

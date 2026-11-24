@@ -367,14 +367,14 @@ const toggleRowSelect = (row: T, event: Event) => {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-md) var(--space-lg);
-  background: var(--color-accent-light, rgba(0, 113, 227, 0.08));
-  border-bottom: 1px solid var(--color-accent, #0071e3);
+  background: var(--color-accent-light, rgba(0, 122, 255, 0.08));
+  border-bottom: 1px solid var(--color-accent, #007aff);
 }
 
 .selected-count {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-accent, #0071e3);
+  color: var(--color-accent, #007aff);
 }
 
 /* Checkbox Cell */
@@ -386,13 +386,13 @@ const toggleRowSelect = (row: T, event: Event) => {
 .table-checkbox {
   width: 18px;
   height: 18px;
-  accent-color: var(--color-accent, #0071e3);
+  accent-color: var(--color-accent, #007aff);
   cursor: pointer;
 }
 
 /* Selected Row */
 .selected-row {
-  background: var(--color-accent-light, rgba(0, 113, 227, 0.05)) !important;
+  background: var(--color-accent-light, rgba(0, 122, 255, 0.05)) !important;
 }
 
 /* Alignment */

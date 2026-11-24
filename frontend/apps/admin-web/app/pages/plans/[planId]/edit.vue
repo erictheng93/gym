@@ -460,7 +460,7 @@ const formatPrice = (value: number) => {
 }
 
 .hero-icon.time {
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
 }
 
 .hero-icon.count {
@@ -596,8 +596,8 @@ const formatPrice = (value: number) => {
 }
 
 .radio-option.active.time {
-  background: linear-gradient(135deg, #0071e3, #00c7be);
-  border-color: #0071e3;
+  background: linear-gradient(135deg, #007aff, #00c7be);
+  border-color: #007aff;
 }
 
 .radio-option.active.count {

@@ -593,13 +593,13 @@ const handleCancel = () => {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #0077ed 0%, #0071e3 100%);
+  background: linear-gradient(180deg, #1a88ff 0%, #007aff 100%);
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
 }
 
 .btn-primary:disabled {

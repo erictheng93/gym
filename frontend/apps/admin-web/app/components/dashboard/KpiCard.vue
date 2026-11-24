@@ -138,12 +138,12 @@ const changeClass = computed(() => {
 
 .kpi-icon--revenue {
   background: rgba(255, 159, 10, 0.1);
-  color: #ff9f0a;
+  color: #ff9500;
 }
 
 .kpi-icon--members {
-  background: rgba(0, 113, 227, 0.1);
-  color: #0071e3;
+  background: rgba(0, 122, 255, 0.1);
+  color: #007aff;
 }
 
 .kpi-icon--contracts {

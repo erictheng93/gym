@@ -30,7 +30,7 @@
             <path d="M14 24h6v-8h8v8h6v4h-6v8h-8v-8h-6v-4z" fill="white" />
             <defs>
               <linearGradient id="logo-gradient" x1="0" y1="0" x2="48" y2="48">
-                <stop stop-color="#0071e3" />
+                <stop stop-color="#007aff" />
                 <stop offset="1" stop-color="#00c7be" />
               </linearGradient>
             </defs>
@@ -225,13 +225,13 @@ const handleLogin = async () => {
    ============================================ */
 
 .login-page {
-  --blue-primary: #0071e3;
+  --blue-primary: #007aff;
   --blue-cyan: #00c7be;
   --bg-light: #f5f5f7;
   --bg-dark: #000000;
   --card-light: rgba(255, 255, 255, 0.8);
   --card-dark: rgba(28, 28, 30, 0.8);
-  --text-light: #1d1d1f;
+  --text-light: #1c1c1e;
   --text-dark: #f5f5f7;
   --border-light: rgba(0, 0, 0, 0.1);
   --border-dark: rgba(255, 255, 255, 0.1);
@@ -367,7 +367,7 @@ const handleLogin = async () => {
 }
 
 .logo-mark {
-  filter: drop-shadow(0 8px 16px rgba(0, 113, 227, 0.2));
+  filter: drop-shadow(0 8px 16px rgba(0, 122, 255, 0.2));
 }
 
 .app-title {
@@ -391,7 +391,7 @@ const handleLogin = async () => {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
 }
 
 /* Login Card */
@@ -504,12 +504,12 @@ const handleLogin = async () => {
 .input-wrapper input:focus {
   background: white;
   border-color: var(--blue-primary);
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.1);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
 }
 
 .dark .input-wrapper input:focus {
   background: #2c2c2e;
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.2);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
 }
 
 .password-toggle {
@@ -539,13 +539,13 @@ const handleLogin = async () => {
   justify-content: center;
   gap: 12px;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 8px 20px rgba(0, 113, 227, 0.2);
+  box-shadow: 0 8px 20px rgba(0, 122, 255, 0.2);
   margin-top: 8px;
 }
 
 .submit-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(0, 113, 227, 0.3);
+  box-shadow: 0 12px 24px rgba(0, 122, 255, 0.3);
 }
 
 .submit-btn:active:not(:disabled) {

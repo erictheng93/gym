@@ -50,7 +50,7 @@ const backgroundStyle = computed(() => {
 
 const textStyle = computed(() => {
   if (props.theme === 'light') {
-    return { color: '#1d1d1f' }
+    return { color: '#1c1c1e' }
   }
   return { color: '#f5f5f7' }
 })

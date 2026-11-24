@@ -370,7 +370,7 @@ const handleSubmit = async () => {
 }
 
 .hero-icon.branch {
-  background: linear-gradient(135deg, #0071e3, #00c7be);
+  background: linear-gradient(135deg, #007aff, #00c7be);
 }
 
 .hero-icon.hq {

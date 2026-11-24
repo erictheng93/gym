@@ -210,7 +210,7 @@ const lastUpdate = computed(() => {
 
 .stat-icon.revenue {
   background: rgba(255, 159, 10, 0.1);
-  color: #ff9f0a;
+  color: #ff9500;
 }
 
 .stat-info {
@@ -281,7 +281,7 @@ const lastUpdate = computed(() => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
   color: white;
   display: flex;
   align-items: center;

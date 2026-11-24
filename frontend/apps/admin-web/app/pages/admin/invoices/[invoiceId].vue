@@ -363,7 +363,7 @@ onMounted(() => {
 
 .back-link {
   display: inline-block;
-  color: #0071e3;
+  color: #007aff;
   text-decoration: none;
   font-size: 14px;
   margin-bottom: 8px;
@@ -396,7 +396,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 24px;
-  border-bottom: 2px solid #0071e3;
+  border-bottom: 2px solid #007aff;
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
 }
 
@@ -429,7 +429,7 @@ onMounted(() => {
 .amount-value {
   font-size: 32px;
   font-weight: 700;
-  color: #0071e3;
+  color: #007aff;
 }
 
 .invoice-body {
@@ -570,7 +570,7 @@ onMounted(() => {
 .total-row td {
   font-size: 16px;
   padding-top: 16px;
-  color: #0071e3;
+  color: #007aff;
 }
 
 .plan-badge {
@@ -647,7 +647,7 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: #0071e3;
+  background: #007aff;
   color: white;
 }
 

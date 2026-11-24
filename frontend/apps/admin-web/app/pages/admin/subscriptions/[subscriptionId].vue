@@ -364,7 +364,7 @@ onMounted(async () => {
 
 .back-link {
   display: inline-block;
-  color: #0071e3;
+  color: #007aff;
   text-decoration: none;
   font-size: 14px;
   margin-bottom: 8px;
@@ -518,7 +518,7 @@ onMounted(async () => {
 .btn-text {
   background: none;
   border: none;
-  color: #0071e3;
+  color: #007aff;
   cursor: pointer;
   font-size: 14px;
   text-decoration: none;

@@ -88,18 +88,18 @@ const { toasts } = useToast()
 }
 
 .toast--info {
-  border-color: rgba(0, 113, 227, 0.3);
+  border-color: rgba(0, 122, 255, 0.3);
 }
 
 .toast--info .toast-icon {
-  color: var(--color-accent, #0071e3);
+  color: var(--color-accent, #007aff);
 }
 
 .toast-message {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--color-text-primary, #1d1d1f);
+  color: var(--color-text-primary, #1c1c1e);
 }
 
 /* Transitions */

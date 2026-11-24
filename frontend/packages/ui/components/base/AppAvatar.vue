@@ -75,7 +75,7 @@ const sizeMap = {
 }
 
 .variant-blue {
-  background: linear-gradient(135deg, #0071e3, #5856d6);
+  background: linear-gradient(135deg, #007aff, #5856d6);
 }
 
 .variant-green {
