@@ -236,6 +236,29 @@ pnpm db:push
 pnpm db:migrate
 ```
 
+### Tenant backfill before `db:push` (#109)
+
+`members`, `contracts` and `payments` now have `tenant_id NOT NULL`. `db:push`
+fails on a database that still has legacy rows with NULL `tenant_id`, so
+backfill them from their branch first (take the backup below beforehand):
+
+```bash
+cd backend
+
+# 1. Report NULL counts; changes nothing
+bun run db:backfill-tenant -- --dry-run
+
+# 2. Backfill in one transaction (no-op if step 1 found nothing)
+bun run db:backfill-tenant
+
+# 3. Apply the schema (adds the NOT NULL constraints)
+bun run db:push
+```
+
+If the script exits non-zero with `BLOCKED`, the listed branches have NULL
+`tenant_id`: set `branches.tenant_id` for each one by hand, then re-run from
+step 1. The script never changes anything in that case.
+
 ### Manual Migration
 
 ```bash

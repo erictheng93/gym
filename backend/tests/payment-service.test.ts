@@ -1120,24 +1120,21 @@ describe('Payment Service', () => {
       expect(body.get('line_items[0][price_data][currency]')).toBe('usd');
     });
 
-    it('getTenantIdForBranch 失敗時 tenantId 應為 null', async () => {
-      const mockPaymentRecord = { id: 'payment-notenant' };
-      mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
-      // Simulate getTenantIdForBranch failing
+    it('getTenantIdForBranch 失敗時不應建立無 tenant 的付款', async () => {
+      // Simulate getTenantIdForBranch failing (unique branch id: bypass the tenant cache)
       mockSelectLimit.mockRejectedValueOnce(new Error('DB error'));
-
-      const mockWhere = vi.fn().mockResolvedValueOnce(undefined);
-      mockUpdateSet.mockReturnValueOnce({ where: mockWhere });
 
       const result = await createPayment({
         gateway: 'manual',
         amount: 500,
         contractId: 'contract-1',
         memberId: 'member-1',
-        branchId: 'branch-1',
+        branchId: 'branch-lookup-fails',
       });
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Branch tenant could not be resolved');
+      expect(mockInsert).not.toHaveBeenCalled();
     });
   });
 
@@ -1311,29 +1308,25 @@ describe('Payment Service', () => {
       expect(result.refundId).toBeDefined();
     });
 
-    it('branch 無 tenantId 應該回傳 null', async () => {
+    it('branch 無 tenantId 時不應建立付款', async () => {
       initPaymentService({ stripe: { secretKey: 'sk_test_123' } });
 
-      const mockPaymentRecord = { id: 'payment-fb-4' };
-      mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
-      // Branch found but tenantId is null
+      // Branch found but tenantId is null (unique branch id: bypass the tenant cache)
       mockSelectLimit.mockResolvedValueOnce([{ tenantId: null }]);
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'cs_test', url: 'https://checkout.stripe.com/x' }),
-      });
 
       const result = await createPayment({
         gateway: 'stripe',
         amount: 1000,
         contractId: 'contract-1',
         memberId: 'member-1',
-        branchId: 'branch-1',
+        branchId: 'branch-without-tenant',
       });
 
-      // Payment should still succeed, just with null tenantId
-      expect(result.success).toBe(true);
+      // payments.tenant_id is NOT NULL: refuse instead of inserting an orphan row
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Branch tenant could not be resolved');
+      expect(mockInsert).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 

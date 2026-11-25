@@ -374,16 +374,15 @@ async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDe
 
         // Partial payments (deposits/instalments) never auto-activate; staff do that manually
         if (summary && paidCents >= toCents(summary.totalAmount)) {
-          const contractConditions = [eq(contracts.id, payment.contractId)];
-          if (payment.tenantId) {
-            contractConditions.push(eq(contracts.tenantId, payment.tenantId));
-          }
-
           // Only DRAFT -> ACTIVE; never re-activate paused/expired/cancelled contracts
           await tx
             .update(contracts)
             .set({ status: 'ACTIVE' })
-            .where(and(...contractConditions, eq(contracts.status, 'DRAFT')));
+            .where(and(
+              eq(contracts.id, payment.contractId),
+              eq(contracts.tenantId, payment.tenantId),
+              eq(contracts.status, 'DRAFT'),
+            ));
 
           console.log(`[Payment Success] Contract ${payment.contractId} activated`);
         } else {
