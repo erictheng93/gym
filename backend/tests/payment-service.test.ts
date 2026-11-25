@@ -48,12 +48,23 @@ import {
   verifyStripeWebhook,
   verifyECPayWebhook,
   verifyLinePayWebhook,
+  confirmLinePayPayment,
+  parseLinePayJson,
+  describeGatewayModes,
   getErrorMessage,
 } from '../src/services/payment.js';
 
 // =============================================================================
 // TESTS
 // =============================================================================
+
+/** Mock a LINE Pay API response (the service reads response.text()) */
+function mockLinePayResponse(body: string | Record<string, unknown>) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+  });
+}
 
 describe('Payment Service', () => {
   beforeEach(() => {
@@ -75,7 +86,7 @@ describe('Payment Service', () => {
     initPaymentService({
       stripe: { secretKey: '', publishableKey: '', webhookSecret: '' },
       ecpay: { merchantId: '', hashKey: '', hashIv: '' },
-      linepay: { channelId: '', channelSecret: '' },
+      linepay: { channelId: '', channelSecret: '', apiUrl: 'https://api-pay.line.me' },
     });
   });
 
@@ -654,7 +665,7 @@ describe('Payment Service', () => {
       expect(result.amount).toBe(3000);
     });
 
-    it('CREDIT_CARD 方式退款應該走 Stripe 流程', async () => {
+    it('CREDIT_CARD 方式退款（Stripe 未串接）應該失敗且不建立退款記錄', async () => {
       initPaymentService({ stripe: { secretKey: 'sk_test_123' } });
 
       mockSelectLimit.mockResolvedValueOnce([{
@@ -670,31 +681,80 @@ describe('Payment Service', () => {
 
       const result = await processRefund({ paymentId: 'payment-1' });
 
-      expect(result.success).toBe(true);
-      expect(result.amount).toBe(8000);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Stripe');
+      expect(mockInsert).not.toHaveBeenCalled();
     });
 
-    it('LINE_PAY 方式退款應該走 LINE Pay 流程', async () => {
-      initPaymentService({ linepay: { channelId: 'ch', channelSecret: 'secret' } });
+    const LINE_PAY_PAYMENT = {
+      id: 'payment-1',
+      type: 'INCOME',
+      amount: '2000',
+      paymentMethod: 'LINE_PAY',
+      contractId: 'contract-1',
+      memberId: 'member-1',
+      branchId: 'branch-1',
+      tenantId: 'tenant-1',
+      receiptNo: '2023042201206549310',
+    };
 
-      mockSelectLimit.mockResolvedValueOnce([{
-        id: 'payment-1',
-        type: 'INCOME',
-        amount: '2000',
-        paymentMethod: 'LINE_PAY',
-        contractId: 'contract-1',
-        memberId: 'member-1',
-        branchId: 'branch-1',
-        tenantId: 'tenant-1',
-      }]);
+    it('LINE_PAY 方式退款應該呼叫 LINE Pay refund API 並回傳 refundTransactionId', async () => {
+      initPaymentService({ linepay: { channelId: 'ch', channelSecret: 'secret' } });
+      mockSelectLimit.mockResolvedValueOnce([LINE_PAY_PAYMENT]);
+      mockLinePayResponse(
+        '{"returnCode":"0000","returnMessage":"Success","info":{"refundTransactionId":2023042201206549999}}',
+      );
 
       const result = await processRefund({ paymentId: 'payment-1' });
 
       expect(result.success).toBe(true);
       expect(result.amount).toBe(2000);
+      expect(result.refundId).toBe('2023042201206549999');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api-pay.line.me/v3/payments/2023042201206549310/refund',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      const [, init] = mockFetch.mock.calls[0]!;
+      expect(JSON.parse(init.body)).toEqual({ refundAmount: 2000 });
+      expect(mockInsert).toHaveBeenCalledTimes(1);
     });
 
-    it('DEBIT_CARD 方式退款應該走 ECPay 流程', async () => {
+    it('LINE_PAY 退款缺少 receiptNo 應該失敗且不建立退款記錄', async () => {
+      initPaymentService({ linepay: { channelId: 'ch', channelSecret: 'secret' } });
+      mockSelectLimit.mockResolvedValueOnce([{ ...LINE_PAY_PAYMENT, receiptNo: null }]);
+
+      const result = await processRefund({ paymentId: 'payment-1' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('transaction id');
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
+    it('LINE_PAY 退款 receiptNo 非純數字應該失敗且不建立退款記錄', async () => {
+      initPaymentService({ linepay: { channelId: 'ch', channelSecret: 'secret' } });
+      mockSelectLimit.mockResolvedValueOnce([{ ...LINE_PAY_PAYMENT, receiptNo: 'tx_abc' }]);
+
+      const result = await processRefund({ paymentId: 'payment-1' });
+
+      expect(result.success).toBe(false);
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
+    it('LINE_PAY 退款 returnCode 非 0000 應該失敗且不建立退款記錄', async () => {
+      initPaymentService({ linepay: { channelId: 'ch', channelSecret: 'secret' } });
+      mockSelectLimit.mockResolvedValueOnce([LINE_PAY_PAYMENT]);
+      mockLinePayResponse({ returnCode: '1165', returnMessage: 'Refund not allowed' });
+
+      const result = await processRefund({ paymentId: 'payment-1' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Refund not allowed');
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
+    it('DEBIT_CARD 方式退款（綠界未串接）應該失敗且不建立退款記錄', async () => {
       initPaymentService({ ecpay: { merchantId: 'M', hashKey: 'k', hashIv: 'v' } });
 
       mockSelectLimit.mockResolvedValueOnce([{
@@ -710,8 +770,9 @@ describe('Payment Service', () => {
 
       const result = await processRefund({ paymentId: 'payment-1' });
 
-      expect(result.success).toBe(true);
-      expect(result.amount).toBe(1500);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('綠界');
+      expect(mockInsert).not.toHaveBeenCalled();
     });
 
     it('paymentMethod 為 null 應該走 manual 流程', async () => {
@@ -905,16 +966,13 @@ describe('Payment Service', () => {
       mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
       mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          returnCode: '0000',
-          returnMessage: 'Success',
-          info: {
-            transactionId: 'tx_linepay_123',
-            paymentUrl: { web: 'https://sandbox-web-pay.line.me/web/payment/wait' },
-          },
-        }),
+      mockLinePayResponse({
+        returnCode: '0000',
+        returnMessage: 'Success',
+        info: {
+          transactionId: 'tx_linepay_123',
+          paymentUrl: { web: 'https://sandbox-web-pay.line.me/web/payment/wait' },
+        },
       });
 
       const result = await createPayment({
@@ -944,17 +1002,41 @@ describe('Payment Service', () => {
       );
     });
 
+    it('LINE Pay orderId 應該是 payment id，confirmUrl 固定為後端 confirm 端點', async () => {
+      process.env.API_URL = 'https://api.example.com';
+      mockInsertReturning.mockResolvedValueOnce([{ id: '123e4567-e89b-42d3-a456-426614174000' }]);
+      mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
+      mockLinePayResponse({
+        returnCode: '0000',
+        returnMessage: 'Success',
+        info: { transactionId: '1', paymentUrl: { web: 'https://pay.example/w' } },
+      });
+
+      await createPayment({
+        gateway: 'linepay',
+        amount: 2000,
+        contractId: 'contract-1',
+        memberId: 'member-1',
+        branchId: 'branch-1',
+        returnUrl: 'https://frontend.example/custom-return',
+      });
+
+      const [, init] = mockFetch.mock.calls[0]!;
+      const body = JSON.parse(init.body);
+      expect(body.orderId).toBe('123e4567-e89b-42d3-a456-426614174000');
+      expect(body.redirectUrls.confirmUrl).toBe(
+        'https://api.example.com/api/payments/webhook/linepay/confirm',
+      );
+    });
+
     it('LINE Pay API 返回錯誤碼應該返回失敗', async () => {
       const mockPaymentRecord = { id: 'payment-linepay-2' };
       mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
       mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          returnCode: '1101',
-          returnMessage: 'Not available LINE Pay',
-        }),
+      mockLinePayResponse({
+        returnCode: '1101',
+        returnMessage: 'Not available LINE Pay',
       });
 
       const result = await createPayment({
@@ -1064,7 +1146,7 @@ describe('Payment Service', () => {
   // ---------------------------------------------------------------------------
 
   describe('processRefund (Stripe)', () => {
-    it('Stripe 退款應該模擬成功', async () => {
+    it('Stripe 部分退款不應該假裝成功', async () => {
       initPaymentService({ stripe: { secretKey: 'sk_test' } });
 
       mockSelectLimit.mockResolvedValueOnce([{
@@ -1084,9 +1166,9 @@ describe('Payment Service', () => {
         reason: 'Partial refund test',
       });
 
-      expect(result.success).toBe(true);
-      expect(result.amount).toBe(3000);
-      expect(result.refundId).toBeDefined();
+      expect(result.success).toBe(false);
+      expect(result.refundId).toBeUndefined();
+      expect(mockInsert).not.toHaveBeenCalled();
     });
   });
 
@@ -1191,12 +1273,9 @@ describe('Payment Service', () => {
       mockInsertReturning.mockResolvedValueOnce([mockPaymentRecord]);
       mockSelectLimit.mockResolvedValueOnce([{ tenantId: 'tenant-1' }]);
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          returnCode: '1101',
-          returnMessage: '', // empty string — triggers || fallback
-        }),
+      mockLinePayResponse({
+        returnCode: '1101',
+        returnMessage: '', // empty string — triggers || fallback
       });
 
       const result = await createPayment({
@@ -1255,6 +1334,137 @@ describe('Payment Service', () => {
 
       // Payment should still succeed, just with null tenantId
       expect(result.success).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // describeGatewayModes
+  // ---------------------------------------------------------------------------
+
+  describe('describeGatewayModes', () => {
+    it('應該依金鑰前綴與 API 網址區分 LIVE / TEST / off', () => {
+      initPaymentService({
+        stripe: { secretKey: 'sk_test_x' },
+        ecpay: { merchantId: 'm', hashKey: 'k', hashIv: 'i', apiUrl: 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5' },
+        linepay: { channelId: 'c', channelSecret: 's', apiUrl: 'https://sandbox-api-pay.line.me' },
+      });
+      expect(describeGatewayModes()).toBe('stripe=TEST ecpay=TEST linepay=TEST');
+
+      initPaymentService({
+        stripe: { secretKey: 'rk_live_x' },
+        ecpay: { merchantId: 'm', hashKey: 'k', hashIv: 'i', apiUrl: 'https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5' },
+        linepay: { channelId: 'c', channelSecret: 's', apiUrl: 'https://api-pay.line.me' },
+      });
+      expect(describeGatewayModes()).toBe('stripe=LIVE ecpay=LIVE linepay=LIVE');
+
+      initPaymentService({ stripe: {}, ecpay: {}, linepay: {} });
+      expect(describeGatewayModes()).toBe('stripe=off ecpay=off linepay=off');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // parseLinePayJson
+  // ---------------------------------------------------------------------------
+
+  describe('parseLinePayJson', () => {
+    it('19 位數 transactionId 應該保留為完整字串（不損失精度）', () => {
+      const parsed = parseLinePayJson<{ transactionId: string }>(
+        '{"returnCode":"0000","returnMessage":"ok","info":{"transactionId":2023042201206549310}}',
+      );
+
+      expect(parsed.info?.transactionId).toBe('2023042201206549310');
+    });
+
+    it('19 位數 refundTransactionId 應該保留為完整字串', () => {
+      const parsed = parseLinePayJson<{ refundTransactionId: string }>(
+        '{"returnCode":"0000","returnMessage":"ok","info":{"refundTransactionId":2023042201206549999}}',
+      );
+
+      expect(parsed.info?.refundTransactionId).toBe('2023042201206549999');
+    });
+
+    it('其他欄位應該維持原本的 JSON 型別', () => {
+      const parsed = parseLinePayJson<{ payInfo: { amount: number }[] }>(
+        '{"returnCode":"0000","returnMessage":"ok","info":{"payInfo":[{"amount":5000}]}}',
+      );
+
+      expect(parsed.returnCode).toBe('0000');
+      expect(parsed.info?.payInfo[0]!.amount).toBe(5000);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // confirmLinePayPayment
+  // ---------------------------------------------------------------------------
+
+  describe('confirmLinePayPayment', () => {
+    beforeEach(() => {
+      initPaymentService({ linepay: { channelId: 'ch', channelSecret: 'secret' } });
+    });
+
+    it('LINE Pay 未設定應該回傳失敗', async () => {
+      initPaymentService({ linepay: { channelId: '', channelSecret: '' } });
+
+      const result = await confirmLinePayPayment('2023042201206549310', 5000);
+
+      expect(result).toEqual({ success: false, error: 'LINE Pay not configured' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('transactionId 非純數字應該回傳失敗且不呼叫 LINE Pay', async () => {
+      const result = await confirmLinePayPayment('../refund', 5000);
+
+      expect(result).toEqual({ success: false, error: 'Invalid transaction id' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('應該使用設定的 sandbox apiUrl 並送出 amount 與 currency', async () => {
+      initPaymentService({
+        linepay: { channelId: 'ch', channelSecret: 'secret', apiUrl: 'https://sandbox-api-pay.line.me' },
+      });
+      mockLinePayResponse({ returnCode: '0000', returnMessage: 'Success', info: { orderId: 'o-1' } });
+
+      const result = await confirmLinePayPayment('2023042201206549310', 5000);
+
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://sandbox-api-pay.line.me/v3/payments/2023042201206549310/confirm',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'X-LINE-ChannelId': 'ch' }),
+        }),
+      );
+      const [, init] = mockFetch.mock.calls[0]!;
+      expect(JSON.parse(init.body)).toEqual({ amount: 5000, currency: 'TWD' });
+    });
+
+    it('paidAmount 應該加總 payInfo 並回傳 orderId', async () => {
+      mockLinePayResponse({
+        returnCode: '0000',
+        returnMessage: 'Success',
+        info: { orderId: 'order-1', payInfo: [{ amount: 3000 }, { amount: 2000 }] },
+      });
+
+      const result = await confirmLinePayPayment('2023042201206549310', 5000);
+
+      expect(result).toEqual({ success: true, orderId: 'order-1', paidAmount: 5000 });
+    });
+
+    it('沒有 payInfo 時 paidAmount 應該退回使用 amount', async () => {
+      mockLinePayResponse({ returnCode: '0000', returnMessage: 'Success', info: {} });
+
+      const result = await confirmLinePayPayment('2023042201206549310', 4200);
+
+      expect(result.success).toBe(true);
+      expect(result.paidAmount).toBe(4200);
+    });
+
+    it('returnCode 非 0000 應該回傳 LINE Pay 的錯誤訊息', async () => {
+      mockLinePayResponse({ returnCode: '1172', returnMessage: 'Transaction expired' });
+
+      const result = await confirmLinePayPayment('2023042201206549310', 5000);
+
+      expect(result).toEqual({ success: false, error: 'Transaction expired' });
     });
   });
 });

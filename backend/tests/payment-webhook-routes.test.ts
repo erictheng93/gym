@@ -8,12 +8,14 @@ const mockVerifyStripe = vi.fn();
 const mockVerifyECPay = vi.fn();
 const mockVerifyLinePay = vi.fn();
 const mockIsGatewayEnabled = vi.fn();
+const mockConfirmLinePay = vi.fn();
 
 vi.mock('../src/services/payment.js', () => ({
   isGatewayEnabled: (...args: unknown[]) => mockIsGatewayEnabled(...args),
   verifyStripeWebhook: (...args: unknown[]) => mockVerifyStripe(...args),
   verifyECPayWebhook: (...args: unknown[]) => mockVerifyECPay(...args),
   verifyLinePayWebhook: (...args: unknown[]) => mockVerifyLinePay(...args),
+  confirmLinePayPayment: (...args: unknown[]) => mockConfirmLinePay(...args),
 }));
 
 // =============================================================================
@@ -597,11 +599,13 @@ describe('Payment Webhook Routes', () => {
   // POST /linepay/confirm
   // ---------------------------------------------------------------------------
 
-  describe('POST /linepay/confirm', () => {
+  describe('GET|POST /linepay/confirm', () => {
+    const PAY_ID = '123e4567-e89b-42d3-a456-426614174000';
+    const TX_ID = '2023042201206549310';
+    const confirmUrl = (params: string) => `/linepay/confirm?${params}`;
+
     it('缺少 transactionId 應該重定向到錯誤頁', async () => {
-      const res = await app.request('/linepay/confirm?orderId=GNpayment-1', {
-        method: 'POST',
-      });
+      const res = await app.request(confirmUrl(`orderId=${PAY_ID}`), { method: 'POST' });
 
       expect(res.status).toBe(302);
       expect(res.headers.get('location')).toContain('/payment/error');
@@ -609,80 +613,125 @@ describe('Payment Webhook Routes', () => {
     });
 
     it('缺少 orderId 應該重定向到錯誤頁', async () => {
-      const res = await app.request('/linepay/confirm?transactionId=tx_123', {
-        method: 'POST',
-      });
+      const res = await app.request(confirmUrl(`transactionId=${TX_ID}`), { method: 'POST' });
 
       expect(res.status).toBe(302);
       expect(res.headers.get('location')).toContain('/payment/error');
+      expect(res.headers.get('location')).toContain('Missing parameters');
     });
 
-    it('LINE Pay 未設定應該重定向到錯誤頁', async () => {
-      process.env.LINEPAY_CHANNEL_ID = '';
-      process.env.LINEPAY_CHANNEL_SECRET = '';
-
+    it('orderId 不是 UUID 應該被拒絕且不查詢資料庫', async () => {
       const res = await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=GNpayment-1`),
         { method: 'POST' },
       );
 
       expect(res.status).toBe(302);
-      expect(res.headers.get('location')).toContain('/payment/error');
+      expect(res.headers.get('location')).toContain('Missing parameters');
+      expect(mockSelect).not.toHaveBeenCalled();
+      expect(mockConfirmLinePay).not.toHaveBeenCalled();
     });
 
-    it('returnCode=0000 應該觸發 handlePaymentSuccess 並重定向到成功頁', async () => {
-      mockFetch.mockResolvedValueOnce({
-        json: async () => ({
-          returnCode: '0000',
-          returnMessage: 'Success',
-          info: { orderId: 'GNpayment-1', transactionId: 'tx_123', payInfo: [{ amount: 5000 }] },
-        }),
-      });
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]); // confirm: expected amount
-      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
-      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
+    it('transactionId 不是純數字應該被拒絕', async () => {
+      const res = await app.request(
+        confirmUrl(`transactionId=tx_123&orderId=${PAY_ID}`),
+        { method: 'POST' },
+      );
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toContain('Missing parameters');
+      expect(mockConfirmLinePay).not.toHaveBeenCalled();
+    });
+
+    it('LINE Pay 未設定應該重定向到錯誤頁', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
+      mockConfirmLinePay.mockResolvedValueOnce({ success: false, error: 'LINE Pay not configured' });
 
       const res = await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
       expect(res.status).toBe(302);
       const location = res.headers.get('location')!;
-      expect(location).toContain('/payment/success');
-      expect(location).toContain('transaction_id=tx_123');
+      expect(location).toContain('/payment/error');
+      expect(location).toContain('LINE%20Pay%20not%20configured');
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('returnCode=0000 應該觸發 handlePaymentSuccess 並重定向到成功頁', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]); // confirm lookup
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
+      mockConfirmLinePay.mockResolvedValueOnce({ success: true, orderId: PAY_ID, paidAmount: 5000 });
+
+      const res = await app.request(
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
+        { method: 'POST' },
+      );
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe(
+        `http://localhost:3002/payment/success?payment_id=${PAY_ID}`,
+      );
       expect(mockUpdate).toHaveBeenCalledTimes(3);
-      // Confirm must send the expected amount, not 0
-      const [, init] = mockFetch.mock.calls[0]!;
-      expect(JSON.parse(init.body)).toEqual({ amount: 5000, currency: 'TWD' });
+      // Confirm must use the stored amount, not 0
+      expect(mockConfirmLinePay).toHaveBeenCalledWith(TX_ID, 5000);
+    });
+
+    it('GET 請求（LINE Pay 瀏覽器導回）也應該完成確認並重定向到成功頁', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
+      mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
+      mockSelectLimit.mockResolvedValueOnce([CONTRACT_ROW]);
+      mockConfirmLinePay.mockResolvedValueOnce({ success: true, orderId: PAY_ID, paidAmount: 5000 });
+
+      const res = await app.request(confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`));
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe(
+        `http://localhost:3002/payment/success?payment_id=${PAY_ID}`,
+      );
+      expect(mockConfirmLinePay).toHaveBeenCalledTimes(1);
+      expect(mockUpdate).toHaveBeenCalledTimes(3);
+    });
+
+    it('已處理過的交易（重新整理頁面）應該直接導向成功頁且不呼叫 LINE Pay', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: TX_ID }]);
+
+      const res = await app.request(confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`));
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe(
+        `http://localhost:3002/payment/success?payment_id=${PAY_ID}`,
+      );
+      expect(mockConfirmLinePay).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('找不到付款記錄應該重定向到錯誤頁且不呼叫 LINE Pay', async () => {
       mockSelectLimit.mockResolvedValueOnce([]);
 
       const res = await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
       expect(res.status).toBe(302);
       expect(res.headers.get('location')).toContain('/payment/error');
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockConfirmLinePay).not.toHaveBeenCalled();
       expect(mockUpdate).not.toHaveBeenCalled();
     });
 
     it('LINE Pay 回傳的 orderId 不符時不應該更新付款', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
-      mockFetch.mockResolvedValueOnce({
-        json: async () => ({
-          returnCode: '0000',
-          returnMessage: 'Success',
-          info: { orderId: 'GNother-payment', transactionId: 'tx_123' },
-        }),
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
+      mockConfirmLinePay.mockResolvedValueOnce({
+        success: true,
+        orderId: '00000000-0000-4000-8000-000000000000',
+        paidAmount: 5000,
       });
 
       const res = await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
@@ -691,35 +740,24 @@ describe('Payment Webhook Routes', () => {
     });
 
     it('payInfo 金額不足時不應該更新付款或合約', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
       mockSelectLimit.mockResolvedValueOnce([PAYMENT_ROW]);
-      mockFetch.mockResolvedValueOnce({
-        json: async () => ({
-          returnCode: '0000',
-          returnMessage: 'Success',
-          info: { orderId: 'GNpayment-1', payInfo: [{ amount: 1 }] },
-        }),
-      });
+      mockConfirmLinePay.mockResolvedValueOnce({ success: true, orderId: PAY_ID, paidAmount: 1 });
 
       await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
       expect(mockUpdate).not.toHaveBeenCalled();
     });
 
-    it('非 0000 returnCode 應該重定向到錯誤頁', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
-      mockFetch.mockResolvedValueOnce({
-        json: async () => ({
-          returnCode: '1172',
-          returnMessage: 'Transaction expired',
-        }),
-      });
+    it('非 0000 returnCode 應該重定向到錯誤頁並帶上錯誤訊息', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
+      mockConfirmLinePay.mockResolvedValueOnce({ success: false, error: 'Transaction expired' });
 
       const res = await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
@@ -727,70 +765,38 @@ describe('Payment Webhook Routes', () => {
       const location = res.headers.get('location')!;
       expect(location).toContain('/payment/error');
       expect(location).toContain('Transaction');
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
-    it('fetch 失敗應該重定向到錯誤頁', async () => {
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    it('LINE Pay 呼叫拋出例外應該重定向到錯誤頁', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
+      mockConfirmLinePay.mockRejectedValueOnce(new Error('Network error'));
 
       const res = await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpayment-1',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
       expect(res.status).toBe(302);
       expect(res.headers.get('location')).toContain('/payment/error');
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
 
-    it('應該使用正確的 LINE Pay API 端點和 headers', async () => {
-      mockFetch.mockResolvedValueOnce({
-        json: async () => ({
-          returnCode: '0000',
-          returnMessage: 'Success',
-          info: {},
-        }),
-      });
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
-      mockSelectLimit.mockResolvedValueOnce([]);
-
-      await app.request(
-        '/linepay/confirm?transactionId=tx_999&orderId=GNpayment-1',
-        { method: 'POST' },
-      );
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api-pay.line.me/v3/payments/tx_999/confirm',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'X-LINE-ChannelId': 'test_channel_id',
-          }),
-        }),
-      );
-    });
-
-    it('應該從 orderId 移除 GN 前綴作為 paymentId', async () => {
-      mockFetch.mockResolvedValueOnce({
-        json: async () => ({
-          returnCode: '0000',
-          returnMessage: 'Success',
-          info: {},
-        }),
-      });
-      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000' }]);
+    it('應該以 orderId 作為 paymentId 並以 transactionId 作為 receiptNo', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{ amount: '5000', receiptNo: null }]);
       mockSelectLimit.mockResolvedValueOnce([{ ...PAYMENT_ROW, contractId: null }]);
+      mockConfirmLinePay.mockResolvedValueOnce({ success: true, orderId: PAY_ID, paidAmount: 5000 });
 
       await app.request(
-        '/linepay/confirm?transactionId=tx_123&orderId=GNpay-abc-123',
+        confirmUrl(`transactionId=${TX_ID}&orderId=${PAY_ID}`),
         { method: 'POST' },
       );
 
-      // handlePaymentSuccess is called → db.update(payments).set({...}).where(eq(payments.id, 'pay-abc-123'))
-      // The receiptNo should be the transactionId
-      expect(mockUpdateWhere).toHaveBeenCalledWith({ _op: 'eq', a: 'id', b: 'pay-abc-123' });
+      // orderId is the payment id: no prefix stripping
+      expect(mockUpdateWhere).toHaveBeenCalledWith({ _op: 'eq', a: 'id', b: PAY_ID });
       expect(mockUpdateSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          receiptNo: 'tx_123',
+          receiptNo: TX_ID,
           notes: expect.stringContaining('linepay'),
         }),
       );

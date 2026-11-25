@@ -6,6 +6,7 @@ import {
   verifyStripeWebhook,
   verifyECPayWebhook,
   verifyLinePayWebhook,
+  confirmLinePayPayment,
 } from '../services/payment.js';
 import { recalculateContractPayment, toCents } from '../services/contract-payment.js';
 
@@ -14,8 +15,9 @@ import { recalculateContractPayment, toCents } from '../services/contract-paymen
 // =============================================================================
 // Handles callbacks from payment gateways
 
-const PAYMENT_AMOUNT_SELECT = {
+const PAYMENT_CONFIRM_SELECT = {
   amount: payments.amount,
+  receiptNo: payments.receiptNo,
 };
 
 const PAYMENT_SUCCESS_SELECT = {
@@ -177,96 +179,63 @@ app.post('/ecpay', async (c) => {
 });
 
 // -----------------------------------------------------------------------------
-// POST /api/payments/webhook/linepay/confirm - LINE Pay Confirm
+// GET|POST /api/payments/webhook/linepay/confirm - LINE Pay Confirm
 // -----------------------------------------------------------------------------
+// LINE Pay redirects the user's browser here (GET) with ?transactionId&orderId
+// after they approve the payment. orderId is our payment id.
 
-app.post('/linepay/confirm', async (c) => {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+app.on(['GET', 'POST'], '/linepay/confirm', async (c) => {
+  const frontendUrl = process.env.FRONTEND_URL;
   const transactionId = c.req.query('transactionId');
   const orderId = c.req.query('orderId');
 
-  if (!transactionId || !orderId) {
-    return c.redirect(`${process.env.FRONTEND_URL}/payment/error?message=Missing parameters`);
+  if (!transactionId || !orderId || !/^\d+$/.test(transactionId) || !UUID_RE.test(orderId)) {
+    return c.redirect(`${frontendUrl}/payment/error?message=Missing parameters`);
   }
 
+  const successUrl = `${frontendUrl}/payment/success?payment_id=${orderId}`;
+
   try {
-    // Get LINE Pay config
-    const channelId = process.env.LINEPAY_CHANNEL_ID;
-    const channelSecret = process.env.LINEPAY_CHANNEL_SECRET;
-
-    if (!channelId || !channelSecret) {
-      throw new Error('LINE Pay not configured');
-    }
-
-    // Find payment by orderId (which should be the payment ID)
-    // In a real implementation, orderId should contain or map to payment ID
-    const paymentId = orderId.replace('GN', '');
     const [payment] = await db
-      .select(PAYMENT_AMOUNT_SELECT)
+      .select(PAYMENT_CONFIRM_SELECT)
       .from(payments)
-      .where(eq(payments.id, paymentId))
+      .where(eq(payments.id, orderId))
       .limit(1);
 
     if (!payment) {
-      throw new Error(`Payment ${paymentId} not found`);
+      throw new Error(`Payment ${orderId} not found`);
     }
 
-    // Confirm with the expected amount; LINE Pay rejects the confirm when it
-    // does not match the reserved transaction amount
-    const expectedAmount = Number(payment.amount);
-    const requestUri = `/v3/payments/${transactionId}/confirm`;
-    const requestBody = JSON.stringify({
-      amount: expectedAmount,
-      currency: 'TWD',
-    });
-
-    const crypto = await import('crypto');
-    const nonce = crypto.randomUUID();
-    const message = channelSecret + requestUri + requestBody + nonce;
-    const signature = crypto.createHmac('sha256', channelSecret).update(message).digest('base64');
-
-    const response = await fetch(`https://api-pay.line.me${requestUri}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-LINE-ChannelId': channelId,
-        'X-LINE-Authorization-Nonce': nonce,
-        'X-LINE-Authorization': signature,
-      },
-      body: requestBody,
-    });
-
-    const data = await response.json() as {
-      returnCode: string;
-      returnMessage: string;
-      info?: { orderId?: string; transactionId?: string; payInfo?: { amount?: number }[] };
-    };
-
-    if (data.returnCode === '0000') {
-      if (data.info?.orderId && data.info.orderId !== orderId) {
-        throw new Error(`Order mismatch: expected ${orderId}, got ${data.info.orderId}`);
-      }
-
-      // Payment confirmed successfully
-      console.log(`[LINE Pay Webhook] Payment confirmed for order ${orderId}`);
-
-      const payInfo = data.info?.payInfo;
-      await handlePaymentSuccess(paymentId, {
-        gateway: 'linepay',
-        transactionId: transactionId,
-        paidAmount: payInfo?.length
-          ? payInfo.reduce((total, p) => total + Number(p.amount), 0)
-          : expectedAmount,
-      });
-
-      return c.redirect(`${process.env.FRONTEND_URL}/payment/success?transaction_id=${transactionId}`);
-    } else {
-      console.error(`[LINE Pay Webhook] Confirm failed: ${data.returnMessage}`);
-      return c.redirect(`${process.env.FRONTEND_URL}/payment/error?message=${encodeURIComponent(data.returnMessage)}`);
+    // Already confirmed (page refresh / back button): LINE Pay would reject a
+    // second confirm, so show success instead of an error
+    if (payment.receiptNo === transactionId) {
+      return c.redirect(successUrl);
     }
 
+    const result = await confirmLinePayPayment(transactionId, Number(payment.amount));
+
+    if (!result.success) {
+      console.error(`[LINE Pay Webhook] Confirm failed: ${result.error}`);
+      return c.redirect(`${frontendUrl}/payment/error?message=${encodeURIComponent(result.error || 'Confirm failed')}`);
+    }
+
+    if (result.orderId && result.orderId !== orderId) {
+      throw new Error(`Order mismatch: expected ${orderId}, got ${result.orderId}`);
+    }
+
+    console.log(`[LINE Pay Webhook] Payment confirmed for order ${orderId}`);
+    await handlePaymentSuccess(orderId, {
+      gateway: 'linepay',
+      transactionId,
+      paidAmount: result.paidAmount ?? NaN,
+    });
+
+    return c.redirect(successUrl);
   } catch (error) {
     console.error('[LINE Pay Webhook] Error:', error);
-    return c.redirect(`${process.env.FRONTEND_URL}/payment/error?message=Processing failed`);
+    return c.redirect(`${frontendUrl}/payment/error?message=Processing failed`);
   }
 });
 
