@@ -82,22 +82,25 @@ export interface RefundResult {
 // Module State
 // -----------------------------------------------------------------------------
 
+// Loaded from env at startup; initPaymentService can still override (tests).
+// Without this every gateway stayed unconfigured and all webhooks failed closed.
 let config: PaymentConfig = {
   stripe: {
-    secretKey: null,
-    publishableKey: null,
-    webhookSecret: null,
+    secretKey: process.env.STRIPE_SECRET_KEY || null,
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || null,
   },
   ecpay: {
-    merchantId: null,
-    hashKey: null,
-    hashIv: null,
-    apiUrl: 'https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5',
+    merchantId: process.env.ECPAY_MERCHANT_ID || null,
+    hashKey: process.env.ECPAY_HASH_KEY || null,
+    hashIv: process.env.ECPAY_HASH_IV || null,
+    apiUrl: process.env.ECPAY_API_URL || 'https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5',
   },
   linepay: {
-    channelId: null,
-    channelSecret: null,
-    apiUrl: 'https://api-pay.line.me',
+    channelId: process.env.LINEPAY_CHANNEL_ID || null,
+    channelSecret: process.env.LINEPAY_CHANNEL_SECRET || null,
+    // Sandbox: https://sandbox-api-pay.line.me
+    apiUrl: process.env.LINEPAY_API_URL || 'https://api-pay.line.me',
   },
 };
 
@@ -167,6 +170,23 @@ export function isGatewayEnabled(gateway: PaymentGateway): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * One-line summary of which gateways are live vs test, for ops to verify after
+ * a deploy (no secrets are logged).
+ */
+export function describeGatewayModes(): string {
+  const mode = (enabled: boolean, test: boolean) => (!enabled ? 'off' : test ? 'TEST' : 'LIVE');
+  return [
+    `stripe=${mode(isGatewayEnabled('stripe'), !config.stripe.secretKey?.includes('_live_'))}`, // sk_live_ / rk_live_
+    `ecpay=${mode(isGatewayEnabled('ecpay'), config.ecpay.apiUrl.includes('-stage.'))}`,
+    `linepay=${mode(isGatewayEnabled('linepay'), config.linepay.apiUrl.includes('sandbox'))}`,
+  ].join(' ');
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  console.log(`[PaymentService] Gateways: ${describeGatewayModes()}`);
 }
 
 // -----------------------------------------------------------------------------
@@ -249,6 +269,7 @@ const PAYMENT_REFUND_SELECT = {
   memberId: payments.memberId,
   branchId: payments.branchId,
   tenantId: payments.tenantId,
+  receiptNo: payments.receiptNo,
 };
 
 type PaymentRefundInfo = {
@@ -260,6 +281,7 @@ type PaymentRefundInfo = {
   memberId: string;
   branchId: string;
   tenantId: string | null;
+  receiptNo: string | null;
 };
 
 /**
@@ -410,15 +432,10 @@ async function processStripeRefund(
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
-  // In a real implementation, we would store the Stripe payment intent ID
-  // For now, return a simulated success
-  console.log(`[PaymentService] Stripe refund for payment ${payment.id}, amount: ${amount}, reason: ${reason}`);
-
-  return {
-    success: true,
-    refundId: crypto.randomUUID(),
-    amount,
-  };
+  // ponytail: not integrated (needs the session's payment_intent). Fail closed so a
+  // refund is never recorded without money going back; refund in the Stripe dashboard.
+  console.warn(`[PaymentService] Stripe refund not integrated: payment ${payment.id}, amount: ${amount}, reason: ${reason}`);
+  return { success: false, error: 'Stripe 線上退款尚未串接，請至 Stripe 後台退款' };
 }
 
 // -----------------------------------------------------------------------------
@@ -511,14 +528,10 @@ async function processECPayRefund(
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
-  // ECPay refunds require merchant backend integration
-  console.log(`[PaymentService] ECPay refund for payment ${payment.id}, amount: ${amount}, reason: ${reason}`);
-
-  return {
-    success: true,
-    refundId: crypto.randomUUID(),
-    amount,
-  };
+  // ponytail: not integrated (credit card refunds use ECPay's DoAction API). Fail
+  // closed so a refund is never recorded without money going back.
+  console.warn(`[PaymentService] ECPay refund not integrated: payment ${payment.id}, amount: ${amount}, reason: ${reason}`);
+  return { success: false, error: '綠界線上退款尚未串接，請至綠界廠商後台退款' };
 }
 
 // -----------------------------------------------------------------------------
@@ -531,7 +544,8 @@ async function processLinePayPayment(
   options: CreatePaymentOptions
 ): Promise<PaymentResult> {
   try {
-    const orderId = `GN${Date.now()}`;
+    // orderId is the payment id, so the confirm callback can find the payment
+    const orderId = paymentId;
     const requestBody = {
       amount,
       currency: 'TWD',
@@ -547,31 +561,17 @@ async function processLinePayPayment(
         }],
       }],
       redirectUrls: {
-        confirmUrl: options.returnUrl || `${process.env.API_URL}/api/payments/webhook/linepay/confirm`,
+        // Always the backend confirm endpoint: confirming is what captures the
+        // payment. The user is redirected to the frontend after that.
+        confirmUrl: `${process.env.API_URL}/api/payments/webhook/linepay/confirm`,
         cancelUrl: `${process.env.FRONTEND_URL}/payment/cancel`,
       },
     };
 
-    const nonce = crypto.randomUUID();
-    const requestUri = '/v3/payments/request';
-    const signature = generateLinePaySignature(requestUri, JSON.stringify(requestBody), nonce);
-
-    const response = await fetch(`${config.linepay.apiUrl}${requestUri}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-LINE-ChannelId': config.linepay.channelId!,
-        'X-LINE-Authorization-Nonce': nonce,
-        'X-LINE-Authorization': signature,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    const data = await response.json() as {
-      returnCode: string;
-      returnMessage: string;
-      info?: { paymentUrl?: { web?: string }; transactionId?: string };
-    };
+    const data = await linePayRequest<{ paymentUrl?: { web?: string }; transactionId?: string }>(
+      '/v3/payments/request',
+      requestBody,
+    );
 
     if (data.returnCode !== '0000') {
       return { success: false, error: data.returnMessage || 'LINE Pay error' };
@@ -594,19 +594,111 @@ function generateLinePaySignature(uri: string, body: string, nonce: string): str
   return crypto.createHmac('sha256', config.linepay.channelSecret!).update(message).digest('base64');
 }
 
+interface LinePayResponse<T> {
+  returnCode: string;
+  returnMessage: string;
+  info?: T;
+}
+
+/**
+ * Parse a LINE Pay response keeping transaction ids as strings: they are
+ * 19-digit numbers, beyond Number.MAX_SAFE_INTEGER, so JSON.parse would
+ * silently change them.
+ */
+export function parseLinePayJson<T>(text: string): LinePayResponse<T> {
+  return JSON.parse(
+    text.replace(/"(transactionId|refundTransactionId)"\s*:\s*(\d+)/g, '"$1":"$2"'),
+  ) as LinePayResponse<T>;
+}
+
+/** Signed POST to the LINE Pay v3 API (production or sandbox per LINEPAY_API_URL) */
+async function linePayRequest<T>(uri: string, body: unknown): Promise<LinePayResponse<T>> {
+  const json = JSON.stringify(body);
+  const nonce = crypto.randomUUID();
+  const response = await fetch(`${config.linepay.apiUrl}${uri}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-LINE-ChannelId': config.linepay.channelId!,
+      'X-LINE-Authorization-Nonce': nonce,
+      'X-LINE-Authorization': generateLinePaySignature(uri, json, nonce),
+    },
+    body: json,
+  });
+  return parseLinePayJson<T>(await response.text());
+}
+
+export interface LinePayConfirmResult {
+  success: boolean;
+  error?: string;
+  orderId?: string;
+  paidAmount?: number;
+}
+
+/**
+ * Confirm (capture) a LINE Pay payment after the user approved it.
+ * LINE Pay rejects the confirm if `amount` differs from the reserved amount.
+ */
+export async function confirmLinePayPayment(
+  transactionId: string,
+  amount: number,
+): Promise<LinePayConfirmResult> {
+  if (!isGatewayEnabled('linepay')) {
+    return { success: false, error: 'LINE Pay not configured' };
+  }
+  if (!/^\d+$/.test(transactionId)) {
+    return { success: false, error: 'Invalid transaction id' };
+  }
+
+  const data = await linePayRequest<{ orderId?: string; payInfo?: { amount?: number }[] }>(
+    `/v3/payments/${transactionId}/confirm`,
+    { amount, currency: 'TWD' },
+  );
+
+  if (data.returnCode !== '0000') {
+    return { success: false, error: data.returnMessage || `LINE Pay error ${data.returnCode}` };
+  }
+
+  const payInfo = data.info?.payInfo;
+  return {
+    success: true,
+    orderId: data.info?.orderId,
+    paidAmount: payInfo?.length
+      ? payInfo.reduce((total, p) => total + Number(p.amount), 0)
+      : amount,
+  };
+}
+
 async function processLinePayRefund(
   payment: PaymentRefundInfo,
   amount: number,
   reason?: string
 ): Promise<RefundResult> {
-  // LINE Pay refunds require transaction ID stored from original payment
-  console.log(`[PaymentService] LINE Pay refund for payment ${payment.id}, amount: ${amount}, reason: ${reason}`);
+  // The original LINE Pay transaction id is stored in receiptNo by the confirm step
+  const transactionId = payment.receiptNo;
+  if (!transactionId || !/^\d+$/.test(transactionId)) {
+    return { success: false, error: 'LINE Pay transaction id not found for this payment' };
+  }
 
-  return {
-    success: true,
-    refundId: crypto.randomUUID(),
-    amount,
-  };
+  try {
+    const data = await linePayRequest<{ refundTransactionId?: string }>(
+      `/v3/payments/${transactionId}/refund`,
+      { refundAmount: amount },
+    );
+
+    if (data.returnCode !== '0000') {
+      return { success: false, error: data.returnMessage || `LINE Pay refund error ${data.returnCode}` };
+    }
+
+    console.log(`[PaymentService] LINE Pay refund for payment ${payment.id}, amount: ${amount}, reason: ${reason}`);
+    return {
+      success: true,
+      refundId: data.info?.refundTransactionId,
+      amount,
+    };
+  } catch (error) {
+    return { success: false, error: getErrorMessage(error, 'LINE Pay refund error') };
+  }
 }
 
 // -----------------------------------------------------------------------------
