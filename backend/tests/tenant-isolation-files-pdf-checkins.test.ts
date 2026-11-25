@@ -62,6 +62,14 @@ describe('Tenant isolation: files, pdf, check-ins, member issues', () => {
     expect(res.status).toBe(401);
   });
 
+  it('GET /api/files/stats reaches the stats handler, not GET /:id (#108)', async () => {
+    const res = await authRequest('/api/files/stats', { token: authToken });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(typeof body.data.totalFiles).toBe('number');
+  });
+
   it('returns 404 for another tenant contract PDF', async () => {
     const res = await authRequest(`/api/pdf/contracts/${TEST_CONTRACT_B_ID}/pdf`, { token: authToken });
     expect(res.status).toBe(404);
