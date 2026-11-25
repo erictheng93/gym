@@ -11,6 +11,8 @@ import {
   TEST_PLAN_ID,
   TEST_COUNT_PLAN_ID,
   TEST_CONTRACT_B_ID,
+  TEST_MEMBER_B_ID,
+  TEST_PLAN_B_ID,
 } from './helpers.js';
 
 describe('Contracts API', () => {
@@ -118,6 +120,25 @@ describe('Contracts API', () => {
       expect(data.data.memberId).toBe(TEST_MEMBER_ID);
       expect(data.data.contractNo).toBeTruthy(); // Auto-generated
       expect(data.data.status).toBe('DRAFT');
+    });
+
+    it.each([
+      ['member', { memberId: TEST_MEMBER_B_ID, planId: TEST_PLAN_ID }, '會員不存在'],
+      ['plan', { memberId: TEST_MEMBER_ID, planId: TEST_PLAN_B_ID }, '會籍方案不存在'],
+    ])('should 404 when the %s belongs to another tenant', async (_kind, ids, error) => {
+      const response = await authRequest('/api/contracts', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({
+          ...ids,
+          branchId: TEST_BRANCH_ID,
+          startDate: new Date().toISOString().split('T')[0],
+          totalAmount: 3000,
+        }),
+      });
+
+      expect(response.status).toBe(404);
+      expect((await response.json()).error).toBe(error);
     });
 
     it('should validate required fields', async () => {
