@@ -1,114 +1,177 @@
+import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
-import type { Member, Contract } from '~/types/schema'
 import { MESSAGES } from '~/constants'
+import { useMembers } from '~/composables/useMembers'
+
+// =============================================================================
+// Wire format of the staff check-ins API (backend/src/routes/check-ins.ts) and of
+// GET /api/members/:id/contracts (backend/src/routes/members.ts)
+// =============================================================================
+
+export type CheckinMethod = 'QR_CODE' | 'MANUAL' | 'CARD'
+
+export interface CheckinMember {
+  id: string
+  fullName: string
+  memberCode: string
+}
+
+/** GET /api/check-ins item */
+interface ApiCheckinListItem {
+  id: string
+  memberId: string
+  branchId: string
+  contractId: string | null
+  checkInTime: string
+  checkInType: string
+  checkInMethod: string | null
+  member: CheckinMember
+  branch: { id: string; name: string }
+}
+
+/** The contract an entry was recorded against, as POST /api/check-ins returns it */
+export interface CheckinContractSummary {
+  id: string
+  contractNo: string
+  planName: string | null
+  planType: 'TIME_BASED' | 'COUNT_BASED' | null
+  /** sessions left after this entry (null for TIME_BASED) */
+  remainingCounts: number | null
+  /** true when this entry used one session of a COUNT_BASED contract */
+  countDeducted: boolean
+}
+
+/** POST /api/check-ins data (201 for a new entry, 200 with alreadyCheckedIn for a same-day repeat) */
+interface ApiCheckinCreated {
+  id: string
+  memberId: string
+  branchId: string
+  contractId: string | null
+  checkInTime: string
+  member: CheckinMember & { phone?: string; email?: string | null; status?: string }
+  contract?: CheckinContractSummary
+  alreadyCheckedIn?: boolean
+}
+
+/** GET /api/members/:id/contracts item: the contract row with its plan joined */
+interface ApiMemberContract {
+  id: string
+  contractNo: string
+  status: string
+  startDate: string
+  endDate: string
+  remainingCounts: number | null
+  plan: { id: string; name: string; planType: 'TIME_BASED' | 'COUNT_BASED' } | null
+}
 
 export interface CheckinRecord {
   id: string
-  member: Member
+  member: CheckinMember
   time: string
-  contract?: Contract
-  branch_id?: string
-  countDeducted?: boolean
-  remainingCounts?: number | null
+  branchId: string
 }
 
-export interface QrCheckinResult {
-  success: boolean
-  message: string
-  checkin_id?: string
-  member?: {
-    id: string
-    member_code: string
-    full_name: string
-  }
-  contract?: {
-    id: string
-    contract_no: string
-    plan_name?: string
-    plan_type?: string
-    remaining_counts?: number | null
-    end_date?: string
-  }
+export interface CheckinResult {
+  record: CheckinRecord
+  /** the member had already entered this branch today; nothing new was recorded */
+  alreadyCheckedIn: boolean
+  contract: CheckinContractSummary | null
 }
 
-// API response types
-interface CheckInApiResponse {
-  success: boolean
-  data: Array<{
-    id: string
-    memberId: string
-    branchId: string
-    contractId?: string
-    checkInTime: string
-    checkInType: string
-    processedById?: string
-    notes?: string
-    member: {
-      id: string
-      fullName: string
-      memberCode: string
-    }
-    branch: {
-      id: string
-      name: string
-    }
-    processedBy?: {
-      id: string
-      fullName: string
-    }
-  }>
-  pagination: {
-    total: number
-    page: number
-    limit: number
-    totalPages: number
+/** The contract the backend will admit the member on (same rule as POST /api/check-ins) */
+export interface ActiveContract {
+  id: string
+  contractNo: string
+  startDate: string
+  endDate: string
+  remainingCounts: number | null
+  plan: ApiMemberContract['plan']
+  /** COUNT_BASED with no sessions left: the backend refuses entry */
+  exhausted: boolean
+}
+
+export interface QrPayload {
+  memberCode: string
+  timestamp: number
+  contractId?: string
+}
+
+export type QrCheckinResult =
+  | ({ success: true; member: CheckinMember } & CheckinResult)
+  | { success: false; message: string }
+
+/** QR codes from the member app are valid for 30 seconds (GET /api/member/check-in/qr-data) */
+export const QR_VALIDITY_MS = 30_000
+
+/** Backend error text when it is a readable message, otherwise the fallback */
+const errorMessage = (error: unknown, fallback: string) => {
+  const message = error instanceof Error ? error.message : ''
+  return message && !message.startsWith('[object') && !message.startsWith('HTTP ') ? message : fallback
+}
+
+/** YYYY-MM-DD of the local day */
+const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** Today's bounds as ISO timestamps (local day) */
+const getTodayRange = () => {
+  const now = new Date()
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(),
+    end: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
   }
 }
 
-interface ContractApiResponse {
-  success: boolean
-  data: Array<{
-    id: string
-    memberId: string
-    contractNo: string
-    status: string
-    startDate: string
-    endDate: string
-    remainingCounts?: number | null
-    plan?: {
-      id: string
-      name: string
-      planType: string
-    }
-  }>
-  pagination?: {
-    total: number
+/**
+ * Picks the contract POST /api/check-ins would use: ACTIVE, in date, latest end date first.
+ * A COUNT_BASED one with no sessions left is still returned (flagged), so the desk can say why.
+ */
+export const pickActiveContract = (rows: ApiMemberContract[], today = localDate()): ActiveContract | null => {
+  const candidate = rows
+    .filter(c => c.status === 'ACTIVE' && c.startDate <= today && c.endDate >= today)
+    .sort((a, b) => b.endDate.localeCompare(a.endDate))[0]
+  if (!candidate) return null
+  return {
+    id: candidate.id,
+    contractNo: candidate.contractNo,
+    startDate: candidate.startDate,
+    endDate: candidate.endDate,
+    remainingCounts: candidate.remainingCounts ?? null,
+    plan: candidate.plan ?? null,
+    exhausted: candidate.plan?.planType === 'COUNT_BASED' && (candidate.remainingCounts ?? 0) <= 0
   }
 }
+
+/** Parses a member-app QR string: {"m": memberCode, "t": timestamp_ms, "c"?: contractId} */
+export const parseQrPayload = (data: string): QrPayload | null => {
+  try {
+    const parsed = JSON.parse(data)
+    if (!parsed || typeof parsed.m !== 'string' || !parsed.m || !Number.isFinite(Number(parsed.t))) {
+      return null
+    }
+    return {
+      memberCode: parsed.m,
+      timestamp: Number(parsed.t),
+      contractId: typeof parsed.c === 'string' && parsed.c ? parsed.c : undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+export const isQrExpired = (timestamp: number, now = Date.now()) => now - timestamp > QR_VALIDITY_MS || timestamp - now > QR_VALIDITY_MS
 
 const inFlightTodayCheckinsMap = new Map<string, Promise<void>>()
-const inFlightMemberContractMap = new Map<string, Promise<Contract | null>>()
-const inFlightMemberHistoryMap = new Map<string, Promise<any>>()
+const inFlightMemberContractMap = new Map<string, Promise<ActiveContract | null>>()
 const inFlightHasCheckedInMap = new Map<string, Promise<boolean>>()
 
 export const useCheckin = () => {
-  const config = useRuntimeConfig()
-  const apiUrl = config.public.apiBaseUrl || 'http://localhost:8056'
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
+  const { findMemberByCode } = useMembers()
   const todayCheckins = useState<CheckinRecord[]>('today_checkins', () => [])
   const isLoading = useState('checkin_loading', () => false)
   const todayCount = useState('checkin_today_count', () => 0)
-
-  // Get today's date range in ISO format
-  const getTodayRange = () => {
-    const now = new Date()
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-    return {
-      start: startOfDay.toISOString(),
-      end: endOfDay.toISOString()
-    }
-  }
 
   // Fetch today's check-in records
   const fetchTodayCheckins = async (branchId?: string, force = false) => {
@@ -122,36 +185,17 @@ export const useCheckin = () => {
       const { start, end } = getTodayRange()
 
       try {
-        // Build query params for the check-ins API
-        const params = new URLSearchParams()
-        params.append('startDate', start)
-        params.append('endDate', end)
-        params.append('limit', '50')
-        if (branchId) {
-          params.append('branchId', branchId)
-        }
-
-        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-          credentials: 'include'
+        const response = await apiFetch<ApiCheckinListItem[]>('/check-ins', {
+          params: { startDate: start, endDate: end, limit: 50, branchId }
         })
-
-        if (response.success && response.data) {
-          // Map API response to CheckinRecord format
-          todayCheckins.value = response.data.map(checkin => ({
-            id: checkin.id,
-            member: {
-              id: checkin.member.id,
-              full_name: checkin.member.fullName,
-              member_code: checkin.member.memberCode
-            } as Member,
-            time: checkin.checkInTime,
-            branch_id: checkin.branchId
-          }))
-          todayCount.value = response.pagination?.total || response.data.length
-        } else {
-          todayCheckins.value = []
-          todayCount.value = 0
-        }
+        const rows = response.data || []
+        todayCheckins.value = rows.map(row => ({
+          id: row.id,
+          member: row.member,
+          time: row.checkInTime,
+          branchId: row.branchId
+        }))
+        todayCount.value = response.pagination?.total ?? rows.length
       } catch (error) {
         handleError(error, {
           context: 'useCheckin.fetchTodayCheckins',
@@ -169,153 +213,67 @@ export const useCheckin = () => {
     return promise
   }
 
-  // Perform member check-in
+  /** POST /api/check-ins; throws with the backend's reason */
+  const postCheckin = async (options: {
+    memberId: string
+    branchId: string
+    contractId?: string
+    checkInMethod?: CheckinMethod
+  }): Promise<CheckinResult> => {
+    const { memberId, branchId, contractId, checkInMethod = 'MANUAL' } = options
+    const { data } = await apiFetch<ApiCheckinCreated>('/check-ins', {
+      method: 'POST',
+      body: { memberId, branchId, checkInMethod, ...(contractId ? { contractId } : {}) }
+    })
+    if (!data) throw new Error(MESSAGES.ERRORS.CHECKIN)
+
+    const record: CheckinRecord = {
+      id: data.id,
+      member: { id: data.member.id, fullName: data.member.fullName, memberCode: data.member.memberCode },
+      time: data.checkInTime,
+      branchId: data.branchId
+    }
+    const alreadyCheckedIn = data.alreadyCheckedIn === true
+
+    if (!alreadyCheckedIn) {
+      todayCheckins.value = [record, ...todayCheckins.value]
+      todayCount.value++
+    }
+
+    return { record, alreadyCheckedIn, contract: data.contract ?? null }
+  }
+
+  /**
+   * POST /api/check-ins. The backend validates the ACTIVE contract and the sessions left,
+   * deducts one session of a COUNT_BASED contract, and reports what is left.
+   * Returns null after showing the backend's reason (e.g. 會員無有效合約 / 剩餘次數不足).
+   */
   const performCheckin = async (options: {
     memberId: string
-    branchId?: string
+    branchId: string
     contractId?: string
-    verifiedBy?: string
-  }): Promise<CheckinRecord | null> => {
-    const { memberId, branchId, contractId } = options
-
+    checkInMethod?: CheckinMethod
+  }): Promise<CheckinResult | null> => {
     try {
-      // Call the check-ins API directly
-      const response = await $fetch<{
-        success: boolean
-        message?: string
-        data?: {
-          id: string
-          memberId: string
-          branchId: string
-          contractId?: string
-          checkInTime: string
-          member: {
-            id: string
-            fullName: string
-            memberCode: string
-          }
-          alreadyCheckedIn?: boolean
-        }
-        error?: string
-      }>(`${apiUrl}/api/check-ins`, {
-        method: 'POST',
-        credentials: 'include',
-        body: {
-          memberId,
-          branchId,
-          contractId
-        }
-      })
-
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to create checkin record')
-      }
-
-      const result = response.data
-
-      // Check if count was deducted (backend handles this automatically for COUNT_BASED)
-      let countDeducted = false
-      let remainingCounts: number | null = null
-
-      // If we have a contractId, fetch the updated contract to get remaining counts
-      if (contractId) {
-        try {
-          const contractResponse = await $fetch<ContractApiResponse>(`${apiUrl}/api/contracts?id=${contractId}&limit=1`, {
-            credentials: 'include'
-          })
-          if (contractResponse.success && contractResponse.data?.[0]) {
-            const contract = contractResponse.data[0]
-            if (contract.plan?.planType === 'COUNT_BASED') {
-              countDeducted = true
-              remainingCounts = contract.remainingCounts ?? null
-            }
-          }
-        } catch {
-          // Ignore errors fetching contract details
-        }
-      }
-
-      const checkinRecord: CheckinRecord = {
-        id: result.id,
-        member: {
-          id: result.member.id,
-          full_name: result.member.fullName,
-          member_code: result.member.memberCode
-        } as Member,
-        time: result.checkInTime,
-        branch_id: result.branchId,
-        countDeducted,
-        remainingCounts
-      }
-
-      // Add to today's list
-      todayCheckins.value.unshift(checkinRecord)
-      todayCount.value++
-
-      return checkinRecord
+      return await postCheckin(options)
     } catch (error) {
       handleError(error, {
         context: 'useCheckin.performCheckin',
-        customMessage: MESSAGES.ERRORS.CHECKIN
+        customMessage: errorMessage(error, MESSAGES.ERRORS.CHECKIN)
       })
-      throw error
+      return null
     }
   }
 
-  // Get member's active contract for check-in
-  const getMemberActiveContract = async (memberId: string): Promise<Contract | null> => {
+  /** The contract the member would be admitted on, from GET /api/members/:id/contracts */
+  const getMemberActiveContract = async (memberId: string): Promise<ActiveContract | null> => {
     const existing = inFlightMemberContractMap.get(memberId)
     if (existing) return existing
 
     const promise = (async () => {
       try {
-        const today = new Date().toISOString().slice(0, 10) || ''
-        const params = new URLSearchParams()
-        params.append('memberId', memberId)
-        params.append('status', 'ACTIVE')
-        params.append('limit', '1')
-
-        const response = await $fetch<ContractApiResponse>(`${apiUrl}/api/contracts?${params.toString()}`, {
-          credentials: 'include'
-        })
-
-        if (!response.success || !response.data?.length) {
-          return null
-        }
-
-        const contractData = response.data[0]
-        if (!contractData) {
-          return null
-        }
-
-        // Check date validity
-        if (contractData.startDate > today || contractData.endDate < today) {
-          return null
-        }
-
-        // For COUNT_BASED contracts, also check if there are remaining counts
-        if (contractData.plan?.planType === 'COUNT_BASED' &&
-            contractData.remainingCounts !== null &&
-            contractData.remainingCounts !== undefined &&
-            contractData.remainingCounts <= 0) {
-          // No remaining counts - treat as no active contract for check-in
-          return null
-        }
-
-        // Map to Contract format expected by the UI
-        return {
-          id: contractData.id,
-          contract_no: contractData.contractNo,
-          contract_status: contractData.status,
-          start_date: contractData.startDate,
-          end_date: contractData.endDate,
-          remaining_counts: contractData.remainingCounts ?? null,
-          plan: contractData.plan ? {
-            id: contractData.plan.id,
-            name: contractData.plan.name,
-            plan_type: contractData.plan.planType
-          } : undefined
-        } as Contract
+        const { data } = await apiFetch<ApiMemberContract[]>(`/members/${memberId}/contracts`)
+        return pickActiveContract(data || [])
       } catch (error) {
         handleError(error, {
           context: 'useCheckin.getMemberActiveContract',
@@ -331,51 +289,6 @@ export const useCheckin = () => {
     return promise
   }
 
-  // Fetch check-in history for a specific member
-  const fetchMemberCheckinHistory = async (memberId: string, limit = 20) => {
-    const flightKey = `${memberId}_${limit}`
-    const existing = inFlightMemberHistoryMap.get(flightKey)
-    if (existing) return existing
-
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        params.append('memberId', memberId)
-        params.append('limit', String(limit))
-
-        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-          credentials: 'include'
-        })
-
-        if (response.success && response.data) {
-          return response.data.map(checkin => ({
-            id: checkin.id,
-            member_id: checkin.memberId,
-            branch_id: checkin.branchId,
-            check_time: checkin.checkInTime,
-            member: {
-              id: checkin.member.id,
-              full_name: checkin.member.fullName,
-              member_code: checkin.member.memberCode
-            }
-          }))
-        }
-        return []
-      } catch (error) {
-        handleError(error, {
-          context: 'useCheckin.fetchMemberCheckinHistory',
-          showToast: false
-        })
-        return []
-      } finally {
-        inFlightMemberHistoryMap.delete(flightKey)
-      }
-    })()
-
-    inFlightMemberHistoryMap.set(flightKey, promise)
-    return promise
-  }
-
   // Check if member has already checked in today
   const hasCheckedInToday = async (memberId: string, branchId?: string): Promise<boolean> => {
     const flightKey = `${memberId}_${branchId || ''}`
@@ -386,20 +299,10 @@ export const useCheckin = () => {
       const { start, end } = getTodayRange()
 
       try {
-        const params = new URLSearchParams()
-        params.append('memberId', memberId)
-        params.append('startDate', start)
-        params.append('endDate', end)
-        params.append('limit', '1')
-        if (branchId) {
-          params.append('branchId', branchId)
-        }
-
-        const response = await $fetch<CheckInApiResponse>(`${apiUrl}/api/check-ins?${params.toString()}`, {
-          credentials: 'include'
+        const response = await apiFetch<ApiCheckinListItem[]>('/check-ins', {
+          params: { memberId, startDate: start, endDate: end, limit: 1, branchId }
         })
-
-        return response.success && response.pagination ? response.pagination.total > 0 : false
+        return (response.pagination?.total ?? response.data?.length ?? 0) > 0
       } catch (error) {
         handleError(error, {
           context: 'useCheckin.hasCheckedInToday',
@@ -416,85 +319,38 @@ export const useCheckin = () => {
   }
 
   /**
-   * Verify QR code and perform check-in via backend API
-   * This uses the /gym/checkin/qr-verify endpoint which handles:
-   * - QR code validation (30 second expiry)
-   * - Member lookup by member_code
-   * - Contract validation
-   * - Check-in record creation
-   * - Count deduction for COUNT_BASED contracts
+   * Front-desk QR check-in: the member shows the QR from the member app, staff scans it.
+   * The QR only names the member (and optionally a contract), so this looks the member up by
+   * code and records a QR_CODE entry through the same POST /api/check-ins as a manual one.
+   * `branchId` falls back to the member's own branch when the staff account has none.
    */
-  const verifyQrCheckin = async (options: {
-    payload: string | object
-    branchId?: string
-    verifiedBy?: string
-  }): Promise<QrCheckinResult> => {
-    const { payload, branchId, verifiedBy } = options
+  const verifyQrCheckin = async (options: { payload: string; branchId?: string }): Promise<QrCheckinResult> => {
+    const parsed = parseQrPayload(options.payload)
+    if (!parsed) return { success: false, message: '無效的 QR Code 格式' }
+    if (isQrExpired(parsed.timestamp)) {
+      return { success: false, message: 'QR Code 已過期，請會員重新產生入場碼' }
+    }
+
+    const member = await findMemberByCode(parsed.memberCode)
+    if (!member) return { success: false, message: `找不到會員編號：${parsed.memberCode}` }
 
     try {
-      const response = await $fetch<QrCheckinResult>(`${apiUrl}/api/admin/checkin/qr-verify`, {
-        method: 'POST',
-        body: {
-          payload,
-          branch_id: branchId,
-          verified_by: verifiedBy
-        }
+      const result = await postCheckin({
+        memberId: member.id,
+        branchId: options.branchId || member.branchId,
+        contractId: parsed.contractId,
+        checkInMethod: 'QR_CODE'
       })
-
-      if (response.success && response.member) {
-        // Refresh today's checkins
-        await fetchTodayCheckins(branchId)
-      }
-
-      return response
-    } catch (error: unknown) {
-      handleError(error, {
-        context: 'useCheckin.verifyQrCheckin',
-        showToast: false
-      })
-
-      // Handle $fetch error response
-      if (typeof error === 'object' && error !== null && 'data' in error) {
-        const fetchError = error as { data?: { message?: string } }
-        return {
-          success: false,
-          message: fetchError.data?.message || 'QR Code 驗證失敗'
-        }
-      }
-
       return {
-        success: false,
-        message: error instanceof Error ? error.message : 'QR Code 驗證失敗'
+        success: true,
+        member: { id: member.id, fullName: member.fullName, memberCode: member.memberCode },
+        ...result
       }
+    } catch (error) {
+      // The page shows the reason next to the scanner
+      handleError(error, { context: 'useCheckin.verifyQrCheckin', showToast: false })
+      return { success: false, message: errorMessage(error, MESSAGES.ERRORS.CHECKIN) }
     }
-  }
-
-  /**
-   * Parse QR code payload
-   * Expected format: { m: member_code, t: timestamp, c: contract_id }
-   */
-  const parseQrPayload = (data: string): { memberCode: string; timestamp: number; contractId?: string } | null => {
-    try {
-      const parsed = JSON.parse(data)
-      if (!parsed.m || !parsed.t) {
-        return null
-      }
-      return {
-        memberCode: parsed.m,
-        timestamp: Number(parsed.t),
-        contractId: parsed.c || undefined
-      }
-    } catch {
-      return null
-    }
-  }
-
-  /**
-   * Check if QR code is expired (30 seconds validity)
-   */
-  const isQrExpired = (timestamp: number): boolean => {
-    const now = Date.now()
-    return Math.abs(now - timestamp) > 30000
   }
 
   return {
@@ -504,7 +360,6 @@ export const useCheckin = () => {
     fetchTodayCheckins,
     performCheckin,
     getMemberActiveContract,
-    fetchMemberCheckinHistory,
     hasCheckedInToday,
     verifyQrCheckin,
     parseQrPayload,

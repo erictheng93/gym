@@ -1,232 +1,188 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
-import { usePlans } from './usePlans'
+import { usePlans, type ApiPlan, type PlanInput } from './usePlans'
+import { MESSAGES } from '~/constants'
+
+// =============================================================================
+// Fixtures in the exact wire format of backend/src/routes/membership-plans.ts
+// (MEMBERSHIP_PLAN_SELECT + joined branch): camelCase, price as a decimal string
+// =============================================================================
+
+const timePlan: ApiPlan = {
+  id: 'p0000000-0000-4000-8000-000000000001',
+  name: '年卡',
+  code: 'YEAR-12',
+  planType: 'TIME_BASED',
+  description: '一年無限次',
+  durationMonths: 12,
+  classCounts: null,
+  price: '30000.00',
+  allowPause: true,
+  maxPauseDays: 30,
+  allowTransfer: false,
+  isActive: true,
+  sort: null,
+  branchId: null,
+  branch: { id: null, name: null },
+  createdAt: '2026-11-01T02:00:00.000Z',
+  updatedAt: null
+}
+
+const countPlan: ApiPlan = {
+  ...timePlan,
+  id: 'p0000000-0000-4000-8000-000000000002',
+  name: '十堂課',
+  code: 'PT-10',
+  planType: 'COUNT_BASED',
+  durationMonths: 3,
+  classCounts: 10,
+  price: '5000.00',
+  isActive: false
+}
+
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
 
 describe('usePlans', () => {
-  beforeEach(() => {
-    // mocks are automatically cleared in vitest.setup.ts
+  afterEach(() => {
+    mockFetchInstance.apiFetch.mockReset()
   })
 
-  describe('初始化狀態', () => {
-    it('應該初始化所有狀態為預設值', () => {
-      const { plans, isLoading } = usePlans()
-
-      expect(plans.value).toEqual([])
-      expect(isLoading.value).toBe(false)
-    })
+  it('initial state is empty', () => {
+    const { plans, isLoading } = usePlans()
+    expect(plans.value).toEqual([])
+    expect(isLoading.value).toBe(false)
   })
 
   describe('fetchPlans', () => {
-    it('應該成功取得方案列表', async () => {
-      const mockPlans = [
-        {
-          id: 'plan-1',
-          name: '月會員',
-          plan_type: 'TIME_BASED',
-          price: 2000
-        },
-        {
-          id: 'plan-2',
-          name: '年會員',
-          plan_type: 'TIME_BASED',
-          price: 20000
-        }
-      ]
+    it('GET /membership-plans and keeps camelCase rows with the price as a number', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [timePlan, countPlan] })
+      const { fetchPlans, plans, isLoading } = usePlans()
 
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockPlans, total: 2 })
+      await fetchPlans({}, true)
 
-      const { fetchPlans, plans } = usePlans()
-      await fetchPlans()
-
-      expect(plans.value).toEqual(mockPlans)
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.any(Object))
-    })
-
-    it('應該支援狀態過濾', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchPlans } = usePlans()
-      await fetchPlans({ status: 'active' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
-        filter: { status: 'active' }
-      }))
-    })
-
-    it('應該支援方案類型過濾', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchPlans } = usePlans()
-      await fetchPlans({ planType: 'TIME_BASED' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
-        filter: { plan_type: 'TIME_BASED' }
-      }))
-    })
-
-    it('應該忽略空字串的過濾條件', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchPlans } = usePlans()
-      await fetchPlans({ status: '', planType: '' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
-        filter: {}
-      }))
-    })
-
-    it('應該同時支援多個過濾條件', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchPlans } = usePlans()
-      await fetchPlans({ status: 'active', planType: 'COUNT_BASED' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
-        filter: { status: 'active', plan_type: 'COUNT_BASED' }
-      }))
-    })
-
-    it('應該按價格排序', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchPlans } = usePlans()
-      await fetchPlans()
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('membership-plans', expect.objectContaining({
-        sort: 'price'
-      }))
-    })
-
-    it('應該處理取得失敗', async () => {
-      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
-
-      const { fetchPlans, isLoading, plans } = usePlans()
-      await fetchPlans()
-
+      expect(lastCall()).toEqual(['/membership-plans', { params: {} }])
+      expect(plans.value[0]).toMatchObject({ name: '年卡', planType: 'TIME_BASED', durationMonths: 12, price: 30000, isActive: true })
+      expect(plans.value[1]).toMatchObject({ planType: 'COUNT_BASED', classCounts: 10, price: 5000, isActive: false })
       expect(isLoading.value).toBe(false)
-      expect(plans.value).toEqual([])
-      expect(mockHandleError).toHaveBeenCalled()
     })
 
-    it('應該在載入時設定 isLoading', async () => {
-      let isLoadingDuringFetch = false
-      mockFetchInstance.readItems.mockImplementation(() => {
-        const { isLoading } = usePlans()
-        isLoadingDuringFetch = isLoading.value
-        return Promise.resolve({ data: [], total: 0 })
-      })
-
+    it('sends the filters under the names the handler reads (planType / branchId / activeOnly)', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
       const { fetchPlans } = usePlans()
-      await fetchPlans()
 
-      expect(isLoadingDuringFetch).toBe(true)
+      await fetchPlans({ planType: 'COUNT_BASED', branchId: 'b-1', activeOnly: true }, true)
+
+      const params = lastCall()[1].params
+      expect(params).toEqual({ planType: 'COUNT_BASED', branchId: 'b-1', activeOnly: 'true' })
+      expect(Object.keys(params)).not.toContain('plan_type')
+    })
+
+    it('clears the list and reports the error on failure', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('boom'))
+      const { fetchPlans, plans } = usePlans()
+      plans.value = [{ ...timePlan, price: 1 }]
+
+      await fetchPlans({}, true)
+
+      expect(plans.value).toEqual([])
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ context: 'usePlans.fetchPlans' }))
+    })
+
+    it('deduplicates concurrent identical requests', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValue({ success: true, data: [] })
+      const { fetchPlans } = usePlans()
+
+      await Promise.all([fetchPlans({ activeOnly: true }), fetchPlans({ activeOnly: true })])
+
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('getPlan', () => {
-    it('應該成功取得單一方案資訊', async () => {
-      const mockPlan = {
-        id: 'plan-1',
-        name: '月會員',
-        plan_type: 'TIME_BASED',
-        duration_months: 1,
-        price: 2000
-      }
-
-      mockFetchInstance.readItem.mockResolvedValueOnce(mockPlan)
-
+    it('GET /membership-plans/:id', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: countPlan })
       const { getPlan } = usePlans()
-      const result = await getPlan('plan-1')
 
-      expect(result).toEqual(mockPlan)
-      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('membership-plans', 'plan-1')
+      const result = await getPlan(countPlan.id)
+
+      expect(lastCall()).toEqual([`/membership-plans/${countPlan.id}`])
+      expect(result).toMatchObject({ code: 'PT-10', classCounts: 10, price: 5000 })
     })
 
-    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
-      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Plan not found'))
-
+    it('returns null and shows the backend reason on 404', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('方案不存在'))
       const { getPlan } = usePlans()
-      const result = await getPlan('invalid-id')
 
-      expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(await getPlan('missing')).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ customMessage: '方案不存在' }))
     })
   })
 
-  describe('createPlan', () => {
-    it('應該成功建立方案', async () => {
-      const newPlan = {
-        name: '季會員',
-        plan_type: 'TIME_BASED' as const,
-        duration_months: 3,
-        price: 5000
-      }
+  describe('createPlan / updatePlan', () => {
+    const input: PlanInput = {
+      name: '年卡',
+      code: 'YEAR-12',
+      planType: 'TIME_BASED',
+      durationMonths: 12,
+      price: 30000,
+      description: '',
+      allowTransfer: false,
+      allowPause: true,
+      isActive: true
+    }
 
-      const createdPlan = { id: 'plan-3', ...newPlan }
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdPlan)
-
+    it('POSTs the body as given and returns the normalized plan', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: timePlan })
       const { createPlan } = usePlans()
-      const result = await createPlan(newPlan)
 
-      expect(result).toEqual(createdPlan)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('membership-plans', newPlan)
+      const result = await createPlan(input)
+
+      expect(lastCall()).toEqual(['/membership-plans', { method: 'POST', body: input }])
+      expect(result).toMatchObject({ id: timePlan.id, price: 30000 })
     })
 
-    it('應該在建立失敗時返回 null 並呼叫 handleError', async () => {
-      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
-
+    it('returns null and surfaces the backend reason on a 400', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('時間制方案需要設定月數'))
       const { createPlan } = usePlans()
-      const result = await createPlan({ name: 'Test' })
 
-      expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalled()
-    })
-  })
-
-  describe('updatePlan', () => {
-    it('應該成功更新方案', async () => {
-      const updates = { price: 2500 }
-      const updatedPlan = { id: 'plan-1', name: '月會員', ...updates }
-
-      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedPlan)
-
-      const { updatePlan } = usePlans()
-      const result = await updatePlan('plan-1', updates)
-
-      expect(result).toEqual(updatedPlan)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('membership-plans', 'plan-1', updates)
+      expect(await createPlan(input)).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ customMessage: '時間制方案需要設定月數' }))
     })
 
-    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
-      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
-
+    it('PATCHes only the fields given', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { ...timePlan, isActive: false } })
       const { updatePlan } = usePlans()
-      const result = await updatePlan('plan-1', { price: 2500 })
 
-      expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalled()
+      const result = await updatePlan(timePlan.id, { isActive: false })
+
+      expect(lastCall()).toEqual([`/membership-plans/${timePlan.id}`, { method: 'PATCH', body: { isActive: false } }])
+      expect(result).toMatchObject({ isActive: false })
+    })
+
+    it('returns null (not the stale form) when the PATCH fails', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 403'))
+      const { updatePlan } = usePlans()
+
+      expect(await updatePlan(timePlan.id, { name: 'x' })).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ customMessage: MESSAGES.ERRORS.PLAN_UPDATE_FAILED }))
     })
   })
 
   describe('deletePlan', () => {
-    it('應該成功刪除方案', async () => {
-      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
-
+    it('DELETE /membership-plans/:id and returns true', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '方案已停用' })
       const { deletePlan } = usePlans()
-      const result = await deletePlan('plan-1')
 
-      expect(result).toBe(true)
-      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('membership-plans', 'plan-1')
+      expect(await deletePlan(timePlan.id)).toBe(true)
+      expect(lastCall()).toEqual([`/membership-plans/${timePlan.id}`, { method: 'DELETE' }])
     })
 
-    it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
-      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
-
+    it('returns false on failure', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
       const { deletePlan } = usePlans()
-      const result = await deletePlan('plan-1')
 
-      expect(result).toBe(false)
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(await deletePlan(timePlan.id)).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledTimes(1)
     })
   })
 })

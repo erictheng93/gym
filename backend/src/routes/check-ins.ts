@@ -93,9 +93,11 @@ const CHECK_IN_MEMBER_SELECT = {
 const CHECK_IN_ACTIVE_CONTRACT_SELECT = {
   contract: {
     id: contracts.id,
+    contractNo: contracts.contractNo,
     remainingCounts: contracts.remainingCounts,
   },
   plan: {
+    name: membershipPlans.name,
     planType: membershipPlans.planType,
   },
 };
@@ -122,6 +124,7 @@ const createCheckInSchema = z.object({
   branchId: z.string().uuid(),
   contractId: z.string().uuid().optional(),
   checkInType: z.enum(['ENTRY', 'CLASS', 'FACILITY']).optional().default('ENTRY'),
+  checkInMethod: z.enum(['QR_CODE', 'MANUAL', 'CARD']).optional().default('MANUAL'),
   notes: z.string().optional(),
 });
 
@@ -299,6 +302,17 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     }, 400);
   }
 
+  // The contract the entry was (or would be) recorded against, so the front desk can tell the
+  // member what is left without a second lookup
+  const contractSummary = (remainingCounts: number | null) => ({
+    id: activeContract.id,
+    contractNo: activeContract.contractNo,
+    planName: activePlan?.name ?? null,
+    planType: activePlan?.planType ?? null,
+    remainingCounts,
+    countDeducted: false,
+  });
+
   if (existingCheckIn) {
     return c.json({
       success: true,
@@ -306,6 +320,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       data: {
         ...existingCheckIn,
         member,
+        contract: contractSummary(activeContract.remainingCounts),
         alreadyCheckedIn: true,
       },
     });
@@ -320,25 +335,33 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     }, 400);
   }
 
-  const newCheckIn = await db.transaction(async (tx) => {
+  const { entry: newCheckIn, contract } = await db.transaction(async (tx) => {
     const [entry] = await tx.insert(checkIns).values({
       memberId: data.memberId,
       branchId: data.branchId,
       contractId: activeContract.id,
       checkInType: data.checkInType,
+      checkInMethod: data.checkInMethod,
       checkInTime: new Date(),
       processedById: user.employeeId,
       notes: data.notes,
     }).returning(CHECK_IN_RETURNING);
     if (activePlan?.planType === 'COUNT_BASED') {
-      await tx.update(contracts)
+      const [deducted] = await tx.update(contracts)
         .set({
           remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,
           updatedAt: new Date(),
         })
-        .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)));
+        .where(and(eq(contracts.id, activeContract.id), gt(contracts.remainingCounts, 0)))
+        .returning({ remainingCounts: contracts.remainingCounts });
+      return {
+        entry,
+        contract: deducted
+          ? { ...contractSummary(deducted.remainingCounts), countDeducted: true }
+          : contractSummary(activeContract.remainingCounts),
+      };
     }
-    return entry;
+    return { entry, contract: contractSummary(activeContract.remainingCounts) };
   });
 
   return c.json({
@@ -347,6 +370,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     data: {
       ...newCheckIn,
       member,
+      contract,
     },
   }, 201);
 });

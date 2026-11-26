@@ -21,9 +21,11 @@ vi.stubGlobal('usePlans', () => ({ createPlan: mockCreatePlan }))
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 vi.stubGlobal('useToast', () => toast)
 
-// Real Zod validation (useZodFormValidation + createPlanSchema) and real useFormSubmit are used.
+// Real Zod validation (useZodFormValidation + createPlanSchema), the real form -> API mapping
+// (planFormToInput) and real useFormSubmit are used.
 
-const nameInput = (w: VueWrapper) => w.find('input[type="text"]')
+const nameInput = (w: VueWrapper) => w.find(`input[placeholder="${PAGES.PLANS.PLAN_NAME_PLACEHOLDER}"]`)
+const codeInput = (w: VueWrapper) => w.find(`input[placeholder="${PAGES.PLANS.PLAN_CODE_PLACEHOLDER}"]`)
 const numberInputs = (w: VueWrapper) => w.findAll('input[type="number"]')
 const errorTexts = (w: VueWrapper) => w.findAll('.error-text').map(e => e.text())
 
@@ -38,25 +40,28 @@ describe('plans/new.vue', () => {
     mockCreatePlan.mockResolvedValue({ id: 'plan-1' })
   })
 
-  it('creates a TIME_BASED plan with duration and no class count, then navigates to /plans', async () => {
+  it('creates a TIME_BASED plan in the POST /membership-plans body shape, then navigates to /plans', async () => {
     const wrapper = mount(PlansNew)
     await nameInput(wrapper).setValue('  半年方案  ')
+    await codeInput(wrapper).setValue(' HALF-6 ')
     const [price, duration] = numberInputs(wrapper)
     await price!.setValue(12000)
     await duration!.setValue(6)
     await wrapper.find('textarea').setValue('   ')
     await submit(wrapper)
 
+    // exactly the backend zod schema: camelCase, required code + planType, isActive flag,
+    // and no classCounts at all (the backend field is optional, not nullable)
     expect(mockCreatePlan).toHaveBeenCalledWith({
       name: '半年方案',
-      plan_type: 'TIME_BASED',
+      code: 'HALF-6',
+      planType: 'TIME_BASED',
       price: 12000,
-      duration_months: 6,
-      class_counts: null,
-      allow_transfer: false,
-      allow_pause: true,
-      description: null,
-      status: 'active'
+      durationMonths: 6,
+      description: '',
+      allowTransfer: false,
+      allowPause: true,
+      isActive: true
     })
     expect(toast.success).toHaveBeenCalledWith(MESSAGES.SUCCESS.PLAN_CREATED)
     expect(mockPush).toHaveBeenCalledWith('/plans')
@@ -69,18 +74,38 @@ describe('plans/new.vue', () => {
     expect(wrapper.text()).not.toContain(PAGES.PLANS.DURATION_MONTHS)
 
     await nameInput(wrapper).setValue('十堂課')
+    await codeInput(wrapper).setValue('PT-10')
     const [price, counts] = numberInputs(wrapper)
     await price!.setValue(5000)
     await counts!.setValue(20)
-    await wrapper.findAll('input[type="checkbox"]')[0]!.setValue(true) // allow_transfer
+    await wrapper.findAll('input[type="checkbox"]')[0]!.setValue(true) // allow transfer
     await submit(wrapper)
 
-    expect(mockCreatePlan).toHaveBeenCalledWith(expect.objectContaining({
-      plan_type: 'COUNT_BASED',
-      duration_months: null,
-      class_counts: 20,
-      allow_transfer: true
-    }))
+    const body = mockCreatePlan.mock.calls[0]![0]
+    expect(body).toMatchObject({ planType: 'COUNT_BASED', classCounts: 20, allowTransfer: true })
+    expect(body).not.toHaveProperty('durationMonths')
+    expect(Object.keys(body).some(k => k.includes('_'))).toBe(false)
+  })
+
+  it('sends isActive=false for a plan created as disabled', async () => {
+    const wrapper = mount(PlansNew)
+    await nameInput(wrapper).setValue('舊方案')
+    await codeInput(wrapper).setValue('OLD')
+    await numberInputs(wrapper)[0]!.setValue(1000)
+    await wrapper.find('input[type="radio"][value="archived"]').setValue(true)
+    await submit(wrapper)
+
+    expect(mockCreatePlan).toHaveBeenCalledWith(expect.objectContaining({ isActive: false }))
+  })
+
+  it('requires a plan code (the backend rejects a plan without one)', async () => {
+    const wrapper = mount(PlansNew)
+    await nameInput(wrapper).setValue('月卡')
+    await numberInputs(wrapper)[0]!.setValue(1000)
+    await submit(wrapper)
+
+    expect(mockCreatePlan).not.toHaveBeenCalled()
+    expect(errorTexts(wrapper)).toContain(PAGES.PLANS.ERROR_CODE_REQUIRED)
   })
 
   it('shows Zod validation errors and does not submit an invalid form', async () => {
@@ -98,6 +123,7 @@ describe('plans/new.vue', () => {
   it('rejects a TIME_BASED plan without a positive duration', async () => {
     const wrapper = mount(PlansNew)
     await nameInput(wrapper).setValue('月卡')
+    await codeInput(wrapper).setValue('M1')
     const [price, duration] = numberInputs(wrapper)
     await price!.setValue(1000)
     await duration!.setValue(0)
@@ -107,15 +133,17 @@ describe('plans/new.vue', () => {
     expect(errorTexts(wrapper).length).toBeGreaterThan(0)
   })
 
-  it('shows an error and stays on the page when the API returns nothing', async () => {
+  it('stays on the page without a success toast when createPlan fails', async () => {
+    // createPlan resolves null after it has already shown the backend's reason
     mockCreatePlan.mockResolvedValue(null)
     const wrapper = mount(PlansNew)
     await nameInput(wrapper).setValue('月卡')
+    await codeInput(wrapper).setValue('M1')
     await numberInputs(wrapper)[0]!.setValue(1000)
     await submit(wrapper)
 
     expect(wrapper.find('.submit-error').text()).toBe(PAGES.PLANS.ERROR_CREATE_FAILED)
-    expect(toast.error).toHaveBeenCalledWith(MESSAGES.ERRORS.PLAN_CREATE_FAILED)
+    expect(toast.success).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()
   })
 
@@ -125,7 +153,7 @@ describe('plans/new.vue', () => {
 
     await nameInput(wrapper).setValue('年卡')
     await numberInputs(wrapper)[0]!.setValue(30000)
-    await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(false) // allow_pause
+    await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(false) // allow pause
 
     expect(wrapper.find('.preview-name').text()).toBe('年卡')
     expect(wrapper.find('.preview-price').text()).toBe('NT$ 30,000')

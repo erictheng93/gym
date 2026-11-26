@@ -3,7 +3,9 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { computed, defineComponent, h, onMounted, watch } from 'vue'
 import ContractNew from './new.vue'
 import { MESSAGES, PAGES } from '~/constants'
-import type { Member, MembershipPlan, Branch } from '~/types/schema'
+import type { Branch } from '~/types/schema'
+import type { ApiMember } from '~/composables/useMembers'
+import type { Plan } from '~/composables/usePlans'
 
 // vitest.setup.ts replaces computed/watch/onMounted with inert fakes for composable tests;
 // a page test needs Vue's real reactivity.
@@ -22,8 +24,8 @@ const mockCreateContract = vi.fn()
 const mockFetchMembers = vi.fn()
 const mockFetchPlans = vi.fn()
 const mockFetchBranches = vi.fn()
-const mockMembers = ref<Partial<Member>[]>([])
-const mockPlans = ref<Partial<MembershipPlan>[]>([])
+const mockMembers = ref<Partial<ApiMember>[]>([])
+const mockPlans = ref<Partial<Plan>[]>([])
 const mockBranches = ref<Partial<Branch>[]>([])
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 
@@ -81,13 +83,13 @@ describe('contracts/new.vue', () => {
     vi.setSystemTime(new Date('2024-11-15T10:00:00Z'))
     mockRoute.query = {}
     mockMembers.value = [
-      { id: 'member-1', full_name: '張三', member_code: 'M001' },
-      { id: 'member-2', full_name: '李四', member_code: 'M002' }
+      { id: 'member-1', fullName: '張三', memberCode: 'M001' },
+      { id: 'member-2', fullName: '李四', memberCode: 'M002' }
     ]
     mockPlans.value = [
-      { id: 'plan-year', name: '年卡方案', price: 30000, plan_type: 'TIME_BASED', duration_months: 12, allow_pause: true, allow_transfer: true },
-      { id: 'plan-month', name: '月卡方案', price: 3000, plan_type: 'TIME_BASED', duration_months: 1, allow_pause: false, allow_transfer: false },
-      { id: 'plan-count', name: '計次方案', price: 5000, plan_type: 'COUNT_BASED', class_counts: 10, allow_pause: false, allow_transfer: false }
+      { id: 'plan-year', name: '年卡方案', price: 30000, planType: 'TIME_BASED', durationMonths: 12, allowPause: true, allowTransfer: true },
+      { id: 'plan-month', name: '月卡方案', price: 3000, planType: 'TIME_BASED', durationMonths: 1, allowPause: false, allowTransfer: false },
+      { id: 'plan-count', name: '計次方案', price: 5000, planType: 'COUNT_BASED', classCounts: 10, allowPause: false, allowTransfer: false }
     ]
     mockBranches.value = [
       { id: 'branch-1', name: '總店' },
@@ -111,7 +113,8 @@ describe('contracts/new.vue', () => {
       await flushPromises()
 
       expect(mockFetchMembers).toHaveBeenCalledWith({ limit: 100 })
-      expect(mockFetchPlans).toHaveBeenCalled()
+      // only plans that can still be sold
+      expect(mockFetchPlans).toHaveBeenCalledWith({ activeOnly: true })
       expect(mockFetchBranches).toHaveBeenCalled()
       expect(wrapper.find('.loading-container').exists()).toBe(false)
       expect(wrapper.text()).toContain(PAGES.CONTRACTS.SELECT_MEMBER_PLAN)
@@ -242,8 +245,8 @@ describe('contracts/new.vue', () => {
       expect(mockPush).toHaveBeenCalledWith('/contracts/contract-1')
     })
 
-    it('sends the plan price as a number even when the plan API returns a decimal string', async () => {
-      mockPlans.value = [{ id: 'plan-count', name: '計次方案', price: '5000.00' as unknown as number, plan_type: 'COUNT_BASED', class_counts: 10 }]
+    it('sends a camelCase body for a COUNT_BASED plan', async () => {
+      mockPlans.value = [{ id: 'plan-count', name: '計次方案', price: 5000, planType: 'COUNT_BASED', classCounts: 10 }]
       const wrapper = await mountPage()
       await goToStep3(wrapper, 'plan-count')
       wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)

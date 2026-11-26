@@ -233,6 +233,36 @@ describe('Check-ins API', () => {
       expect(await remainingCounts(contract.id)).toBe(9);
     });
 
+    it('returns the sessions left after the deduction and records the check-in method', async () => {
+      const { member, contract } = await memberWithContract({ remainingCounts: 5 });
+
+      const response = await checkIn(member.id, { checkInMethod: 'QR_CODE' });
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      expect(body.data.contract).toMatchObject({
+        id: contract.id,
+        contractNo: contract.contractNo,
+        planType: 'COUNT_BASED',
+        remainingCounts: 4,
+        countDeducted: true,
+      });
+      const [row] = await db.select().from(checkIns).where(eq(checkIns.id, body.data.id));
+      expect(row.checkInMethod).toBe('QR_CODE');
+
+      const repeat = await (await checkIn(member.id)).json();
+      expect(repeat.data.alreadyCheckedIn).toBe(true);
+      expect(repeat.data.contract).toMatchObject({ remainingCounts: 4, countDeducted: false });
+    });
+
+    it('defaults the check-in method to MANUAL and reports no deduction for TIME_BASED', async () => {
+      const { member } = await memberWithContract({ planId: TEST_PLAN_ID, remainingCounts: null });
+
+      const body = await (await checkIn(member.id)).json();
+      expect(body.data.contract).toMatchObject({ planType: 'TIME_BASED', remainingCounts: null, countDeducted: false });
+      const [row] = await db.select().from(checkIns).where(eq(checkIns.id, body.data.id));
+      expect(row.checkInMethod).toBe('MANUAL');
+    });
+
     it('does not touch remainingCounts of a TIME_BASED contract', async () => {
       const { member, contract } = await memberWithContract({ planId: TEST_PLAN_ID, remainingCounts: null });
 

@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import { VALIDATION } from '~/constants'
+import type { ApiMember, MemberGender, MemberInput } from '~/composables/useMembers'
 
 // 電話驗證正則表達式
 const phoneRegex = /^[0-9]{8,15}$/
@@ -11,8 +12,8 @@ const phoneRegex = /^[0-9]{8,15}$/
 // UUID 驗證正則表達式 (Zod v4 compatible)
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// 會員狀態枚舉
-export const MemberStatusEnum = z.enum(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'BANNED', 'INACTIVE'])
+// 會員狀態枚舉（與後端 members.ts 相同）
+export const MemberStatusEnum = z.enum(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'BANNED'])
 
 // 性別枚舉
 export const GenderEnum = z.enum(['M', 'F', 'O'])
@@ -124,3 +125,51 @@ export type MemberBase = z.infer<typeof memberBaseSchema>
 export type CreateMemberInput = z.infer<typeof createMemberSchema>
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>
 export type MemberFilter = z.infer<typeof memberFilterSchema>
+
+// =============================================================================
+// Form <-> API mapping. The form keeps short gender codes (M/F/O) and snake_case keys;
+// the API takes and returns camelCase with MALE/FEMALE/OTHER.
+// =============================================================================
+
+type FormGender = z.infer<typeof GenderEnum>
+
+const GENDER_TO_API: Record<FormGender, MemberGender> = { M: 'MALE', F: 'FEMALE', O: 'OTHER' }
+const GENDER_FROM_API: Record<MemberGender, FormGender> = { MALE: 'M', FEMALE: 'F', OTHER: 'O' }
+
+const orNull = (value: string | null | undefined) => {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+/**
+ * Body for POST/PATCH /api/members. Empty optional fields are sent as null so an edit can
+ * clear them (the backend accepts null for every optional field it stores).
+ */
+export const memberFormToInput = (form: UpdateMemberInput): MemberInput => ({
+  fullName: form.full_name.trim(),
+  phone: form.phone.trim(),
+  branchId: form.branch_id || '',
+  email: orNull(form.email),
+  gender: form.gender ? GENDER_TO_API[form.gender] : null,
+  birthday: orNull(form.birthday),
+  height: form.height || null,
+  emergencyContact: orNull(form.emergency_contact),
+  emergencyPhone: orNull(form.emergency_phone),
+  tags: form.tags || [],
+  ...(form.member_status ? { status: form.member_status } : {})
+})
+
+/** Edit-form values from a member as GET /api/members/:id returns it */
+export const memberToForm = (member: ApiMember): UpdateMemberInput => ({
+  full_name: member.fullName || '',
+  phone: member.phone || '',
+  email: member.email || '',
+  gender: member.gender ? GENDER_FROM_API[member.gender] ?? null : null,
+  birthday: member.birthday || '',
+  height: member.height ?? null,
+  branch_id: member.branchId || null,
+  emergency_contact: member.emergencyContact || '',
+  emergency_phone: member.emergencyPhone || null,
+  tags: member.tags || [],
+  member_status: member.status || 'ACTIVE'
+})

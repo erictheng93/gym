@@ -33,13 +33,14 @@ const statusOptions = [
  * 使用 DataList 組件，卡片式呈現
  */
 import { PAGES, PAGINATION, TIMING } from '~/constants'
+import type { MemberStatus } from '~/composables/useMembers'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 // Data fetching
-const { members, totalCount, isLoading, fetchMembers, updateMember, deleteMember } = useMembers()
+const { members, totalCount, isLoading, fetchMembers, updateMembersStatus, deleteMember } = useMembers()
 const { branches, fetchBranches } = useBranches()
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -47,7 +48,7 @@ const { confirm } = useConfirm()
 // Filter state
 const search = ref('')
 const selectedBranch = ref('')
-const selectedStatus = ref('')
+const selectedStatus = ref<MemberStatus | ''>('')
 const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
 
@@ -118,7 +119,14 @@ const handleRowClick = (member: typeof members.value[0]) => {
 }
 
 // Batch action handlers
-const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED' | 'INACTIVE') => {
+/** Toasts how many of a batch went through, by what actually succeeded */
+const reportBatch = (done: number, failed: number, success: string, failure: string) => {
+  if (done > 0) toast.success(success.replace('{n}', String(done)))
+  if (failed > 0) toast.error(failure.replace('{n}', String(failed)))
+}
+
+// PATCH /members/:id { status } per selected member (the backend has no bulk route)
+const handleBatchStatusUpdate = async (status: MemberStatus) => {
   if (selectedIds.value.length === 0) return
 
   const confirmed = await confirm({
@@ -130,40 +138,30 @@ const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED
 
   if (!confirmed) return
 
-  try {
-    await Promise.all(
-      selectedIds.value.map(id => updateMember(id, { member_status: status }))
-    )
-    toast.success(`成功更新 ${selectedIds.value.length} 位會員狀態`)
-    selectedIds.value = []
-    await loadMembers()
-  } catch (error) {
-    console.error('Failed to batch update:', error)
-    toast.error('批量更新失敗')
-  }
+  const { updated, failed } = await updateMembersStatus(selectedIds.value, status)
+  reportBatch(updated, failed, `已將 {n} 位會員設為「${BATCH_STATUS_LABELS[status] || status}」`, '{n} 位會員狀態更新失敗')
+  selectedIds.value = []
+  await loadMembers()
 }
 
+// DELETE /members/:id archives each member (status SUSPENDED); nothing is removed
 const handleBatchDelete = async () => {
   if (selectedIds.value.length === 0) return
 
   const confirmed = await confirm({
-    title: '批量刪除',
-    message: `確定要刪除 ${selectedIds.value.length} 位會員嗎？此操作無法復原。`,
-    confirmText: '確定刪除',
+    title: '批量封存',
+    message: `確定要封存 ${selectedIds.value.length} 位會員嗎？會員狀態將改為暫停，資料與合約紀錄會保留。`,
+    confirmText: '確定封存',
     confirmVariant: 'danger'
   })
 
   if (!confirmed) return
 
-  try {
-    await Promise.all(selectedIds.value.map(id => deleteMember(id)))
-    toast.success(`成功刪除 ${selectedIds.value.length} 位會員`)
-    selectedIds.value = []
-    await loadMembers()
-  } catch (error) {
-    console.error('Failed to batch delete:', error)
-    toast.error('批量刪除失敗，部分會員可能有關聯合約')
-  }
+  const results = await Promise.all(selectedIds.value.map(id => deleteMember(id, { showToast: false })))
+  const archived = results.filter(Boolean).length
+  reportBatch(archived, results.length - archived, '已封存 {n} 位會員', '{n} 位會員封存失敗')
+  selectedIds.value = []
+  await loadMembers()
 }
 
 const handleExportSelected = () => {
@@ -304,7 +302,7 @@ const getBranchName = (branchId: string | null | undefined) => {
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
             </svg>
-            刪除
+            封存
           </button>
         </div>
       </div>

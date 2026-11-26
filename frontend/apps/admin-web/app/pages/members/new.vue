@@ -15,7 +15,7 @@ const genderOptions = [
  * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
 import { MESSAGES, PAGES } from '~/constants'
-import { createMemberSchema, type CreateMemberInput } from '~/schemas/member.schema'
+import { createMemberSchema, memberFormToInput, type CreateMemberInput } from '~/schemas/member.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
 
@@ -82,28 +82,6 @@ onMounted(async () => {
   }
 })
 
-// Transform snake_case to camelCase for API
-const transformToCamelCase = (data: typeof form) => {
-  // Map frontend field names (snake_case) to backend field names (camelCase)
-  const genderMap: Record<string, 'MALE' | 'FEMALE' | 'OTHER'> = {
-    M: 'MALE',
-    F: 'FEMALE',
-    O: 'OTHER'
-  }
-
-  return {
-    fullName: data.full_name,
-    phone: data.phone || '',
-    email: data.email || null,
-    gender: data.gender ? genderMap[data.gender] : null,
-    birthday: data.birthday || null,
-    branchId: data.branch_id,
-    emergencyContact: data.emergency_contact || null,
-    emergencyPhone: data.emergency_phone || null,
-    tags: data.tags || [],
-    joinDate: new Date().toISOString().slice(0, 10)
-  }
-}
 
 // Form submission
 const handleSubmit = async () => {
@@ -121,9 +99,11 @@ const handleSubmit = async () => {
 
   await submit(
     async () => {
-      const memberData = transformToCamelCase(form)
-
-      const result = await createMember(memberData)
+      const result = await createMember({
+        ...memberFormToInput(form),
+        joinDate: new Date().toISOString().slice(0, 10)
+      })
+      // createMember already showed the backend's reason
       if (!result) {
         throw new Error(MESSAGES.ERRORS.MEMBER_CREATE_FAILED)
       }
@@ -131,7 +111,7 @@ const handleSubmit = async () => {
     },
     {
       successMessage: MESSAGES.SUCCESS.MEMBER_CREATED,
-      errorMessage: MESSAGES.ERRORS.MEMBER_CREATE_FAILED,
+      showErrorToast: false,
       onSuccess: async () => { await router.push('/members') },
       onError: (error) => setError('submit', error.message)
     }

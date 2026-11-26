@@ -39,16 +39,19 @@ const ATTENDANCE_STATUS_LABEL_MAP: Record<string, string> = {
 </script>
 
 <script setup lang="ts">
-import { MESSAGES, PAGES } from '~/constants'
+import { MESSAGES, PAGES, TIMING } from '~/constants'
 import type { VerificationMethod } from '~/components/VerificationMethodSelector.vue'
 import { useAttendance } from '~/composables/hr/useAttendance'
 import { apiErrorMessage } from '~/utils/api-error'
+import type { ApiMember } from '~/composables/useMembers'
+import type { ActiveContract } from '~/composables/useCheckin'
 
 // Tab state
 const activeTab = ref<'member' | 'staff'>('member')
 
 // Common data
-const { members, fetchMembers } = useMembers()
+const { searchMembers, findMemberByCode } = useMembers()
+const { branches, fetchBranches } = useBranches()
 const { employees, fetchEmployees } = useEmployees()
 const { currentEmployee } = useAuth()
 
@@ -61,9 +64,7 @@ const {
   performCheckin: doCheckin,
   getMemberActiveContract,
   hasCheckedInToday,
-  verifyQrCheckin,
-  parseQrPayload,
-  isQrExpired
+  verifyQrCheckin
 } = useCheckin()
 
 // Staff attendance composable
@@ -82,9 +83,10 @@ const verificationMethod = ref<VerificationMethod>('MANUAL')
 
 // Member check-in state
 const searchQuery = ref('')
-const selectedMember = ref<any>(null)
-const selectedContract = ref<any>(null)
-const memberBranch = ref<any>(null)
+const memberResults = ref<ApiMember[]>([])
+const selectedMember = ref<Pick<ApiMember, 'id' | 'fullName' | 'memberCode'> & Partial<ApiMember> | null>(null)
+const selectedContract = ref<ActiveContract | null>(null)
+const memberBranch = ref<{ id: string; name: string } | null>(null)
 const isCrossBranch = ref(false)
 const isCheckinSuccess = ref(false)
 const isProcessing = ref(false)
@@ -108,7 +110,7 @@ let scanInterval: NodeJS.Timeout | null = null
 
 // QR code scanner state
 const showQrScanner = ref(false)
-const qrCheckinResult = ref<{ success: boolean; message: string; member?: any; contract?: any } | null>(null)
+const qrCheckinResult = ref<Awaited<ReturnType<typeof verifyQrCheckin>> | null>(null)
 
 let checkinSuccessTimer: ReturnType<typeof setTimeout> | null = null
 let attendanceSuccessTimer: ReturnType<typeof setTimeout> | null = null
@@ -146,7 +148,7 @@ const resetAttendanceSuccess = () => {
 
 onMounted(async () => {
   await Promise.all([
-    fetchMembers(),
+    fetchBranches(),
     fetchEmployees(),
     fetchTodayCheckins(currentEmployee.value?.branch_id || undefined),
     fetchTodayAttendances(currentEmployee.value?.branch_id || undefined)
@@ -160,6 +162,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopScanner()
+  clearTimeout(memberSearchTimer)
   if (checkinSuccessTimer) {
     clearTimeout(checkinSuccessTimer)
     checkinSuccessTimer = null
@@ -174,54 +177,58 @@ onUnmounted(() => {
 // MEMBER CHECK-IN FUNCTIONS
 // ============================================
 
-const filteredMembers = computed(() => {
-  if (!searchQuery.value) return []
-  const query = searchQuery.value.toLowerCase()
-  const results: any[] = []
-  for (const m of members.value) {
-    if (
-      m.full_name?.toLowerCase().includes(query) ||
-      m.member_code?.toLowerCase().includes(query) ||
-      m.phone?.includes(query)
-    ) {
-      results.push(m)
-      if (results.length >= 5) break
-    }
+// Server-side search (name, member code, phone, email), debounced
+let memberSearchTimer: ReturnType<typeof setTimeout> | undefined
+let memberSearchSeq = 0
+watch(searchQuery, (query) => {
+  clearTimeout(memberSearchTimer)
+  if (!query.trim()) {
+    memberResults.value = []
+    return
   }
-  return results
+  memberSearchTimer = setTimeout(async () => {
+    const seq = ++memberSearchSeq
+    const rows = await searchMembers(query, 5)
+    // ignore a slower, older response
+    if (seq === memberSearchSeq && searchQuery.value === query) memberResults.value = rows
+  }, TIMING.DEBOUNCE)
 })
 
-const selectMember = async (member: any) => {
-  selectedMember.value = member
-  searchQuery.value = ''
-  errorMessage.value = ''
-  alreadyCheckedIn.value = false
+const clearSelectedMember = () => {
+  selectedMember.value = null
   selectedContract.value = null
   memberBranch.value = null
   isCrossBranch.value = false
+  alreadyCheckedIn.value = false
+}
 
-  // Get member's branch
-  if (member.branch_id) {
-    memberBranch.value = member.branch
-  }
+const selectMember = async (member: ApiMember) => {
+  clearSelectedMember()
+  selectedMember.value = member
+  searchQuery.value = ''
+  memberResults.value = []
+  errorMessage.value = ''
+
+  memberBranch.value = branches.value.find(b => b.id === member.branchId) ?? null
 
   // Check if cross-branch
   const currentBranchId = currentEmployee.value?.branch_id
-  if (currentBranchId && member.branch_id && member.branch_id !== currentBranchId) {
+  if (currentBranchId && member.branchId && member.branchId !== currentBranchId) {
     isCrossBranch.value = true
   }
 
   // Check if member has already checked in today and fetch active contract in parallel
-  const branchId = currentEmployee.value?.branch_id || undefined
   const [checkedIn, contract] = await Promise.all([
-    hasCheckedInToday(member.id, branchId),
+    hasCheckedInToday(member.id, checkinBranchId(member)),
     getMemberActiveContract(member.id),
   ])
-  if (checkedIn) {
-    alreadyCheckedIn.value = true
-  }
+  alreadyCheckedIn.value = checkedIn
   selectedContract.value = contract
 }
+
+/** The branch the entry is recorded at: the desk's branch, else the member's own */
+const checkinBranchId = (member: { branchId?: string | null } | null) =>
+  currentEmployee.value?.branch_id || member?.branchId || ''
 
 const performMemberCheckin = async () => {
   if (!selectedMember.value) return
@@ -230,24 +237,33 @@ const performMemberCheckin = async () => {
   errorMessage.value = ''
 
   try {
+    // The backend re-validates the contract and the sessions left; on refusal performCheckin
+    // has already shown its reason (e.g. 會員無有效合約 / 剩餘次數不足)
     const result = await doCheckin({
       memberId: selectedMember.value.id,
-      branchId: currentEmployee.value?.branch_id || undefined,
-      contractId: selectedContract.value?.id || undefined,
-      verifiedBy: currentEmployee.value?.id || undefined
+      branchId: checkinBranchId(selectedMember.value),
+      contractId: selectedContract.value?.id,
+      checkInMethod: verificationMethod.value === 'BARCODE' ? 'CARD' : 'MANUAL'
     })
 
+    if (!result) {
+      errorMessage.value = MESSAGES.ERRORS.CHECKIN
+      return
+    }
+
+    if (result.alreadyCheckedIn) {
+      alreadyCheckedIn.value = true
+      useToast().info('此會員今日已經入場過')
+      return
+    }
+
     lastCheckinResult.value = {
-      countDeducted: result?.countDeducted,
-      remainingCounts: result?.remainingCounts
+      countDeducted: result.contract?.countDeducted,
+      remainingCounts: result.contract?.remainingCounts
     }
 
     useToast().success(MESSAGES.SUCCESS.CHECKIN)
     resetCheckinSuccess()
-  } catch (error) {
-    errorMessage.value = MESSAGES.ERRORS.CHECKIN
-    console.error('Checkin failed:', error)
-    useToast().error(MESSAGES.ERRORS.CHECKIN)
   } finally {
     isProcessing.value = false
   }
@@ -402,16 +418,6 @@ const stopScanner = () => {
   isScannerActive.value = false
 }
 
-const memberCodeMap = computed(() => {
-  const map = new Map<string, any>()
-  for (const m of members.value) {
-    if (m.member_code) {
-      map.set(m.member_code, m)
-    }
-  }
-  return map
-})
-
 const employeeCodeMap = computed(() => {
   const map = new Map<string, any>()
   for (const e of employees.value) {
@@ -426,7 +432,7 @@ const handleScannedCode = async (code: string) => {
   stopScanner()
 
   if (activeTab.value === 'member') {
-    const member = memberCodeMap.value.get(code)
+    const member = await findMemberByCode(code)
     if (member) {
       await selectMember(member)
     } else {
@@ -448,41 +454,33 @@ const handleQrScan = async (payload: string) => {
   isProcessing.value = true
   errorMessage.value = ''
   qrCheckinResult.value = null
+  clearSelectedMember()
 
   try {
-    const parsed = parseQrPayload(payload)
-    if (!parsed) {
-      errorMessage.value = '無效的 QR Code 格式'
-      return
-    }
-
-    if (isQrExpired(parsed.timestamp)) {
-      errorMessage.value = 'QR Code 已過期，請重新掃描會員的入場碼'
-      return
-    }
-
     const result = await verifyQrCheckin({
       payload,
-      branchId: currentEmployee.value?.branch_id || undefined,
-      verifiedBy: currentEmployee.value?.id || undefined
+      branchId: currentEmployee.value?.branch_id || undefined
     })
-
     qrCheckinResult.value = result
 
-    if (result.success) {
-      lastCheckinResult.value = {
-        countDeducted: result.contract?.remaining_counts !== undefined,
-        remainingCounts: result.contract?.remaining_counts
-      }
-      selectedMember.value = result.member
-      resetCheckinSuccess()
-    } else {
+    if (!result.success) {
       errorMessage.value = result.message
+      return
     }
-  } catch (error) {
-    console.error('QR checkin failed:', error)
-    errorMessage.value = 'QR Code 驗證失敗，請重試'
-    useToast().error(MESSAGES.ERRORS.CHECKIN_VERIFY_FAILED)
+
+    selectedMember.value = result.member
+    if (result.alreadyCheckedIn) {
+      alreadyCheckedIn.value = true
+      useToast().info('此會員今日已經入場過')
+      return
+    }
+
+    lastCheckinResult.value = {
+      countDeducted: result.contract?.countDeducted,
+      remainingCounts: result.contract?.remainingCounts
+    }
+    useToast().success(MESSAGES.SUCCESS.CHECKIN)
+    resetCheckinSuccess()
   } finally {
     isProcessing.value = false
   }
@@ -504,7 +502,7 @@ const handleVerificationMethodChange = (method: VerificationMethod) => {
 
 // Helper functions
 const isCountBasedContract = computed(() => {
-  return selectedContract.value?.plan?.plan_type === 'COUNT_BASED'
+  return selectedContract.value?.plan?.planType === 'COUNT_BASED'
 })
 
 const formatTime = (iso: string) => {
@@ -531,9 +529,9 @@ const getAttendanceStatusLabel = (status: string) => {
 }
 
 const canMemberCheckin = computed(() => {
-  if (!selectedMember.value) return false
-  const status = selectedMember.value.member_status
-  return (status === 'ACTIVE' || status === 'active') && !alreadyCheckedIn.value
+  // Same gate as POST /api/check-ins: an ACTIVE, in-date contract with sessions left
+  if (!selectedMember.value || !selectedContract.value || selectedContract.value.exhausted) return false
+  return !alreadyCheckedIn.value
 })
 
 const canStaffCheckIn = computed(() => {
@@ -616,7 +614,7 @@ const todayCountLabel = computed(() => {
               </svg>
             </div>
             <h2>{{ activeTab === 'member' ? MESSAGES.SUCCESS.CHECKIN : '打卡成功' }}</h2>
-            <p>{{ activeTab === 'member' ? selectedMember?.full_name : selectedEmployee?.full_name }}</p>
+            <p>{{ activeTab === 'member' ? selectedMember?.fullName : selectedEmployee?.full_name }}</p>
             <div v-if="activeTab === 'member' && lastCheckinResult.countDeducted" class="count-deducted-info">
               <span class="deduct-badge">已扣 1 堂</span>
               <span class="remaining">剩餘 {{ lastCheckinResult.remainingCounts }} 堂</span>
@@ -688,20 +686,20 @@ const todayCountLabel = computed(() => {
             </div>
 
             <!-- Search Results -->
-            <div v-if="filteredMembers.length > 0" class="search-results">
+            <div v-if="memberResults.length > 0" class="search-results">
               <button
-                v-for="member in filteredMembers"
+                v-for="member in memberResults"
                 :key="member.id"
                 class="result-item"
                 @click="selectMember(member)"
               >
-                <div class="result-avatar">{{ member.full_name?.[0] }}</div>
+                <div class="result-avatar">{{ member.fullName?.[0] }}</div>
                 <div class="result-info">
-                  <span class="result-name">{{ member.full_name }}</span>
-                  <span class="result-code">{{ member.member_code }}</span>
+                  <span class="result-name">{{ member.fullName }}</span>
+                  <span class="result-code">{{ member.memberCode }}</span>
                 </div>
-                <span class="member-status" :class="getMemberStatusClass(member.member_status)">
-                  {{ getMemberStatusLabel(member.member_status) }}
+                <span class="member-status" :class="getMemberStatusClass(member.status)">
+                  {{ getMemberStatusLabel(member.status) }}
                 </span>
               </button>
             </div>
@@ -717,13 +715,13 @@ const todayCountLabel = computed(() => {
             <!-- Selected Member Preview -->
             <div v-if="selectedMember" class="selected-preview theme-member">
               <div class="selected-header">
-                <div class="selected-avatar">{{ selectedMember.full_name?.[0] }}</div>
+                <div class="selected-avatar">{{ selectedMember.fullName?.[0] }}</div>
                 <div class="selected-info">
-                  <h3>{{ selectedMember.full_name }}</h3>
-                  <p>{{ selectedMember.member_code }}</p>
+                  <h3>{{ selectedMember.fullName }}</h3>
+                  <p>{{ selectedMember.memberCode }}</p>
                 </div>
-                <span class="member-status large" :class="getMemberStatusClass(selectedMember.member_status)">
-                  {{ getMemberStatusLabel(selectedMember.member_status) }}
+                <span v-if="selectedMember.status" class="member-status large" :class="getMemberStatusClass(selectedMember.status)">
+                  {{ getMemberStatusLabel(selectedMember.status) }}
                 </span>
               </div>
 
@@ -751,15 +749,16 @@ const todayCountLabel = computed(() => {
                 <div v-if="selectedContract" class="detail-item full-width">
                   <span class="label">有效合約</span>
                   <span class="value contract-info">
-                    {{ selectedContract.contract_no }}
+                    {{ selectedContract.contractNo }}
                     <span v-if="selectedContract.plan?.name" class="plan-name">({{ selectedContract.plan.name }})</span>
                   </span>
                 </div>
-                <div v-if="isCountBasedContract" class="detail-item full-width">
+                <div v-if="selectedContract && isCountBasedContract" class="detail-item full-width">
                   <span class="label">剩餘堂數</span>
-                  <span class="value remaining-counts" :class="{ low: selectedContract.remaining_counts <= 3 }">
-                    {{ selectedContract.remaining_counts }} 堂
-                    <span v-if="selectedContract.remaining_counts <= 3" class="low-warning">（即將用完）</span>
+                  <span class="value remaining-counts" :class="{ low: (selectedContract.remainingCounts ?? 0) <= 3 }">
+                    {{ selectedContract.remainingCounts ?? 0 }} 堂
+                    <span v-if="selectedContract.exhausted" class="low-warning">（已用完，無法入場）</span>
+                    <span v-else-if="(selectedContract.remainingCounts ?? 0) <= 3" class="low-warning">（即將用完）</span>
                   </span>
                 </div>
                 <div v-else-if="!selectedContract" class="detail-item full-width">
@@ -777,7 +776,7 @@ const todayCountLabel = computed(() => {
               </div>
 
               <div class="action-buttons">
-                <button class="btn-cancel" @click="selectedMember = null; selectedContract = null; memberBranch = null; isCrossBranch = false; alreadyCheckedIn = false">
+                <button class="btn-cancel" @click="clearSelectedMember">
                   {{ MESSAGES.FORM.CANCEL }}
                 </button>
                 <button
@@ -971,10 +970,10 @@ const todayCountLabel = computed(() => {
         </div>
         <div v-else-if="activeTab === 'member'" class="records-list">
           <div v-for="checkin in todayCheckins" :key="checkin.id" class="record-item theme-member">
-            <div class="record-avatar">{{ checkin.member?.full_name?.[0] }}</div>
+            <div class="record-avatar">{{ checkin.member?.fullName?.[0] }}</div>
             <div class="record-info">
-              <span class="record-name">{{ checkin.member?.full_name }}</span>
-              <span class="record-code">{{ checkin.member?.member_code }}</span>
+              <span class="record-name">{{ checkin.member?.fullName }}</span>
+              <span class="record-code">{{ checkin.member?.memberCode }}</span>
             </div>
             <span class="record-time">{{ formatTime(checkin.time) }}</span>
           </div>

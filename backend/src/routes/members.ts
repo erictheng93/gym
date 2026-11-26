@@ -110,6 +110,7 @@ const createMemberSchema = z.object({
   address: z.string().optional().nullable(),
   emergencyContact: z.string().optional().nullable(),
   emergencyPhone: z.string().optional().nullable(),
+  height: z.number().min(50).max(300).optional().nullable(),
   tags: z.array(z.string()).optional(),
   notes: z.string().optional().nullable(),
 });

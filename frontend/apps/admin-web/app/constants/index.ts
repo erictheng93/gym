@@ -227,7 +227,7 @@ export const MESSAGES = {
     // Member
     MEMBER_CREATE_FAILED: '建立會員失敗，請檢查輸入資料',
     MEMBER_UPDATE_FAILED: '更新會員資料失敗，請稍後再試',
-    MEMBER_DELETE_FAILED: '刪除會員失敗，該會員可能有關聯的合約',
+    MEMBER_DELETE_FAILED: '封存會員失敗',
     MEMBER_FETCH_FAILED: '載入會員資料失敗，請稍後再試',
     MEMBER_SEARCH_FAILED: '搜尋會員失敗，請稍後再試',
     MEMBER_LOAD_FAILED: '載入會員資料失敗，請稍後再試',
@@ -255,7 +255,7 @@ export const MESSAGES = {
     // Plan
     PLAN_CREATE_FAILED: '建立方案失敗，請稍後再試',
     PLAN_UPDATE_FAILED: '更新方案失敗，請稍後再試',
-    PLAN_DELETE_FAILED: '刪除方案失敗，請稍後再試',
+    PLAN_DELETE_FAILED: '停用方案失敗，請稍後再試',
     PLAN_FETCH_FAILED: '載入方案資料失敗，請稍後再試',
 
     // Employee
@@ -321,7 +321,7 @@ export const MESSAGES = {
     // Member
     MEMBER_CREATED: '會員建立成功',
     MEMBER_UPDATED: '會員資料更新成功',
-    MEMBER_DELETED: '會員刪除成功',
+    MEMBER_DELETED: '會員已封存',
 
     // Contract
     CONTRACT_CREATED: '合約建立成功',
@@ -343,7 +343,7 @@ export const MESSAGES = {
     // Plan
     PLAN_CREATED: '方案建立成功',
     PLAN_UPDATED: '方案更新成功',
-    PLAN_DELETED: '方案刪除成功',
+    PLAN_DELETED: '方案已停用',
 
     // Employee
     EMPLOYEE_CREATED: '員工建立成功',
@@ -477,7 +477,7 @@ export const PAGES = {
     NO_MEMBERS_HINT: '新增第一位會員開始使用系統',
     SEARCH_PLACEHOLDER: '搜尋會員姓名、編號或電話...',
     VIEW_MEMBER: '查看會員',
-    DELETE_WARNING: '刪除後將無法恢復會員資料',
+    DELETE_WARNING: '刪除後會員將被封存（狀態改為暫停），資料與合約紀錄會保留。會員：',
     NAME_PLACEHOLDER: '請輸入會員姓名',
     CONTRACT_HISTORY: '合約紀錄',
     NO_CONTRACTS: '尚無合約紀錄',
@@ -757,6 +757,10 @@ export const PAGES = {
     // Form Labels
     PLAN_NAME: '方案名稱',
     PLAN_NAME_PLACEHOLDER: '請輸入方案名稱',
+    PLAN_CODE: '方案代碼',
+    PLAN_CODE_PLACEHOLDER: '例如 YEAR-12（最多 20 字元）',
+    ERROR_CODE_REQUIRED: '請輸入方案代碼',
+    ERROR_CODE_MAX: '方案代碼最多 20 個字元',
     PLAN_TYPE: '方案類型',
     PRICE: '售價',
     PRICE_PLACEHOLDER: '請輸入售價',

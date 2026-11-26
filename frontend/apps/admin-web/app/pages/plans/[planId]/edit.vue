@@ -12,7 +12,8 @@ const planTypeOptions = [
 
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS } from '~/constants'
-import type { MembershipPlan } from '~/types/schema'
+import type { Plan } from '~/composables/usePlans'
+import { planFormToInput, planToForm, type PlanBase } from '~/schemas/plan.schema'
 
 definePageMeta({
   middleware: 'auth',
@@ -26,15 +27,16 @@ const route = useRoute()
 const router = useRouter()
 const { getPlan, updatePlan } = usePlans()
 
-const plan = ref<MembershipPlan | null>(null)
+const plan = ref<Plan | null>(null)
 const isLoading = ref(true)
 const isSubmitting = ref(false)
 const errors = ref<Record<string, string>>({})
 
 const planId = computed(() => route.params.planId as string)
 
-const form = reactive({
+const form = reactive<PlanBase>({
   name: '',
+  code: '',
   plan_type: 'TIME_BASED' as 'TIME_BASED' | 'COUNT_BASED',
   price: 0,
   duration_months: 1,
@@ -48,24 +50,11 @@ const form = reactive({
 const loadPlan = async () => {
   isLoading.value = true
   try {
+    // getPlan already showed the backend's reason
     const data = await getPlan(planId.value)
-    if (!data) {
-      console.error('Plan not found')
-      return
-    }
+    if (!data) return
     plan.value = data
-    // 填充表單
-    form.name = data.name
-    form.plan_type = data.plan_type
-    form.price = data.price
-    form.duration_months = data.duration_months || 1
-    form.class_counts = data.class_counts || 10
-    form.allow_transfer = data.allow_transfer
-    form.allow_pause = data.allow_pause
-    form.description = data.description || ''
-    form.status = data.status
-  } catch (error) {
-    console.error('Failed to load plan:', error)
+    Object.assign(form, planToForm(data))
   } finally {
     isLoading.value = false
   }
@@ -78,6 +67,12 @@ const validate = () => {
 
   if (!form.name.trim()) {
     errors.value.name = PAGES.PLANS.ERROR_NAME_REQUIRED
+  }
+
+  if (!form.code.trim()) {
+    errors.value.code = PAGES.PLANS.ERROR_CODE_REQUIRED
+  } else if (form.code.trim().length > 20) {
+    errors.value.code = PAGES.PLANS.ERROR_CODE_MAX
   }
 
   if (!form.plan_type) {
@@ -106,23 +101,14 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const planData: Partial<MembershipPlan> = {
-      name: form.name.trim(),
-      plan_type: form.plan_type,
-      price: form.price,
-      duration_months: form.plan_type === 'TIME_BASED' ? form.duration_months : null,
-      class_counts: form.plan_type === 'COUNT_BASED' ? form.class_counts : null,
-      allow_transfer: form.allow_transfer,
-      allow_pause: form.allow_pause,
-      description: form.description.trim() || null,
-      status: form.status
+    // updatePlan shows the backend's reason itself when it fails
+    const updated = await updatePlan(planId.value, planFormToInput(form))
+    if (!updated) {
+      errors.value.submit = PAGES.PLANS.ERROR_UPDATE_FAILED
+      return
     }
-
-    await updatePlan(planId.value, planData)
+    useToast().success(MESSAGES.SUCCESS.PLAN_UPDATED)
     router.push('/plans')
-  } catch (error) {
-    console.error('Failed to update plan:', error)
-    errors.value.submit = PAGES.PLANS.ERROR_UPDATE_FAILED
   } finally {
     isSubmitting.value = false
   }
@@ -188,6 +174,19 @@ const formatPrice = (value: number) => {
                 :placeholder="PAGES.PLANS.PLAN_NAME_PLACEHOLDER"
               />
               <span v-if="errors.name" class="error-text">{{ errors.name }}</span>
+            </div>
+
+            <div class="input-group required">
+              <label class="input-label">{{ PAGES.PLANS.PLAN_CODE }}</label>
+              <input
+                v-model="form.code"
+                type="text"
+                class="input"
+                :class="{ 'input-error': errors.code }"
+                :placeholder="PAGES.PLANS.PLAN_CODE_PLACEHOLDER"
+                maxlength="20"
+              />
+              <span v-if="errors.code" class="error-text">{{ errors.code }}</span>
             </div>
 
             <div class="input-group required">

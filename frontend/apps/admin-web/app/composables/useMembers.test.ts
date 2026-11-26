@@ -1,14 +1,62 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
-import { useMembers } from './useMembers'
-import type { Member } from '~/types/schema'
+import { useMembers, type ApiMember } from './useMembers'
+import { MESSAGES } from '~/constants'
 
-const mockMembers = [
-  { id: 'member-1', member_code: 'M001', full_name: '張三', member_status: 'ACTIVE', branch_id: 'branch-1' },
-  { id: 'member-2', member_code: 'M002', full_name: '李四', member_status: 'EXPIRED', branch_id: 'branch-1' }
-] as unknown as Member[]
+const mockInvalidateCache = vi.hoisted(() => vi.fn())
+
+vi.mock('~/composables/core/useApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('~/composables/core/useApi')>()
+  return {
+    ...actual,
+    useApi: () => ({ invalidateCache: mockInvalidateCache })
+  }
+})
+
+// =============================================================================
+// Fixtures in the exact wire format of backend/src/routes/members.ts (MEMBER_RETURNING):
+// camelCase, MALE/FEMALE/OTHER, status ACTIVE/EXPIRED/SUSPENDED/BANNED, list total in `pagination`
+// =============================================================================
+
+const apiMember: ApiMember = {
+  id: 'a1b2c3d4-0000-4000-8000-000000000001',
+  memberCode: 'M000001',
+  fullName: '張三',
+  phone: '0912345678',
+  email: 'zhang@example.com',
+  gender: 'MALE',
+  birthday: '1990-05-01',
+  idNumber: null,
+  address: null,
+  emergencyContact: null,
+  emergencyPhone: null,
+  branchId: 'b0000000-0000-4000-8000-000000000001',
+  salesPersonId: null,
+  status: 'ACTIVE',
+  joinDate: '2026-11-01',
+  tags: ['VIP'],
+  notes: null,
+  avatar: null,
+  height: 172.5,
+  createdAt: '2026-11-01T02:00:00.000Z',
+  updatedAt: null
+}
+
+const otherMember: ApiMember = { ...apiMember, id: 'a1b2c3d4-0000-4000-8000-000000000002', memberCode: 'M0000010', fullName: '李四', status: 'EXPIRED' }
+
+const listResponse = {
+  success: true,
+  data: [apiMember, otherMember],
+  pagination: { total: 42, page: 1, limit: 20, totalPages: 3 }
+}
+
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
 
 describe('useMembers', () => {
+  afterEach(() => {
+    mockFetchInstance.apiFetch.mockReset()
+  })
+
   it('initial state is empty', () => {
     const { members, isLoading, totalCount } = useMembers()
 
@@ -18,172 +66,171 @@ describe('useMembers', () => {
   })
 
   describe('fetchMembers', () => {
-    it('stores data and total from the response', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockMembers, total: 2 })
+    it('GET /members with the query names the handler reads, storing rows and pagination.total', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce(listResponse)
       const { fetchMembers, members, totalCount, isLoading } = useMembers()
 
-      await fetchMembers()
+      await fetchMembers({ search: '張三', branchId: 'b-9', status: 'ACTIVE', page: 2, limit: 10 }, true)
 
-      expect(members.value).toEqual(mockMembers)
-      expect(totalCount.value).toBe(2)
+      expect(lastCall()).toEqual(['/members', {
+        params: { page: 2, limit: 10, search: '張三', branchId: 'b-9', status: 'ACTIVE', sortBy: 'dateCreated', sortOrder: 'desc' }
+      }])
+      expect(members.value).toEqual([apiMember, otherMember])
+      expect(totalCount.value).toBe(42)
       expect(isLoading.value).toBe(false)
     })
 
-    it('uses default paging and newest-first sorting', async () => {
+    it('does not send empty filters', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce(listResponse)
       const { fetchMembers } = useMembers()
 
-      await fetchMembers()
+      await fetchMembers({ search: '', status: '' }, true)
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('members', expect.objectContaining({
-        page: 1,
-        limit: 20,
-        sort: 'dateCreated',
-        sortOrder: 'desc'
-      }))
+      expect(lastCall()[1].params).toEqual({ page: 1, limit: 20, sortBy: 'dateCreated', sortOrder: 'desc' })
     })
 
-    it('forwards paging, search and filters to readItems', async () => {
-      const { fetchMembers } = useMembers()
+    it('reports the error and leaves loading off when fetching fails', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('Fetch failed'))
+      const { fetchMembers, isLoading } = useMembers()
 
-      await fetchMembers({ search: '張三', branchId: 'branch-9', status: 'ACTIVE', page: 2, limit: 10 })
+      await fetchMembers({}, true)
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('members', expect.objectContaining({
-        page: 2,
-        limit: 10,
-        search: '張三',
-        filter: { branchId: 'branch-9', status: 'ACTIVE' }
-      }))
-    })
-
-    it('keeps existing state and reports the error when fetching fails', async () => {
-      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
-      const { fetchMembers, members, isLoading } = useMembers()
-      members.value = mockMembers
-
-      await fetchMembers({ page: 99 })
-
-      expect(mockHandleError).toHaveBeenCalledWith(
-        expect.any(Error),
-        expect.objectContaining({ context: 'useMembers.fetchMembers' })
-      )
-      expect(members.value).toEqual(mockMembers)
       expect(isLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ context: 'useMembers.fetchMembers' }))
     })
 
-    it('sets loading while the request is in flight', async () => {
-      let loadingDuringFetch = false
-      mockFetchInstance.readItems.mockImplementationOnce(() => {
-        loadingDuringFetch = useMembers().isLoading.value
-        return Promise.resolve({ data: [], total: 0 })
-      })
+    it('deduplicates concurrent identical requests', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValue(listResponse)
       const { fetchMembers } = useMembers()
 
-      await fetchMembers({ page: 98 })
+      await Promise.all([fetchMembers({ page: 5 }), fetchMembers({ page: 5 })])
 
-      expect(loadingDuringFetch).toBe(true)
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('searchMembers / findMemberByCode', () => {
+    it('searches on the server without touching the shared list', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce(listResponse)
+      const { searchMembers, members } = useMembers()
+
+      const rows = await searchMembers(' 0912 ')
+
+      expect(lastCall()[1].params).toMatchObject({ search: '0912', limit: 5, page: 1 })
+      expect(rows).toHaveLength(2)
+      expect(members.value).toEqual([])
     })
 
-    it('shares one request between concurrent identical calls', async () => {
-      let resolve!: (v: { data: Member[]; total: number }) => void
-      mockFetchInstance.readItems.mockImplementationOnce(() => new Promise((r) => { resolve = r }))
-      const { fetchMembers } = useMembers()
-      const opts = { page: 97 }
+    it('returns [] without a request for an empty query', async () => {
+      const { searchMembers } = useMembers()
+      expect(await searchMembers('  ')).toEqual([])
+      expect(mockFetchInstance.apiFetch).not.toHaveBeenCalled()
+    })
 
-      const first = fetchMembers(opts)
-      const second = fetchMembers(opts)
-      resolve({ data: [], total: 0 })
-      await Promise.all([first, second])
+    it('finds only the exact member code, not a partial match', async () => {
+      // the backend search is ILIKE %code%, so "M000001" also returns "M0000010"
+      mockFetchInstance.apiFetch.mockResolvedValue({ ...listResponse, data: [otherMember, apiMember] })
+      const { findMemberByCode } = useMembers()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledTimes(1)
+      expect(await findMemberByCode('m000001')).toEqual(apiMember)
+      expect(await findMemberByCode('M0000')).toBeNull()
     })
   })
 
   describe('getMember', () => {
-    it('returns the member', async () => {
-      mockFetchInstance.readItem.mockResolvedValueOnce(mockMembers[0])
+    it('GET /members/:id', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { ...apiMember, contracts: [] } })
       const { getMember } = useMembers()
 
-      const result = await getMember('member-1')
+      const result = await getMember(apiMember.id)
 
-      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('members', 'member-1')
-      expect(result).toEqual(mockMembers[0])
+      expect(lastCall()).toEqual([`/members/${apiMember.id}`])
+      expect(result).toMatchObject({ fullName: '張三', gender: 'MALE', height: 172.5 })
     })
 
-    it('returns null and reports the error on failure', async () => {
-      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
+    it('returns null and shows the backend error on 404', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('會員不存在'))
       const { getMember } = useMembers()
 
-      const result = await getMember('invalid-id')
-
-      expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalledTimes(1)
+      expect(await getMember('missing')).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ customMessage: '會員不存在' }))
     })
   })
 
   describe('createMember', () => {
-    it('creates the member and returns the created record', async () => {
-      const input = { member_code: 'M003', full_name: '王五' }
-      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'member-3', ...input })
+    it('POSTs the camelCase body and returns the created member', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiMember })
       const { createMember } = useMembers()
+      const input = { fullName: '張三', phone: '0912345678', branchId: apiMember.branchId, gender: 'MALE' as const, height: 172.5 }
 
       const result = await createMember(input)
 
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('members', input)
-      expect(result).toMatchObject({ id: 'member-3', ...input })
+      expect(lastCall()).toEqual(['/members', { method: 'POST', body: input }])
+      expect(result).toEqual(apiMember)
+      expect(mockInvalidateCache).toHaveBeenCalled()
     })
 
-    it('returns null and reports the error on failure', async () => {
-      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Creation failed'))
+    it('returns null and surfaces the backend reason on a 400', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('無效的分店'))
       const { createMember } = useMembers()
 
-      const result = await createMember({ full_name: 'x' })
+      const result = await createMember({ fullName: '王五', phone: '0900000000', branchId: 'x' })
 
       expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalledTimes(1)
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ customMessage: '無效的分店' }))
+    })
+
+    it('falls back to the generic message for a bare HTTP status', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 500'))
+      const { createMember } = useMembers()
+
+      await createMember({ fullName: '王五', phone: '0900000000', branchId: 'x' })
+
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ customMessage: MESSAGES.ERRORS.MEMBER_CREATE_FAILED }))
     })
   })
 
-  describe('updateMember', () => {
-    it('updates the member by id and returns the updated record', async () => {
-      const patch = { phone: '0900000000' }
-      mockFetchInstance.updateItem.mockResolvedValueOnce({ id: 'member-1', ...patch })
+  describe('updateMember / updateMembersStatus', () => {
+    it('PATCHes /members/:id with the given fields', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { ...apiMember, phone: '0900000000' } })
       const { updateMember } = useMembers()
 
-      const result = await updateMember('member-1', patch)
+      const result = await updateMember(apiMember.id, { phone: '0900000000' })
 
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('members', 'member-1', patch)
-      expect(result).toMatchObject({ id: 'member-1', phone: '0900000000' })
+      expect(lastCall()).toEqual([`/members/${apiMember.id}`, { method: 'PATCH', body: { phone: '0900000000' } }])
+      expect(result).toMatchObject({ phone: '0900000000' })
     })
 
-    it('returns null and reports the error on failure', async () => {
-      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
-      const { updateMember } = useMembers()
+    it('sets the status field the backend reads (not member_status) and counts real successes', async () => {
+      mockFetchInstance.apiFetch
+        .mockResolvedValueOnce({ success: true, data: { ...apiMember, status: 'SUSPENDED' } })
+        .mockRejectedValueOnce(new Error('會員不存在'))
+      const { updateMembersStatus } = useMembers()
 
-      const result = await updateMember('member-1', { phone: '1' })
+      const result = await updateMembersStatus(['m-1', 'm-2'], 'SUSPENDED')
 
-      expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalledTimes(1)
+      expect(mockFetchInstance.apiFetch).toHaveBeenNthCalledWith(1, '/members/m-1', { method: 'PATCH', body: { status: 'SUSPENDED' } })
+      expect(mockFetchInstance.apiFetch).toHaveBeenNthCalledWith(2, '/members/m-2', { method: 'PATCH', body: { status: 'SUSPENDED' } })
+      expect(result).toEqual({ updated: 1, failed: 1 })
+      // the page reports the batch outcome; individual failures are not toasted
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ showToast: false }))
     })
   })
 
   describe('deleteMember', () => {
-    it('returns true when deleted', async () => {
-      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
+    it('DELETE /members/:id (archives) and returns true', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '會員已封存' })
       const { deleteMember } = useMembers()
 
-      const result = await deleteMember('member-1')
-
-      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('members', 'member-1')
-      expect(result).toBe(true)
+      expect(await deleteMember(apiMember.id)).toBe(true)
+      expect(lastCall()).toEqual([`/members/${apiMember.id}`, { method: 'DELETE' }])
     })
 
     it('returns false and reports the error on failure', async () => {
-      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('會員不存在'))
       const { deleteMember } = useMembers()
 
-      const result = await deleteMember('member-1')
-
-      expect(result).toBe(false)
+      expect(await deleteMember('missing')).toBe(false)
       expect(mockHandleError).toHaveBeenCalledTimes(1)
     })
   })
@@ -192,10 +239,10 @@ describe('useMembers', () => {
     const a = useMembers()
     const b = useMembers()
 
-    a.members.value = [{ id: 'member-1' } as Member]
+    a.members.value = [apiMember]
     a.totalCount.value = 100
 
-    expect(b.members.value).toEqual([{ id: 'member-1' }])
+    expect(b.members.value).toEqual([apiMember])
     expect(b.totalCount.value).toBe(100)
   })
 })

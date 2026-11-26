@@ -104,6 +104,7 @@ describe('members/new.vue', () => {
     await wrapper.find('select').setValue(BRANCH_2)
     await byPlaceholder(wrapper, 'email@example.com').setValue('a@example.com')
     await byPlaceholder(wrapper, '請輸入緊急聯絡人姓名').setValue('王媽媽')
+    await byPlaceholder(wrapper, '例：175').setValue('168')
     await submit(wrapper)
 
     expect(mockCreateMember).toHaveBeenCalledWith({
@@ -112,6 +113,7 @@ describe('members/new.vue', () => {
       email: 'a@example.com',
       gender: 'FEMALE',
       birthday: '1990-05-01',
+      height: 168,
       branchId: BRANCH_2,
       emergencyContact: '王媽媽',
       emergencyPhone: null,
@@ -165,14 +167,15 @@ describe('members/new.vue', () => {
     expect(wrapper.find('.quota-alert').text()).toContain('92%')
   })
 
-  it('shows the API error message and stays on the page when creation fails', async () => {
-    mockCreateMember.mockRejectedValue(new Error('電話號碼已存在'))
+  it('stays on the page without a success toast when creation fails', async () => {
+    // createMember resolves null after it has already shown the backend's reason
+    mockCreateMember.mockResolvedValue(null)
     const wrapper = await mountPage()
     await fillRequired(wrapper)
     await submit(wrapper)
 
-    expect(wrapper.find('.submit-error').text()).toBe('電話號碼已存在')
-    expect(toast.error).toHaveBeenCalledWith(MESSAGES.ERRORS.MEMBER_CREATE_FAILED)
+    expect(wrapper.find('.submit-error').text()).toBe(MESSAGES.ERRORS.MEMBER_CREATE_FAILED)
+    expect(toast.success).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()
   })
 })
