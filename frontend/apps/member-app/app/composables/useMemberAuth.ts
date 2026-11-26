@@ -143,6 +143,8 @@ export const useMemberAuth = () => {
     sendPhoneVerification: methods.sendPhoneVerification,
     completeProfile: methods.completeProfile,
     changePhone: methods.changePhone,
+    sendEmailVerification: methods.sendEmailVerification,
+    changeEmail: methods.changeEmail,
 
     // ============================================
     // Session Management

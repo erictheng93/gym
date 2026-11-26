@@ -80,7 +80,7 @@ export function toProfileApiFailure(error: unknown, fallback: string): ProfileAp
 export const useAuthMethods = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
-  // The gym this app is deployed for: OTP login only looks for members there
+  // The gym this app is deployed for: login, OTP login and forgot-password only look for members there
   const tenantScope = config.public.tenantSlug ? { tenantSlug: config.public.tenantSlug as string } : {}
 
   const { setTokens, clearTokens, getAuthHeader } = useAuthTokens()
@@ -178,7 +178,7 @@ export const useAuthMethods = () => {
     try {
       const response = await $fetch<EmailLoginResponse>(`${apiUrl}/api/member/auth/login`, {
         method: 'POST',
-        body: { email, account: email, password },
+        body: { email, account: email, password, ...tenantScope },
       })
 
       if (response.success && response.data) {
@@ -275,7 +275,7 @@ export const useAuthMethods = () => {
     try {
       const response = await $fetch<{ success: boolean; message: string; data?: { resetUrl?: string } }>(`${apiUrl}/api/member/auth/forgot-password`, {
         method: 'POST',
-        body: { email },
+        body: { email, ...tenantScope },
       })
 
       return {
@@ -433,6 +433,57 @@ export const useAuthMethods = () => {
     }
   }
 
+  /**
+   * Send a verification code to the NEW email this member wants to use.
+   * The code is bound to the logged-in member and that address.
+   */
+  const sendEmailVerification = async (email: string): Promise<ProfileApiResult> => {
+    const headers = getAuthHeader()
+    if (!headers['X-Member-Token']) {
+      return { success: false, message: '請先登入', code: 'UNAUTHORIZED' }
+    }
+
+    try {
+      const response = await $fetch<{ success: boolean; message?: string; data?: { otp?: string } }>(
+        `${apiUrl}/api/member/me/email/otp`,
+        { method: 'POST', headers, body: { email } },
+      )
+      return {
+        success: response.success,
+        message: response.message || '驗證碼已發送',
+        otp: response.data?.otp, // Only in development
+      }
+    } catch (error: unknown) {
+      return toProfileApiFailure(error, '發送驗證碼失敗，請稍後再試')
+    }
+  }
+
+  /**
+   * Change the email of the profile (POST /api/member/me/email).
+   * `otpCode` must come from sendEmailVerification for the same address.
+   */
+  const changeEmail = async (email: string, otpCode: string): Promise<ProfileApiResult> => {
+    const headers = getAuthHeader()
+    if (!headers['X-Member-Token']) {
+      return { success: false, message: '請先登入', code: 'UNAUTHORIZED' }
+    }
+
+    try {
+      const response = await $fetch<{ success: boolean; message?: string }>(`${apiUrl}/api/member/me/email`, {
+        method: 'POST',
+        headers,
+        body: { email, otpCode },
+      })
+      if (response.success) {
+        await fetchMember(headers['X-Member-Token'])
+        return { success: true, message: response.message || 'Email 已更新' }
+      }
+      return { success: false, message: response.message || '變更 Email 失敗' }
+    } catch (error: unknown) {
+      return toProfileApiFailure(error, '變更 Email 失敗，請稍後再試')
+    }
+  }
+
   // ============================================
   // Logout
   // ============================================
@@ -472,6 +523,8 @@ export const useAuthMethods = () => {
     sendPhoneVerification,
     completeProfile,
     changePhone,
+    sendEmailVerification,
+    changeEmail,
 
     // Logout
     logout,

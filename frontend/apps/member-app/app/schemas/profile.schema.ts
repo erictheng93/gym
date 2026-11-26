@@ -65,14 +65,7 @@ export const updateProfileSchema = z.object({
     .min(NAME_MIN_LENGTH, `姓名至少需要 ${NAME_MIN_LENGTH} 個字`)
     .max(NAME_MAX_LENGTH, `姓名不能超過 ${NAME_MAX_LENGTH} 個字`)
     .optional(),
-  phone: z
-    .string()
-    .regex(PHONE_REGEX, '請輸入有效的手機號碼')
-    .optional(),
-  email: z
-    .string()
-    .email('請輸入有效的電子郵件')
-    .optional(),
+  // No phone/email: both are login identifiers and change only with a code
   gender: z
     .enum(['MALE', 'FEMALE', 'OTHER'])
     .optional()

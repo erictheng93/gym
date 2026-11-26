@@ -5,11 +5,14 @@ import { db, members, branches, contracts, membershipPlans, memberCredentials, m
 import { eq, and, ne, desc, inArray, sql } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter, limitMax, getClientIp } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
+import { emailService } from '../services/email.js';
 import {
   generateOtp,
   consumeOtp,
   deliverPhoneOtp,
   memberPhoneOtpIdentifier,
+  memberEmailOtpIdentifier,
+  otpEmailHtml,
   otpDevMode,
   phoneOtpLogError,
   OTP_TTL_MS,
@@ -20,7 +23,7 @@ import {
 // MEMBER PROFILE ROUTES
 // =============================================================================
 // Profile management for member-app
-// Endpoints: /me (GET, PUT), /phone/otp, /phone, /complete-profile
+// Endpoints: /me (GET, PUT), /phone/otp, /phone, /email/otp, /email, /complete-profile
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
@@ -41,7 +44,8 @@ app.use('*', requireMember);
 const updateProfileSchema = z.object({
   fullName: z.string().min(2, '姓名至少 2 個字元').max(100).optional(),
   phone: z.unknown().optional(),
-  email:z.string().email('請輸入有效的 Email').optional(),
+  // No `email` either (it is a login identifier): POST /email/otp, then POST /email.
+  email: z.unknown().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式: YYYY-MM-DD').optional(),
   address: z.string().max(500).optional(),
@@ -57,14 +61,26 @@ const phoneOtpSchema = z.object({
   phone: phoneSchema,
 });
 
-const otpCodeSchema = z.string().regex(/^\d{6}$/, '驗證碼必須是 6 位數字');
+const emailSchema = z.string().trim().max(255).email('請輸入有效的 Email')
+  .transform(email => email.toLowerCase());
+
+const emailOtpSchema = z.object({
+  email: emailSchema,
+});
+
+const otpCodeSchema =z.string().regex(/^\d{6}$/, '驗證碼必須是 6 位數字');
 
 const changePhoneSchema = z.object({
   phone: phoneSchema,
   otpCode: otpCodeSchema,
 });
 
-const completeProfileSchema = z.object({
+const changeEmailSchema = z.object({
+  email: emailSchema,
+  otpCode: otpCodeSchema,
+});
+
+const completeProfileSchema =z.object({
   phone: phoneSchema,
   otpCode: otpCodeSchema,
   fullName: z.string().trim().min(2, '姓名至少 2 個字元').max(100).optional(),
@@ -271,7 +287,7 @@ app.put(
   zValidator('json', updateProfileSchema),
   async (c) => {
     const memberInfo = c.get('member')!;
-    const { phone, ...updates } = c.req.valid('json');
+    const { phone, email, ...updates } = c.req.valid('json');
 
     if (phone !== undefined) {
       return c.json({
@@ -281,15 +297,11 @@ app.put(
       }, 400);
     }
 
-    const [existingEmailMember] = updates.email
-      ? await db.select(MEMBER_ID_SELECT).from(members).where(and(eq(members.email, updates.email), ne(members.id, memberInfo.id))).limit(1)
-      : [];
-
-    if (existingEmailMember) {
+    if (email !== undefined) {
       return c.json({
         success: false,
-        error: '此 Email 已被使用',
-        code: 'EMAIL_TAKEN',
+        error: '變更 Email 需要驗證信箱，請使用 Email 驗證流程',
+        code: 'EMAIL_VERIFICATION_REQUIRED',
       }, 400);
     }
 
@@ -578,6 +590,229 @@ app.post(
     return c.json({
       success: true,
       message: '手機號碼已更新',
+      data: { member: result.member },
+    });
+  }
+);
+
+// -----------------------------------------------------------------------------
+// Email change (verified)
+// -----------------------------------------------------------------------------
+// Email is a login identifier, so it is changed like the phone: a code is sent
+// to the NEW address (bound to this member + that address, single use,
+// expiring), then POST /email with the code. Uniqueness is per tenant,
+// case-insensitive, with the same lock and generic 409 as the phone.
+
+const EMAIL_TAKEN_RESPONSE = {
+  success: false,
+  error: '此 Email 已被其他會員使用，請改用其他 Email 或洽櫃台協助',
+  code: 'EMAIL_TAKEN',
+} as const;
+
+const EMAIL_UNAVAILABLE_RESPONSE = {
+  success: false,
+  error: '郵件服務暫時無法使用，請稍後再試或洽櫃台協助',
+  code: 'EMAIL_UNAVAILABLE',
+} as const;
+
+/** Whether another member of the tenant has `email` (case-insensitive). */
+async function emailTakenByOther(
+  member: { id: string; tenantId: string },
+  email: string,
+  executor: Pick<typeof db, 'select'> = db,
+): Promise<boolean> {
+  const [taken] = await executor
+    .select(MEMBER_ID_SELECT)
+    .from(members)
+    .where(and(
+      eq(members.tenantId, member.tenantId),
+      eq(sql`lower(${members.email})`, email),
+      ne(members.id, member.id),
+    ))
+    .limit(1);
+  return !!taken;
+}
+
+const emailOtpSendLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  max: limitMax(1),
+  keyGenerator: (c) => `member-email-otp:send:${memberRateKey(c)}`,
+  message: '發送過於頻繁，請 1 分鐘後再試',
+});
+
+const emailOtpSendHourlyLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: limitMax(5),
+  keyGenerator: (c) => `member-email-otp:send:hourly:${memberRateKey(c)}`,
+  message: '發送次數已達上限，請稍後再試',
+});
+
+const emailOtpSendIpLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: limitMax(20),
+  keyGenerator: (c) => `member-email-otp:send:ip:${getClientIp(c)}`,
+  message: '發送次數已達上限，請稍後再試',
+});
+
+const changeEmailLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: limitMax(5),
+  keyGenerator: (c) => `member-email-otp:verify:${memberRateKey(c)}`,
+  message: '驗證次數過多，請 15 分鐘後再試',
+});
+
+// POST /api/member/me/email/otp - Send a verification code to the new email
+app.post(
+  '/email/otp',
+  zValidator('json', emailOtpSchema),
+  emailOtpSendLimiter,
+  emailOtpSendHourlyLimiter,
+  emailOtpSendIpLimiter,
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { email } = c.req.valid('json');
+    const ip = getClientIp(c);
+    const ipAddress = ip === 'unknown' ? undefined : ip;
+
+    const [member] = await db
+      .select({ id: members.id, status: members.status, fullName: members.fullName })
+      .from(members)
+      .where(ownMember(memberInfo))
+      .limit(1);
+
+    if (!member) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
+    if (member.status === 'BANNED') {
+      return c.json({ success: false, error: '帳號已停權', code: 'MEMBER_BANNED' }, 403);
+    }
+    if (await emailTakenByOther(memberInfo, email)) {
+      return c.json(EMAIL_TAKEN_RESPONSE, 409);
+    }
+
+    const identifier = memberEmailOtpIdentifier(memberInfo.id, email);
+    const code = generateOtp();
+
+    // One live code per member + email: a resend replaces the previous code
+    await db.delete(otpTokens).where(and(
+      eq(otpTokens.identifier, identifier),
+      eq(otpTokens.identifierType, 'email'),
+    ));
+    await db.insert(otpTokens).values({
+      identifier,
+      identifierType: 'email',
+      code,
+      expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      ipAddress,
+      userAgent: c.req.header('user-agent') || '',
+    });
+
+    const sent = await emailService.send({
+      to: email,
+      subject: '您的 Email 驗證碼',
+      html: otpEmailHtml({
+        title: 'Email 驗證碼',
+        name: member.fullName,
+        code,
+        intro: '您正在變更會員帳號的 Email，驗證碼是：',
+      }),
+    });
+
+    await db.insert(otpSendLogs).values({
+      identifier: email,
+      identifierType: 'email',
+      ipAddress,
+      success: sent,
+      errorMessage: sent ? null : 'SMTP 未設定或發送失敗',
+    });
+
+    // Without a mailbox delivery nothing proves the address, so outside
+    // development/test the code is dropped and the caller told
+    if (!sent && !otpDevMode()) {
+      await db.delete(otpTokens).where(and(
+        eq(otpTokens.identifier, identifier),
+        eq(otpTokens.identifierType, 'email'),
+      ));
+      return c.json(EMAIL_UNAVAILABLE_RESPONSE, 503);
+    }
+
+    return c.json({
+      success: true,
+      message: '驗證碼已發送',
+      data: {
+        expiresIn: OTP_TTL_MS / 1000,
+        ...(otpDevMode() && { otp: code }),
+      },
+    });
+  }
+);
+
+class EmailTakenError extends Error {}
+
+/** Save `email` on the member if `otpCode` is the code sent to that address for this member. */
+async function saveVerifiedEmail(
+  memberInfo: { id: string; tenantId: string },
+  email: string,
+  otpCode: string,
+) {
+  try {
+    return await db.transaction(async (tx) => {
+      // Serialize claims of the same email within a tenant
+      const lockKey = `member-email:${memberInfo.tenantId}:${email}`;
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+
+      if (await emailTakenByOther(memberInfo, email, tx)) {
+        throw new EmailTakenError();
+      }
+
+      const otp = await consumeOtp(
+        and(
+          eq(otpTokens.identifier, memberEmailOtpIdentifier(memberInfo.id, email)),
+          eq(otpTokens.identifierType, 'email'),
+        ),
+        otpCode,
+        tx,
+      );
+      // Returning (not throwing) commits the counted attempt
+      if (!otp.ok) return { ok: false as const, failure: otp.failure };
+
+      const [updatedMember] = await tx
+        .update(members)
+        .set({ email, updatedAt: new Date() })
+        .where(ownMember(memberInfo))
+        .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
+
+      return { ok: true as const, member: updatedMember };
+    });
+  } catch (error) {
+    if (error instanceof EmailTakenError) return { ok: false as const, taken: true as const };
+    throw error;
+  }
+}
+
+// POST /api/member/me/email - Change the email with a verified code
+app.post(
+  '/email',
+  zValidator('json', changeEmailSchema),
+  changeEmailLimiter,
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { email, otpCode } = c.req.valid('json');
+
+    const result = await saveVerifiedEmail(memberInfo, email, otpCode);
+
+    if (!result.ok) {
+      return 'taken' in result
+        ? c.json(EMAIL_TAKEN_RESPONSE, 409)
+        : c.json({ success: false, ...result.failure }, 400);
+    }
+    if (!result.member) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
+
+    return c.json({
+      success: true,
+      message: 'Email 已更新',
       data: { member: result.member },
     });
   }

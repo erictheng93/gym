@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import { escapeHtml } from '../utils/html.js';
 
 interface EmailOptions {
   to: string | string[];
@@ -52,8 +53,8 @@ class EmailService {
       subject: `歡迎加入 ${branchName}！`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #333;">歡迎加入 ${branchName}！</h1>
-          <p>親愛的 ${memberName}，</p>
+          <h1 style="color: #333;">歡迎加入 ${escapeHtml(branchName)}！</h1>
+          <p>親愛的 ${escapeHtml(memberName)}，</p>
           <p>感謝您成為我們的會員！我們很高興能為您服務。</p>
           <p>您可以使用我們的會員 App 來：</p>
           <ul>
@@ -81,8 +82,8 @@ class EmailService {
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #333;">會籍到期提醒</h1>
-          <p>親愛的 ${memberName}，</p>
-          <p>您的合約 <strong>${contractNo}</strong> 將於 <strong>${endDate}</strong> 到期。</p>
+          <p>親愛的 ${escapeHtml(memberName)}，</p>
+          <p>您的合約 <strong>${escapeHtml(contractNo)}</strong> 將於 <strong>${escapeHtml(endDate)}</strong> 到期。</p>
           <p>還剩 <strong>${daysLeft}</strong> 天！</p>
           <p>為了不中斷您的運動計畫，請儘快聯繫我們續約。</p>
           <p>謝謝您的支持！</p>
@@ -105,13 +106,13 @@ class EmailService {
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #333;">預約成功！</h1>
-          <p>親愛的 ${memberName}，</p>
+          <p>親愛的 ${escapeHtml(memberName)}，</p>
           <p>您已成功預約以下課程：</p>
           <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
-            <p><strong>課程：</strong>${className}</p>
-            <p><strong>日期：</strong>${date}</p>
-            <p><strong>時間：</strong>${time}</p>
-            <p><strong>地點：</strong>${branchName}</p>
+            <p><strong>課程：</strong>${escapeHtml(className)}</p>
+            <p><strong>日期：</strong>${escapeHtml(date)}</p>
+            <p><strong>時間：</strong>${escapeHtml(time)}</p>
+            <p><strong>地點：</strong>${escapeHtml(branchName)}</p>
           </div>
           <p>請準時出席，如需取消請提前 2 小時操作。</p>
         </div>
