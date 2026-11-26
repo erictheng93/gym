@@ -6,7 +6,13 @@
  */
 
 import { extractErrorMessage } from '../utils/apiHelpers'
-import type { CurrentMember, AuthResult, OtpSendResult, OAuthResult } from '../types/auth'
+import type {
+  AuthResult,
+  OtpSendResult,
+  OAuthResult,
+  CompleteProfileInput,
+  ProfileApiResult,
+} from '../types/auth'
 
 interface OtpSendResponse {
   success: boolean
@@ -48,6 +54,27 @@ interface EmailLoginResponse {
     }
   }
   error?: string
+}
+
+/**
+ * Failure result from a member-profile API error. The backend replies
+ * `{ error, code, attemptsRemaining? }`; $fetch exposes it as `error.data`.
+ */
+export function toProfileApiFailure(error: unknown, fallback: string): ProfileApiResult {
+  const data = (error as { data?: unknown } | null)?.data
+  if (data && typeof data === 'object') {
+    const body = data as { error?: unknown; message?: unknown; code?: unknown; attemptsRemaining?: unknown }
+    const message = typeof body.error === 'string'
+      ? body.error
+      : typeof body.message === 'string' ? body.message : fallback
+    return {
+      success: false,
+      message,
+      code: typeof body.code === 'string' ? body.code : undefined,
+      attemptsRemaining: typeof body.attemptsRemaining === 'number' ? body.attemptsRemaining : undefined,
+    }
+  }
+  return { success: false, message: extractErrorMessage(error, fallback) }
 }
 
 export const useAuthMethods = () => {
@@ -321,39 +348,56 @@ export const useAuthMethods = () => {
   // ============================================
 
   /**
-   * Complete member profile after social login
+   * Send a verification code to the phone this member wants to save.
+   * The code is bound to the logged-in member and that phone number.
    */
-  const completeProfile = async (data: {
-    fullName: string
-    phone: string
-    gender?: 'MALE' | 'FEMALE' | 'OTHER' | null
-    birthday?: string
-    branchId?: string
-    emergencyContact?: string
-    emergencyPhone?: string
-  }): Promise<AuthResult> => {
-    setLoading(true)
+  const sendPhoneVerification = async (phone: string): Promise<ProfileApiResult> => {
     const headers = getAuthHeader()
+    if (!headers['X-Member-Token']) {
+      return { success: false, message: '請先登入', code: 'UNAUTHORIZED' }
+    }
 
     try {
-      const response = await $fetch<{ success: boolean; message: string; data?: { member: CurrentMember } }>(`${apiUrl}/api/member/me/complete-profile`, {
+      const response = await $fetch<{ success: boolean; message?: string; data?: { otp?: string } }>(
+        `${apiUrl}/api/member/me/phone/otp`,
+        { method: 'POST', headers, body: { phone } },
+      )
+      return {
+        success: response.success,
+        message: response.message || '驗證碼已發送',
+        otp: response.data?.otp, // Only in development
+      }
+    } catch (error: unknown) {
+      return toProfileApiFailure(error, '發送驗證碼失敗，請稍後再試')
+    }
+  }
+
+  /**
+   * Complete member profile after social login.
+   * `otpCode` must come from sendPhoneVerification for the same phone.
+   */
+  const completeProfile = async (data: CompleteProfileInput): Promise<ProfileApiResult> => {
+    const headers = getAuthHeader()
+    if (!headers['X-Member-Token']) {
+      return { success: false, message: '請先登入', code: 'UNAUTHORIZED' }
+    }
+
+    setLoading(true)
+    try {
+      const response = await $fetch<{ success: boolean; message?: string }>(`${apiUrl}/api/member/me/complete-profile`, {
         method: 'POST',
         headers,
         body: data,
       })
 
       if (response.success) {
-        // Refresh member data
-        await fetchMember(headers['X-Member-Token'] || '')
+        await fetchMember(headers['X-Member-Token'])
         return { success: true, message: response.message || '資料已更新' }
       }
 
       return { success: false, message: response.message || '更新資料失敗' }
     } catch (error: unknown) {
-      return {
-        success: false,
-        message: extractErrorMessage(error, '更新資料失敗，請稍後再試'),
-      }
+      return toProfileApiFailure(error, '更新資料失敗，請稍後再試')
     } finally {
       setLoading(false)
     }
@@ -395,6 +439,7 @@ export const useAuthMethods = () => {
     changePassword,
 
     // Profile
+    sendPhoneVerification,
     completeProfile,
 
     // Logout

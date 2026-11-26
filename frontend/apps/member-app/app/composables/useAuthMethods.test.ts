@@ -393,61 +393,84 @@ describe('useAuthMethods', () => {
     })
   })
 
-  describe('completeProfile', () => {
-    it('should complete profile successfully', async () => {
-      // Set up auth token
+  describe('sendPhoneVerification', () => {
+    it('posts the phone to the member-authenticated endpoint', async () => {
       cookieStore.set('member_access_token', { value: 'valid-token' })
+      mockFetch.mockResolvedValueOnce({ success: true, message: '驗證碼已發送', data: { expiresIn: 300, otp: '123456' } })
 
+      const { sendPhoneVerification } = useAuthMethods()
+      const result = await sendPhoneVerification('0912345678')
+
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8056/api/member/me/phone/otp', {
+        method: 'POST',
+        headers: { 'X-Member-Token': 'valid-token' },
+        body: { phone: '0912345678' },
+      })
+      expect(result).toMatchObject({ success: true, otp: '123456' })
+    })
+
+    it('surfaces the backend error and code (409 PHONE_TAKEN)', async () => {
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+      mockFetch.mockRejectedValueOnce(Object.assign(new Error('[POST] 409 Conflict'), {
+        data: { success: false, error: '此手機號碼已被其他會員使用', code: 'PHONE_TAKEN' },
+      }))
+
+      const { sendPhoneVerification } = useAuthMethods()
+      const result = await sendPhoneVerification('0912345678')
+
+      expect(result).toEqual({
+        success: false,
+        message: '此手機號碼已被其他會員使用',
+        code: 'PHONE_TAKEN',
+        attemptsRemaining: undefined,
+      })
+    })
+
+    it('does not call the API without a member token', async () => {
+      const { sendPhoneVerification } = useAuthMethods()
+      const result = await sendPhoneVerification('0912345678')
+
+      expect(mockFetch).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ success: false, code: 'UNAUTHORIZED' })
+    })
+  })
+
+  describe('completeProfile', () => {
+    it('posts the camelCase body with the OTP code and refreshes the member', async () => {
+      cookieStore.set('member_access_token', { value: 'valid-token' })
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: '資料已更新',
-        data: {
-          member: {
-            id: 'member-1',
-            memberCode: 'M001',
-            fullName: 'Test User',
-          },
-        },
+        data: { member: { id: 'member-1', memberCode: 'M001', fullName: 'Test User' } },
       })
 
       const { completeProfile } = useAuthMethods()
       const result = await completeProfile({
-        fullName: 'Test User',
         phone: '0912345678',
+        otpCode: '123456',
+        fullName: 'Test User',
         gender: 'MALE',
       })
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/member/me/complete-profile',
-        {
-          method: 'POST',
-          headers: { 'X-Member-Token': 'valid-token' },
-          body: {
-            fullName: 'Test User',
-            phone: '0912345678',
-            gender: 'MALE',
-          },
-        }
-      )
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8056/api/member/me/complete-profile', {
+        method: 'POST',
+        headers: { 'X-Member-Token': 'valid-token' },
+        body: { phone: '0912345678', otpCode: '123456', fullName: 'Test User', gender: 'MALE' },
+      })
+      expect(mockFetchMember).toHaveBeenCalledWith('valid-token')
       expect(result.success).toBe(true)
     })
 
-    it('should handle profile completion error', async () => {
-      // Set up auth token
+    it('returns the OTP error code and remaining attempts', async () => {
       cookieStore.set('member_access_token', { value: 'valid-token' })
-
-      mockFetch.mockRejectedValueOnce({
-        data: { message: '電話號碼已被使用' },
-      })
+      mockFetch.mockRejectedValueOnce(Object.assign(new Error('[POST] 400 Bad Request'), {
+        data: { success: false, error: '驗證碼錯誤', code: 'WRONG_CODE', attemptsRemaining: 2 },
+      }))
 
       const { completeProfile } = useAuthMethods()
-      const result = await completeProfile({
-        fullName: 'Test User',
-        phone: '0912345678',
-      })
+      const result = await completeProfile({ phone: '0912345678', otpCode: '000000' })
 
-      expect(result.success).toBe(false)
-      expect(result.message).toBe('電話號碼已被使用')
+      expect(result).toEqual({ success: false, message: '驗證碼錯誤', code: 'WRONG_CODE', attemptsRemaining: 2 })
     })
   })
 

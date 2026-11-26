@@ -99,10 +99,8 @@ onMounted(async () => {
 
       // 儲存社交資訊供完成註冊頁面使用
       if (typeof window !== 'undefined' && result.socialInfo) {
+        // Only the display info; the provider's access token is never stored client-side
         sessionStorage.setItem('oauth_social_info', JSON.stringify(result.socialInfo))
-        if (result.accessToken) {
-          sessionStorage.setItem('oauth_temp_token', result.accessToken)
-        }
       }
 
       // 延遲後導向到完成資料頁面

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { generateCsv, type ExportColumn } from '../src/services/export.js';
-import { generateOtp } from '../src/routes/member-otp.js';
+import { generateOtp } from '../src/services/otp.js';
 
 // Regression tests for security issues #7 (OTP), #9 (JWT secrets), #10 (CSV injection)
 
