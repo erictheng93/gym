@@ -96,21 +96,30 @@ const exerciseSchema = z.object({
   material_id: z.string().optional(),
 });
 
-const createPlanSchema = z.object({
+const planFieldsSchema = z.object({
   title: z.string().min(1, '請輸入標題'),
-  objectives: z.array(z.string()).optional().default([]),
-  warmup_exercises: z.array(exerciseSchema).optional().default([]),
-  main_exercises: z.array(exerciseSchema).optional().default([]),
-  cooldown_exercises: z.array(exerciseSchema).optional().default([]),
+  objectives: z.array(z.string()),
+  warmup_exercises: z.array(exerciseSchema),
+  main_exercises: z.array(exerciseSchema),
+  cooldown_exercises: z.array(exerciseSchema),
   notes: z.string().optional(),
-  is_template: z.boolean().optional().default(false),
+  is_template: z.boolean(),
   template_category: z.string().optional(),
   difficulty: z.string().optional(),
   duration_minutes: z.number().optional(),
   session_id: z.string().uuid().optional(),
 });
 
-const updatePlanSchema = createPlanSchema.partial();
+const createPlanSchema = planFieldsSchema.extend({
+  objectives: planFieldsSchema.shape.objectives.optional().default([]),
+  warmup_exercises: planFieldsSchema.shape.warmup_exercises.optional().default([]),
+  main_exercises: planFieldsSchema.shape.main_exercises.optional().default([]),
+  cooldown_exercises: planFieldsSchema.shape.cooldown_exercises.optional().default([]),
+  is_template: planFieldsSchema.shape.is_template.optional().default(false),
+});
+
+// No defaults: a PATCH must only touch the fields it sends
+const updatePlanSchema = planFieldsSchema.partial();
 
 const copyPlanSchema = z.object({
   title: z.string().optional(),

@@ -3,6 +3,7 @@
  * 包含：打卡、考勤記錄、統計報表、工時計算
  */
 
+import { toLocalDateString } from '~/utils/date'
 import { useFetch } from '~/composables/core/useFetch'
 import type { Attendance, Employee } from '~/types/schema'
 
@@ -69,7 +70,7 @@ export const useAttendance = () => {
   // Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const now = new Date()
-    return now.toISOString().slice(0, 10)
+    return toLocalDateString(now)
   }
 
   // Fetch today's attendance records
@@ -345,7 +346,7 @@ export const useAttendance = () => {
       const result = await readItems<Attendance>('attendances', {
         filter: {
           employee_id: employeeId,
-          attendance_date_gte: startDate.toISOString().slice(0, 10)
+          attendance_date_gte: toLocalDateString(startDate)
         },
         sort: 'attendance_date',
         sortOrder: 'desc',
@@ -448,8 +449,8 @@ export const useAttendance = () => {
     if (existing) return existing
 
     const promise = (async () => {
-      const startDate = new Date(year, month - 1, 1).toISOString().slice(0, 10)
-      const endDate = new Date(year, month, 0).toISOString().slice(0, 10)
+      const startDate = toLocalDateString(new Date(year, month - 1, 1))
+      const endDate = toLocalDateString(new Date(year, month, 0))
 
       try {
         const filter: Record<string, unknown> = {
@@ -536,8 +537,8 @@ export const useAttendance = () => {
     if (existing) return existing
 
     const promise = (async () => {
-      const startDate = new Date(year, month - 1, 1).toISOString().slice(0, 10)
-      const endDate = new Date(year, month, 0).toISOString().slice(0, 10)
+      const startDate = toLocalDateString(new Date(year, month - 1, 1))
+      const endDate = toLocalDateString(new Date(year, month, 0))
 
       try {
         const result = await readItems<Attendance>('attendances', {

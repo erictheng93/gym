@@ -407,13 +407,11 @@ describe('Coach Lesson Plans API', () => {
       });
     });
 
-    // BUG: src/routes/coach-lesson-plans.ts updatePlanSchema = createPlanSchema.partial() keeps the
-    // .default([]) / .default(false) of the create schema, so a PATCH that omits objectives,
-    // *_exercises or is_template silently resets them to [] / false (data loss).
-    it.skip('keeps fields that are not part of the PATCH body', async () => {
+    it('keeps fields that are not part of the PATCH body', async () => {
       const res = await makeCoachRequest(`/api/coach/lesson-plans/${createdPlanId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title: '只改標題' }),
+        // re-sends the current title so later tests still see it; only the omitted fields matter here
+        body: JSON.stringify({ title: '下肢力量訓練（進階版）' }),
       });
       expect(res.status).toBe(200);
 

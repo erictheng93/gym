@@ -340,14 +340,11 @@ describe('useSegmentation', () => {
       expect(getScoreColor(0)).toBe(getScoreColor(1))
     })
 
-    // BUG: getSegmentColor (useSegmentation.ts) returns Tailwind class strings, but
-    // pages/marketing/segmentation/index.vue and [segment].vue bind it as an inline CSS
-    // `background` value, and Tailwind is not installed, so segments get no color.
-    it.skip('getSegmentColor returns a value usable as a CSS color', () => {
+    it('getSegmentColor returns a value usable as a CSS color', () => {
       const { getSegmentColor } = useSegmentation()
 
       ALL_SEGMENTS.forEach((segment) => {
-        expect(getSegmentColor(segment)).toMatch(/^(#|rgb|hsl|var\()/)
+        expect(getSegmentColor(segment)).toMatch(/^#[0-9A-Fa-f]{6}$/)
       })
     })
   })

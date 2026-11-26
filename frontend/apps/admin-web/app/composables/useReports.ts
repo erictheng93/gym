@@ -276,7 +276,7 @@ export const useReports = () => {
 
         const response = await authFetch(`${baseURL}/api/reports/revenue?${params}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         handleError(error, {
           context: 'useReports.getRevenueReport',
@@ -313,7 +313,7 @@ export const useReports = () => {
 
         const response = await authFetch(`${baseURL}/api/reports/member-growth?${params}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         handleError(error, {
           context: 'useReports.getMemberGrowthReport',
@@ -350,7 +350,7 @@ export const useReports = () => {
 
         const response = await authFetch(`${baseURL}/api/reports/contract-expiry?${params}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         handleError(error, {
           context: 'useReports.getContractExpiryReport',
@@ -387,7 +387,7 @@ export const useReports = () => {
 
         const response = await authFetch(`${baseURL}/api/reports/member-activity?${params}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         handleError(error, {
           context: 'useReports.getMemberActivityReport',
@@ -412,7 +412,7 @@ export const useReports = () => {
         method: 'POST'
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.json()
+      return await response.json()
     } catch (error) {
       handleError(error, {
         context: 'useReports.refreshReports',
@@ -443,7 +443,7 @@ export const useReports = () => {
 
         const response = await authFetch(`${baseURL}/api/reports/branch-performance?${params}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         handleError(error, {
           context: 'useReports.getBranchPerformanceReport',
@@ -480,7 +480,7 @@ export const useReports = () => {
 
         const response = await authFetch(`${baseURL}/api/reports/coach-performance?${params}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         handleError(error, {
           context: 'useReports.getCoachPerformanceReport',

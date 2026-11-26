@@ -174,6 +174,11 @@ describe('Export Service', () => {
   // Excel Generation Tests
   // ---------------------------------------------------------------------------
   describe('generateExcel', () => {
+    // Cold exceljs import is ~1s idle but can exceed testTimeout on a loaded machine; pay it in a hook.
+    beforeAll(async () => {
+      await import('exceljs');
+    }, 180_000);
+
     it('should generate valid Excel buffer', async () => {
       const columns: ExportColumn[] = [
         { header: '姓名', key: 'name', width: 15 },

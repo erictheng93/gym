@@ -383,19 +383,20 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
 
   const contractCondition = and(eq(contracts.id, data.contractId), eq(contracts.tenantId, tenantId));
 
-  const [contract] = await db
-    .select(CONTRACT_TOTAL_AMOUNT_SELECT)
-    .from(contracts)
-    .where(and(contractCondition, eq(contracts.memberId, data.memberId)))
-    .limit(1);
-
-  if (!contract) {
-    return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  // Insert and recalculate atomically; the contract row is locked inside
-  // recalculateContractPayment so concurrent payments cannot race the total
+  // Lock the contract row FOR UPDATE before inserting the payment. The insert's
+  // foreign-key check takes FOR KEY SHARE on the contract; locking it only
+  // afterwards (in recalculateContractPayment) lets two concurrent payments
+  // each hold KEY SHARE and wait for the other's FOR UPDATE -> deadlock.
   const newPayment = await db.transaction(async (tx) => {
+    const [contract] = await tx
+      .select(CONTRACT_TOTAL_AMOUNT_SELECT)
+      .from(contracts)
+      .where(and(contractCondition, eq(contracts.memberId, data.memberId)))
+      .limit(1)
+      .for('update');
+
+    if (!contract) return null;
+
     const [inserted] = await tx.insert(payments).values({
       contractId,
       memberId: data.memberId,
@@ -413,6 +414,10 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
 
     return inserted;
   });
+
+  if (!newPayment) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
 
   return c.json({ success: true, data: newPayment }, 201);
 });

@@ -184,8 +184,10 @@ app.route('/api/bookings', bookingsRoutes);
 app.route('/api/check-ins', checkInsRoutes);
 
 // Payment routes
-app.route('/api/payments', paymentsRoutes);
+// Webhooks first: gateway callbacks carry no staff session, and paymentsRoutes'
+// use('*', requireAuth) would otherwise also match /api/payments/webhook/*
 app.route('/api/payments/webhook', paymentWebhooksRoutes);
+app.route('/api/payments', paymentsRoutes);
 
 // Marketing routes
 app.route('/api/leads', leadsRoutes);

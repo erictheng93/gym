@@ -69,8 +69,7 @@ describe('ContractAlerts', () => {
     expect(w.find('.expiry-date').text()).toBe(expected)
   })
 
-  // BUG: ContractAlerts.vue formatDays returns '已到期' and the template appends '到期', rendering '已到期到期'.
-  it.skip.each([-2, 0])('shows "已到期" once for %i days until expiry', (days) => {
+  it.each([-2, 0])('shows "已到期" once for %i days until expiry', (days) => {
     const w = mountAlerts({ alerts: makeResponse([makeAlert({ days_until_expiry: days })]) })
     expect(w.find('.expiry-date').text()).toBe('已到期')
   })

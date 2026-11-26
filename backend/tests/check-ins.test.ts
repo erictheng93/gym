@@ -252,11 +252,7 @@ describe('Check-ins API', () => {
       }
     });
 
-    // BUG: POST /api/check-ins (src/routes/check-ins.ts) selects the active
-    // contract without requiring remainingCounts > 0, so a COUNT_BASED contract
-    // with no sessions left still lets the member in (the decrement is just a
-    // no-op thanks to the remainingCounts > 0 guard).
-    it.skip('rejects check-in when a COUNT_BASED contract has no sessions left', async () => {
+    it('rejects check-in when a COUNT_BASED contract has no sessions left', async () => {
       const { member, contract } = await memberWithContract({ remainingCounts: 0 });
 
       const response = await checkIn(member.id);
@@ -265,11 +261,7 @@ describe('Check-ins API', () => {
       expect(await remainingCounts(contract.id)).toBe(0);
     });
 
-    // BUG: POST /api/check-ins only requires an ACTIVE, in-date contract when no
-    // contractId is sent (`if (!activeContract && !data.contractId)`). Passing the
-    // id of the member's own PAUSED/EXPIRED/CANCELLED contract skips that check
-    // and the check-in is created.
-    it.skip('rejects check-in with an explicit contractId of a non-active contract', async () => {
+    it('rejects check-in with an explicit contractId of a non-active contract', async () => {
       const { member, contract } = await memberWithContract({ status: 'PAUSED' });
 
       const response = await checkIn(member.id, { contractId: contract.id });

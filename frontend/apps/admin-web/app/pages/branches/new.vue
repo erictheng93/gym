@@ -159,6 +159,7 @@ const handleSubmit = async () => {
               v-model="form.address"
               :label="PAGES.BRANCHES.ADDRESS"
               :placeholder="PAGES.BRANCHES.ADDRESS_PLACEHOLDER"
+              :error="errors.address"
             />
           </div>
 
@@ -167,6 +168,7 @@ const handleSubmit = async () => {
             :label="PAGES.BRANCHES.PHONE"
             type="tel"
             :placeholder="PAGES.BRANCHES.PHONE_PLACEHOLDER"
+            :error="errors.phone"
           />
 
           <FormInput
@@ -174,6 +176,7 @@ const handleSubmit = async () => {
             :label="PAGES.BRANCHES.TAX_ID"
             :placeholder="PAGES.BRANCHES.TAX_ID_PLACEHOLDER"
             :maxlength="8"
+            :error="errors.tax_id"
           />
         </div>
       </section>

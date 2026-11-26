@@ -51,8 +51,7 @@ function stripeCompletedRequest(paymentId: string, sessionId: string, amount: nu
   });
 }
 
-// Sent to the webhook router itself: through the full app the webhooks are
-// currently unreachable (see the BUG test at the bottom).
+// Sent to the webhook router itself; the full-app path is covered at the bottom.
 function stripeCompleted(paymentId: string, sessionId: string, amount: number) {
   return webhookRoutes.fetch(stripeCompletedRequest(paymentId, sessionId, amount));
 }
@@ -148,14 +147,7 @@ describe('Payments (real DB)', () => {
     });
   });
 
-  // BUG: POST /api/payments (src/routes/payments.ts) inserts the payment row
-  // before recalculateContractPayment locks the contract with SELECT ... FOR
-  // UPDATE. The insert's foreign-key check already holds a FOR KEY SHARE lock on
-  // the contract row, so two concurrent payments on the same contract each hold
-  // KEY SHARE and wait for the other's FOR UPDATE: Postgres reports
-  // "deadlock detected" and one request fails with 500. Locking the contract
-  // before the insert (or FOR NO KEY UPDATE) would avoid it.
-  it.skip('POST /api/payments: concurrent staff payments on one contract all succeed', async () => {
+  it('POST /api/payments: concurrent staff payments on one contract all succeed', async () => {
     const contractId = await createContract('5000.00');
 
     const responses = await Promise.all([
@@ -247,6 +239,12 @@ describe('Payments (real DB)', () => {
   // paid (createPayment inserts them with receiptNo = NULL, and abandoned/expired
   // checkouts are never removed). An abandoned 5000 checkout plus a paid 3000
   // deposit is stored as paidAmount 8000 / PAID instead of 3000 / PARTIAL.
+  // Needs a schema decision: payments has no completion status. receiptNo NULL
+  // also describes every staff (cash/POS) payment, and createdBy is NULL for
+  // staff users without an employee record, so neither column can tell a
+  // pending checkout from a completed payment. Fix by adding a status /
+  // completed_at column (set by the webhook) or by not inserting the row until
+  // the gateway confirms.
   it.skip('webhook: an abandoned (unpaid) checkout row is not counted as paid', async () => {
     const contractId = await createContract('10000.00');
     await createCheckoutPayment(contractId, '5000.00'); // abandoned, never paid
@@ -260,13 +258,8 @@ describe('Payments (real DB)', () => {
     });
   });
 
-  // BUG: src/app.ts mounts paymentsRoutes at /api/payments before the webhook
-  // router at /api/payments/webhook, and routes/payments.ts applies
-  // app.use('*', requireAuth) + requireTenant, which also matches
-  // /api/payments/webhook/*. Every gateway callback (Stripe, ECPay, LINE Pay
-  // notify and the LINE Pay browser confirm redirect) gets 401 "未授權，請先登入",
-  // so no gateway payment is ever recorded or activates its contract.
-  it.skip('gateway webhooks are reachable through the full app without a staff session', async () => {
+  // Webhooks are mounted ahead of the staff-auth payments router (src/app.ts)
+  it('gateway webhooks are reachable through the full app without a staff session', async () => {
     const contractId = await createContract('5000.00');
     const paymentId = await createCheckoutPayment(contractId, '5000.00');
     const req = stripeCompletedRequest(paymentId, 'cs_full_app', 5000);
@@ -279,5 +272,17 @@ describe('Payments (real DB)', () => {
 
     expect(res.status).toBe(200);
     expect((await getPayment(paymentId)).receiptNo).toBe('cs_full_app');
+  });
+
+  it('non-webhook /api/payments routes still require a staff session', async () => {
+    for (const [method, path] of [
+      ['GET', '/api/payments'],
+      ['POST', '/api/payments'],
+      ['GET', '/api/payments/webhook'],
+      ['GET', '/api/payments/webhook/unknown'],
+    ] as const) {
+      const res = await app.request(path, { method });
+      expect(res.status, `${method} ${path}`).toBe(401);
+    }
   });
 });

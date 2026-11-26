@@ -177,6 +177,10 @@ export const useMakeupRequests = () => {
       throw new Error('Makeup request not found')
     }
 
+    if (makeupRequest.request_status !== 'PENDING') {
+      throw new Error('只能審核待審核的申請')
+    }
+
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED'
 
     const data = await updateItem<MakeupRequest>('makeup_requests', makeupRequestId, {

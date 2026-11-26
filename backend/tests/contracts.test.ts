@@ -609,11 +609,7 @@ describe('Contracts API', () => {
   });
 
   describe('Tenant Isolation', () => {
-    // BUG: POST /api/contracts (src/routes/contracts.ts) looks up the member and
-    // the plan by id only, without a tenant filter. A staff user can create a
-    // contract in their own branch for another tenant's member (or with another
-    // tenant's plan); the member route and POST /api/payments both scope by tenant.
-    it.skip('should reject creating a contract for a member or plan of another tenant', async () => {
+    it('should reject creating a contract for a member or plan of another tenant', async () => {
       const todayStr = new Date().toISOString().split('T')[0];
       for (const ids of [
         { memberId: TEST_MEMBER_B_ID, planId: TEST_PLAN_ID },

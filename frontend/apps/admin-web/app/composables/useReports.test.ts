@@ -216,9 +216,7 @@ describe('useReports', () => {
       expect(mockHandleError).toHaveBeenCalledTimes(1)
     })
 
-    // BUG: useReports.ts `return response.json()` (no await) inside try/catch: an async JSON parse
-    // rejection escapes the catch, so the call rejects instead of returning null and handleError is skipped.
-    it.skip('returns null when the body is not valid JSON', async () => {
+    it('returns null when the body is not valid JSON', async () => {
       mockFetch.mockResolvedValueOnce({ ok: true, json: vi.fn().mockRejectedValue(new Error('Invalid JSON')) })
 
       expect(await useReports().getRevenueReport()).toBeNull()

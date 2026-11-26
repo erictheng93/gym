@@ -534,9 +534,7 @@ describe('useMakeupRequests', () => {
       expect(attendanceUpdate).not.toHaveProperty('check_out')
     })
 
-    // BUG: useMakeupRequests.ts reviewMakeup (~line 174-203) never checks that the request is still PENDING,
-    // unlike cancelMakeup. An already CANCELLED/REJECTED/APPROVED request can be re-approved and rewrites attendance.
-    it.skip('應該拒絕審核非待審核狀態的申請', async () => {
+    it('應該拒絕審核非待審核狀態的申請', async () => {
       mockFetchInstance.readItem.mockResolvedValueOnce({
         id: 'mr-1',
         employee_id: 'emp-1',

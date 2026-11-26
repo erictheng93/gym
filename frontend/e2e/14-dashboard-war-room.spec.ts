@@ -37,9 +37,7 @@ test.describe('戰情室 Dashboard', () => {
     expect(download.suggestedFilename()).toMatch(/^kpis-\d{4}-\d{2}-\d{2}\.json$/)
   })
 
-  // BUG: war-room.vue isHeadquarter compares user.role with 'Administrator' / 'Manager', but the
-  // backend returns lowercase roles ('admin', 'manager'), so the HQ branch selector never renders.
-  test.skip('HQ 管理員可看到分店選擇器', async ({ page }) => {
+  test('HQ 管理員可看到分店選擇器', async ({ page }) => {
     const select = page.locator('.header-controls select.form-select')
     await expect(select).toBeVisible()
     await expect(select.locator('option')).not.toHaveCount(1)

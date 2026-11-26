@@ -762,4 +762,28 @@ describe('useShiftSchedules', () => {
       )
     })
   })
+
+  describe('local date handling (Asia/Taipei, UTC+8)', () => {
+    const originalTZ = process.env.TZ
+    beforeEach(() => {
+      process.env.TZ = 'Asia/Taipei'
+      // 07:30 local on Jan 15 = 23:30 UTC on Jan 14
+      vi.setSystemTime(new Date('2026-01-15T07:30:00+08:00'))
+    })
+    afterEach(() => {
+      if (originalTZ === undefined) delete process.env.TZ
+      else process.env.TZ = originalTZ
+    })
+
+    it('filters active assignments by the local date, not the UTC date', async () => {
+      mockFetchInstance.readItems.mockResolvedValue({ data: [], total: 0 })
+      await useShiftSchedules().fetchShiftEmployees('shift-1')
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith(
+        'employee_shifts',
+        expect.objectContaining({
+          filter: expect.objectContaining({ effective_date_lte: '2026-01-15' })
+        })
+      )
+    })
+  })
 })

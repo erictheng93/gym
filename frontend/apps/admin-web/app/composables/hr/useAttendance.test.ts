@@ -905,4 +905,36 @@ describe('useAttendance', () => {
       consoleErrorSpy.mockRestore()
     })
   })
+
+  describe('local date handling (Asia/Taipei, UTC+8)', () => {
+    const originalTZ = process.env.TZ
+    beforeEach(() => {
+      process.env.TZ = 'Asia/Taipei'
+      // 07:30 local on Jan 15 = 23:30 UTC on Jan 14
+      vi.setSystemTime(new Date('2026-01-15T07:30:00+08:00'))
+    })
+    afterEach(() => {
+      if (originalTZ === undefined) delete process.env.TZ
+      else process.env.TZ = originalTZ
+    })
+
+    it('queries today using the local date, not the UTC date', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+      await useAttendance().fetchTodayAttendances()
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith(
+        'attendances',
+        expect.objectContaining({ filter: { attendance_date: '2026-01-15' } })
+      )
+    })
+
+    it('uses local month boundaries for monthly stats', async () => {
+      mockFetchInstance.readItems.mockResolvedValue({ data: [], total: 0 })
+      await useAttendance().fetchMonthlyAttendanceStats({ year: 2026, month: 2 })
+      const filters = mockFetchInstance.readItems.mock.calls.map(c => c[1]?.filter)
+      expect(filters).toContainEqual(expect.objectContaining({
+        attendance_date_gte: '2026-02-01',
+        attendance_date_lte: '2026-02-28'
+      }))
+    })
+  })
 })

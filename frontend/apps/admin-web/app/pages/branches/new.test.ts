@@ -111,9 +111,7 @@ describe('branches/new.vue', () => {
     expect(mockCreateBranch).not.toHaveBeenCalled()
   })
 
-  // BUG: pages/branches/new.vue passes no :error to the address/phone/tax_id FormInputs, so Zod
-  // rejects the form but the user sees no message at all (submit silently does nothing).
-  it.skip('shows the phone and tax id validation messages', async () => {
+  it('shows the phone and tax id validation messages', async () => {
     const wrapper = await submitInvalidContact()
     expect(fieldErrors(wrapper)).toEqual(expect.arrayContaining([
       VALIDATION.PHONE_INVALID,

@@ -452,10 +452,7 @@ describe('Member Reviews API', () => {
       expect((await response.json()).code).toBe('CLASS_NOT_FOUND');
     });
 
-    // BUG: src/routes/member-reviews.ts GET /class/:classId looks the class up by id only (no tenant
-    // check), so a member of another tenant can read this tenant's class reviews, including the
-    // reviewers' full names for non-anonymous reviews.
-    it.skip("should not expose another tenant's class reviews", async () => {
+    it("should not expose another tenant's class reviews", async () => {
       const response = await review(`/api/member/reviews/class/${TEST_CLASS_ID}`, otherTenantMemberToken);
 
       expect(response.status).toBe(404);

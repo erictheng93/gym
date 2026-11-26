@@ -46,8 +46,8 @@ const getUrgencyLabel = (urgency: string) => {
 
 const formatDays = (days: number) => {
   if (days <= 0) return '已到期'
-  if (days === 1) return '明天'
-  return `${days} 天後`
+  if (days === 1) return '明天到期'
+  return `${days} 天後到期`
 }
 </script>
 
@@ -100,7 +100,7 @@ const formatDays = (days: number) => {
           <div class="alert-details">
             <span class="plan-name">{{ alert.plan_name }}</span>
             <span class="separator">|</span>
-            <span class="expiry-date">{{ formatDays(alert.days_until_expiry) }}到期</span>
+            <span class="expiry-date">{{ formatDays(alert.days_until_expiry) }}</span>
           </div>
         </div>
         <div class="alert-action">
