@@ -207,14 +207,14 @@ describe('Members API', () => {
       expect(response.status).toBe(404);
     });
 
-    it('should return 403 when updating a member from another tenant', async () => {
+    it('should return 404 when updating a member from another tenant', async () => {
       const response = await authRequest(`/api/members/${TEST_MEMBER_B_ID}`, {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ fullName: 'Hijacked' }),
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
   });
 
@@ -338,31 +338,31 @@ describe('Members API', () => {
   });
 
   describe('Tenant Isolation', () => {
-    it('should return 403 when getting a member from another tenant', async () => {
+    it('should return 404 when getting a member from another tenant', async () => {
       const response = await authRequest(`/api/members/${TEST_MEMBER_B_ID}`, {
         method: 'GET',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when deleting a member from another tenant', async () => {
+    it('should return 404 when deleting a member from another tenant', async () => {
       const response = await authRequest(`/api/members/${TEST_MEMBER_B_ID}`, {
         method: 'DELETE',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when getting contracts for a member from another tenant', async () => {
+    it('should return 404 when getting contracts for a member from another tenant', async () => {
       const response = await authRequest(`/api/members/${TEST_MEMBER_B_ID}/contracts`, {
         method: 'GET',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
   });
 

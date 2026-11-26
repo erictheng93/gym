@@ -231,32 +231,32 @@ describe('Branches API', () => {
       expect(row.status).not.toBe('archived');
     });
 
-    it('should return 403 when getting a branch from another tenant', async () => {
+    it('should return 404 when getting a branch from another tenant', async () => {
       const response = await authRequest(`/api/branches/${TEST_BRANCH_B_ID}`, {
         method: 'GET',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when updating a branch from another tenant', async () => {
+    it('should return 404 when updating a branch from another tenant', async () => {
       const response = await authRequest(`/api/branches/${TEST_BRANCH_B_ID}`, {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ name: 'Hijacked' }),
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when deleting a branch from another tenant', async () => {
+    it('should return 404 when deleting a branch from another tenant', async () => {
       const response = await authRequest(`/api/branches/${TEST_BRANCH_B_ID}`, {
         method: 'DELETE',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
   });
 });

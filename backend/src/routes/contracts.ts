@@ -326,12 +326,8 @@ app.get('/:id', async (c) => {
       .orderBy(desc(payments.createdAt)),
   ]);
 
-  if (!contract) {
+  if (!contract || !branchIds.includes(contract.contract.branchId!)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  if (!branchIds.includes(contract.contract.branchId!)) {
-    return c.json({ success: false, error: '無權限存取此合約' }, 403);
   }
 
   return c.json({
@@ -440,12 +436,8 @@ app.patch('/:id', zValidator('json', updateContractSchema), async (c) => {
       .limit(1),
   ]);
 
-  if (!contract) {
+  if (!contract || !contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
-    return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
   const [updatedContract] = await db
@@ -473,12 +465,8 @@ app.post('/:id/activate', async (c) => {
       .limit(1),
   ]);
 
-  if (!contract) {
+  if (!contract || !contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
-    return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
   if (contract.status !== 'DRAFT') {
@@ -518,12 +506,8 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
       .limit(1),
   ]);
 
-  if (!contract) {
+  if (!contract || !contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
-    return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
   if (contract.status !== 'ACTIVE') {
@@ -596,12 +580,8 @@ app.post('/:id/resume', async (c) => {
       .limit(1),
   ]);
 
-  if (!contract) {
+  if (!contract || !contract.branchId || !branchIds.includes(contract.branchId)) {
     return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  if (!contract.branchId || !branchIds.includes(contract.branchId)) {
-    return c.json({ success: false, error: '無權限操作此合約' }, 403);
   }
 
   if (contract.status !== 'PAUSED') {

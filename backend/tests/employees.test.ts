@@ -275,32 +275,32 @@ describe('Employees API', () => {
   });
 
   describe('Tenant Isolation', () => {
-    it('should return 403 when getting an employee from another tenant', async () => {
+    it('should return 404 when getting an employee from another tenant', async () => {
       const response = await authRequest(`/api/employees/${TEST_EMPLOYEE_B_ID}`, {
         method: 'GET',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when updating an employee from another tenant', async () => {
+    it('should return 404 when updating an employee from another tenant', async () => {
       const response = await authRequest(`/api/employees/${TEST_EMPLOYEE_B_ID}`, {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ fullName: 'Hijacked' }),
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when deleting an employee from another tenant', async () => {
+    it('should return 404 when deleting an employee from another tenant', async () => {
       const response = await authRequest(`/api/employees/${TEST_EMPLOYEE_B_ID}`, {
         method: 'DELETE',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
 
       const [row] = await db.select().from(employees).where(eq(employees.id, TEST_EMPLOYEE_B_ID));
       expect(row.status).not.toBe('RESIGNED');
