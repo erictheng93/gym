@@ -24,6 +24,10 @@ const createEmployeeSchema = z.object({
   basicSalary: z.coerce.number().optional().nullable(),
 });
 
+const PERMISSION_ADMIN_ROLES = ['super_admin', 'admin'];
+const SELF_LOCKED_FIELDS = ['customPermissions', 'basicSalary', 'jobTitleId'] as const;
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 const updateEmployeeSchema = z.object({
   fullName: z.string().min(2, '姓名至少 2 個字元').optional(),
   phone: z.string().optional().nullable(),
@@ -230,7 +234,7 @@ app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json',
     return c.json({ success: false, error: '無效的分店' }, 400);
   }
 
-  const branchFilter = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
+  const branchFilter =branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [countResult] = await db
     .select(EMPLOYEE_COUNT_SELECT)
     .from(employees)
@@ -254,6 +258,21 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
+  const user = c.get('user')!;
+  // Postgres also matches uppercase/braced/unhyphenated uuids; only accept the canonical
+  // form so the self-edit check below compares the same identity the UPDATE will hit.
+  if (!CANONICAL_UUID.test(id)) {
+    return c.json({ success: false, error: '員工不存在' }, 404);
+  }
+
+  // Permission overrides grant UI capabilities: admins only.
+  if (data.customPermissions !== undefined && !PERMISSION_ADMIN_ROLES.includes(user.role)) {
+    return c.json({ success: false, error: '權限不足' }, 403);
+  }
+  // Nobody raises their own salary, job title or permissions.
+  if (id === user.employeeId && SELF_LOCKED_FIELDS.some((f) => data[f] !== undefined)) {
+    return c.json({ success: false, error: '不可修改自己的薪資、職稱或權限' }, 403);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
   if (branchIds.length === 0) {
