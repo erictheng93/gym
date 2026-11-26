@@ -79,6 +79,17 @@ describe('Permission self-escalation', () => {
     expect(row.basicSalary).toBe('40000.00');
   });
 
+  it.each([
+    ['uppercase', MANAGER_EMPLOYEE_ID.toUpperCase()],
+    ['braced', `{${MANAGER_EMPLOYEE_ID}}`],
+    ['unhyphenated', MANAGER_EMPLOYEE_ID.replace(/-/g, '')],
+  ])('a non-canonical (%s) own id cannot bypass the self-edit lock', async (_form, id) => {
+    const res = await patch(`/api/employees/${id}`, managerToken, { basicSalary: 99999 });
+    expect(res.status).toBe(404);
+    const [row] = await db.select().from(employees).where(eq(employees.id, MANAGER_EMPLOYEE_ID));
+    expect(row.basicSalary).toBe('40000.00');
+  });
+
   it('a manager can still edit their own non-sensitive fields', async () => {
     const res = await patch(`/api/employees/${MANAGER_EMPLOYEE_ID}`, managerToken, { phone: '0912000111' });
     expect(res.status).toBe(200);

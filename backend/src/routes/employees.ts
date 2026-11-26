@@ -26,6 +26,7 @@ const createEmployeeSchema = z.object({
 
 const PERMISSION_ADMIN_ROLES = ['super_admin', 'admin'];
 const SELF_LOCKED_FIELDS = ['customPermissions', 'basicSalary', 'jobTitleId'] as const;
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const updateEmployeeSchema = z.object({
   fullName: z.string().min(2, '姓名至少 2 個字元').optional(),
@@ -258,6 +259,11 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
   const user = c.get('user')!;
+  // Postgres also matches uppercase/braced/unhyphenated uuids; only accept the canonical
+  // form so the self-edit check below compares the same identity the UPDATE will hit.
+  if (!CANONICAL_UUID.test(id)) {
+    return c.json({ success: false, error: '員工不存在' }, 404);
+  }
 
   // Permission overrides grant UI capabilities: admins only.
   if (data.customPermissions !== undefined && !PERMISSION_ADMIN_ROLES.includes(user.role)) {
