@@ -151,7 +151,7 @@ jobs:
         env:
           CI: 'true'
           E2E_APPS: ${{ matrix.app }}
-        run: bunx playwright test --project=${{ matrix.app }} --max-failures=10
+        run: bunx playwright test --project=${{ matrix.app }}
       - name: Backend log
         if: failure()
         run: |
