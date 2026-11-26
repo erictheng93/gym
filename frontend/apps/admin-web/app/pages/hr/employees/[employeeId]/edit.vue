@@ -16,7 +16,8 @@ const employmentTypeOptions = [
 import { validateUUIDParam } from '~/utils/validation'
 import { PERMISSION_MODULES, createEmptyPermissions } from '~/constants/permissions'
 import { MESSAGES } from '~/constants'
-import type { JobTitle } from '~/types/schema'
+import type { ApiJobTitle } from '~/composables/useJobTitles'
+import type { PermissionMatrix, UpdateEmployeeInput } from '~/composables/useEmployees'
 
 definePageMeta({
   middleware: 'auth',
@@ -25,7 +26,7 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const { getEmployee, updateEmployee, employees, fetchEmployees } = useEmployees()
+const { getEmployee, updateEmployee } = useEmployees()
 const { branches, fetchBranches } = useBranches()
 const { jobTitles, fetchJobTitles, getJobTitle } = useJobTitles()
 
@@ -37,7 +38,7 @@ const employeeId = computed(() => route.params.employeeId as string)
 
 // Custom permissions state
 const useCustomPermissions = ref(false)
-const currentJobTitle = ref<JobTitle | null>(null)
+const currentJobTitle = ref<ApiJobTitle | null>(null)
 
 const form = reactive({
   full_name: '',
@@ -46,8 +47,6 @@ const form = reactive({
   email: '',
   branch_id: '',
   job_title_id: '',
-  supervisor_id: '',
-  user_id: '',
   employment_status: 'ACTIVE' as 'ACTIVE' | 'RESIGNED' | 'LEAVE',
   employment_type: 'FULL_TIME' as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE',
   hire_date: '',
@@ -63,45 +62,39 @@ const jobTitleOptions = computed(() =>
   jobTitles.value.map(j => ({ value: j.id, label: j.name }))
 )
 
-const supervisorOptions = computed(() =>
-  employees.value
-    .filter(e => e.employment_status === 'ACTIVE' && e.id !== employeeId.value)
-    .map(e => ({ value: e.id, label: e.full_name }))
-)
-
 const loadEmployee = async () => {
   isLoading.value = true
   try {
-    const employee = await getEmployee(employeeId.value) as Record<string, unknown> | null
+    const employee = await getEmployee(employeeId.value)
     if (!employee) {
       throw new Error('Employee not found')
     }
-    // Map backend camelCase to form snake_case
-    // Support both naming conventions for compatibility
-    form.full_name = (employee.fullName || employee.full_name || '') as string
-    form.employee_code = (employee.employeeCode || employee.employee_code || '') as string
-    form.phone = (employee.phone || '') as string
-    form.email = (employee.email || '') as string
-    form.branch_id = (employee.branchId || employee.branch_id || '') as string
-    form.job_title_id = (employee.jobTitleId || employee.job_title_id || '') as string
-    form.supervisor_id = (employee.supervisorId || employee.supervisor_id || '') as string
-    form.user_id = (employee.userId || employee.user_id || '') as string
-    form.employment_status = (employee.status || employee.employment_status || 'ACTIVE') as 'ACTIVE' | 'RESIGNED' | 'LEAVE'
-    form.employment_type = (employee.employmentType || employee.employment_type || 'FULL_TIME') as 'FULL_TIME' | 'PART_TIME' | 'FREELANCE'
-    form.hire_date = (employee.hireDate || employee.hire_date || '') as string
-    form.basic_salary = (employee.basicSalary || employee.basic_salary || null) as number | null
+    form.full_name = employee.fullName || ''
+    form.employee_code = employee.employeeCode || ''
+    form.phone = employee.phone || ''
+    form.email = employee.email || ''
+    form.branch_id = employee.branchId || ''
+    form.job_title_id = employee.jobTitleId || ''
+    form.employment_status = employee.status || 'ACTIVE'
+    form.employment_type = employee.employmentType || 'FULL_TIME'
+    form.hire_date = employee.hireDate || ''
+    // decimal columns arrive as strings ("45000.00")
+    form.basic_salary = employee.basicSalary !== null && employee.basicSalary !== undefined ? Number(employee.basicSalary) : null
 
-    // Load custom permissions if exists
-    const customPerms = employee.customPermissions || employee.custom_permissions
+    // Load custom permissions if exists, overlaid on the full module list so every checkbox has a slot
+    const customPerms = employee.customPermissions
     if (customPerms && typeof customPerms === 'object') {
-      form.custom_permissions = customPerms as unknown as Record<string, Record<string, boolean>>
+      const merged = createEmptyPermissions()
+      for (const [moduleKey, actions] of Object.entries(customPerms)) {
+        merged[moduleKey] = { ...merged[moduleKey], ...actions } as typeof merged[string]
+      }
+      form.custom_permissions = merged
       useCustomPermissions.value = true
     }
 
     // Load job title permissions
-    const jobTitleId = (employee.jobTitleId || employee.job_title_id) as string | undefined
-    if (jobTitleId) {
-      await loadJobTitlePermissions(jobTitleId)
+    if (employee.jobTitleId) {
+      await loadJobTitlePermissions(employee.jobTitleId)
     }
   } catch (error) {
     console.error('Failed to load employee:', error)
@@ -166,19 +159,23 @@ const isModulePartiallyEnabled = (moduleKey: string) => {
 // Check if permission is custom (different from job title)
 const isCustomPermission = (moduleKey: string, actionKey: string): boolean => {
   if (!useCustomPermissions.value || !currentJobTitle.value) return false
-  const jobTitlePerm = (currentJobTitle.value.permissions_config?.[moduleKey] as Record<string, boolean> | undefined)?.[actionKey] || false
+  const jobTitlePerm = (currentJobTitle.value.permissionsConfig?.[moduleKey] as Record<string, boolean> | undefined)?.[actionKey] || false
   const customPerm = (form.custom_permissions[moduleKey] as Record<string, boolean> | undefined)?.[actionKey] || false
   return jobTitlePerm !== customPerm
 }
 
-// Toggle custom permissions on/off
+// Toggle custom permissions on/off.
+// Off: the page saves customPermissions = null, so the job title's permissions apply again.
+// On: start from the job title's permissions unless an override was already loaded.
 const toggleCustomPermissions = () => {
   useCustomPermissions.value = !useCustomPermissions.value
-  if (!useCustomPermissions.value) {
-    // Reset custom permissions to job title permissions
-    if (currentJobTitle.value?.permissions_config) {
-      form.custom_permissions = JSON.parse(JSON.stringify(currentJobTitle.value.permissions_config))
+  const hasOverride = Object.values(form.custom_permissions).some(m => Object.values(m).some(Boolean))
+  if (useCustomPermissions.value && !hasOverride && currentJobTitle.value?.permissionsConfig) {
+    const seeded = createEmptyPermissions()
+    for (const [moduleKey, actions] of Object.entries(currentJobTitle.value.permissionsConfig)) {
+      seeded[moduleKey] = { ...seeded[moduleKey], ...actions } as typeof seeded[string]
     }
+    form.custom_permissions = seeded
   }
 }
 
@@ -186,8 +183,7 @@ onMounted(async () => {
   await Promise.all([
     loadEmployee(),
     fetchBranches(),
-    fetchJobTitles(),
-    fetchEmployees({ limit: 100, status: 'ACTIVE' })
+    fetchJobTitles()
   ])
 })
 
@@ -206,30 +202,31 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    // Map form snake_case to backend camelCase
-    const employeeData: Record<string, unknown> = {
-      fullName: form.full_name,
-      phone: form.phone || undefined,
-      email: form.email || undefined,
+    // Field names are exactly the backend updateEmployeeSchema (camelCase).
+    // Phone / email are sent as null when emptied so they can be cleared.
+    const employeeData: UpdateEmployeeInput = {
+      fullName: form.full_name.trim(),
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
       status: form.employment_status,
       employmentType: form.employment_type,
-      customPermissions: useCustomPermissions.value ? form.custom_permissions : undefined
+      // null removes the override and falls back to the job title's permissions
+      customPermissions: useCustomPermissions.value ? form.custom_permissions as PermissionMatrix : null,
+      basicSalary: form.basic_salary ? Number(form.basic_salary) : null
     }
 
-    // Only include optional fields if they have values
     if (form.branch_id) employeeData.branchId = form.branch_id
     if (form.job_title_id) employeeData.jobTitleId = form.job_title_id
-    if (form.supervisor_id) employeeData.supervisorId = form.supervisor_id
     if (form.hire_date) employeeData.hireDate = form.hire_date
-    if (form.basic_salary !== null) employeeData.basicSalary = form.basic_salary
 
-    await updateEmployee(employeeId.value, employeeData)
+    // updateEmployee toasts the backend's reason and returns null on failure
+    const updated = await updateEmployee(employeeId.value, employeeData)
+    if (!updated) {
+      errors.value.submit = '更新員工失敗，請稍後再試'
+      return
+    }
     useToast().success(MESSAGES.SUCCESS.EMPLOYEE_UPDATED)
     router.push(`/hr/employees/${employeeId.value}`)
-  } catch (error) {
-    console.error('Failed to update employee:', error)
-    useToast().error(MESSAGES.ERRORS.EMPLOYEE_UPDATE_FAILED)
-    errors.value.submit = '更新員工失敗，請稍後再試'
   } finally {
     isSubmitting.value = false
   }
@@ -297,7 +294,9 @@ const handleSubmit = async () => {
                 v-model="form.employee_code"
                 type="text"
                 class="input"
-                placeholder="自動產生或手動輸入"
+                readonly
+                disabled
+                placeholder="系統自動產生"
               />
             </div>
 
@@ -351,17 +350,6 @@ const handleSubmit = async () => {
                   {{ jobTitle.label }}
                 </option>
               </select>
-            </div>
-
-            <div class="input-group">
-              <label class="input-label">直屬主管</label>
-              <select v-model="form.supervisor_id" class="input">
-                <option value="">請選擇主管（選填）</option>
-                <option v-for="supervisor in supervisorOptions" :key="supervisor.value" :value="supervisor.value">
-                  {{ supervisor.label }}
-                </option>
-              </select>
-              <span class="help-text">用於休假審核流程</span>
             </div>
           </div>
         </section>
@@ -450,7 +438,7 @@ const handleSubmit = async () => {
 
             <label class="toggle-switch">
               <input
-                v-model="useCustomPermissions"
+                :checked="useCustomPermissions"
                 type="checkbox"
                 @change="toggleCustomPermissions"
               />

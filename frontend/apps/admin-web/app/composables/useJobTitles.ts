@@ -1,15 +1,45 @@
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
-import type { JobTitle } from '~/types/schema'
 import { MESSAGES } from '~/constants'
+import { apiErrorMessage } from '~/utils/api-error'
+import type { PermissionMatrix } from '~/composables/useEmployees'
+
+// =============================================================================
+// Wire format of the staff job-titles API (backend/src/routes/job-titles.ts):
+// camelCase rows, tenant-scoped, sorted by name; no status / pagination.
+// =============================================================================
+
+export interface ApiJobTitle {
+  id: string
+  createdAt: string
+  name: string
+  code: string
+  description: string | null
+  level: number | null
+  sort: number | null
+  permissionsConfig: PermissionMatrix | null
+  tenantId: string
+}
+
+/** Body of POST /api/job-titles (createJobTitleSchema); `code` is required (max 20 chars) */
+export interface CreateJobTitleInput {
+  name: string
+  code: string
+  description?: string
+  level?: number
+  sort?: number
+  permissionsConfig?: PermissionMatrix
+}
+
+export type UpdateJobTitleInput = Partial<CreateJobTitleInput>
 
 let inFlightJobTitlesPromise: Promise<void> | null = null
-const inFlightSingleJobTitleMap = new Map<string, Promise<JobTitle | null>>()
+const inFlightSingleJobTitleMap = new Map<string, Promise<ApiJobTitle | null>>()
 
 export const useJobTitles = () => {
-  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
-  const jobTitles = useState<JobTitle[]>('job_titles', () => [])
+  const jobTitles = useState<ApiJobTitle[]>('job_titles', () => [])
   const isLoading = useState('job_titles_loading', () => false)
 
   const fetchJobTitles = async (force = false) => {
@@ -20,12 +50,8 @@ export const useJobTitles = () => {
     inFlightJobTitlesPromise = (async () => {
       isLoading.value = true
       try {
-        const { data } = await readItems<JobTitle>('job-titles', {
-          filter: { status: 'active' },
-          sort: 'name',
-          limit: 1000
-        })
-        jobTitles.value = data
+        const { data } = await apiFetch<ApiJobTitle[]>('/job-titles')
+        jobTitles.value = data || []
       } catch (error) {
         handleError(error, {
           context: 'useJobTitles.fetchJobTitles',
@@ -47,8 +73,8 @@ export const useJobTitles = () => {
 
     const promise = (async () => {
       try {
-        const data = await readItem<JobTitle>('job-titles', id)
-        return data
+        const { data } = await apiFetch<ApiJobTitle>(`/job-titles/${id}`)
+        return data ?? null
       } catch (error) {
         handleError(error, {
           context: 'useJobTitles.getJobTitle',
@@ -64,40 +90,45 @@ export const useJobTitles = () => {
     return promise
   }
 
-  const createJobTitle = async (jobTitle: Partial<JobTitle>) => {
+  /** Returns null on failure, after showing the backend's reason; never throws. */
+  const createJobTitle = async (input: CreateJobTitleInput): Promise<ApiJobTitle | null> => {
     try {
-      const data = await createItem<JobTitle>('job-titles', jobTitle)
+      const { data } = await apiFetch<ApiJobTitle>('/job-titles', { method: 'POST', body: input })
+      if (!data) throw new Error(MESSAGES.ERRORS.JOB_TITLE_CREATE_FAILED)
       return data
     } catch (error) {
       handleError(error, {
         context: 'useJobTitles.createJobTitle',
-        customMessage: MESSAGES.ERRORS.JOB_TITLE_CREATE_FAILED
+        customMessage: apiErrorMessage(error, MESSAGES.ERRORS.JOB_TITLE_CREATE_FAILED)
       })
       return null
     }
   }
 
-  const updateJobTitle = async (id: string, jobTitle: Partial<JobTitle>) => {
+  /** Returns null on failure, after showing the backend's reason; never throws. */
+  const updateJobTitle = async (id: string, input: UpdateJobTitleInput): Promise<ApiJobTitle | null> => {
     try {
-      const data = await updateItem<JobTitle>('job-titles', id, jobTitle)
+      const { data } = await apiFetch<ApiJobTitle>(`/job-titles/${id}`, { method: 'PATCH', body: input })
+      if (!data) throw new Error(MESSAGES.ERRORS.JOB_TITLE_UPDATE_FAILED)
       return data
     } catch (error) {
       handleError(error, {
         context: 'useJobTitles.updateJobTitle',
-        customMessage: MESSAGES.ERRORS.JOB_TITLE_UPDATE_FAILED
+        customMessage: apiErrorMessage(error, MESSAGES.ERRORS.JOB_TITLE_UPDATE_FAILED)
       })
       return null
     }
   }
 
-  const deleteJobTitle = async (id: string) => {
+  /** Returns false on failure (e.g. 403 for non-admins), after showing the backend's reason. */
+  const deleteJobTitle = async (id: string): Promise<boolean> => {
     try {
-      const result = await deleteItem('job-titles', id)
-      return result
+      await apiFetch(`/job-titles/${id}`, { method: 'DELETE' })
+      return true
     } catch (error) {
       handleError(error, {
         context: 'useJobTitles.deleteJobTitle',
-        customMessage: MESSAGES.ERRORS.JOB_TITLE_DELETE_FAILED
+        customMessage: apiErrorMessage(error, MESSAGES.ERRORS.JOB_TITLE_DELETE_FAILED)
       })
       return false
     }

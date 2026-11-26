@@ -42,6 +42,7 @@ const ATTENDANCE_STATUS_LABEL_MAP: Record<string, string> = {
 import { MESSAGES, PAGES } from '~/constants'
 import type { VerificationMethod } from '~/components/VerificationMethodSelector.vue'
 import { useAttendance } from '~/composables/hr/useAttendance'
+import { apiErrorMessage } from '~/utils/api-error'
 
 // Tab state
 const activeTab = ref<'member' | 'staff'>('member')
@@ -303,7 +304,7 @@ const performStaffCheckIn = async () => {
   } catch (error) {
     attendanceErrorMessage.value = '打卡失敗，請重試'
     console.error('Check-in failed:', error)
-    useToast().error('上班打卡失敗，請稍後再試')
+    useToast().error(apiErrorMessage(error, '上班打卡失敗，請稍後再試'))
   } finally {
     isProcessing.value = false
   }
@@ -323,7 +324,7 @@ const performStaffCheckOut = async () => {
   } catch (error) {
     attendanceErrorMessage.value = '打卡失敗，請重試'
     console.error('Check-out failed:', error)
-    useToast().error('下班打卡失敗，請稍後再試')
+    useToast().error(apiErrorMessage(error, '下班打卡失敗，請稍後再試'))
   } finally {
     isProcessing.value = false
   }

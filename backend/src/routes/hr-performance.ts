@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { eq, and, or, sql, desc, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { performanceReviews, kpiTemplates, employees, jobTitles, branches } from '../db/schema.js';
-import { authMiddleware, requireAuth, requireTenant } from '../middleware/index.js';
+import { authMiddleware, requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
@@ -17,7 +17,12 @@ import { getTenantBranchIds } from '../utils/tenant-cache.js';
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
 // Apply auth middleware
-app.use('*', authMiddleware, requireAuth, requireTenant);
+// Performance reviews are managed by managers; approving/rejecting a review and
+// deleting a KPI template need an admin (same split as payroll).
+const HR_READ_ROLES = ['super_admin', 'admin', 'manager'];
+const HR_ADMIN_ROLES = ['super_admin', 'admin'];
+
+app.use('*', authMiddleware, requireAuth, requireTenant, requireRole(...HR_READ_ROLES));
 
 const TENANT_EMPLOYEE_ID_SELECT = { id: employees.id };
 
@@ -416,7 +421,7 @@ app.post('/reviews/:id/submit', async (c) => {
 // POST /reviews/:id/approve - Approve performance review
 // -----------------------------------------------------------------------------
 
-app.post('/reviews/:id/approve', async (c) => {
+app.post('/reviews/:id/approve', requireRole(...HR_ADMIN_ROLES), async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
   const scope = await reviewScope(c.get('tenantId')!);
@@ -467,7 +472,7 @@ app.post('/reviews/:id/approve', async (c) => {
 // POST /reviews/:id/reject - Reject performance review
 // -----------------------------------------------------------------------------
 
-app.post('/reviews/:id/reject', async (c) => {
+app.post('/reviews/:id/reject', requireRole(...HR_ADMIN_ROLES), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const { reason } = body;
@@ -572,7 +577,7 @@ app.post('/kpi-templates', async (c) => {
 // DELETE /kpi-templates/:id - Delete KPI template (soft delete)
 // -----------------------------------------------------------------------------
 
-app.delete('/kpi-templates/:id', async (c) => {
+app.delete('/kpi-templates/:id', requireRole(...HR_ADMIN_ROLES), async (c) => {
   const id = c.req.param('id');
 
   const [updated] = await db.update(kpiTemplates)

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, employees, branches, jobTitles, users, attendances } from '../db/index.js';
-import { eq, and, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, or, ilike, sql, desc, inArray, type SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -34,6 +34,8 @@ const updateEmployeeSchema = z.object({
   employmentType: z.enum(['FULL_TIME', 'PART_TIME', 'FREELANCE']).optional(),
   hireDate: z.string().optional().nullable(),
   basicSalary: z.coerce.number().optional().nullable(),
+  // module -> action -> allowed; per-employee override of the job title's permissionsConfig
+  customPermissions: z.record(z.string(), z.record(z.string(), z.boolean())).optional().nullable(),
 });
 
 const EMPLOYEE_SELECT = {
@@ -105,6 +107,14 @@ const EMPLOYEE_RESIGNED_RETURNING = {
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
+  const status = c.req.query('status');
+  const jobTitleId = c.req.query('jobTitleId');
+  const search = c.req.query('search')?.trim();
+  const pageParam = c.req.query('page');
+
+  if (status && !['ACTIVE', 'RESIGNED', 'LEAVE'].includes(status)) {
+    return c.json({ success: false, error: '無效的員工狀態' }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -116,17 +126,45 @@ app.get('/', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
-  const condition = branchId
-    ? eq(employees.branchId, branchId)
-    : (branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds));
+  const conditions: SQL[] = [
+    branchId
+      ? eq(employees.branchId, branchId)
+      : (branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds)),
+  ];
+  if (status) conditions.push(eq(employees.status, status as 'ACTIVE' | 'RESIGNED' | 'LEAVE'));
+  if (jobTitleId) conditions.push(eq(employees.jobTitleId, jobTitleId));
+  if (search) {
+    const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+    conditions.push(or(
+      ilike(employees.fullName, pattern),
+      ilike(employees.employeeCode, pattern),
+      ilike(employees.email, pattern),
+      ilike(employees.phone, pattern),
+    )!);
+  }
+  const condition = and(...conditions)!;
 
-  const result = await db
+  // Pagination is opt-in (?page=): other callers rely on getting the full list.
+  const paginated = pageParam !== undefined;
+  const page = Math.max(1, Number.parseInt(pageParam ?? '1', 10) || 1);
+  const limit = Math.min(1000, Math.max(1, Number.parseInt(c.req.query('limit') ?? '20', 10) || 20));
+
+  const listQuery = db
     .select(EMPLOYEE_LIST_JOIN_SELECT)
     .from(employees)
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
     .leftJoin(branches, eq(employees.branchId, branches.id))
     .where(condition)
     .orderBy(employees.fullName);
+
+  let total = 0;
+  const [result, totalRows] = await Promise.all([
+    paginated ? listQuery.limit(limit).offset((page - 1) * limit) : listQuery,
+    paginated
+      ? db.select(EMPLOYEE_COUNT_SELECT).from(employees).where(condition)
+      : Promise.resolve([] as { count: number }[]),
+  ]);
+  if (paginated) total = Number(totalRows[0]?.count || 0);
 
   const data = new Array(result.length);
   for (let i = 0; i < result.length; i++) {
@@ -141,6 +179,7 @@ app.get('/', async (c) => {
   return c.json({
     success: true,
     data,
+    ...(paginated ? { meta: { total, page, limit, totalPages: Math.ceil(total / limit) } } : {}),
   });
 });
 
@@ -238,6 +277,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
   if (data.employmentType !== undefined) updateData.employmentType = data.employmentType;
   if (data.hireDate !== undefined && data.hireDate !== null) updateData.hireDate = data.hireDate;
   if (data.basicSalary !== undefined) updateData.basicSalary = data.basicSalary ? String(data.basicSalary) : null;
+  if (data.customPermissions !== undefined) updateData.customPermissions = data.customPermissions;
 
   const branchCondition = branchIds.length === 1 ? eq(employees.branchId, branchIds[0]) : inArray(employees.branchId, branchIds);
   const [updatedEmployee] = await db

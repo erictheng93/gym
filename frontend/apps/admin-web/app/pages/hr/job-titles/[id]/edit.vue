@@ -37,7 +37,13 @@ const loadJobTitle = async () => {
       throw new Error('Job title not found')
     }
     form.name = jobTitle.name
-    form.permissions_config = (jobTitle.permissions_config as typeof form.permissions_config) || createEmptyPermissions()
+    // the API sends camelCase `permissionsConfig`; overlay it on the full module list so every checkbox has a slot
+    const saved = jobTitle.permissionsConfig ?? {}
+    const merged = createEmptyPermissions()
+    for (const [moduleKey, actions] of Object.entries(saved)) {
+      merged[moduleKey] = { ...merged[moduleKey], ...actions } as typeof merged[string]
+    }
+    form.permissions_config = merged
   } catch (error) {
     console.error('Failed to load job title:', error)
     useToast().error(MESSAGES.ERRORS.JOB_TITLE_FETCH_FAILED)
@@ -117,15 +123,14 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    await updateJobTitle(jobTitleId.value, {
-      name: form.name,
-      permissions_config: form.permissions_config
+    // updateJobTitle toasts the backend's reason and returns null on failure
+    const updated = await updateJobTitle(jobTitleId.value, {
+      name: form.name.trim(),
+      permissionsConfig: form.permissions_config
     })
+    if (!updated) return
     useToast().success(MESSAGES.SUCCESS.JOB_TITLE_UPDATED)
     router.push('/hr/job-titles')
-  } catch (error) {
-    console.error('Failed to update job title:', error)
-    useToast().error(MESSAGES.ERRORS.JOB_TITLE_UPDATE_FAILED)
   } finally {
     isSubmitting.value = false
   }

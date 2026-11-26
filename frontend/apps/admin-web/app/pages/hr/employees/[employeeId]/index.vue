@@ -69,9 +69,9 @@ const formatDate = (dateStr?: string | null) => {
   return employeeDateFormatter.format(d)
 }
 
-const formatCurrency = (amount?: number | null) => {
+const formatCurrency = (amount?: number | string | null) => {
   if (amount === null || amount === undefined) return '—'
-  return `NT$ ${employeeCurrencyFormatter.format(amount)}`
+  return `NT$ ${employeeCurrencyFormatter.format(Number(amount))}`
 }
 
 const getStatusBadge = (status: string) => {
@@ -87,12 +87,10 @@ const handleDelete = async () => {
   if (!employee.value) return
   isDeleting.value = true
   try {
-    await deleteEmployee(employee.value.id)
+    // deleteEmployee toasts the backend's reason (e.g. 403 for non-admins) and returns false
+    if (!(await deleteEmployee(employee.value.id))) return
     useToast().success(MESSAGES.SUCCESS.EMPLOYEE_DELETED)
     router.push('/hr/employees')
-  } catch (error) {
-    console.error('Failed to delete employee:', error)
-    useToast().error(MESSAGES.ERRORS.EMPLOYEE_DELETE_FAILED)
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false

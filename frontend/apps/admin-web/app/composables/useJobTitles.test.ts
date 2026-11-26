@@ -1,23 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
-import { useJobTitles } from './useJobTitles'
-import type { JobTitle } from '~/types/schema'
+import { useJobTitles, type ApiJobTitle } from './useJobTitles'
+import { MESSAGES } from '~/constants'
 
-const makeJobTitle = (overrides: Partial<JobTitle> = {}): JobTitle => ({
-  id: 'job-1',
+// Fixtures in the exact wire format of backend/src/routes/job-titles.ts: JOB_TITLE_SELECT,
+// camelCase with `code` and `permissionsConfig`, no status column.
+const makeJobTitle = (overrides: Partial<ApiJobTitle> = {}): ApiJobTitle => ({
+  id: 'a0000000-0000-4000-8000-000000000001',
+  createdAt: '2026-01-01T00:00:00.000Z',
   name: '經理',
-  status: 'active',
-  permissions_config: null,
-  date_created: '2024-01-01',
-  date_updated: null,
-  user_created: null,
-  user_updated: null,
+  code: 'MANAGER',
+  description: null,
+  level: null,
+  sort: null,
+  permissionsConfig: null,
+  tenantId: 't0000000-0000-4000-8000-000000000001',
   ...overrides
 })
 
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
+
 describe('useJobTitles', () => {
-  beforeEach(() => {
-    // mocks are automatically cleared in vitest.setup.ts
+  afterEach(() => {
+    mockFetchInstance.apiFetch.mockReset()
   })
 
   describe('初始化狀態', () => {
@@ -30,174 +35,139 @@ describe('useJobTitles', () => {
   })
 
   describe('fetchJobTitles', () => {
-    it('應該成功取得職位列表', async () => {
-      const mockJobTitles = [
-        makeJobTitle({ permissions_config: { members: { view_all: true } } }),
-        makeJobTitle({ id: 'job-2', name: '教練', permissions_config: { members: { view_own: true } } }),
-        makeJobTitle({ id: 'job-3', name: '櫃檯人員', permissions_config: { members: { basic_access: true } } })
+    it('取得職位列表並保留 permissionsConfig', async () => {
+      const rows = [
+        makeJobTitle({ permissionsConfig: { members: { view: true } } }),
+        makeJobTitle({ id: 'a0000000-0000-4000-8000-000000000002', name: '教練', code: 'COACH' })
       ]
-
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockJobTitles, total: 3 })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: rows })
 
       const { fetchJobTitles, jobTitles } = useJobTitles()
-      await fetchJobTitles()
+      await fetchJobTitles(true)
 
-      expect(jobTitles.value).toEqual(mockJobTitles)
+      expect(jobTitles.value).toEqual(rows)
+      expect(jobTitles.value[0]!.permissionsConfig).toEqual({ members: { view: true } })
     })
 
-    it('應該只取得 active 狀態的職位', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+    it('不送出後端不認得的 status / sort 篩選（後端已依名稱排序）', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
 
       const { fetchJobTitles } = useJobTitles()
-      await fetchJobTitles()
+      await fetchJobTitles(true)
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job-titles', {
-        filter: { status: 'active' },
-        sort: 'name',
-        limit: 1000
-      })
+      expect(lastCall()).toEqual(['/job-titles'])
     })
 
     it('應該處理取得失敗', async () => {
-      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('Failed'))
 
-      const { fetchJobTitles, isLoading, jobTitles } = useJobTitles()
-      await fetchJobTitles()
+      const { fetchJobTitles, jobTitles, isLoading } = useJobTitles()
+      await fetchJobTitles(true)
 
-      expect(isLoading.value).toBe(false)
       expect(jobTitles.value).toEqual([])
-      expect(mockHandleError).toHaveBeenCalled()
-    })
-
-    it('應該在載入時設定 isLoading', async () => {
-      let resolvePromise: (value: unknown) => void
-      const pendingPromise = new Promise((resolve) => {
-        resolvePromise = resolve
-      })
-      mockFetchInstance.readItems.mockReturnValueOnce(pendingPromise)
-
-      const { fetchJobTitles, isLoading } = useJobTitles()
-      const fetchPromise = fetchJobTitles()
-
-      expect(isLoading.value).toBe(true)
-
-      resolvePromise!({ data: [], total: 0 })
-      await fetchPromise
-
       expect(isLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('getJobTitle', () => {
-    it('應該成功取得單一職位資訊', async () => {
-      const mockJobTitle = makeJobTitle({
-        permissions_config: {
-          members: { view_all: true },
-          employees: { manage: true },
-          contracts: { manage: true }
-        }
-      })
-
-      mockFetchInstance.readItem.mockResolvedValueOnce(mockJobTitle)
+    it('取得單一職位（含 permissionsConfig）', async () => {
+      const row = makeJobTitle({ permissionsConfig: { contracts: { view: true, create: false } } })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: row })
 
       const { getJobTitle } = useJobTitles()
-      const result = await getJobTitle('job-1')
+      const result = await getJobTitle(row.id)
 
-      expect(result).toEqual(mockJobTitle)
-      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('job-titles', 'job-1')
+      expect(result).toEqual(row)
+      expect(lastCall()).toEqual([`/job-titles/${row.id}`])
     })
 
-    it('應該處理取得失敗並返回 null', async () => {
-      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
+    it('取得失敗時返回 null', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('職稱不存在'))
 
       const { getJobTitle } = useJobTitles()
-      const result = await getJobTitle('job-999')
-
-      expect(result).toBeNull()
+      expect(await getJobTitle('missing')).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('createJobTitle', () => {
-    it('應該成功建立職位', async () => {
-      const newJobTitle: Partial<JobTitle> = {
-        name: '實習教練',
-        status: 'active',
-        permissions_config: { members: { basic_access: true } }
-      }
+    const input = { name: '店長', code: 'MANAGER', permissionsConfig: { members: { view: true } } }
 
-      const createdJobTitle = makeJobTitle({ id: 'job-4', ...newJobTitle })
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdJobTitle)
+    it('POST createJobTitleSchema 的欄位（含必填 code 與 permissionsConfig）', async () => {
+      const created = makeJobTitle({ ...input })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: created })
 
       const { createJobTitle } = useJobTitles()
-      const result = await createJobTitle(newJobTitle)
+      const result = await createJobTitle(input)
 
-      expect(result).toEqual(createdJobTitle)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('job-titles', newJobTitle)
+      expect(result).toEqual(created)
+      expect(lastCall()).toEqual(['/job-titles', { method: 'POST', body: input }])
     })
 
-    it('應該處理建立失敗並返回 null', async () => {
-      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
+    it('後端回 400 時返回 null，並把後端訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('職稱代碼必填'))
 
       const { createJobTitle } = useJobTitles()
-      const result = await createJobTitle({ name: '測試職位' })
+      const result = await createJobTitle({ ...input, code: '' })
 
       expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '職稱代碼必填'
+      }))
     })
   })
 
   describe('updateJobTitle', () => {
-    it('應該成功更新職位', async () => {
-      const updates: Partial<JobTitle> = {
-        permissions_config: {
-          members: { view_all: true },
-          employees: { manage: true },
-          contracts: { manage: true },
-          reports: { manage: true }
-        }
-      }
-      const updatedJobTitle = makeJobTitle(updates)
-
-      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedJobTitle)
+    it('PATCH permissionsConfig（camelCase，後端才不會把它當未知欄位丟掉）', async () => {
+      const permissionsConfig = { members: { view: true, create: true } }
+      const updated = makeJobTitle({ permissionsConfig })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: updated })
 
       const { updateJobTitle } = useJobTitles()
-      const result = await updateJobTitle('job-1', updates)
+      const result = await updateJobTitle(updated.id, { name: '經理', permissionsConfig })
 
-      expect(result).toEqual(updatedJobTitle)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('job-titles', 'job-1', updates)
+      expect(result).toEqual(updated)
+      expect(lastCall()).toEqual([`/job-titles/${updated.id}`, { method: 'PATCH', body: { name: '經理', permissionsConfig } }])
     })
 
-    it('應該處理更新失敗並返回 null', async () => {
-      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
+    it('更新失敗時返回 null', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('職稱不存在'))
 
       const { updateJobTitle } = useJobTitles()
-      const result = await updateJobTitle('job-1', { name: '新名稱' })
-
-      expect(result).toBeNull()
+      expect(await updateJobTitle('missing', { name: 'X' })).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('deleteJobTitle', () => {
-    it('應該成功刪除職位', async () => {
-      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
+    it('成功時返回 true', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '職稱已刪除' })
 
       const { deleteJobTitle } = useJobTitles()
-      const result = await deleteJobTitle('job-1')
-
-      expect(result).toBe(true)
-      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('job-titles', 'job-1')
+      expect(await deleteJobTitle('job-1')).toBe(true)
+      expect(lastCall()).toEqual(['/job-titles/job-1', { method: 'DELETE' }])
     })
 
-    it('應該處理刪除失敗並返回 false', async () => {
-      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
+    it('後端回 403 時返回 false，並把後端訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
       const { deleteJobTitle } = useJobTitles()
-      const result = await deleteJobTitle('job-1')
+      expect(await deleteJobTitle('job-1')).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '權限不足'
+      }))
+    })
 
-      expect(result).toBe(false)
-      expect(mockHandleError).toHaveBeenCalled()
+    it('沒有可讀的錯誤訊息時使用預設的失敗訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 403'))
+
+      const { deleteJobTitle } = useJobTitles()
+      await deleteJobTitle('job-1')
+
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: MESSAGES.ERRORS.JOB_TITLE_DELETE_FAILED
+      }))
     })
   })
 })

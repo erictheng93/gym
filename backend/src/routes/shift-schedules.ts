@@ -2,15 +2,29 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, shiftSchedules, employeeShifts, employees, branches } from '../db/index.js';
-import { eq, and, desc, asc, sql, lte, or } from 'drizzle-orm';
-import { authMiddleware, requireAuth } from '../middleware/index.js';
-import type { AuthVariables } from '../middleware/index.js';
+import { eq, and, desc, asc, sql, lte, or, inArray } from 'drizzle-orm';
+import { authMiddleware, requireAuth, requireTenant, requireRole } from '../middleware/index.js';
+import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
-const app = new Hono<{ Variables: AuthVariables }>();
+// =============================================================================
+// SHIFT SCHEDULES (/api/shift_schedules) and EMPLOYEE SHIFTS (/api/employee_shifts)
+// =============================================================================
+// Two routers: app.ts mounts each on its own prefix. Shift schedules are scoped
+// to the caller's tenant through their branch, employee shifts through the
+// employee's branch (getTenantBranchIds). Another tenant's row gets the same
+// 404 as a missing one. Writes need a manager, like employees.ts.
+
+type Variables = AuthVariables & TenantVariables;
+
+const MANAGER_ROLES = ['super_admin', 'admin', 'manager'] as const;
+const SCHEDULE_NOT_FOUND = '找不到班表';
+const ASSIGNMENT_NOT_FOUND = '找不到班表指派';
+const INVALID_BRANCH = '無效的分店';
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
 
-const SHIFT_SCHEDULE_RETURNING = {
+const SHIFT_SCHEDULE_SELECT = {
   id: shiftSchedules.id,
   status: shiftSchedules.status,
   createdAt: shiftSchedules.createdAt,
@@ -26,50 +40,26 @@ const SHIFT_SCHEDULE_RETURNING = {
   overtimeStartAfter: shiftSchedules.overtimeStartAfter,
   isDefault: shiftSchedules.isDefault,
   applicableDays: shiftSchedules.applicableDays,
-  tenantId: shiftSchedules.tenantId,
 };
 
 const SHIFT_SCHEDULE_LIST_SELECT = {
-  id: shiftSchedules.id,
-  status: shiftSchedules.status,
-  createdAt: shiftSchedules.createdAt,
-  updatedAt: shiftSchedules.updatedAt,
-  branchId: shiftSchedules.branchId,
-  name: shiftSchedules.name,
-  startTime: shiftSchedules.startTime,
-  endTime: shiftSchedules.endTime,
-  breakStart: shiftSchedules.breakStart,
-  breakEnd: shiftSchedules.breakEnd,
-  gracePeriodMinutes: shiftSchedules.gracePeriodMinutes,
-  earlyLeaveMinutes: shiftSchedules.earlyLeaveMinutes,
-  overtimeStartAfter: shiftSchedules.overtimeStartAfter,
-  isDefault: shiftSchedules.isDefault,
-  applicableDays: shiftSchedules.applicableDays,
+  ...SHIFT_SCHEDULE_SELECT,
   branchName: branches.name,
 };
 
-const SHIFT_SCHEDULE_DELETE_RETURNING = {
-  id: shiftSchedules.id,
-};
+const ID_SELECT = { id: shiftSchedules.id };
 
 const EMPLOYEE_SHIFT_RETURNING = {
   id: employeeShifts.id,
   createdAt: employeeShifts.createdAt,
-  updatedAt: employeeShifts.updatedAt,
   employeeId: employeeShifts.employeeId,
   shiftScheduleId: employeeShifts.shiftScheduleId,
   effectiveDate: employeeShifts.effectiveDate,
   endDate: employeeShifts.endDate,
-  tenantId: employeeShifts.tenantId,
 };
 
 const EMPLOYEE_SHIFT_LIST_SELECT = {
-  id: employeeShifts.id,
-  createdAt: employeeShifts.createdAt,
-  employeeId: employeeShifts.employeeId,
-  shiftScheduleId: employeeShifts.shiftScheduleId,
-  effectiveDate: employeeShifts.effectiveDate,
-  endDate: employeeShifts.endDate,
+  ...EMPLOYEE_SHIFT_RETURNING,
   employeeFullName: employees.fullName,
   employeeCode: employees.employeeCode,
   employeeBranchId: employees.branchId,
@@ -78,18 +68,79 @@ const EMPLOYEE_SHIFT_LIST_SELECT = {
   shiftEndTime: shiftSchedules.endTime,
 };
 
-const EMPLOYEE_SHIFT_DELETE_RETURNING = {
-  id: employeeShifts.id,
+type ShiftScheduleRow = {
+  id: string;
+  status: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  branchId: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  breakStart: string | null;
+  breakEnd: string | null;
+  gracePeriodMinutes: number | null;
+  earlyLeaveMinutes: number | null;
+  overtimeStartAfter: string | null;
+  isDefault: boolean | null;
+  applicableDays: string[] | null;
+  branchName?: string | null;
 };
 
-app.use('*', authMiddleware, requireAuth);
+function formatShiftSchedule(r: ShiftScheduleRow) {
+  return {
+    id: r.id,
+    status: r.status,
+    date_created: r.createdAt?.toISOString() || null,
+    date_updated: r.updatedAt?.toISOString() || null,
+    branch_id: r.branchId,
+    name: r.name,
+    start_time: r.startTime,
+    end_time: r.endTime,
+    break_start: r.breakStart,
+    break_end: r.breakEnd,
+    grace_period_minutes: r.gracePeriodMinutes,
+    early_leave_minutes: r.earlyLeaveMinutes,
+    overtime_start_after: r.overtimeStartAfter,
+    is_default: r.isDefault,
+    applicable_days: r.applicableDays,
+    ...(r.branchName !== undefined ? { branch: r.branchName ? { name: r.branchName } : null } : {}),
+  };
+}
+
+type EmployeeShiftRow = {
+  id: string;
+  createdAt: Date | null;
+  employeeId: string;
+  shiftScheduleId: string;
+  effectiveDate: string;
+  endDate: string | null;
+};
+
+function formatEmployeeShift(r: EmployeeShiftRow) {
+  return {
+    id: r.id,
+    date_created: r.createdAt?.toISOString() || null,
+    employee_id: r.employeeId,
+    shift_schedule_id: r.shiftScheduleId,
+    effective_date: r.effectiveDate,
+    end_date: r.endDate,
+  };
+}
+
+const TIME = /^\d{2}:\d{2}(:\d{2})?$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const WEEKDAYS = z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']);
 
 // =============================================================================
 // SHIFT SCHEDULES CRUD
 // =============================================================================
 
+export const shiftSchedulesRoutes = new Hono<{ Variables: Variables }>();
+shiftSchedulesRoutes.use('*', authMiddleware, requireAuth, requireTenant);
+
 // GET /api/shift_schedules - List Shift Schedules
-app.get('/', async (c) => {
+shiftSchedulesRoutes.get('/', async (c) => {
   try {
     const {
       branch_id,
@@ -100,7 +151,8 @@ app.get('/', async (c) => {
       sortOrder = 'asc'
     } = c.req.query();
 
-    const conditions = [];
+    const branchIds = await getTenantBranchIds(c.get('tenantId')!);
+    const conditions = [inArray(shiftSchedules.branchId, branchIds)];
 
     // Filter by status (exclude archived by default)
     if (status) {
@@ -110,7 +162,7 @@ app.get('/', async (c) => {
         or(
           eq(shiftSchedules.status, 'published'),
           eq(shiftSchedules.status, 'draft')
-        )
+        )!
       );
     }
 
@@ -124,44 +176,26 @@ app.get('/', async (c) => {
                        shiftSchedules.startTime;
 
     const orderFn = sortOrder === 'desc' ? desc : asc;
+    const where = and(...conditions);
 
     const [records, countResult] = await Promise.all([
       db
         .select(SHIFT_SCHEDULE_LIST_SELECT)
         .from(shiftSchedules)
         .leftJoin(branches, eq(shiftSchedules.branchId, branches.id))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .where(where)
         .orderBy(orderFn(sortColumn))
         .limit(parseInt(limit))
         .offset(parseInt(offset)),
       db
         .select(COUNT_SELECT)
         .from(shiftSchedules)
-        .where(conditions.length > 0 ? and(...conditions) : undefined),
+        .where(where),
     ]);
-
-    const formattedRecords = records.map(r => ({
-      id: r.id,
-      status: r.status,
-      date_created: r.createdAt?.toISOString() || null,
-      date_updated: r.updatedAt?.toISOString() || null,
-      branch_id: r.branchId,
-      name: r.name,
-      start_time: r.startTime,
-      end_time: r.endTime,
-      break_start: r.breakStart,
-      break_end: r.breakEnd,
-      grace_period_minutes: r.gracePeriodMinutes,
-      early_leave_minutes: r.earlyLeaveMinutes,
-      overtime_start_after: r.overtimeStartAfter,
-      is_default: r.isDefault,
-      applicable_days: r.applicableDays,
-      branch: r.branchName ? { name: r.branchName } : null,
-    }));
 
     return c.json({
       success: true,
-      data: formattedRecords,
+      data: records.map(formatShiftSchedule),
       pagination: {
         total: Number(countResult[0]?.count || 0),
         page: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
@@ -176,61 +210,48 @@ app.get('/', async (c) => {
 });
 
 // GET /api/shift_schedules/:id - Get Single Shift Schedule
-app.get('/:id', async (c) => {
+shiftSchedulesRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
   const [record] = await db
     .select(SHIFT_SCHEDULE_LIST_SELECT)
     .from(shiftSchedules)
     .leftJoin(branches, eq(shiftSchedules.branchId, branches.id))
-    .where(eq(shiftSchedules.id, id))
+    .where(and(eq(shiftSchedules.id, id), inArray(shiftSchedules.branchId, branchIds)))
     .limit(1);
 
   if (!record) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
+    return c.json({ success: false, error: SCHEDULE_NOT_FOUND }, 404);
   }
 
-  return c.json({
-    success: true,
-    data: {
-      id: record.id,
-      status: record.status,
-      date_created: record.createdAt?.toISOString() || null,
-      date_updated: record.updatedAt?.toISOString() || null,
-      branch_id: record.branchId,
-      name: record.name,
-      start_time: record.startTime,
-      end_time: record.endTime,
-      break_start: record.breakStart,
-      break_end: record.breakEnd,
-      grace_period_minutes: record.gracePeriodMinutes,
-      early_leave_minutes: record.earlyLeaveMinutes,
-      overtime_start_after: record.overtimeStartAfter,
-      is_default: record.isDefault,
-      applicable_days: record.applicableDays,
-      branch: record.branchName ? { name: record.branchName } : null,
-    },
-  });
+  return c.json({ success: true, data: formatShiftSchedule(record) });
 });
 
 // POST /api/shift_schedules - Create Shift Schedule
 const createShiftSchema = z.object({
   branch_id: z.string().uuid(),
   name: z.string().min(1).max(100),
-  start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
-  end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
-  break_start: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
-  break_end: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
+  start_time: z.string().regex(TIME),
+  end_time: z.string().regex(TIME),
+  break_start: z.string().regex(TIME).optional().nullable(),
+  break_end: z.string().regex(TIME).optional().nullable(),
   grace_period_minutes: z.number().int().min(0).max(60).optional(),
   early_leave_minutes: z.number().int().min(0).max(60).optional(),
-  overtime_start_after: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
+  overtime_start_after: z.string().regex(TIME).optional().nullable(),
   is_default: z.boolean().optional(),
-  applicable_days: z.array(z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])).optional(),
+  applicable_days: z.array(WEEKDAYS).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
 });
 
-app.post('/', zValidator('json', createShiftSchema), async (c) => {
+shiftSchedulesRoutes.post('/', requireRole(...MANAGER_ROLES), zValidator('json', createShiftSchema), async (c) => {
   const data = c.req.valid('json');
+  const tenantId = c.get('tenantId')!;
+  const branchIds = await getTenantBranchIds(tenantId);
+
+  if (!branchIds.includes(data.branch_id)) {
+    return c.json({ success: false, error: INVALID_BRANCH }, 400);
+  }
 
   try {
     const [record] = await db
@@ -248,28 +269,11 @@ app.post('/', zValidator('json', createShiftSchema), async (c) => {
         isDefault: data.is_default ?? false,
         applicableDays: data.applicable_days ?? ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
         status: data.status ?? 'published',
+        tenantId,
       })
-      .returning(SHIFT_SCHEDULE_RETURNING);
+      .returning(SHIFT_SCHEDULE_SELECT);
 
-    return c.json({
-      success: true,
-      data: {
-        id: record.id,
-        status: record.status,
-        date_created: record.createdAt?.toISOString() || null,
-        branch_id: record.branchId,
-        name: record.name,
-        start_time: record.startTime,
-        end_time: record.endTime,
-        break_start: record.breakStart,
-        break_end: record.breakEnd,
-        grace_period_minutes: record.gracePeriodMinutes,
-        early_leave_minutes: record.earlyLeaveMinutes,
-        overtime_start_after: record.overtimeStartAfter,
-        is_default: record.isDefault,
-        applicable_days: record.applicableDays,
-      },
-    });
+    return c.json({ success: true, data: formatShiftSchedule(record!) }, 201);
   } catch (error) {
     console.error('[Create Shift Schedule Error]', error);
     return c.json({ success: false, error: error instanceof Error ? error.message : '建立班表失敗' }, 500);
@@ -277,24 +281,16 @@ app.post('/', zValidator('json', createShiftSchema), async (c) => {
 });
 
 // PATCH /api/shift_schedules/:id - Update Shift Schedule
-const updateShiftSchema = z.object({
-  branch_id: z.string().uuid().optional(),
-  name: z.string().min(1).max(100).optional(),
-  start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional(),
-  end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional(),
-  break_start: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
-  break_end: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
-  grace_period_minutes: z.number().int().min(0).max(60).optional(),
-  early_leave_minutes: z.number().int().min(0).max(60).optional(),
-  overtime_start_after: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).optional().nullable(),
-  is_default: z.boolean().optional(),
-  applicable_days: z.array(z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])).optional(),
-  status: z.enum(['draft', 'published', 'archived']).optional(),
-});
+const updateShiftSchema = createShiftSchema.partial();
 
-app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
+shiftSchedulesRoutes.patch('/:id', requireRole(...MANAGER_ROLES), zValidator('json', updateShiftSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
+
+  if (data.branch_id !== undefined && !branchIds.includes(data.branch_id)) {
+    return c.json({ success: false, error: INVALID_BRANCH }, 400);
+  }
 
   const updates: Record<string, unknown> = {
     updatedAt: new Date(),
@@ -316,48 +312,30 @@ app.patch('/:id', zValidator('json', updateShiftSchema), async (c) => {
   const [updated] = await db
     .update(shiftSchedules)
     .set(updates)
-    .where(eq(shiftSchedules.id, id))
-    .returning(SHIFT_SCHEDULE_RETURNING);
+    .where(and(eq(shiftSchedules.id, id), inArray(shiftSchedules.branchId, branchIds)))
+    .returning(SHIFT_SCHEDULE_SELECT);
 
   if (!updated) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
+    return c.json({ success: false, error: SCHEDULE_NOT_FOUND }, 404);
   }
 
-  return c.json({
-    success: true,
-    data: {
-      id: updated.id,
-      status: updated.status,
-      date_created: updated.createdAt?.toISOString() || null,
-      date_updated: updated.updatedAt?.toISOString() || null,
-      branch_id: updated.branchId,
-      name: updated.name,
-      start_time: updated.startTime,
-      end_time: updated.endTime,
-      break_start: updated.breakStart,
-      break_end: updated.breakEnd,
-      grace_period_minutes: updated.gracePeriodMinutes,
-      early_leave_minutes: updated.earlyLeaveMinutes,
-      overtime_start_after: updated.overtimeStartAfter,
-      is_default: updated.isDefault,
-      applicable_days: updated.applicableDays,
-    },
-  });
+  return c.json({ success: true, data: formatShiftSchedule(updated) });
 });
 
 // DELETE /api/shift_schedules/:id - Delete (Archive) Shift Schedule
-app.delete('/:id', async (c) => {
+shiftSchedulesRoutes.delete('/:id', requireRole(...MANAGER_ROLES), async (c) => {
   const id = c.req.param('id');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
   // Atomic soft delete by setting status to archived
   const [updated] = await db
     .update(shiftSchedules)
     .set({ status: 'archived', updatedAt: new Date() })
-    .where(eq(shiftSchedules.id, id))
-    .returning(SHIFT_SCHEDULE_DELETE_RETURNING);
+    .where(and(eq(shiftSchedules.id, id), inArray(shiftSchedules.branchId, branchIds)))
+    .returning(ID_SELECT);
 
   if (!updated) {
-    return c.json({ success: false, error: '找不到班表' }, 404);
+    return c.json({ success: false, error: SCHEDULE_NOT_FOUND }, 404);
   }
 
   return c.json({ success: true, message: '班表已刪除' });
@@ -367,8 +345,22 @@ app.delete('/:id', async (c) => {
 // EMPLOYEE SHIFTS CRUD
 // =============================================================================
 
+export const employeeShiftsRoutes = new Hono<{ Variables: Variables }>();
+employeeShiftsRoutes.use('*', authMiddleware, requireAuth, requireTenant);
+
+/** The assignment if its employee belongs to one of branchIds (missing and foreign look the same). */
+async function findTenantEmployeeShift(id: string, branchIds: string[]) {
+  const [row] = await db
+    .select({ id: employeeShifts.id })
+    .from(employeeShifts)
+    .innerJoin(employees, eq(employeeShifts.employeeId, employees.id))
+    .where(and(eq(employeeShifts.id, id), inArray(employees.branchId, branchIds)))
+    .limit(1);
+  return row;
+}
+
 // GET /api/employee_shifts - List Employee Shift Assignments
-app.get('/employee_shifts', async (c) => {
+employeeShiftsRoutes.get('/', async (c) => {
   try {
     const {
       employee_id,
@@ -380,7 +372,8 @@ app.get('/employee_shifts', async (c) => {
       sortOrder = 'desc'
     } = c.req.query();
 
-    const conditions = [];
+    const branchIds = await getTenantBranchIds(c.get('tenantId')!);
+    const conditions = [inArray(employees.branchId, branchIds)];
 
     if (employee_id) {
       conditions.push(eq(employeeShifts.employeeId, employee_id));
@@ -399,6 +392,7 @@ app.get('/employee_shifts', async (c) => {
                        employeeShifts.createdAt;
 
     const orderFn = sortOrder === 'asc' ? asc : desc;
+    const where = and(...conditions);
 
     const limitNum = parseInt(limit);
     const offsetNum = parseInt(offset);
@@ -407,25 +401,21 @@ app.get('/employee_shifts', async (c) => {
       db
         .select(EMPLOYEE_SHIFT_LIST_SELECT)
         .from(employeeShifts)
-        .leftJoin(employees, eq(employeeShifts.employeeId, employees.id))
+        .innerJoin(employees, eq(employeeShifts.employeeId, employees.id))
         .leftJoin(shiftSchedules, eq(employeeShifts.shiftScheduleId, shiftSchedules.id))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .where(where)
         .orderBy(orderFn(sortColumn))
         .limit(limitNum)
         .offset(offsetNum),
       db
         .select(COUNT_SELECT)
         .from(employeeShifts)
-        .where(conditions.length > 0 ? and(...conditions) : undefined),
+        .innerJoin(employees, eq(employeeShifts.employeeId, employees.id))
+        .where(where),
     ]);
 
     const formattedRecords = records.map(r => ({
-      id: r.id,
-      date_created: r.createdAt?.toISOString() || null,
-      employee_id: r.employeeId,
-      shift_schedule_id: r.shiftScheduleId,
-      effective_date: r.effectiveDate,
-      end_date: r.endDate,
+      ...formatEmployeeShift(r),
       employee: {
         id: r.employeeId,
         full_name: r.employeeFullName,
@@ -462,12 +452,28 @@ app.get('/employee_shifts', async (c) => {
 const createEmployeeShiftSchema = z.object({
   employee_id: z.string().uuid(),
   shift_schedule_id: z.string().uuid(),
-  effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  effective_date: z.string().regex(DATE),
+  end_date: z.string().regex(DATE).optional().nullable(),
 });
 
-app.post('/employee_shifts', zValidator('json', createEmployeeShiftSchema), async (c) => {
+employeeShiftsRoutes.post('/', requireRole(...MANAGER_ROLES), zValidator('json', createEmployeeShiftSchema), async (c) => {
   const data = c.req.valid('json');
+  const tenantId = c.get('tenantId')!;
+  const branchIds = await getTenantBranchIds(tenantId);
+
+  const [[employee], [schedule]] = await Promise.all([
+    db.select({ id: employees.id }).from(employees)
+      .where(and(eq(employees.id, data.employee_id), inArray(employees.branchId, branchIds))).limit(1),
+    db.select(ID_SELECT).from(shiftSchedules)
+      .where(and(eq(shiftSchedules.id, data.shift_schedule_id), inArray(shiftSchedules.branchId, branchIds))).limit(1),
+  ]);
+
+  if (!employee) {
+    return c.json({ success: false, error: '員工不存在' }, 404);
+  }
+  if (!schedule) {
+    return c.json({ success: false, error: SCHEDULE_NOT_FOUND }, 404);
+  }
 
   try {
     const [record] = await db
@@ -477,20 +483,11 @@ app.post('/employee_shifts', zValidator('json', createEmployeeShiftSchema), asyn
         shiftScheduleId: data.shift_schedule_id,
         effectiveDate: data.effective_date,
         endDate: data.end_date || null,
+        tenantId,
       })
       .returning(EMPLOYEE_SHIFT_RETURNING);
 
-    return c.json({
-      success: true,
-      data: {
-        id: record.id,
-        date_created: record.createdAt?.toISOString() || null,
-        employee_id: record.employeeId,
-        shift_schedule_id: record.shiftScheduleId,
-        effective_date: record.effectiveDate,
-        end_date: record.endDate,
-      },
-    });
+    return c.json({ success: true, data: formatEmployeeShift(record!) }, 201);
   } catch (error) {
     console.error('[Create Employee Shift Error]', error);
     return c.json({ success: false, error: error instanceof Error ? error.message : '建立班表指派失敗' }, 500);
@@ -499,13 +496,18 @@ app.post('/employee_shifts', zValidator('json', createEmployeeShiftSchema), asyn
 
 // PATCH /api/employee_shifts/:id - Update Employee Shift Assignment
 const updateEmployeeShiftSchema = z.object({
-  effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  effective_date: z.string().regex(DATE).optional(),
+  end_date: z.string().regex(DATE).optional().nullable(),
 });
 
-app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema), async (c) => {
+employeeShiftsRoutes.patch('/:id', requireRole(...MANAGER_ROLES), zValidator('json', updateEmployeeShiftSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
+
+  if (!await findTenantEmployeeShift(id, branchIds)) {
+    return c.json({ success: false, error: ASSIGNMENT_NOT_FOUND }, 404);
+  }
 
   const updates: Record<string, unknown> = {
     updatedAt: new Date(),
@@ -520,37 +522,19 @@ app.patch('/employee_shifts/:id', zValidator('json', updateEmployeeShiftSchema),
     .where(eq(employeeShifts.id, id))
     .returning(EMPLOYEE_SHIFT_RETURNING);
 
-  if (!updated) {
-    return c.json({ success: false, error: '找不到班表指派' }, 404);
-  }
-
-  return c.json({
-    success: true,
-    data: {
-      id: updated.id,
-      date_created: updated.createdAt?.toISOString() || null,
-      employee_id: updated.employeeId,
-      shift_schedule_id: updated.shiftScheduleId,
-      effective_date: updated.effectiveDate,
-      end_date: updated.endDate,
-    },
-  });
+  return c.json({ success: true, data: formatEmployeeShift(updated!) });
 });
 
 // DELETE /api/employee_shifts/:id - Delete Employee Shift Assignment
-app.delete('/employee_shifts/:id', async (c) => {
+employeeShiftsRoutes.delete('/:id', requireRole(...MANAGER_ROLES), async (c) => {
   const id = c.req.param('id');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
-  const [deleted] = await db
-    .delete(employeeShifts)
-    .where(eq(employeeShifts.id, id))
-    .returning(EMPLOYEE_SHIFT_DELETE_RETURNING);
-
-  if (!deleted) {
-    return c.json({ success: false, error: '找不到班表指派' }, 404);
+  if (!await findTenantEmployeeShift(id, branchIds)) {
+    return c.json({ success: false, error: ASSIGNMENT_NOT_FOUND }, 404);
   }
+
+  await db.delete(employeeShifts).where(eq(employeeShifts.id, id));
 
   return c.json({ success: true, message: '班表指派已刪除' });
 });
-
-export default app;

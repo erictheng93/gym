@@ -66,6 +66,46 @@ describe('Employees API', () => {
     });
   });
 
+  describe('GET /api/employees filters', () => {
+    it('should filter by status', async () => {
+      const response = await authRequest('/api/employees?status=RESIGNED', { method: 'GET', token: authToken });
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      data.data.forEach((emp: { status: string }) => expect(emp.status).toBe('RESIGNED'));
+      expect(data.data.map((e: { id: string }) => e.id)).not.toContain(TEST_EMPLOYEE_ID);
+    });
+
+    it('should reject an unknown status', async () => {
+      const response = await authRequest('/api/employees?status=active', { method: 'GET', token: authToken });
+      expect(response.status).toBe(400);
+    });
+
+    it('should filter by jobTitleId and search', async () => {
+      const byTitle = await authRequest(`/api/employees?jobTitleId=${TEST_JOB_TITLE_ID}`, { method: 'GET', token: authToken });
+      const titled = (await byTitle.json()).data as { jobTitleId: string }[];
+      expect(titled.length).toBeGreaterThanOrEqual(1);
+      titled.forEach(e => expect(e.jobTitleId).toBe(TEST_JOB_TITLE_ID));
+
+      const found = await authRequest('/api/employees?search=test%20admin', { method: 'GET', token: authToken });
+      expect((await found.json()).data.map((e: { id: string }) => e.id)).toContain(TEST_EMPLOYEE_ID);
+
+      const none = await authRequest('/api/employees?search=zzz-no-such-person', { method: 'GET', token: authToken });
+      expect((await none.json()).data).toEqual([]);
+    });
+
+    it('should paginate only when page is given and report meta.total', async () => {
+      const plain = await authRequest('/api/employees', { method: 'GET', token: authToken });
+      expect((await plain.json()).meta).toBeUndefined();
+
+      const paged = await authRequest('/api/employees?page=1&limit=1', { method: 'GET', token: authToken });
+      const body = await paged.json();
+      expect(body.data).toHaveLength(1);
+      expect(body.meta.total).toBeGreaterThanOrEqual(1);
+      expect(body.meta.page).toBe(1);
+      expect(body.meta.limit).toBe(1);
+    });
+  });
+
   describe('GET /api/employees/:id', () => {
     it('should get employee with attendances', async () => {
       const response = await authRequest(`/api/employees/${TEST_EMPLOYEE_ID}`, {
@@ -165,6 +205,42 @@ describe('Employees API', () => {
       expect(data.success).toBe(true);
       expect(data.data.fullName).toBe('Updated Employee Name');
       expect(data.data.phone).toBe('0955666777');
+    });
+
+    it('should save customPermissions and return them', async () => {
+      const customPermissions = { members: { view: true, edit: false }, contracts: { view: true } };
+      const response = await authRequest(`/api/employees/${createdEmployeeId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ customPermissions }),
+      });
+
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.customPermissions).toEqual(customPermissions);
+
+      const detail = await authRequest(`/api/employees/${createdEmployeeId}`, { method: 'GET', token: authToken });
+      expect((await detail.json()).data.customPermissions).toEqual(customPermissions);
+    });
+
+    it('should clear customPermissions with null', async () => {
+      const response = await authRequest(`/api/employees/${createdEmployeeId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ customPermissions: null }),
+      });
+
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.customPermissions).toBeNull();
+    });
+
+    it('should reject malformed customPermissions', async () => {
+      const response = await authRequest(`/api/employees/${createdEmployeeId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ customPermissions: { members: 'yes' } }),
+      });
+
+      expect(response.status).toBe(400);
     });
 
     it('should validate new branchId belongs to tenant', async () => {

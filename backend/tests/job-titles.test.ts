@@ -142,6 +142,20 @@ describe('Job Titles API', () => {
       expect(data.data.level).toBe(5);
     });
 
+    it('should save permissionsConfig on update and return it on read', async () => {
+      const permissionsConfig = { members: { view: true, create: false } };
+      const response = await authRequest(`/api/job-titles/${createdJobTitleId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ permissionsConfig }),
+      });
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.permissionsConfig).toEqual(permissionsConfig);
+
+      const read = await authRequest(`/api/job-titles/${createdJobTitleId}`, { method: 'GET', token: authToken });
+      expect((await read.json()).data.permissionsConfig).toEqual(permissionsConfig);
+    });
+
     it('should return 404 for non-existent job title', async () => {
       const response = await authRequest('/api/job-titles/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',

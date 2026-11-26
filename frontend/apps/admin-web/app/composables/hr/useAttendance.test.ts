@@ -304,132 +304,94 @@ describe('useAttendance', () => {
     })
   })
 
-  describe('performCheckIn', () => {
-    it('應該成功執行上班打卡', async () => {
-      vi.setSystemTime(new Date('2025-01-15T08:55:00')) // on time (local)
-      const createdAttendance: Partial<Attendance> = {
-        id: 'att-new',
-        employee_id: 'emp-1',
-        check_in: '2025-01-15T10:00:00.000Z',
-        attendance_date: '2025-01-15'
-      }
+  // Backend-shaped rows: what routes/attendances.ts formatAttendance() answers
+  const apiAttendance = (overrides: Partial<Attendance> = {}): Attendance => ({
+    id: 'att-1',
+    date_created: '',
+    employee_id: 'emp-1',
+    employee: { id: 'emp-1', full_name: 'Alice', employee_code: 'E00001' } as unknown as Employee,
+    check_in: new Date('2025-01-15T09:00:00').toISOString(),
+    check_out: null,
+    attendance_date: '2025-01-15',
+    check_type: 'REGULAR',
+    attendance_status: 'PRESENT',
+    late_minutes: 0,
+    early_leave_minutes: 0,
+    work_hours: null,
+    overtime_hours: 0,
+    branch_id: 'branch-1',
+    location_ip: null,
+    location_gps: null,
+    notes: null,
+    ...overrides
+  })
 
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [createdAttendance],
-        total: 1
-      })
+  describe('performCheckIn', () => {
+    it('POSTs only the fields the backend accepts and keeps the created record', async () => {
+      vi.setSystemTime(new Date('2025-01-15T08:55:00')) // on time (local)
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ id: 'att-new' }) })
 
       const { performCheckIn } = useAttendance()
+      const result = await performCheckIn({ employeeId: 'emp-1', branchId: 'branch-1' })
 
-      const result = await performCheckIn({
-        employeeId: 'emp-1',
-        branchId: 'branch-1'
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/attendances', {
+        method: 'POST',
+        body: {
+          employee_id: 'emp-1',
+          branch_id: 'branch-1',
+          check_in: new Date('2025-01-15T08:55:00').toISOString(),
+          notes: undefined
+        }
       })
-
       expect(result).toMatchObject({
         id: 'att-new',
+        employee: { id: 'emp-1', full_name: 'Alice' },
         check_out: null,
         check_type: 'REGULAR',
         attendance_status: 'PRESENT',
         late_minutes: 0
       })
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
-        'attendances',
-        expect.objectContaining({
-          employee_id: 'emp-1',
-          branch_id: 'branch-1',
-          attendance_date: '2025-01-15',
-          late_minutes: 0,
-          attendance_status: 'PRESENT'
-        })
-      )
+      // The record comes from the POST answer, not from a list query
+      expect(mockFetchInstance.readItems).not.toHaveBeenCalled()
     })
 
-    it('應該計算遲到分鐘數', async () => {
-      // Use local time (without Z suffix) for correct late calculation
+    it('computes late minutes', async () => {
       vi.setSystemTime(new Date('2025-01-15T09:30:00'))
-
-      const createdAttendance: Partial<Attendance> = {
-        id: 'att-late',
-        employee_id: 'emp-1',
-        late_minutes: 30,
-        attendance_status: 'LATE'
-      }
-
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [createdAttendance],
-        total: 1
-      })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ id: 'att-late' }) })
 
       const { performCheckIn } = useAttendance()
+      const result = await performCheckIn({ employeeId: 'emp-1' })
 
-      const result = await performCheckIn({
-        employeeId: 'emp-1'
-      })
-
-      expect(result).toMatchObject({ attendance_status: 'LATE', late_minutes: 30 })
-
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
-        'attendances',
-        expect.objectContaining({
-          late_minutes: 30,
-          attendance_status: 'LATE'
-        })
-      )
+      expect(result).toMatchObject({ id: 'att-late', attendance_status: 'LATE', late_minutes: 30 })
     })
 
-    it('應該支援不同打卡類型', async () => {
-      const createdAttendance: Partial<Attendance> = {
-        id: 'att-ot',
-        check_type: 'OVERTIME'
-      }
+    it('rethrows the backend error (already checked in)', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('此員工已打卡上班，尚未打卡下班'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [createdAttendance],
-        total: 1
-      })
+      const { performCheckIn, todayAttendances } = useAttendance()
+      todayAttendances.value = []
 
-      const { performCheckIn } = useAttendance()
-
-      await performCheckIn({
-        employeeId: 'emp-1',
-        checkType: 'OVERTIME'
-      })
-
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
-        'attendances',
-        expect.objectContaining({
-          check_type: 'OVERTIME'
-        })
-      )
+      await expect(performCheckIn({ employeeId: 'emp-1' })).rejects.toThrow('此員工已打卡上班，尚未打卡下班')
+      expect(todayAttendances.value).toEqual([])
+      consoleErrorSpy.mockRestore()
     })
 
-    it('應該在建立失敗時拋出錯誤', async () => {
-      mockFetchInstance.createItem.mockResolvedValueOnce(null)
+    it('throws when the answer carries no record', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true })
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const { performCheckIn } = useAttendance()
 
       await expect(performCheckIn({ employeeId: 'emp-1' })).rejects.toThrow('Failed to create attendance record')
+      consoleErrorSpy.mockRestore()
     })
 
-    it('應該將新記錄加入 todayAttendances 最前面', async () => {
-      const createdAttendance: Partial<Attendance> = {
-        id: 'att-new',
-        employee_id: 'emp-1'
-      }
-
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdAttendance)
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [createdAttendance],
-        total: 1
-      })
+    it('puts the new record first in todayAttendances', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ id: 'att-new' }) })
 
       const { performCheckIn, todayCount, todayAttendances } = useAttendance()
       todayAttendances.value = [{ id: 'att-old' } as AttendanceRecord]
-
       const initialCount = todayCount.value
 
       await performCheckIn({ employeeId: 'emp-1' })
@@ -440,155 +402,111 @@ describe('useAttendance', () => {
   })
 
   describe('performCheckOut', () => {
-    it('應該成功執行下班打卡', async () => {
+    // What the old code got back from readItems({ filter: { id } }): the backend
+    // ignored `id` and returned the newest row of the table - another employee's
+    const bobsRow = () => apiAttendance({
+      id: 'att-bob',
+      employee_id: 'emp-2',
+      employee: { id: 'emp-2', full_name: 'Bob' } as unknown as Employee
+    })
+
+    it('keeps the PATCHed record itself, never the newest row of a list query', async () => {
       vi.setSystemTime(new Date('2025-01-15T18:30:00')) // after 18:00 local: no early leave
-      const checkIn = new Date('2025-01-15T09:00:00').toISOString()
       const checkOut = new Date('2025-01-15T18:30:00').toISOString()
-      const existingAttendance: Partial<Attendance> = {
-        id: 'att-1',
-        employee_id: 'emp-1',
-        check_in: checkIn,
-        check_out: null,
-        attendance_status: 'PRESENT'
-      }
-
-      const updatedAttendance: Partial<Attendance> = {
-        ...existingAttendance,
-        check_out: checkOut,
-        work_hours: 9.5
-      }
-
-      mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
-      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedAttendance)
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [updatedAttendance],
-        total: 1
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance())
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
+        success: true,
+        data: apiAttendance({ check_out: checkOut, work_hours: 9.5 })
       })
+      mockFetchInstance.readItems.mockResolvedValue({ data: [bobsRow()], total: 1 })
 
       const { performCheckOut } = useAttendance()
-
       const result = await performCheckOut('att-1')
 
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/attendances/att-1', {
+        method: 'PATCH',
+        body: { check_out: checkOut }
+      })
       expect(result).toMatchObject({
+        id: 'att-1',
+        employee: { id: 'emp-1', full_name: 'Alice' },
         check_out: checkOut,
         work_hours: 9.5,
         early_leave_minutes: 0,
         attendance_status: 'PRESENT'
       })
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'attendances',
-        'att-1',
-        expect.objectContaining({ check_out: checkOut, work_hours: 9.5, early_leave_minutes: 0 })
-      )
     })
 
-    it('應該在找不到記錄時拋出錯誤', async () => {
+    it('a second check-out click PATCHes the same record again, not another employee', async () => {
+      vi.setSystemTime(new Date('2025-01-15T18:30:00'))
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance()).mockResolvedValueOnce(apiAttendance())
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ check_out: new Date().toISOString() }) })
+      mockFetchInstance.readItems.mockResolvedValue({ data: [bobsRow()], total: 1 })
+
+      const { performCheckOut } = useAttendance()
+      const first = await performCheckOut('att-1')
+
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('此筆考勤已打卡下班'))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await expect(performCheckOut(first.id)).rejects.toThrow('此筆考勤已打卡下班')
+      consoleErrorSpy.mockRestore()
+
+      const patched = mockFetchInstance.apiFetch.mock.calls.map(c => c[0])
+      expect(patched).toEqual(['/attendances/att-1', '/attendances/att-1'])
+    })
+
+    it('throws when the PATCH answers with no record', async () => {
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance())
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '考勤記錄已更新' })
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { performCheckOut } = useAttendance()
+
+      await expect(performCheckOut('att-1')).rejects.toThrow('下班打卡失敗')
+      consoleErrorSpy.mockRestore()
+    })
+
+    it('throws when the record does not exist', async () => {
       mockFetchInstance.readItem.mockResolvedValueOnce(null)
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const { performCheckOut } = useAttendance()
 
       await expect(performCheckOut('non-existent')).rejects.toThrow('找不到上班打卡記錄')
+      expect(mockFetchInstance.apiFetch).not.toHaveBeenCalled()
+      consoleErrorSpy.mockRestore()
     })
 
-    it('應該在沒有上班打卡時拋出錯誤', async () => {
-      mockFetchInstance.readItem.mockResolvedValueOnce({
-        id: 'att-1',
-        check_in: null
-      })
+    it('throws when there is no check-in', async () => {
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance({ check_in: null }))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const { performCheckOut } = useAttendance()
 
       await expect(performCheckOut('att-1')).rejects.toThrow('找不到上班打卡記錄')
+      consoleErrorSpy.mockRestore()
     })
 
-    it('應該計算工作時數', async () => {
-      vi.setSystemTime(new Date('2025-01-15T18:00:00'))
-      const existingAttendance: Partial<Attendance> = {
-        id: 'att-1',
-        check_in: new Date('2025-01-15T09:30:00').toISOString(), // 8.5 hours before
-        attendance_status: 'PRESENT'
-      }
-
-      mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { performCheckOut } = useAttendance()
-
-      const result = await performCheckOut('att-1')
-
-      expect(result.work_hours).toBe(8.5)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'attendances',
-        'att-1',
-        expect.objectContaining({ work_hours: 8.5 })
-      )
-    })
-
-    it('應該在早退時更新狀態', async () => {
-      // Use local time (without Z suffix) for correct early leave calculation
+    it('marks an early leave, and keeps LATE for a late record', async () => {
       vi.setSystemTime(new Date('2025-01-15T17:30:00')) // 5:30 PM - early leave
-
-      const existingAttendance: Partial<Attendance> = {
-        id: 'att-1',
-        check_in: '2025-01-15T09:00:00.000',
-        attendance_status: 'PRESENT'
-      }
-
-      mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [{ ...existingAttendance, attendance_status: 'EARLY_LEAVE' }],
-        total: 1
-      })
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance())
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ check_out: new Date().toISOString(), work_hours: 8.5 }) })
 
       const { performCheckOut } = useAttendance()
+      const early = await performCheckOut('att-1')
+      expect(early).toMatchObject({ attendance_status: 'EARLY_LEAVE', early_leave_minutes: 30, work_hours: 8.5 })
 
-      await performCheckOut('att-1')
-
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'attendances',
-        'att-1',
-        expect.objectContaining({
-          attendance_status: 'EARLY_LEAVE',
-          early_leave_minutes: 30
-        })
-      )
-    })
-  })
-
-  describe('performCheckOut - 狀態保留與列表更新', () => {
-    it('遲到的記錄早退時應保持 LATE 狀態', async () => {
       vi.setSystemTime(new Date('2025-01-15T17:00:00'))
-      mockFetchInstance.readItem.mockResolvedValueOnce({
-        id: 'att-1',
-        check_in: new Date('2025-01-15T09:30:00').toISOString(),
-        attendance_status: 'LATE'
-      })
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { performCheckOut } = useAttendance()
-      const result = await performCheckOut('att-1')
-
-      expect(result.attendance_status).toBe('LATE')
-      expect(result.early_leave_minutes).toBe(60)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'attendances',
-        'att-1',
-        expect.objectContaining({ attendance_status: 'LATE', early_leave_minutes: 60 })
-      )
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance({ attendance_status: 'LATE' }))
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ check_out: new Date().toISOString() }) })
+      const late = await performCheckOut('att-1')
+      expect(late).toMatchObject({ attendance_status: 'LATE', early_leave_minutes: 60 })
     })
 
-    it('應該更新 todayAttendances 中對應的記錄', async () => {
+    it('replaces the matching row of todayAttendances', async () => {
       vi.setSystemTime(new Date('2025-01-15T18:00:00'))
-      const checkIn = new Date('2025-01-15T09:00:00').toISOString()
-      mockFetchInstance.readItem.mockResolvedValueOnce({ id: 'att-1', check_in: checkIn, attendance_status: 'PRESENT' })
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [{ id: 'att-1', check_in: checkIn, check_out: new Date('2025-01-15T18:00:00').toISOString() }],
-        total: 1
-      })
+      mockFetchInstance.readItem.mockResolvedValueOnce(apiAttendance())
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAttendance({ check_out: new Date().toISOString(), work_hours: 9 }) })
 
       const { performCheckOut, todayAttendances } = useAttendance()
       todayAttendances.value = [

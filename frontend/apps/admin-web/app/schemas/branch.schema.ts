@@ -15,7 +15,7 @@ const taxIdRegex = /^\d{8}$/
 export const BranchTypeEnum = z.enum(['HEADQUARTER', 'BRANCH'])
 
 // 分店狀態枚舉
-export const BranchStatusEnum = z.enum(['active', 'archived'])
+export const BranchStatusEnum = z.enum(['published', 'archived'])
 
 /**
  * 分店基本資料 Schema
@@ -48,7 +48,7 @@ export const branchBaseSchema = z.object({
     .optional()
     .or(z.literal('')),
 
-  status: BranchStatusEnum.default('active'),
+  status: BranchStatusEnum.default('published'),
 })
 
 /**

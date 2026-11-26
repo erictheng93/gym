@@ -55,7 +55,7 @@ const inFlightMonthlyStatsMap = new Map<string, Promise<MonthlyAttendanceStats[]
 const inFlightEmployeeMonthlyMap = new Map<string, Promise<Attendance[]>>()
 
 export const useAttendance = () => {
-  const { readItems, readItem, createItem, updateItem } = useFetch()
+  const { apiFetch, readItems, readItem } = useFetch()
 
   // ============================================
   // 狀態
@@ -213,30 +213,23 @@ export const useAttendance = () => {
     const attendanceStatus = lateMinutes > 0 ? 'LATE' : 'PRESENT'
 
     try {
-      const attendanceData: Partial<Attendance> = {
-        employee_id: employeeId,
-        branch_id: branchId,
-        attendance_date: today,
-        check_in: now.toISOString(),
-        check_type: checkType,
-        late_minutes: lateMinutes,
-        attendance_status: attendanceStatus,
-        notes
-      }
+      // POST /attendances accepts only these fields (routes/attendances.ts createSchema)
+      // and answers with the created record, employee included. It rejects an
+      // employee who is already checked in (409) with a readable error.
+      const { data: att } = await apiFetch<Attendance>('/attendances', {
+        method: 'POST',
+        body: {
+          employee_id: employeeId,
+          branch_id: branchId,
+          check_in: now.toISOString(),
+          notes
+        }
+      })
 
-      const result = await createItem<Attendance>('attendances', attendanceData)
-
-      if (!result) {
+      if (!att) {
         throw new Error('Failed to create attendance record')
       }
 
-      // Fetch the created record with relations
-      const createdResult = await readItems<Attendance>('attendances', {
-        filter: { id: result.id },
-        limit: 1
-      })
-
-      const att = createdResult.data[0] || result
       const record: AttendanceRecord = {
         id: att.id,
         employee: att.employee as Employee,
@@ -287,23 +280,18 @@ export const useAttendance = () => {
         attendanceStatus = 'EARLY_LEAVE'
       }
 
-      const updateData: Partial<Attendance> = {
-        check_out: now.toISOString(),
-        work_hours: workHours,
-        early_leave_minutes: earlyLeaveMinutes,
-        attendance_status: attendanceStatus,
-        notes: notes || attendance.notes
-      }
-
-      await updateItem<Attendance>('attendances', attendanceId, updateData)
-
-      // Fetch the updated record
-      const updatedResult = await readItems<Attendance>('attendances', {
-        filter: { id: attendanceId },
-        limit: 1
+      // PATCH answers with this very record (the backend computes work_hours).
+      // Never look the record up again by list query: that once returned the
+      // newest row of the table, usually another employee's.
+      const { data: att } = await apiFetch<Attendance>(`/attendances/${attendanceId}`, {
+        method: 'PATCH',
+        body: { check_out: now.toISOString(), ...(notes ? { notes } : {}) }
       })
 
-      const att = updatedResult.data[0] || { ...attendance, ...updateData }
+      if (!att || att.id !== attendanceId) {
+        throw new Error('下班打卡失敗')
+      }
+
       const record: AttendanceRecord = {
         id: att.id,
         employee: att.employee as Employee,
@@ -314,8 +302,8 @@ export const useAttendance = () => {
         attendance_status: attendanceStatus as AttendanceRecord['attendance_status'],
         late_minutes: att.late_minutes || 0,
         early_leave_minutes: earlyLeaveMinutes,
-        work_hours: workHours,
-        notes: att.notes || undefined
+        work_hours: att.work_hours ?? workHours,
+        notes: notes || att.notes || attendance.notes || undefined
       }
 
       // Update in today's list

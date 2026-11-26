@@ -2,6 +2,8 @@
 import { MESSAGES } from '~/constants'
 import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
 import { useShiftSchedules } from '~/composables/hr'
+import type { BranchEmployee } from '~/composables/hr/useShiftSchedules'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -32,7 +34,7 @@ const scheduleToDelete = ref<ShiftSchedule | null>(null)
 const showAssignModal = ref(false)
 const assigningSchedule = ref<ShiftSchedule | null>(null)
 const assignedEmployees = ref<EmployeeShift[]>([])
-const availableEmployees = ref<Employee[]>([])
+const availableEmployees = ref<BranchEmployee[]>([])
 const selectedEmployees = ref<string[]>([])
 const assignEffectiveDate = ref('')
 const isAssigning = ref(false)
@@ -50,28 +52,21 @@ const form = reactive({
   early_leave_minutes: 15,
   overtime_start_after: '18:30',
   is_default: false,
-  applicable_days: ['MON', 'TUE', 'WED', 'THU', 'FRI'] as string[]
+  applicable_days: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'] as string[]
 })
 
-const WEEKDAY_LABEL_MAP: Record<string, string> = {
-  MON: '一',
-  TUE: '二',
-  WED: '三',
-  THU: '四',
-  FRI: '五',
-  SAT: '六',
-  SUN: '日',
-}
-
+// Values are the backend's applicable_days enum (routes/shift-schedules.ts)
 const weekdays = [
-  { value: 'MON', label: '一' },
-  { value: 'TUE', label: '二' },
-  { value: 'WED', label: '三' },
-  { value: 'THU', label: '四' },
-  { value: 'FRI', label: '五' },
-  { value: 'SAT', label: '六' },
-  { value: 'SUN', label: '日' }
+  { value: 'MONDAY', label: '一' },
+  { value: 'TUESDAY', label: '二' },
+  { value: 'WEDNESDAY', label: '三' },
+  { value: 'THURSDAY', label: '四' },
+  { value: 'FRIDAY', label: '五' },
+  { value: 'SATURDAY', label: '六' },
+  { value: 'SUNDAY', label: '日' }
 ] as const
+
+const WEEKDAY_LABEL_MAP: Record<string, string> = Object.fromEntries(weekdays.map(d => [d.value, d.label]))
 
 onMounted(async () => {
   await Promise.all([fetchShiftSchedules(), fetchBranches()])
@@ -98,7 +93,7 @@ const resetForm = () => {
   form.early_leave_minutes = 15
   form.overtime_start_after = '18:30'
   form.is_default = false
-  form.applicable_days = ['MON', 'TUE', 'WED', 'THU', 'FRI']
+  form.applicable_days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
 }
 
 const openCreateModal = () => {
@@ -120,7 +115,7 @@ const openEditModal = (schedule: ShiftSchedule) => {
   form.early_leave_minutes = schedule.early_leave_minutes
   form.overtime_start_after = schedule.overtime_start_after || ''
   form.is_default = schedule.is_default
-  form.applicable_days = schedule.applicable_days || []
+  form.applicable_days = [...(schedule.applicable_days || [])]
   showModal.value = true
 }
 
@@ -154,7 +149,7 @@ const handleSubmit = async () => {
     await fetchShiftSchedules(selectedBranch.value || undefined)
   } catch (error) {
     console.error('Failed to save shift schedule:', error)
-    useToast().error(isEditing.value ? MESSAGES.ERRORS.SCHEDULE_UPDATE_FAILED : MESSAGES.ERRORS.SCHEDULE_CREATE_FAILED)
+    useToast().error(apiErrorMessage(error, isEditing.value ? MESSAGES.ERRORS.SCHEDULE_UPDATE_FAILED : MESSAGES.ERRORS.SCHEDULE_CREATE_FAILED))
   } finally {
     isSubmitting.value = false
   }
@@ -176,7 +171,7 @@ const handleDelete = async () => {
     await fetchShiftSchedules(selectedBranch.value || undefined)
   } catch (error) {
     console.error('Failed to delete shift schedule:', error)
-    useToast().error(MESSAGES.ERRORS.SCHEDULE_DELETE_FAILED)
+    useToast().error(apiErrorMessage(error, MESSAGES.ERRORS.SCHEDULE_DELETE_FAILED))
   }
 }
 
@@ -187,7 +182,7 @@ const formatTime = (time: string) => {
 const getDayLabels = (days: string[]) => {
   if (!days || days.length === 0) return '—'
   if (days.length === 7) return '每天'
-  if (days.length === 5 && !days.includes('SAT') && !days.includes('SUN')) return '週一至週五'
+  if (days.length === 5 && !days.includes('SATURDAY') && !days.includes('SUNDAY')) return '週一至週五'
   return days.map(d => WEEKDAY_LABEL_MAP[d]).filter(Boolean).join('、')
 }
 
@@ -216,6 +211,7 @@ const openAssignModal = async (schedule: ShiftSchedule) => {
     availableEmployees.value = await fetchBranchEmployees(schedule.branch_id)
   } catch (error) {
     console.error('Failed to load employees:', error)
+    useToast().error(apiErrorMessage(error, '載入員工失敗，請稍後再試'))
   } finally {
     isLoadingEmployees.value = false
   }
@@ -251,7 +247,7 @@ const handleAssign = async () => {
     useToast().success(MESSAGES.SUCCESS.SCHEDULE_ASSIGNED)
   } catch (error) {
     console.error('Failed to assign employees:', error)
-    useToast().error(MESSAGES.ERRORS.SCHEDULE_ASSIGN_FAILED)
+    useToast().error(apiErrorMessage(error, MESSAGES.ERRORS.SCHEDULE_ASSIGN_FAILED))
   } finally {
     isAssigning.value = false
   }
@@ -275,7 +271,7 @@ const handleRemoveAssignment = async (employeeShift: EmployeeShift) => {
     }
   } catch (error) {
     console.error('Failed to remove assignment:', error)
-    useToast().error('移除班表指派失敗，請稍後再試')
+    useToast().error(apiErrorMessage(error, '移除班表指派失敗，請稍後再試'))
   }
 }
 

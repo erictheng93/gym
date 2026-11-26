@@ -1,34 +1,38 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
-import { useEmployees } from './useEmployees'
-import type { Employee } from '~/types/schema'
+import { useEmployees, type ApiEmployee } from './useEmployees'
+import { MESSAGES } from '~/constants'
 
-const makeEmployee = (overrides: Partial<Employee> = {}): Employee => ({
-  id: 'emp-1',
-  full_name: '張三',
-  employee_code: 'EMP001',
-  status: 'active',
-  user_id: null,
-  branch_id: 'branch-1',
-  job_title_id: 'job-1',
-  supervisor_id: null,
-  hire_date: null,
-  employment_status: 'ACTIVE',
-  employment_type: 'FULL_TIME',
-  basic_salary: null,
-  custom_permissions: null,
-  phone: null,
-  email: null,
-  date_created: '2024-01-01',
-  date_updated: null,
-  user_created: null,
-  user_updated: null,
+// Fixtures in the exact wire format of backend/src/routes/employees.ts: EMPLOYEE_SELECT spread
+// flat (camelCase, `status`, decimal salary as a string) with the joined jobTitle / branch.
+const makeEmployee = (overrides: Partial<ApiEmployee> = {}): ApiEmployee => ({
+  id: 'e0000000-0000-4000-8000-000000000001',
+  userId: null,
+  branchId: 'b0000000-0000-4000-8000-000000000001',
+  jobTitleId: 'a0000000-0000-4000-8000-000000000001',
+  employeeCode: 'E00001',
+  fullName: '張三',
+  phone: '0912345678',
+  email: 'zhang@example.com',
+  status: 'ACTIVE',
+  employmentType: 'FULL_TIME',
+  hireDate: '2026-01-05',
+  resignDate: null,
+  basicSalary: '45000.00',
+  customPermissions: null,
+  createdAt: '2026-01-05T02:00:00.000Z',
+  updatedAt: '2026-01-05T02:00:00.000Z',
+  tenantId: 't0000000-0000-4000-8000-000000000001',
+  jobTitle: { id: 'a0000000-0000-4000-8000-000000000001', name: '教練' },
+  branch: { id: 'b0000000-0000-4000-8000-000000000001', name: '信義店' },
   ...overrides
 })
 
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
+
 describe('useEmployees', () => {
-  beforeEach(() => {
-    // mocks are automatically cleared in vitest.setup.ts
+  afterEach(() => {
+    mockFetchInstance.apiFetch.mockReset()
   })
 
   describe('初始化狀態', () => {
@@ -42,94 +46,66 @@ describe('useEmployees', () => {
   })
 
   describe('fetchEmployees', () => {
-    it('應該成功取得員工列表', async () => {
-      const mockEmployees = [
-        makeEmployee(),
-        makeEmployee({ id: 'emp-2', full_name: '李四', employee_code: 'EMP002', branch_id: 'branch-2', job_title_id: 'job-2' })
-      ]
-
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockEmployees, total: 2 })
+    it('應該讀取後端的 camelCase 員工列表與 meta.total', async () => {
+      const rows = [makeEmployee(), makeEmployee({ id: 'e0000000-0000-4000-8000-000000000002', fullName: '李四' })]
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
+        success: true,
+        data: rows,
+        meta: { total: 42, page: 2, limit: 20, totalPages: 3 }
+      })
 
       const { fetchEmployees, employees, totalCount } = useEmployees()
-      await fetchEmployees()
+      await fetchEmployees({ page: 2 })
 
-      expect(employees.value).toEqual(mockEmployees)
-      expect(totalCount.value).toBe(2)
+      expect(employees.value).toEqual(rows)
+      expect(employees.value[0]!.fullName).toBe('張三')
+      expect(totalCount.value).toBe(42)
     })
 
-    it('應該以第 1 頁、每頁 20 筆、建立時間倒序為預設', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+    it('沒有 meta 時以回傳筆數作為總數', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [makeEmployee()] })
 
-      const { fetchEmployees } = useEmployees()
+      const { fetchEmployees, totalCount } = useEmployees()
       await fetchEmployees()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
-        page: 1,
-        limit: 20,
-        filter: {},
-        sort: 'date_created',
-        sortOrder: 'desc'
-      }))
+      expect(totalCount.value).toBe(1)
     })
 
-    it('應該支援分頁查詢', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 50 })
+    it('以後端支援的 camelCase 查詢參數送出分頁與過濾條件', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
 
       const { fetchEmployees } = useEmployees()
-      await fetchEmployees({ page: 2, limit: 10 })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
+      await fetchEmployees({
         page: 2,
-        limit: 10
-      }))
+        limit: 10,
+        search: '張',
+        branchId: 'branch-1',
+        status: 'RESIGNED',
+        jobTitleId: 'job-1'
+      })
+
+      expect(lastCall()[0]).toBe('/employees')
+      expect(lastCall()[1].params).toEqual({
+        page: 2,
+        limit: 10,
+        search: '張',
+        branchId: 'branch-1',
+        status: 'RESIGNED',
+        jobTitleId: 'job-1'
+      })
     })
 
-    it('應該支援搜尋功能', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+    it('預設為第 1 頁、每頁 20 筆', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
 
       const { fetchEmployees } = useEmployees()
-      await fetchEmployees({ search: '張三' })
+      await fetchEmployees()
 
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
-        search: '張三'
-      }))
-    })
-
-    it('應該支援分店過濾', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchEmployees } = useEmployees()
-      await fetchEmployees({ branchId: 'branch-1' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
-        filter: expect.objectContaining({ branch_id: 'branch-1' })
-      }))
-    })
-
-    it('應該支援狀態過濾', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchEmployees } = useEmployees()
-      await fetchEmployees({ status: 'ACTIVE' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
-        filter: expect.objectContaining({ employment_status: 'ACTIVE' })
-      }))
-    })
-
-    it('應該支援職位過濾', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchEmployees } = useEmployees()
-      await fetchEmployees({ jobTitleId: 'job-1' })
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
-        filter: expect.objectContaining({ job_title_id: 'job-1' })
-      }))
+      expect(lastCall()[1].params).toMatchObject({ page: 1, limit: 20 })
     })
 
     it('應該處理取得失敗', async () => {
-      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('Failed'))
 
       const { fetchEmployees, isLoading, employees, totalCount } = useEmployees()
       await fetchEmployees()
@@ -139,37 +115,22 @@ describe('useEmployees', () => {
       expect(totalCount.value).toBe(0)
       expect(mockHandleError).toHaveBeenCalled()
     })
-
-    it('應該在載入時設定 isLoading', async () => {
-      let isLoadingDuringFetch = false
-      mockFetchInstance.readItems.mockImplementation(() => {
-        const { isLoading } = useEmployees()
-        isLoadingDuringFetch = isLoading.value
-        return Promise.resolve({ data: [], total: 0 })
-      })
-
-      const { fetchEmployees } = useEmployees()
-      await fetchEmployees()
-
-      expect(isLoadingDuringFetch).toBe(true)
-    })
   })
 
   describe('getEmployee', () => {
-    it('應該成功取得單一員工資訊', async () => {
-      const mockEmployee = makeEmployee()
-
-      mockFetchInstance.readItem.mockResolvedValueOnce(mockEmployee)
+    it('應該取得含 jobTitle / branch 的單一員工', async () => {
+      const employee = makeEmployee()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: employee })
 
       const { getEmployee } = useEmployees()
       const result = await getEmployee('emp-1')
 
-      expect(result).toEqual(mockEmployee)
-      expect(mockFetchInstance.readItem).toHaveBeenCalledWith('employees', 'emp-1')
+      expect(result).toEqual(employee)
+      expect(lastCall()[0]).toBe('/employees/emp-1')
     })
 
-    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
-      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
+    it('取得失敗時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('員工不存在'))
 
       const { getEmployee } = useEmployees()
       const result = await getEmployee('emp-x')
@@ -180,54 +141,69 @@ describe('useEmployees', () => {
   })
 
   describe('createEmployee', () => {
-    it('應該成功建立員工', async () => {
-      const newEmployee: Partial<Employee> = {
-        full_name: '王五',
-        employee_code: 'EMP003',
-        branch_id: 'branch-1',
-        job_title_id: 'job-1'
-      }
+    const input = {
+      fullName: '王五',
+      branchId: 'b0000000-0000-4000-8000-000000000001',
+      jobTitleId: 'a0000000-0000-4000-8000-000000000001',
+      employmentType: 'FULL_TIME' as const
+    }
 
-      const createdEmployee = makeEmployee({ id: 'emp-3', ...newEmployee })
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdEmployee)
+    it('以 createEmployeeSchema 的 camelCase 欄位 POST 並返回建立的員工', async () => {
+      const created = makeEmployee({ fullName: '王五', employeeCode: 'E00003' })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: created })
 
       const { createEmployee } = useEmployees()
-      const result = await createEmployee(newEmployee)
+      const result = await createEmployee(input)
 
-      expect(result).toEqual(createdEmployee)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employees', newEmployee)
+      expect(result).toEqual(created)
+      expect(lastCall()).toEqual(['/employees', { method: 'POST', body: input }])
     })
 
-    it('應該在建立失敗時返回 null 並呼叫 handleError', async () => {
-      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
+    it('後端回 400 時返回 null，並把後端的錯誤訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('無效的分店'))
 
       const { createEmployee } = useEmployees()
-      const result = await createEmployee({ full_name: '王五' })
+      const result = await createEmployee(input)
 
       expect(result).toBeNull()
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '無效的分店'
+      }))
+    })
+
+    it('沒有可讀的錯誤訊息時使用預設的失敗訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 500'))
+
+      const { createEmployee } = useEmployees()
+      await createEmployee(input)
+
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: MESSAGES.ERRORS.EMPLOYEE_CREATE_FAILED
+      }))
     })
   })
 
   describe('updateEmployee', () => {
-    it('應該成功更新員工', async () => {
-      const updates: Partial<Employee> = { full_name: '張三（已更新）' }
-      const updatedEmployee = makeEmployee(updates)
-
-      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedEmployee)
+    it('以 PATCH 送出 camelCase 欄位與 customPermissions', async () => {
+      const updates = {
+        fullName: '張三（已更新）',
+        customPermissions: { members: { view: true, edit: false } }
+      }
+      const updated = makeEmployee(updates)
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: updated })
 
       const { updateEmployee } = useEmployees()
       const result = await updateEmployee('emp-1', updates)
 
-      expect(result).toEqual(updatedEmployee)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('employees', 'emp-1', updates)
+      expect(result).toEqual(updated)
+      expect(lastCall()).toEqual(['/employees/emp-1', { method: 'PATCH', body: updates }])
     })
 
-    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
-      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
+    it('更新失敗時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('員工不存在'))
 
       const { updateEmployee } = useEmployees()
-      const result = await updateEmployee('emp-1', { full_name: 'X' })
+      const result = await updateEmployee('emp-1', { fullName: 'X' })
 
       expect(result).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
@@ -235,50 +211,43 @@ describe('useEmployees', () => {
   })
 
   describe('deleteEmployee', () => {
-    it('應該成功刪除員工', async () => {
-      mockFetchInstance.deleteItem.mockResolvedValueOnce(true)
+    it('成功時返回 true', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '員工已封存' })
 
       const { deleteEmployee } = useEmployees()
       const result = await deleteEmployee('emp-1')
 
       expect(result).toBe(true)
-      expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('employees', 'emp-1')
+      expect(lastCall()).toEqual(['/employees/emp-1', { method: 'DELETE' }])
     })
 
-    it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
-      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
+    it('後端回 403 時返回 false，並把後端的訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
       const { deleteEmployee } = useEmployees()
       const result = await deleteEmployee('emp-1')
 
       expect(result).toBe(false)
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '權限不足'
+      }))
     })
   })
 
   describe('fetchAllEmployees', () => {
-    it('應該取得所有在職員工', async () => {
-      const mockEmployees = [
-        makeEmployee(),
-        makeEmployee({ id: 'emp-2', full_name: '李四', employee_code: 'EMP002' })
-      ]
-
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockEmployees, total: 2 })
+    it('以 status=ACTIVE（不帶 page，取得完整列表）取得在職員工', async () => {
+      const rows = [makeEmployee(), makeEmployee({ id: 'e0000000-0000-4000-8000-000000000002', fullName: '李四' })]
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: rows })
 
       const { fetchAllEmployees } = useEmployees()
       const result = await fetchAllEmployees()
 
-      expect(result).toEqual(mockEmployees)
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
-        limit: 1000,
-        filter: { employment_status: 'ACTIVE' },
-        sort: 'full_name',
-        sortOrder: 'asc'
-      }))
+      expect(result).toEqual(rows)
+      expect(lastCall()).toEqual(['/employees', { params: { status: 'ACTIVE' } }])
     })
 
-    it('應該在失敗時返回空陣列', async () => {
-      mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
+    it('失敗時返回空陣列', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('Failed'))
 
       const { fetchAllEmployees } = useEmployees()
       const result = await fetchAllEmployees()

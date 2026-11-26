@@ -59,8 +59,8 @@ describe('branches/new.vue', () => {
       type: 'BRANCH',
       address: null,
       phone: null,
-      tax_id: null,
-      status: 'active'
+      taxId: null,
+      status: 'published'
     })
     expect(toast.success).toHaveBeenCalledWith(MESSAGES.SUCCESS.BRANCH_CREATED)
     expect(mockPush).toHaveBeenCalledWith('/branches')
@@ -83,7 +83,7 @@ describe('branches/new.vue', () => {
       type: 'HEADQUARTER',
       address: '台北市信義區',
       phone: '02-12345678',
-      tax_id: '12345678',
+      taxId: '12345678',
       status: 'archived'
     })
   })
@@ -119,14 +119,16 @@ describe('branches/new.vue', () => {
     ]))
   })
 
-  it('shows an error and stays on the page when creation fails', async () => {
-    mockCreateBranch.mockRejectedValue(new Error('network'))
+  it('shows an inline error, no success toast and no redirect when creation fails (createBranch resolves null)', async () => {
+    mockCreateBranch.mockResolvedValue(null)
     const wrapper = mountPage()
     await inputs(wrapper).name.setValue('信義店')
     await submit(wrapper)
 
     expect(wrapper.find('.submit-error').text()).toBe(PAGES.BRANCHES.ERROR_CREATE_FAILED)
-    expect(toast.error).toHaveBeenCalledWith(MESSAGES.ERRORS.BRANCH_CREATE_FAILED)
+    expect(toast.success).not.toHaveBeenCalled()
+    // useBranches.createBranch already toasted the backend's reason; the page must not stack a second one
+    expect(toast.error).not.toHaveBeenCalled()
     expect(mockPush).not.toHaveBeenCalled()
   })
 
