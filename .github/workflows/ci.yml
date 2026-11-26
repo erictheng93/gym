@@ -146,10 +146,12 @@ jobs:
           fi
       - name: Playwright (${{ matrix.app }})
         working-directory: frontend
+        # Leave time for the report upload: a job-level timeout cancels it
+        timeout-minutes: 20
         env:
           CI: 'true'
           E2E_APPS: ${{ matrix.app }}
-        run: bunx playwright test --project=${{ matrix.app }}
+        run: bunx playwright test --project=${{ matrix.app }} --max-failures=4
       - name: Backend log
         if: failure()
         run: |

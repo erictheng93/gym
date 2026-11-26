@@ -1,6 +1,6 @@
 # E2E 測試（Playwright）
 
-端到端測試，涵蓋三個前端應用。未接入 CI，需在本機手動執行。
+端到端測試，涵蓋三個前端應用。CI 的 `e2e` job（僅 pull request）會在剛 seed 過的資料庫上啟動後端並執行，見下方「CI」。
 
 ## 結構
 
@@ -58,4 +58,4 @@ bunx playwright show-report
 - 斷言使用 web-first（`await expect(locator).toBeVisible()`），不要用 `waitForTimeout`。
 - 不要寫 `if (await x.isVisible()) { ... }` 的條件分支，這種測試永遠不會失敗。
 - 選擇器以實際畫面文字（繁體中文）與 role 為主；應用程式碼目前沒有 `data-testid`。
-- 驗證 production bug 的測試用 `test.skip` 並加上 `// BUG:` 註解說明。
+- 不要用 `test.skip` 讓測試通過：測試錯就修測試，應用程式錯就修應用程式。

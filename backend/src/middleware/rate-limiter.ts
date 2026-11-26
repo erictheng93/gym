@@ -36,7 +36,7 @@ export interface RateLimitOptions {
  * production process ignores) log in far more often than a real user, so they
  * get a budget of 100.
  */
-export function limitMax(productionMax: number, env: NodeJS.ProcessEnv = process.env): number {
+export function limitMax(productionMax: number, env: Record<string, string | undefined> = process.env): number {
   const relaxed = env.NODE_ENV === 'test' ||
     (env.RELAX_RATE_LIMITS === 'true' && env.NODE_ENV !== 'production');
   return relaxed ? 100 : productionMax;
