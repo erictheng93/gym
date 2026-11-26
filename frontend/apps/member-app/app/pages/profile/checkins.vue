@@ -3,83 +3,33 @@ const checkinMonthDayFormatter = new Intl.DateTimeFormat('zh-TW', { month: 'shor
 const checkinTimeFormatter = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
 const checkinWeekdayFormatter = new Intl.DateTimeFormat('zh-TW', { weekday: 'short' })
 const checkinDateKeyFormatter = new Intl.DateTimeFormat('zh-TW')
-
-const VERIFICATION_LABELS: Record<string, string> = {
-  BARCODE: '條碼',
-  QR_CODE: 'QR Code',
-  MANUAL: '人工',
-  FACE_ID: '人臉辨識',
-  FINGERPRINT: '指紋',
-  BATCH: '批次簽到'
-}
 </script>
 
 <script setup lang="ts">
-import { useFetch } from '~/composables/core/useFetch'
+import type { CheckInListItem } from '~/composables/useCheckIns'
+import { CHECKIN_METHOD_LABELS, CHECKIN_TYPE_LABELS } from '~/composables/useCheckIns'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const { handleError } = useApiError()
+const { checkIns: checkins, isLoading, hasMore, fetchCheckIns, loadMore } = useCheckIns()
 
-interface Checkin {
-  id: string
-  check_time: string
-  check_type: 'ENTRY' | 'EXIT'
-  verification_method: string | null
-  is_cross_branch: boolean
-  branch_id: {
-    id: string
-    name: string
-  } | null
-}
-
-const { readItems } = useFetch()
-const { member } = useMemberAuth()
-
-const checkins = ref<Checkin[]>([])
-const isLoading = ref(true)
-const currentPage = ref(1)
-const hasMore = ref(true)
-const pageSize = 20
-
-const fetchCheckins = async (loadMore = false) => {
-  if (!member.value) return
-
+const fetchCheckins = async () => {
   try {
-    if (!loadMore) {
-      isLoading.value = true
-      currentPage.value = 1
-    }
-
-    const result = await readItems<Checkin>('member_checkins', {
-      filter: {
-        member_id: member.value.id
-      },
-      page: currentPage.value,
-      limit: pageSize,
-      sort: 'check_time',
-      sortOrder: 'desc'
-    })
-
-    if (loadMore) {
-      checkins.value = [...checkins.value, ...result.data]
-    } else {
-      checkins.value = result.data
-    }
-
-    hasMore.value = result.data.length === pageSize
+    await fetchCheckIns()
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入入場紀錄' })
-  } finally {
-    isLoading.value = false
   }
 }
 
-const loadMore = async () => {
-  currentPage.value++
-  await fetchCheckins(true)
+const loadNextPage = async () => {
+  try {
+    await loadMore()
+  } catch (error) {
+    handleError(error, { fallbackMessage: '無法載入入場紀錄' })
+  }
 }
 
 onMounted(() => {
@@ -95,14 +45,15 @@ const formatDateTime = (dateStr: string) => {
   }
 }
 
-const verificationLabels = VERIFICATION_LABELS
+const verificationLabels = CHECKIN_METHOD_LABELS
+const typeLabels = CHECKIN_TYPE_LABELS
 
 // Group checkins by date
 const groupedCheckins = computed(() => {
-  const groups: Record<string, Checkin[]> = {}
+  const groups: Record<string, CheckInListItem[]> = {}
 
   checkins.value.forEach(checkin => {
-    const dateKey = checkinDateKeyFormatter.format(new Date(checkin.check_time))
+    const dateKey = checkinDateKeyFormatter.format(new Date(checkin.checkInTime))
     if (!groups[dateKey]) {
       groups[dateKey] = []
     }
@@ -150,8 +101,8 @@ const groupedCheckins = computed(() => {
             :to="`/profile/checkins/${checkin.id}`"
             class="checkin-card"
           >
-            <div class="checkin-icon" :class="checkin.check_type.toLowerCase()">
-              <svg v-if="checkin.check_type === 'ENTRY'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <div class="checkin-icon" :class="checkin.checkInType.toLowerCase()">
+              <svg v-if="checkin.checkInType === 'ENTRY'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
                 <polyline points="10 17 15 12 10 7" />
                 <line x1="15" y1="12" x2="3" y2="12" />
@@ -165,21 +116,21 @@ const groupedCheckins = computed(() => {
 
             <div class="checkin-info">
               <div class="checkin-time">
-                {{ formatDateTime(checkin.check_time).time }}
+                {{ formatDateTime(checkin.checkInTime).time }}
               </div>
               <div class="checkin-details">
                 <span class="branch-name">
-                  {{ checkin.branch_id?.name || '未知分店' }}
-                  <span v-if="checkin.is_cross_branch" class="cross-branch-badge">跨店</span>
+                  {{ checkin.branch.name || '未知分店' }}
+                  <span v-if="checkin.isCrossBranch" class="cross-branch-badge">跨店</span>
                 </span>
-                <span v-if="checkin.verification_method" class="verification">
-                  {{ verificationLabels[checkin.verification_method] || checkin.verification_method }}
+                <span v-if="checkin.checkInMethod" class="verification">
+                  {{ verificationLabels[checkin.checkInMethod] || checkin.checkInMethod }}
                 </span>
               </div>
             </div>
 
             <div class="checkin-type">
-              {{ checkin.check_type === 'ENTRY' ? '入場' : '離場' }}
+              {{ typeLabels[checkin.checkInType] || checkin.checkInType }}
             </div>
 
             <div class="checkin-arrow">
@@ -195,7 +146,7 @@ const groupedCheckins = computed(() => {
         v-if="hasMore"
         class="load-more-btn"
         :disabled="isLoading"
-        @click="loadMore"
+        @click="loadNextPage"
       >
         {{ isLoading ? '載入中...' : '載入更多' }}
       </button>
@@ -319,6 +270,8 @@ const groupedCheckins = computed(() => {
   color: var(--color-primary);
 }
 
+.checkin-icon.class,
+.checkin-icon.facility,
 .checkin-icon.exit {
   background-color: rgba(107, 114, 128, 0.1);
   color: var(--color-text-secondary);
