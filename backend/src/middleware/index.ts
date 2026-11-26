@@ -13,5 +13,5 @@ export {
   getCsrfToken,
   extraSecurityHeaders,
   requestId,
-  getClientIp
 } from './csrf.js';
+export { getClientIp, trustedProxyHops } from './client-ip.js';

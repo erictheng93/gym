@@ -27,6 +27,7 @@ import couponsRoutes from './routes/coupons.js';
 import notificationsRoutes from './routes/notifications.js';
 import dashboardRoutes from './routes/dashboard.js';
 import reportsRoutes from './routes/reports.js';
+import { adminDashboardRoutes, adminAnalyticsRoutes, adminReportsRoutes } from './routes/war-room.js';
 import healthRoutes from './routes/health.js';
 import filesRoutes from './routes/files.js';
 import usersRoutes from './routes/users.js';
@@ -202,6 +203,10 @@ app.route('/api/coupons', couponsRoutes);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/reports', reportsRoutes);
+// War room + member analytics (admin-web)
+app.route('/api/admin/dashboard', adminDashboardRoutes);
+app.route('/api/admin/analytics', adminAnalyticsRoutes);
+app.route('/api/admin/reports', adminReportsRoutes);
 app.route('/api/files', filesRoutes);
 app.route('/api/pdf', pdfRoutes);
 app.route('/health', healthRoutes);

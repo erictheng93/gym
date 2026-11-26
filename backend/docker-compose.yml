@@ -85,6 +85,9 @@ services:
     environment:
       NODE_ENV: "${NODE_ENV:-production}"
       PORT: 8056
+      # Reverse proxies in front of the API that append to X-Forwarded-For
+      # (docs/deployment-runbook.md). Unset: the socket address is the client.
+      TRUST_PROXY: "${TRUST_PROXY:-}"
 
       # Database
       DATABASE_URL: "postgresql://${DB_USER:-gym_nexus}:${DB_PASSWORD:-gym_nexus_dev}@database:5432/${DB_DATABASE:-gym_nexus}"

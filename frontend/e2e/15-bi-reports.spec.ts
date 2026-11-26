@@ -26,9 +26,7 @@ test.describe('BI 報表', () => {
     await expect(tabs.first()).not.toHaveClass(/active/)
   })
 
-  // BUG: /api/admin/analytics/* and /api/admin/reports/member-growth exist only in rust-backend;
-  // the Hono backend answers 404 and the page renders no stat cards or charts.
-  test.fail('會員分析顯示統計卡與分佈圖', async ({ page }) => {
+  test('會員分析顯示統計卡與分佈圖', async ({ page }) => {
     await goto(page, '/admin/member-analytics')
 
     await expect(page.getByRole('heading', { level: 1, name: '會員分析' })).toBeVisible()

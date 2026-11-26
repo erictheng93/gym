@@ -13,6 +13,8 @@ const kpiGridCurrencyFormatter = new Intl.NumberFormat('zh-TW', {
  */
 
 import type { DashboardKPIs } from '~/composables/useDashboard'
+// Explicit import: auto-import registers it as DashboardKpiCard, so <KpiCard> would not resolve
+import KpiCard from './KpiCard.vue'
 
 interface Props {
   kpis: DashboardKPIs | null

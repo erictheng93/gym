@@ -9,6 +9,14 @@ services:
   # ===========================================================================
   api:
     restart: always
+    # Reachable only through the tunnel (and from the host for health checks):
+    # with TRUST_PROXY set, a client talking to the port directly could forge
+    # X-Forwarded-For.
+    ports: !override
+      - "127.0.0.1:${API_PORT:-8056}:8056"
+    environment:
+      # Cloudflare edge appends the visitor address; cloudflared forwards it
+      TRUST_PROXY: "1"
     logging:
       driver: "json-file"
       options:

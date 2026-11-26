@@ -1,4 +1,5 @@
 import { MiddlewareHandler, Context } from 'hono';
+import { getClientIp } from './client-ip.js';
 
 interface RateLimitEntry {
   count: number;
@@ -46,12 +47,7 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
   const {
     windowMs = 60 * 1000,
     max = 100,
-    keyGenerator = (c) => {
-      const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-                 c.req.header('x-real-ip') ||
-                 'unknown';
-      return `rate:${ip}`;
-    },
+    keyGenerator = (c) => `rate:${getClientIp(c)}`,
     message = '請求過於頻繁，請稍後再試',
   } = options;
 

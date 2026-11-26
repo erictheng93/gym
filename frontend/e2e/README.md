@@ -84,10 +84,7 @@ seed 沒有課程場次與預約，所以 booking spec 只檢查空狀態；預�
 下列測試以 `test.fail()` 標記：測試照常執行，且必須失敗；bug 修好後 Playwright 會回報
 「expected to fail」，屆時移除標記即可。
 
-| 測試 | 原因 |
-|------|------|
-| `14-dashboard-war-room`：KPI 卡片、合約到期警示、匯出 JSON | `/api/admin/dashboard/*`、`/api/admin/analytics/checkin-heatmap` 只存在於 `rust-backend/`，Hono 後端回 404 |
-| `15-bi-reports`：會員分析 | `/api/admin/analytics/*`、`/api/admin/reports/member-growth` 同上 |
+目前沒有以 `test.fail()` 標記的測試。
 
 ## 撰寫原則
 

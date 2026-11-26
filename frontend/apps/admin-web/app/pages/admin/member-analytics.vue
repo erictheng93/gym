@@ -1,9 +1,9 @@
 <script lang="ts">
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: '活躍',
-  INACTIVE: '未啟用',
   SUSPENDED: '暫停',
   EXPIRED: '已過期',
+  BANNED: '停權',
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -12,9 +12,10 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 }
 
 const GENDER_LABELS: Record<string, string> = {
-  M: '男性',
-  F: '女性',
+  MALE: '男性',
+  FEMALE: '女性',
   OTHER: '其他',
+  UNKNOWN: '未填寫',
 }
 
 const analyticsDateFormatter = new Intl.DateTimeFormat('zh-TW', {
@@ -234,9 +235,9 @@ const renderCharts = () => {
   if (memberStatusChartRef.value && memberStatusData.value.length > 0) {
     const statusColors: Record<string, string> = {
       'ACTIVE': '#34c759',
-      'INACTIVE': '#8e8e93',
       'SUSPENDED': '#ff9500',
-      'EXPIRED': '#ff3b30'
+      'EXPIRED': '#ff3b30',
+      'BANNED': '#8e8e93'
     }
 
     charts.memberStatus = new Chart(memberStatusChartRef.value, {
@@ -330,8 +331,8 @@ const renderCharts = () => {
   // Gender Pie Chart
   if (genderChartRef.value && genderDistributionData.value.length > 0) {
     const genderColors: Record<string, string> = {
-      'M': '#007aff',
-      'F': '#ff2d55',
+      'MALE': '#007aff',
+      'FEMALE': '#ff2d55',
       'OTHER': '#8e8e93'
     }
 
