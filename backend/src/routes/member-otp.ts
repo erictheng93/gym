@@ -1,10 +1,10 @@
 import { randomInt, timingSafeEqual } from 'node:crypto';
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
 import { eq, and, gt, desc, sql } from 'drizzle-orm';
-import { rateLimiter } from '../middleware/index.js';
+import { rateLimiter, getClientIp } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
 
@@ -133,10 +133,10 @@ function otpCodeMatches(expected: string, provided: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string | undefined {
-  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-         c.req.header('x-real-ip');
-  return ip || undefined;
+/** Client address for the OTP logs (TRUST_PROXY-aware); undefined when unknown. */
+function otpClientIp(c: Context): string | undefined {
+  const ip = getClientIp(c);
+  return ip === 'unknown' ? undefined : ip;
 }
 
 function memberIdentifierMatches(type: 'phone' | 'email', identifier: string) {
@@ -164,7 +164,7 @@ app.post(
   otpSendHourlyRateLimiter,
   async (c) => {
     const { identifier, type } = c.req.valid('json');
-    const ipAddress = getClientIp(c);
+    const ipAddress = otpClientIp(c);
     const userAgent = c.req.header('user-agent') || '';
 
     // Find member by phone or email
