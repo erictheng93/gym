@@ -236,6 +236,12 @@ pnpm db:push
 pnpm db:migrate
 ```
 
+### Performance score column widened
+
+`performance_reviews.overall_score` is now `decimal(5,2)` (was `decimal(4,2)`,
+which overflowed at a score of 100). `bun run db:push` applies it as an
+in-place `ALTER COLUMN TYPE`; widening precision is lossless and needs no backfill.
+
 ### Tenant backfill before `db:push` (#109)
 
 `members`, `contracts` and `payments` now have `tenant_id NOT NULL`. `db:push`

@@ -1566,7 +1566,7 @@ export const performanceReviews = pgTable('performance_reviews', {
   reviewType: varchar('review_type', { length: 20 }).default('MONTHLY'), // MONTHLY, QUARTERLY, ANNUAL
   kpiData: jsonb('kpi_data').default([]), // [{ id, name, weight, target, actual, achievement, unit }]
   scores: jsonb('scores').default({}), // { category1: 4, category2: 5, ... }
-  overallScore: decimal('overall_score', { precision: 4, scale: 2 }),
+  overallScore: decimal('overall_score', { precision: 5, scale: 2 }),
   strengths: text('strengths'),
   improvements: text('improvements'),
   improvementPlan: text('improvement_plan'),

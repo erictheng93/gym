@@ -504,6 +504,25 @@ app.delete('/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
+  // Usage history cascades with the coupon, so a used coupon must be
+  // deactivated instead of deleted. Check inside the tenant scope first.
+  const [owned] = await db
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
+    .limit(1);
+  if (!owned) {
+    return c.json({ success: false, error: '優惠碼不存在' }, 404);
+  }
+  const [used] = await db
+    .select({ id: couponUsages.id })
+    .from(couponUsages)
+    .where(eq(couponUsages.couponId, id))
+    .limit(1);
+  if (used) {
+    return c.json({ success: false, error: '已使用的優惠券無法刪除，請改為停用' }, 409);
+  }
+
   const [deleted] = await db
     .delete(coupons)
     .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
