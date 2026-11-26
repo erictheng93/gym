@@ -313,6 +313,65 @@ describe('Payments (real DB)', () => {
     expect(await summary()).toBe(before + 4000);
   });
 
+  it('GET /api/payments/summary: an endDate of today includes payments recorded today', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const summary = async () => {
+      const res = await authRequest(
+        `/api/payments/summary?branchId=${TEST_BRANCH_ID}&startDate=${today}&endDate=${today}`,
+        { token },
+      );
+      expect(res.status).toBe(200);
+      return (await res.json()).data.totalIncome as number;
+    };
+    const contractId = await createContract('9000.00');
+    const before = await summary();
+
+    expect((await staffPayment(contractId, 1200)).status).toBe(201);
+
+    expect(await summary()).toBe(before + 1200);
+  });
+
+  it('GET /api/payments filters by type, status, date range and search', async () => {
+    const contractId = await createContract('9000.00');
+    const { contractNo } = await getContract(contractId);
+    const pendingId = await createCheckoutPayment(contractId, '500.00');
+    expect((await staffPayment(contractId, 3000)).status).toBe(201);
+    const refund = await authRequest('/api/payments', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({
+        contractId, memberId: TEST_MEMBER_ID, branchId: TEST_BRANCH_ID, amount: 400,
+        paymentMethod: 'BANK_TRANSFER', paymentType: 'REFUND', paymentDate: '2024-03-15',
+      }),
+    });
+    expect(refund.status).toBe(201);
+
+    const list = async (query: string) => {
+      const res = await authRequest(`/api/payments?contractId=${contractId}&${query}`, { token });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      return { ids: json.data.map((p: { id: string }) => p.id) as string[], json };
+    };
+
+    const all = await list('');
+    expect(all.json.meta.total).toBe(3);
+    // flat payment fields with the joined member/contract nested
+    expect(all.json.data[0]).toMatchObject({
+      contractId,
+      member: { id: TEST_MEMBER_ID },
+      contract: { id: contractId, contractNo },
+    });
+
+    const refunds = await list('type=REFUND');
+    expect(refunds.json.data).toHaveLength(1);
+    expect(refunds.json.data[0]).toMatchObject({ type: 'REFUND', amount: '400.00', paymentMethod: 'BANK_TRANSFER' });
+
+    expect((await list('status=PENDING')).ids).toEqual([pendingId]);
+    expect((await list('startDate=2024-03-15&endDate=2024-03-15')).ids).toEqual([refunds.json.data[0].id]);
+    expect((await list(`search=${contractNo}`)).json.meta.total).toBe(3);
+    expect((await list('search=no-such-member-or-contract')).json.meta.total).toBe(0);
+  });
+
   // Webhooks are mounted ahead of the staff-auth payments router (src/app.ts)
   it('gateway webhooks are reachable through the full app without a staff session', async () => {
     const contractId = await createContract('5000.00');

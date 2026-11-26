@@ -23,6 +23,9 @@ export type {
   ClassSession,
   Booking,
   Payment,
+  PaymentMethod,
+  PaymentType,
+  PaymentRecordStatus,
   /** @deprecated Use DbSchema instead */
   DatabaseSchema,
   DatabaseSchema as DbSchema,

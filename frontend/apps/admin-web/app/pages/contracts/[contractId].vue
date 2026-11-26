@@ -23,6 +23,15 @@ const PAYMENT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }>
   PAID: { label: STATUS.PAYMENT.PAID, class: 'badge-success' }
 }
 
+/** A payment row's status → label + design-system status color */
+const PAYMENT_RECORD_BADGE_MAP: Record<string, { label: string; class: string }> = {
+  PENDING: { label: STATUS.PAYMENT_RECORD.PENDING, class: 'badge-warning' },
+  COMPLETED: { label: STATUS.PAYMENT_RECORD.COMPLETED, class: 'badge-success' },
+  FAILED: { label: STATUS.PAYMENT_RECORD.FAILED, class: 'badge-error' }
+}
+
+const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = LABELS.PAYMENT_METHOD
+
 const LOG_TYPE_LABEL_MAP: Record<string, string> = {
   PAUSE: LABELS.LOG_TYPE.PAUSE,
   RESUME: LABELS.LOG_TYPE.RESUME,
@@ -36,7 +45,7 @@ const LOG_TYPE_LABEL_MAP: Record<string, string> = {
 </script>
 
 <script setup lang="ts">
-import type { ContractLog, Member } from '~/types/schema'
+import type { ContractLog, Member, PaymentMethod } from '~/types/schema'
 import { MESSAGES, PAGES, TIMING } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
 import { useFetch } from '~/composables/core/useFetch'
@@ -51,7 +60,7 @@ const router = useRouter()
 const { readItems, createItem } = useFetch()
 const { getContract, updateContract, activateContract, pauseContract } = useContracts()
 const { confirm } = useConfirm()
-const { fetchPayments, payments } = usePayments()
+const { fetchPayments, payments, createPayment } = usePayments()
 const { currentEmployee, fetchCurrentEmployee } = useAuth()
 
 const contract = ref<Awaited<ReturnType<typeof getContract>> | null>(null)
@@ -78,7 +87,8 @@ const transferForm = reactive({
 
 const terminateForm = reactive({
   reason: '',
-  refundAmount: 0
+  refundAmount: 0,
+  refundMethod: 'CASH' as PaymentMethod
 })
 
 const extendForm = reactive({
@@ -213,6 +223,12 @@ const formatCurrency = (amount: number | null) => {
 const getStatusBadge = (status: string) => {
   return CONTRACT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
 }
+
+const getPaymentRecordBadge = (status: string) => {
+  return PAYMENT_RECORD_BADGE_MAP[status] || { label: status, class: '' }
+}
+
+const getPaymentMethodLabel = (method: string | null) => (method ? PAYMENT_METHOD_LABEL_MAP[method] || method : '—')
 
 const getPaymentStatusBadge = (status: string) => {
   return PAYMENT_STATUS_BADGE_MAP[status] || { label: status, class: '' }
@@ -407,21 +423,27 @@ const handleTerminate = async () => {
 
     // 如果有退款金額，建立退款紀錄
     if (terminateForm.refundAmount > 0) {
-      await createItem('payments', {
-        contract_id: contract.value.id,
-        member_id: contract.value.member?.id,
+      // GET /contracts/:id nests the row under `contract`; the type still lists flat snake_case fields
+      const detail = contract.value as typeof contract.value & {
+        contract?: { id?: string; memberId?: string; branchId?: string | null }
+      }
+      const refund = await createPayment({
+        contractId: detail.contract?.id || contract.value.id,
+        memberId: detail.contract?.memberId || contract.value.member?.id || '',
+        branchId: detail.contract?.branchId || contract.value.branch_id || currentEmployee.value?.branch_id || '',
         amount: terminateForm.refundAmount,
-        payment_type: 'REFUND',
-        payment_date: new Date().toISOString().slice(0, 10),
-        branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null,
-        received_by: currentEmployee.value?.id || null,
+        paymentMethod: terminateForm.refundMethod,
+        paymentType: 'REFUND',
         notes: `合約終止退款 - ${terminateForm.reason}`
       })
+      // createPayment already showed why; the refund must not be silently lost
+      if (!refund) throw new Error(MESSAGES.ERRORS.PAYMENT_CREATE_FAILED)
     }
 
     showTerminateModal.value = false
     terminateForm.reason = ''
     terminateForm.refundAmount = 0
+    terminateForm.refundMethod = 'CASH'
     useToast().success(MESSAGES.SUCCESS.CONTRACT_TERMINATED)
     await loadContract()
   } catch (error) {
@@ -816,7 +838,11 @@ const openRenewModal = () => {
       <section class="payments-section">
         <div class="section-header">
           <h2 class="section-title">{{ PAGES.CONTRACTS.PAYMENT_RECORDS }}</h2>
-          <NuxtLink :to="`/payments/new?contract=${contract.id}`" class="btn btn-primary btn-small">
+          <!-- the payment form loads contracts per member, so it needs both ids -->
+          <NuxtLink
+            :to="{ path: '/payments/new', query: { contract: contractId, member: contract.member?.id } }"
+            class="btn btn-primary btn-small"
+          >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14" /><path d="M12 5v14" />
             </svg>
@@ -829,15 +855,23 @@ const openRenewModal = () => {
         </div>
 
         <div v-else class="payments-list">
-          <div v-for="payment in payments" :key="payment.id" class="payment-item card">
-            <div class="payment-type" :class="payment.payment_type === 'INCOME' ? 'payment-income' : 'payment-refund'">
-              {{ payment.payment_type === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND }}
+          <div
+            v-for="payment in payments"
+            :key="payment.id"
+            class="payment-item card"
+            :class="{ 'payment-not-received': payment.status !== 'COMPLETED' }"
+          >
+            <div class="payment-type" :class="payment.type === 'INCOME' ? 'payment-income' : 'payment-refund'">
+              {{ payment.type === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND }}
             </div>
             <div class="payment-info">
               <span class="payment-amount">{{ formatCurrency(payment.amount) }}</span>
-              <span class="payment-method text-secondary">{{ payment.payment_method || '—' }}</span>
+              <span class="payment-method text-secondary">{{ getPaymentMethodLabel(payment.paymentMethod) }}</span>
             </div>
-            <div class="payment-date text-secondary">{{ formatDate(payment.payment_date) }}</div>
+            <span :class="['badge', getPaymentRecordBadge(payment.status).class]" data-testid="payment-record-status">
+              {{ getPaymentRecordBadge(payment.status).label }}
+            </span>
+            <div class="payment-date text-secondary">{{ formatDate(payment.paymentDate) }}</div>
           </div>
         </div>
       </section>
@@ -1034,6 +1068,15 @@ const openRenewModal = () => {
                 />
               </div>
               <span class="input-hint text-tertiary">{{ PAGES.CONTRACTS.NO_REFUND }}：0</span>
+            </div>
+            <div v-if="terminateForm.refundAmount > 0" class="input-group">
+              <label class="input-label">{{ PAGES.PAYMENTS.PAYMENT_METHOD }}</label>
+              <select v-model="terminateForm.refundMethod" class="input">
+                <option value="CASH">{{ LABELS.PAYMENT_METHOD.CASH }}</option>
+                <option value="CREDIT_CARD">{{ LABELS.PAYMENT_METHOD.CREDIT_CARD }}</option>
+                <option value="LINE_PAY">{{ LABELS.PAYMENT_METHOD.LINE_PAY }}</option>
+                <option value="BANK_TRANSFER">{{ LABELS.PAYMENT_METHOD.BANK_TRANSFER }}</option>
+              </select>
             </div>
           </div>
 
@@ -1661,6 +1704,11 @@ const openRenewModal = () => {
 .payment-amount {
   font-weight: 600;
   font-family: var(--font-mono);
+}
+
+/* Open (PENDING) / failed gateway checkouts are not money received */
+.payment-not-received .payment-amount {
+  color: var(--color-text-tertiary);
 }
 
 .payment-method {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, payments, contracts, members } from '../db/index.js';
-import { eq, and, sql, desc, inArray, gte, lte } from 'drizzle-orm';
+import { eq, and, or, ilike, sql, desc, inArray } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
@@ -93,6 +93,44 @@ const PAYMENT_DETAIL_SELECT = {
   },
 };
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const isIsoDate = (value: string) => ISO_DATE.test(value) && !Number.isNaN(Date.parse(value));
+const PAYMENT_TYPES = ['INCOME', 'REFUND'] as const;
+const PAYMENT_RECORD_STATUSES = ['PENDING', 'COMPLETED', 'FAILED'] as const;
+
+/**
+ * paymentDate filter for YYYY-MM-DD bounds. Both ends are inclusive calendar days:
+ * paymentDate is a timestamp, so `<= endDate` alone would drop everything after
+ * midnight on the end day (a "today" range would always be empty).
+ * Returns null when a bound is not a YYYY-MM-DD date.
+ */
+function paymentDateRange(startDate?: string, endDate?: string): SQL[] | null {
+  const conditions: SQL[] = [];
+  if (startDate) {
+    if (!isIsoDate(startDate)) return null;
+    conditions.push(sql`${payments.paymentDate} >= ${startDate}::date`);
+  }
+  if (endDate) {
+    if (!isIsoDate(endDate)) return null;
+    conditions.push(sql`${payments.paymentDate} < ${endDate}::date + 1`);
+  }
+  return conditions;
+}
+
+/**
+ * A back-dated payment is stored at noon Taiwan time (04:00 UTC), which falls on
+ * the same calendar day in UTC and in Asia/Taipei, so day filters agree either way.
+ * No date means now; a noon that has not come yet (recording today) is capped at now.
+ */
+function paymentTimestamp(paymentDate?: string | null): Date {
+  const now = new Date();
+  if (!paymentDate) return now;
+  const stored = new Date(`${paymentDate}T12:00:00+08:00`);
+  return stored > now ? now : stored;
+}
+
+const INVALID_DATE_ERROR = '日期格式必須為 YYYY-MM-DD';
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -103,7 +141,13 @@ const createPaymentSchema = z.object({
   paymentMethod: z.enum(['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'LINE_PAY', 'OTHER']),
   paymentType: z.enum(['INCOME', 'REFUND']).default('INCOME'),
   branchId: z.string().uuid(),
+  // Day the money was received (YYYY-MM-DD); defaults to now. Not in the future
+  // (a day counts as started once it has begun in the earliest timezone, UTC+14).
+  paymentDate: z.iso.date().optional().nullable(),
   notes: z.string().optional().nullable(),
+}).refine((d) => !d.paymentDate || new Date(`${d.paymentDate}T00:00:00+14:00`) <= new Date(), {
+  message: '付款日期不能是未來日期',
+  path: ['paymentDate'],
 });
 
 app.get('/', async (c) => {
@@ -111,6 +155,13 @@ app.get('/', async (c) => {
   const branchId = c.req.query('branchId');
   const memberId = c.req.query('memberId');
   const contractId = c.req.query('contractId');
+  const type = c.req.query('type');
+  const status = c.req.query('status');
+  const search = c.req.query('search')?.trim();
+  const dateRange = paymentDateRange(c.req.query('startDate'), c.req.query('endDate'));
+  if (!dateRange) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
   const page = Number(c.req.query('page')) || 1;
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
@@ -142,12 +193,33 @@ app.get('/', async (c) => {
     conditions.push(eq(payments.contractId, contractId));
   }
 
+  if (type && (PAYMENT_TYPES as readonly string[]).includes(type)) {
+    conditions.push(eq(payments.type, type as typeof PAYMENT_TYPES[number]));
+  }
+
+  if (status && (PAYMENT_RECORD_STATUSES as readonly string[]).includes(status)) {
+    conditions.push(eq(payments.status, status as typeof PAYMENT_RECORD_STATUSES[number]));
+  }
+
+  conditions.push(...dateRange);
+
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(or(
+      ilike(members.fullName, pattern),
+      ilike(members.memberCode, pattern),
+      ilike(contracts.contractNo, pattern),
+    )!);
+  }
+
   const whereCondition = and(...conditions);
 
   const [[countResult], result] = await Promise.all([
     db
       .select(COUNT_SELECT)
       .from(payments)
+      .leftJoin(members, eq(payments.memberId, members.id))
+      .leftJoin(contracts, eq(payments.contractId, contracts.id))
       .where(whereCondition),
     db
       .select(PAYMENT_LIST_JOIN_SELECT)
@@ -182,8 +254,10 @@ app.get('/', async (c) => {
 app.get('/summary', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId');
-  const startDate = c.req.query('startDate');
-  const endDate = c.req.query('endDate');
+  const dateRange = paymentDateRange(c.req.query('startDate'), c.req.query('endDate'));
+  if (!dateRange) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -210,13 +284,7 @@ app.get('/summary', async (c) => {
     );
   }
 
-  if (startDate) {
-    conditions.push(sql`${payments.paymentDate} >= ${startDate}`);
-  }
-
-  if (endDate) {
-    conditions.push(sql`${payments.paymentDate} <= ${endDate}`);
-  }
+  conditions.push(...dateRange);
 
   // Revenue: only payments that were actually received (not open/failed gateway checkouts)
   conditions.push(eq(payments.status, 'COMPLETED'));
@@ -249,6 +317,10 @@ app.get('/summary', async (c) => {
 app.get('/export', async (c) => {
   const tenantId = c.get('tenantId')!;
   const { branchId, startDate, endDate, format = 'csv' } = c.req.query();
+  const dateRange = paymentDateRange(startDate, endDate);
+  if (!dateRange) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -272,13 +344,7 @@ app.get('/export', async (c) => {
     );
   }
 
-  if (startDate) {
-    conditions.push(gte(payments.paymentDate, new Date(startDate)));
-  }
-
-  if (endDate) {
-    conditions.push(lte(payments.paymentDate, new Date(endDate)));
-  }
+  conditions.push(...dateRange);
 
   // Export is a record of money received: leave out open/failed gateway checkouts
   conditions.push(eq(payments.status, 'COMPLETED'));
@@ -410,7 +476,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
       branchId: data.branchId,
       amount: String(data.amount),
       paymentMethod: data.paymentMethod,
-      paymentDate: new Date(),
+      paymentDate: paymentTimestamp(data.paymentDate),
       type: data.paymentType,
       status: 'COMPLETED', // staff record money already received
       notes: data.notes,

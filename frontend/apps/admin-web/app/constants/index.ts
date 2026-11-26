@@ -76,6 +76,12 @@ export const STATUS = {
     PARTIAL: '部分付款',
     REFUNDED: '已退款',
   },
+  // Payment record status (a single payment row; only COMPLETED is money received)
+  PAYMENT_RECORD: {
+    PENDING: '待付款',
+    COMPLETED: '已完成',
+    FAILED: '失敗',
+  },
   // General
   ENABLED: '啟用',
   DISABLED: '停用',
@@ -111,8 +117,10 @@ export const LABELS = {
   PAYMENT_METHOD: {
     CASH: '現金',
     CREDIT_CARD: '信用卡',
+    DEBIT_CARD: '金融卡',
     LINE_PAY: 'LINE Pay',
     BANK_TRANSFER: '匯款',
+    OTHER: '其他',
   },
   // Contract Log Type
   LOG_TYPE: {
@@ -620,10 +628,12 @@ export const PAGES = {
     NET_PAYMENT: '淨收款',
     RECORD_INFO: '記錄收款或退款資訊',
     MEMBER_CONTRACT: '會員與合約',
-    RELATED_CONTRACT: '關聯合約（選填）',
+    RELATED_CONTRACT: '關聯合約',
     SELECT_MEMBER: '選擇會員',
     SELECT_MEMBER_PLACEHOLDER: '請選擇會員',
-    NO_CONTRACT_LINK: '不關聯合約',
+    SELECT_CONTRACT_PLACEHOLDER: '請選擇合約',
+    NO_MEMBER_CONTRACTS: '此會員沒有合約，請先建立合約',
+    REMAINING_AMOUNT: '尚未付清',
     SELECT_MEMBER_FIRST: '請先選擇會員',
     AMOUNT_METHOD: '金額與付款方式',
     OTHER_INFO: '其他資訊',
@@ -637,6 +647,11 @@ export const PAGES = {
     DATE_RANGE_TODAY: '今日',
     DATE_RANGE_WEEK: '本週',
     DATE_RANGE_MONTH: '本月',
+    ALL_STATUSES: '全部狀態',
+    EXPORT: '匯出 CSV',
+    EXPORT_FAILED: '匯出收款紀錄失敗，請稍後再試',
+    COMPLETED_ENTRIES: '已完成',
+    STATS_COMPLETED_ONLY: '僅計入已完成的收款',
     // Table headers
     DATE: '日期',
     TYPE: '類型',
@@ -645,9 +660,11 @@ export const PAGES = {
     PAYMENT_METHOD: '付款方式',
     BRANCH: '分店',
     AMOUNT: '金額',
+    STATUS: '狀態',
     ENTRIES: '筆',
     // Validation
     ERROR_SELECT_MEMBER: '請選擇會員',
+    ERROR_SELECT_CONTRACT: '請選擇合約',
     ERROR_AMOUNT_POSITIVE: '金額必須大於 0',
     ERROR_SELECT_DATE: '請選擇付款日期',
     ERROR_SELECT_BRANCH: '請選擇分店',

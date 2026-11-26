@@ -1,9 +1,17 @@
 <script lang="ts">
 const paymentNumberFormatter = new Intl.NumberFormat('zh-TW')
+
+/** YYYY-MM-DD of the viewer's local calendar day */
+const localIsoDate = (date: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
 </script>
 
 <script setup lang="ts">
 import { MESSAGES, PAGES, LABELS } from '~/constants'
+import type { PaymentMethod, PaymentType } from '~/types/schema'
+import type { PayableContract } from '~/composables/usePayments'
 // Validation rules are auto-imported from @gym-nexus/ui/composables/useFormValidation
 
 definePageMeta({
@@ -12,83 +20,84 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const { createPayment } = usePayments()
+const { createPayment, fetchMemberContracts } = usePayments()
 const { members, fetchMembers } = useMembers()
-const { contracts, fetchContracts } = useContracts()
 const { branches, fetchBranches } = useBranches()
 
 const isLoading = ref(true)
 const isSubmitting = ref(false)
 
 const form = reactive({
-  member_id: route.query.member as string || '',
-  contract_id: route.query.contract as string || '',
+  memberId: route.query.member as string || '',
+  contractId: route.query.contract as string || '',
   amount: 0,
-  payment_method: 'CASH' as 'CASH' | 'CREDIT_CARD' | 'LINE_PAY' | 'TRANSFER',
-  payment_type: 'INCOME' as 'INCOME' | 'REFUND',
-  payment_date: new Date().toISOString().slice(0, 10)!,
-  branch_id: '',
+  paymentMethod: 'CASH' as PaymentMethod,
+  paymentType: 'INCOME' as PaymentType,
+  paymentDate: localIsoDate(new Date()),
+  branchId: '',
   notes: ''
 })
 
-const memberContracts = ref<typeof contracts.value>([])
+const memberContracts = ref<PayableContract[]>([])
 
 // Form validation - 使用 composable
 const { errors, validate, setError, clearErrors } = useFormValidation<typeof form>()
 
-const paymentMethods = [
+// Values are the backend enum (POST /api/payments paymentMethod)
+const paymentMethods: Array<{ value: PaymentMethod; label: string; icon: string }> = [
   { value: 'CASH', label: LABELS.PAYMENT_METHOD.CASH, icon: '💵' },
   { value: 'CREDIT_CARD', label: LABELS.PAYMENT_METHOD.CREDIT_CARD, icon: '💳' },
   { value: 'LINE_PAY', label: LABELS.PAYMENT_METHOD.LINE_PAY, icon: '📱' },
-  { value: 'TRANSFER', label: LABELS.PAYMENT_METHOD.BANK_TRANSFER, icon: '🏦' }
+  { value: 'BANK_TRANSFER', label: LABELS.PAYMENT_METHOD.BANK_TRANSFER, icon: '🏦' }
 ]
 
-const selectedMember = computed(() => members.value.find(m => m.id === form.member_id))
-const selectedContract = computed(() => memberContracts.value.find(c => c.id === form.contract_id))
+// The members API answers in camelCase; the shared Member type still lists snake_case too
+type MemberOption = { id: string; fullName?: string; full_name?: string; memberCode?: string; member_code?: string }
+const memberName = (m?: MemberOption) => m?.fullName ?? m?.full_name ?? ''
+const memberCode = (m?: MemberOption) => m?.memberCode ?? m?.member_code ?? ''
+
+const selectedMember = computed(() => (members.value as MemberOption[]).find(m => m.id === form.memberId))
+const selectedContract = computed(() => memberContracts.value.find(c => c.id === form.contractId))
+const remainingAmount = (c: PayableContract) => Math.max(c.totalAmount - c.paidAmount, 0)
+
+const loadMemberContracts = async (memberId: string) => {
+  memberContracts.value = memberId ? await fetchMemberContracts(memberId) : []
+  // keep a preset contract (?contract=) only when it belongs to this member
+  if (!memberContracts.value.some(c => c.id === form.contractId)) {
+    form.contractId = memberContracts.value.length === 1 ? memberContracts.value[0]!.id : ''
+  }
+}
 
 // 當選擇會員時，載入該會員的合約
-watch(() => form.member_id, async (memberId) => {
-  if (memberId) {
-    await fetchContracts({ memberId })
-    memberContracts.value = contracts.value
-    // 如果有預設合約 ID，保留它
-    if (!form.contract_id || !memberContracts.value.find(c => c.id === form.contract_id)) {
-      form.contract_id = ''
-    }
-  } else {
-    memberContracts.value = []
-    form.contract_id = ''
-  }
-})
+watch(() => form.memberId, (memberId) => loadMemberContracts(memberId))
 
-// 當選擇合約時，自動填入應付金額
-watch(() => form.contract_id, () => {
-  if (selectedContract.value && form.payment_type === 'INCOME') {
-    // 如果是收款，預設填入合約金額（可以是尾款概念）
-    form.amount = selectedContract.value.total_amount || 0
+// 當選擇合約時：收款預設帶入尚未付清的金額，分店預設為合約分店
+watch(() => form.contractId, () => {
+  const contract = selectedContract.value
+  if (!contract) return
+  if (form.paymentType === 'INCOME') form.amount = remainingAmount(contract)
+  if (contract.branchId && branches.value.some(b => b.id === contract.branchId)) {
+    form.branchId = contract.branchId
   }
 })
 
 onMounted(async () => {
   isLoading.value = true
-  const initialPromises: Promise<unknown>[] = [
+  await Promise.all([
     fetchMembers({ limit: 100 }),
     fetchBranches(),
-  ]
-  if (form.member_id) {
-    initialPromises.push(fetchContracts({ memberId: form.member_id }))
+    form.memberId ? loadMemberContracts(form.memberId) : Promise.resolve()
+  ])
+
+  const contractBranch = selectedContract.value?.branchId
+  if (contractBranch && branches.value.some(b => b.id === contractBranch)) {
+    form.branchId = contractBranch
+  } else if (branches.value.length > 0 && !form.branchId) {
+    // 預設選擇第一個分店
+    form.branchId = branches.value[0]!.id
   }
-
-  await Promise.all(initialPromises)
-
-  // 預設選擇第一個分店
-  if (branches.value.length > 0 && !form.branch_id) {
-    form.branch_id = branches.value[0]!.id
-  }
-
-  // 如果有預設會員 ID，更新合約列表
-  if (form.member_id) {
-    memberContracts.value = contracts.value
+  if (selectedContract.value && form.paymentType === 'INCOME' && !form.amount) {
+    form.amount = remainingAmount(selectedContract.value)
   }
 
   isLoading.value = false
@@ -98,16 +107,17 @@ const handleSubmit = async () => {
   clearErrors()
 
   const isValid = validate(form, {
-    member_id: [required(PAGES.PAYMENTS.ERROR_SELECT_MEMBER)],
+    memberId: [required(PAGES.PAYMENTS.ERROR_SELECT_MEMBER)],
+    contractId: [required(PAGES.PAYMENTS.ERROR_SELECT_CONTRACT)],
     amount: [
       positive(PAGES.PAYMENTS.ERROR_AMOUNT_POSITIVE),
       between(1, 10000000, '金額需介於 1 至 10,000,000 之間')
     ],
-    payment_date: [
+    paymentDate: [
       required(PAGES.PAYMENTS.ERROR_SELECT_DATE),
       dateNotFuture('付款日期不能是未來日期')
     ],
-    branch_id: [required(PAGES.PAYMENTS.ERROR_SELECT_BRANCH)],
+    branchId: [required(PAGES.PAYMENTS.ERROR_SELECT_BRANCH)],
     notes: [maxLength(500, '備註不能超過 500 個字')]
   })
 
@@ -115,24 +125,26 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const paymentData = {
-      member_id: form.member_id,
-      contract_id: form.contract_id || null,
+    // Field names are exactly the backend createPaymentSchema (camelCase)
+    const created = await createPayment({
+      contractId: form.contractId,
+      memberId: form.memberId,
+      branchId: form.branchId,
       amount: form.amount,
-      payment_method: form.payment_method,
-      payment_type: form.payment_type,
-      payment_date: form.payment_date,
-      branch_id: form.branch_id,
+      paymentMethod: form.paymentMethod,
+      paymentType: form.paymentType,
+      paymentDate: form.paymentDate,
       notes: form.notes || null
+    })
+
+    // createPayment already showed the backend's reason; stay on the form
+    if (!created) {
+      setError('submit', PAGES.PAYMENTS.ERROR_CREATE_FAILED)
+      return
     }
 
-    await createPayment(paymentData)
     useToast().success(MESSAGES.SUCCESS.PAYMENT_CREATED)
     router.push('/payments')
-  } catch (error) {
-    console.error('Failed to create payment:', error)
-    useToast().error(MESSAGES.ERRORS.PAYMENT_CREATE_FAILED)
-    setError('submit', PAGES.PAYMENTS.ERROR_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }
@@ -164,12 +176,12 @@ const formatCurrency = (amount: number) => {
 
       <!-- Form Hero -->
       <div class="form-hero">
-        <div class="hero-icon" :class="form.payment_type === 'INCOME' ? 'hero-income' : 'hero-refund'">
+        <div class="hero-icon" :class="form.paymentType === 'INCOME' ? 'hero-income' : 'hero-refund'">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
         </div>
-        <h1 class="text-headline">{{ form.payment_type === 'INCOME' ? PAGES.PAYMENTS.ADD_PAYMENT : PAGES.PAYMENTS.ADD_REFUND }}</h1>
+        <h1 class="text-headline">{{ form.paymentType === 'INCOME' ? PAGES.PAYMENTS.ADD_PAYMENT : PAGES.PAYMENTS.ADD_REFUND }}</h1>
         <p class="text-body text-secondary">{{ PAGES.PAYMENTS.RECORD_INFO }}</p>
       </div>
 
@@ -177,8 +189,8 @@ const formatCurrency = (amount: number) => {
       <div class="type-toggle glass-card-flat">
         <button
           class="type-option"
-          :class="{ active: form.payment_type === 'INCOME' }"
-          @click="form.payment_type = 'INCOME'"
+          :class="{ active: form.paymentType === 'INCOME' }"
+          @click="form.paymentType = 'INCOME'"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -187,8 +199,8 @@ const formatCurrency = (amount: number) => {
         </button>
         <button
           class="type-option refund"
-          :class="{ active: form.payment_type === 'REFUND' }"
-          @click="form.payment_type = 'REFUND'"
+          :class="{ active: form.paymentType === 'REFUND' }"
+          @click="form.paymentType = 'REFUND'"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 7 9 13 3 19" />
@@ -212,24 +224,31 @@ const formatCurrency = (amount: number) => {
           <div class="form-grid">
             <div class="input-group required full-width">
               <label class="input-label">{{ PAGES.PAYMENTS.SELECT_MEMBER }}</label>
-              <select v-model="form.member_id" class="input" :class="{ 'input-error': errors.member_id }">
+              <select v-model="form.memberId" class="input" :class="{ 'input-error': errors.memberId }">
                 <option value="">{{ PAGES.PAYMENTS.SELECT_MEMBER_PLACEHOLDER }}</option>
                 <option v-for="member in members" :key="member.id" :value="member.id">
-                  {{ member.full_name }} ({{ member.member_code }})
+                  {{ memberName(member) }} ({{ memberCode(member) }})
                 </option>
               </select>
-              <span v-if="errors.member_id" class="error-text">{{ errors.member_id }}</span>
+              <span v-if="errors.memberId" class="error-text">{{ errors.memberId }}</span>
             </div>
 
-            <div class="input-group full-width">
+            <div class="input-group required full-width">
               <label class="input-label">{{ PAGES.PAYMENTS.RELATED_CONTRACT }}</label>
-              <select v-model="form.contract_id" class="input" :disabled="!form.member_id || memberContracts.length === 0">
-                <option value="">{{ PAGES.PAYMENTS.NO_CONTRACT_LINK }}</option>
+              <select
+                v-model="form.contractId"
+                class="input"
+                :class="{ 'input-error': errors.contractId }"
+                :disabled="!form.memberId || memberContracts.length === 0"
+              >
+                <option value="">{{ PAGES.PAYMENTS.SELECT_CONTRACT_PLACEHOLDER }}</option>
                 <option v-for="contract in memberContracts" :key="contract.id" :value="contract.id">
-                  {{ contract.contract_no }} - {{ contract.plan?.name }} ({{ formatCurrency(contract.total_amount || 0) }})
+                  {{ contract.contractNo }} - {{ contract.plan?.name }} ({{ formatCurrency(contract.totalAmount) }})
                 </option>
               </select>
-              <span v-if="!form.member_id" class="hint-text">{{ PAGES.PAYMENTS.SELECT_MEMBER_FIRST }}</span>
+              <span v-if="errors.contractId" class="error-text">{{ errors.contractId }}</span>
+              <span v-else-if="!form.memberId" class="hint-text">{{ PAGES.PAYMENTS.SELECT_MEMBER_FIRST }}</span>
+              <span v-else-if="memberContracts.length === 0" class="hint-text">{{ PAGES.PAYMENTS.NO_MEMBER_CONTRACTS }}</span>
             </div>
           </div>
 
@@ -237,11 +256,15 @@ const formatCurrency = (amount: number) => {
           <div v-if="selectedMember" class="selected-preview">
             <div class="preview-item">
               <span class="preview-label">{{ PAGES.PAYMENTS.MEMBER }}</span>
-              <span class="preview-value">{{ selectedMember.full_name }}</span>
+              <span class="preview-value">{{ memberName(selectedMember) }}</span>
             </div>
             <div v-if="selectedContract" class="preview-item">
               <span class="preview-label">{{ PAGES.PAYMENTS.CONTRACT_AMOUNT }}</span>
-              <span class="preview-value">{{ formatCurrency(selectedContract.total_amount || 0) }}</span>
+              <span class="preview-value">{{ formatCurrency(selectedContract.totalAmount) }}</span>
+            </div>
+            <div v-if="selectedContract" class="preview-item">
+              <span class="preview-label">{{ PAGES.PAYMENTS.REMAINING_AMOUNT }}</span>
+              <span class="preview-value" data-testid="remaining-amount">{{ formatCurrency(remainingAmount(selectedContract)) }}</span>
             </div>
           </div>
         </section>
@@ -262,7 +285,7 @@ const formatCurrency = (amount: number) => {
               v-model.number="form.amount"
               type="number"
               class="amount-field"
-              :class="{ 'input-error': errors.amount, 'amount-refund': form.payment_type === 'REFUND' }"
+              :class="{ 'input-error': errors.amount, 'amount-refund': form.paymentType === 'REFUND' }"
               placeholder="0"
               min="0"
             />
@@ -274,10 +297,10 @@ const formatCurrency = (amount: number) => {
               v-for="method in paymentMethods"
               :key="method.value"
               class="method-option"
-              :class="{ active: form.payment_method === method.value }"
+              :class="{ active: form.paymentMethod === method.value }"
             >
               <input
-                v-model="form.payment_method"
+                v-model="form.paymentMethod"
                 type="radio"
                 :value="method.value"
                 class="method-input"
@@ -301,23 +324,23 @@ const formatCurrency = (amount: number) => {
             <div class="input-group required">
               <label class="input-label">{{ PAGES.PAYMENTS.PAYMENT_DATE }}</label>
               <input
-                v-model="form.payment_date"
+                v-model="form.paymentDate"
                 type="date"
                 class="input"
-                :class="{ 'input-error': errors.payment_date }"
+                :class="{ 'input-error': errors.paymentDate }"
               />
-              <span v-if="errors.payment_date" class="error-text">{{ errors.payment_date }}</span>
+              <span v-if="errors.paymentDate" class="error-text">{{ errors.paymentDate }}</span>
             </div>
 
             <div class="input-group required">
               <label class="input-label">{{ PAGES.PAYMENTS.PAYMENT_BRANCH }}</label>
-              <select v-model="form.branch_id" class="input" :class="{ 'input-error': errors.branch_id }">
+              <select v-model="form.branchId" class="input" :class="{ 'input-error': errors.branchId }">
                 <option value="">{{ PAGES.PAYMENTS.SELECT_BRANCH_PLACEHOLDER }}</option>
                 <option v-for="branch in branches" :key="branch.id" :value="branch.id">
                   {{ branch.name }}
                 </option>
               </select>
-              <span v-if="errors.branch_id" class="error-text">{{ errors.branch_id }}</span>
+              <span v-if="errors.branchId" class="error-text">{{ errors.branchId }}</span>
             </div>
 
             <div class="input-group full-width">
@@ -343,11 +366,11 @@ const formatCurrency = (amount: number) => {
         <!-- Actions -->
         <div class="form-actions">
           <button type="button" class="btn btn-ghost" @click="router.back()">{{ MESSAGES.FORM.CANCEL }}</button>
-          <button type="submit" class="btn btn-large" :class="form.payment_type === 'INCOME' ? 'btn-primary' : 'btn-warning'" :disabled="isSubmitting">
+          <button type="submit" class="btn btn-large" :class="form.paymentType === 'INCOME' ? 'btn-primary' : 'btn-warning'" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="btn-spinner" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
-            {{ isSubmitting ? MESSAGES.ACTIONS.PROCESSING : (form.payment_type === 'INCOME' ? PAGES.PAYMENTS.CONFIRM_INCOME : PAGES.PAYMENTS.CONFIRM_REFUND) }}
+            {{ isSubmitting ? MESSAGES.ACTIONS.PROCESSING : (form.paymentType === 'INCOME' ? PAGES.PAYMENTS.CONFIRM_INCOME : PAGES.PAYMENTS.CONFIRM_REFUND) }}
           </button>
         </div>
       </form>
