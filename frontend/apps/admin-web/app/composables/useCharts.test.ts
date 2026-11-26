@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useCharts Composable Unit Tests
  * 測試 Chart.js 圖表工具函數

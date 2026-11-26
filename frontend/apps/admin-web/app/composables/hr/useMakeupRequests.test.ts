@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useMakeupRequests.test.ts
  * Tests for the makeup request management composable
@@ -50,6 +49,13 @@ describe('useMakeupRequests', () => {
       expect(makeupRequests.value).toEqual(mockRequests)
       expect(makeupTotalCount.value).toBe(2)
       expect(isMakeupLoading.value).toBe(false)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('makeup_requests', {
+        filter: {},
+        sort: 'date_created',
+        sortOrder: 'desc',
+        limit: 20,
+        page: 1
+      })
     })
 
     it('應該支援員工 ID 過濾', async () => {
@@ -146,8 +152,14 @@ describe('useMakeupRequests', () => {
 
       await fetchPendingMakeupApprovals('supervisor-1')
 
+      expect(mockFetchInstance.readItems).toHaveBeenNthCalledWith(1, 'employees', {
+        filter: { supervisor_id: 'supervisor-1' }
+      })
+      expect(mockFetchInstance.readItems).toHaveBeenNthCalledWith(2, 'makeup_requests', expect.objectContaining({
+        filter: { request_status: 'PENDING' }
+      }))
       expect(pendingMakeupApprovals.value).toHaveLength(1)
-      expect(pendingMakeupApprovals.value[0].id).toBe('mr-1')
+      expect(pendingMakeupApprovals.value[0]!.id).toBe('mr-1')
     })
 
     it('應該在沒有下屬時返回空陣列', async () => {
@@ -385,9 +397,15 @@ describe('useMakeupRequests', () => {
         'makeup_requests',
         'mr-1',
         expect.objectContaining({
-          request_status: 'REJECTED'
+          request_status: 'REJECTED',
+          approver_id: 'approver-1',
+          approval_notes: '資料不足'
         })
       )
+      // Rejecting must never touch the attendance records
+      expect(mockFetchInstance.readItems).not.toHaveBeenCalled()
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledTimes(1)
+      expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(1) // approval log only
     })
 
     it('應該在核准時更新現有考勤紀錄', async () => {
@@ -462,6 +480,76 @@ describe('useMakeupRequests', () => {
           check_type: 'MAKEUP'
         })
       )
+    })
+
+    it('BOTH 類型核准時應同時更新上班與下班時間', async () => {
+      mockFetchInstance.readItem.mockResolvedValueOnce({
+        id: 'mr-1',
+        employee_id: 'emp-1',
+        branch_id: 'branch-1',
+        target_date: '2025-01-10',
+        makeup_type: 'BOTH',
+        requested_check_in: '09:00:00',
+        requested_check_out: '18:00:00',
+        request_status: 'PENDING',
+        reason: '系統故障'
+      })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({ request_status: 'APPROVED' })
+      mockFetchInstance.createItem.mockResolvedValueOnce({})
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [{ id: 'att-1' }], total: 1 })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+
+      const { reviewMakeup } = useMakeupRequests()
+      await reviewMakeup('mr-1', 'approver-1', 'APPROVE')
+
+      expect(mockFetchInstance.updateItem).toHaveBeenNthCalledWith(2, 'attendances', 'att-1', {
+        check_type: 'MAKEUP',
+        notes: '補打卡申請核准 - 系統故障',
+        check_in: '2025-01-10T09:00:00',
+        check_out: '2025-01-10T18:00:00'
+      })
+    })
+
+    it('CHECK_IN 類型核准時不應覆寫既有的下班時間', async () => {
+      mockFetchInstance.readItem.mockResolvedValueOnce({
+        id: 'mr-1',
+        employee_id: 'emp-1',
+        target_date: '2025-01-10',
+        makeup_type: 'CHECK_IN',
+        requested_check_in: '09:00:00',
+        requested_check_out: '18:00:00',
+        request_status: 'PENDING',
+        reason: '忘記打卡'
+      })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({ request_status: 'APPROVED' })
+      mockFetchInstance.createItem.mockResolvedValueOnce({})
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [{ id: 'att-1' }], total: 1 })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+
+      const { reviewMakeup } = useMakeupRequests()
+      await reviewMakeup('mr-1', 'approver-1', 'APPROVE')
+
+      const attendanceUpdate = mockFetchInstance.updateItem.mock.calls[1]![2]
+      expect(attendanceUpdate).toHaveProperty('check_in', '2025-01-10T09:00:00')
+      expect(attendanceUpdate).not.toHaveProperty('check_out')
+    })
+
+    // BUG: useMakeupRequests.ts reviewMakeup (~line 174-203) never checks that the request is still PENDING,
+    // unlike cancelMakeup. An already CANCELLED/REJECTED/APPROVED request can be re-approved and rewrites attendance.
+    it.skip('應該拒絕審核非待審核狀態的申請', async () => {
+      mockFetchInstance.readItem.mockResolvedValueOnce({
+        id: 'mr-1',
+        employee_id: 'emp-1',
+        target_date: '2025-01-10',
+        makeup_type: 'CHECK_IN',
+        requested_check_in: '09:00:00',
+        request_status: 'CANCELLED'
+      })
+
+      const { reviewMakeup } = useMakeupRequests()
+
+      await expect(reviewMakeup('mr-1', 'approver-1', 'APPROVE')).rejects.toThrow()
+      expect(mockFetchInstance.updateItem).not.toHaveBeenCalled()
     })
 
     it('應該在找不到申請時拋出錯誤', async () => {
@@ -541,6 +629,8 @@ describe('useMakeupRequests', () => {
 
       await expect(cancelMakeup('mr-1', 'emp-1'))
         .rejects.toThrow('只能取消待審核的申請')
+      expect(mockFetchInstance.updateItem).not.toHaveBeenCalled()
+      expect(mockFetchInstance.createItem).not.toHaveBeenCalled()
     })
 
     it('應該拒絕取消已駁回的申請', async () => {

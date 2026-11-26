@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { db, memberGoals } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
@@ -10,6 +9,9 @@ import {
   TEST_MEMBER_ID,
   TEST_BRANCH_ID,
   TEST_TENANT_ID,
+  TEST_MEMBER_B_ID,
+  TEST_BRANCH_B_ID,
+  TEST_TENANT_B_ID,
 } from './helpers.js';
 
 // =============================================================================
@@ -45,13 +47,12 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Goals Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await db.delete(memberGoals).where(eq(memberGoals.memberId, TEST_MEMBER_ID));
+    await db.delete(memberGoals).where(eq(memberGoals.memberId, TEST_MEMBER_B_ID));
     await cleanupTestFixtures();
   });
 
@@ -72,7 +73,6 @@ describe('Member Goals Routes', () => {
 
   describe('POST /api/member/goals', () => {
     it('should create a goal', async () => {
-      if (!dbAvailable) return;
 
       const today = new Date().toISOString().split('T')[0];
       const res = await memberRequest('/api/member/goals', {
@@ -97,7 +97,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should reject missing goalType', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/goals', {
         method: 'POST',
@@ -111,7 +110,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should reject missing startDate', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/goals', {
         method: 'POST',
@@ -125,7 +123,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should reject invalid goalType', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/goals', {
         method: 'POST',
@@ -146,7 +143,6 @@ describe('Member Goals Routes', () => {
 
   describe('GET /api/member/goals', () => {
     it('should return paginated goal list', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/goals');
 
@@ -160,7 +156,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should support pagination parameters', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/goals?page=1&limit=5');
 
@@ -170,7 +165,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should support status filter', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/goals?status=IN_PROGRESS');
 
@@ -187,7 +181,7 @@ describe('Member Goals Routes', () => {
 
   describe('GET /api/member/goals/:id', () => {
     it('should return a specific goal', async () => {
-      if (!dbAvailable || !createdGoalId) return;
+      if (!createdGoalId) throw new Error('createdGoalId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/goals/${createdGoalId}`);
 
@@ -198,7 +192,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should return 404 for non-existent goal', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/goals/00000000-0000-4000-8000-000000099999'
@@ -214,7 +207,7 @@ describe('Member Goals Routes', () => {
 
   describe('PUT /api/member/goals/:id', () => {
     it('should update a goal', async () => {
-      if (!dbAvailable || !createdGoalId) return;
+      if (!createdGoalId) throw new Error('createdGoalId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/goals/${createdGoalId}`, {
         method: 'PUT',
@@ -230,7 +223,7 @@ describe('Member Goals Routes', () => {
     });
 
     it('should update goal status to ACHIEVED', async () => {
-      if (!dbAvailable || !createdGoalId) return;
+      if (!createdGoalId) throw new Error('createdGoalId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/goals/${createdGoalId}`, {
         method: 'PUT',
@@ -246,7 +239,6 @@ describe('Member Goals Routes', () => {
     });
 
     it('should return 404 for non-existent goal', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/goals/00000000-0000-4000-8000-000000099999',
@@ -266,7 +258,7 @@ describe('Member Goals Routes', () => {
 
   describe('DELETE /api/member/goals/:id', () => {
     it('should delete a goal', async () => {
-      if (!dbAvailable || !createdGoalId) return;
+      if (!createdGoalId) throw new Error('createdGoalId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/goals/${createdGoalId}`, {
         method: 'DELETE',
@@ -278,13 +270,83 @@ describe('Member Goals Routes', () => {
     });
 
     it('should return 404 for already deleted goal', async () => {
-      if (!dbAvailable || !createdGoalId) return;
+      if (!createdGoalId) throw new Error('createdGoalId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/goals/${createdGoalId}`, {
         method: 'DELETE',
       });
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cross-member isolation
+  // ---------------------------------------------------------------------------
+
+  describe('Cross-member isolation', () => {
+    let otherGoalId: string;
+
+    function otherMemberRequest(path: string, options: RequestInit = {}) {
+      const headers = new Headers(options.headers);
+      headers.set(MEMBER_TOKEN_HEADER, generateMemberTokens({
+        id: TEST_MEMBER_B_ID,
+        memberCode: 'OM0001',
+        branchId: TEST_BRANCH_B_ID,
+        tenantId: TEST_TENANT_B_ID,
+      }).accessToken);
+      if (!headers.has('Content-Type') && options.body) {
+        headers.set('Content-Type', 'application/json');
+      }
+      return app.request(path, { ...options, headers });
+    }
+
+    beforeAll(async () => {
+      const res = await otherMemberRequest('/api/member/goals', {
+        method: 'POST',
+        body: JSON.stringify({
+          goalType: 'MUSCLE_GAIN',
+          targetValue: { value: 60, unit: 'kg' },
+          startDate: new Date().toISOString().split('T')[0],
+          notes: 'Other member goal',
+        }),
+      });
+      expect(res.status).toBe(201);
+      otherGoalId = (await res.json()).data.goal.id;
+    });
+
+    it("should not include another member's goals in the list", async () => {
+      const data = await (await memberRequest('/api/member/goals')).json();
+
+      expect(data.data.goals.map((g: { id: string }) => g.id)).not.toContain(otherGoalId);
+
+      const theirs = await (await otherMemberRequest('/api/member/goals')).json();
+      expect(theirs.data.goals.map((g: { id: string }) => g.id)).toEqual([otherGoalId]);
+    });
+
+    it("should return 404 when reading another member's goal", async () => {
+      const res = await memberRequest(`/api/member/goals/${otherGoalId}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("should not update another member's goal", async () => {
+      const res = await memberRequest(`/api/member/goals/${otherGoalId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ notes: 'Hijacked' }),
+      });
+
+      expect(res.status).toBe(404);
+      const [row] = await db.select().from(memberGoals).where(eq(memberGoals.id, otherGoalId));
+      expect(row.notes).toBe('Other member goal');
+    });
+
+    it("should not delete another member's goal", async () => {
+      const res = await memberRequest(`/api/member/goals/${otherGoalId}`, { method: 'DELETE' });
+
+      expect(res.status).toBe(404);
+      const rows = await db.select().from(memberGoals).where(eq(memberGoals.id, otherGoalId));
+      expect(rows).toHaveLength(1);
     });
   });
 });

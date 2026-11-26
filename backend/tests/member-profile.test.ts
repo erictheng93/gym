@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import {
   createTestFixtures,
@@ -40,12 +39,10 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Profile Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await cleanupTestFixtures();
   });
 
@@ -73,7 +70,6 @@ describe('Member Profile Routes', () => {
 
   describe('GET /api/member/me', () => {
     it('should return member profile', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me');
       expect(res.status).toBe(200);
@@ -89,7 +85,6 @@ describe('Member Profile Routes', () => {
     });
 
     it('should include branch information', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me');
       const data = await res.json();
@@ -100,7 +95,6 @@ describe('Member Profile Routes', () => {
     });
 
     it('should include contracts array', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me');
       const data = await res.json();
@@ -116,7 +110,6 @@ describe('Member Profile Routes', () => {
 
   describe('PUT /api/member/me', () => {
     it('should update member profile', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me', {
         method: 'PUT',
@@ -131,7 +124,6 @@ describe('Member Profile Routes', () => {
     });
 
     it('should reject invalid phone format', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me', {
         method: 'PUT',
@@ -144,7 +136,6 @@ describe('Member Profile Routes', () => {
     });
 
     it('should reject invalid email format', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me', {
         method: 'PUT',
@@ -157,7 +148,6 @@ describe('Member Profile Routes', () => {
     });
 
     it('should accept valid profile update fields', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/me', {
         method: 'PUT',
@@ -180,7 +170,6 @@ describe('Member Profile Routes', () => {
 
   describe('POST /api/member/complete-profile', () => {
     it('should reject without required phone', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/complete-profile', {
         method: 'POST',
@@ -191,7 +180,6 @@ describe('Member Profile Routes', () => {
     });
 
     it('should reject invalid phone format', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/complete-profile', {
         method: 'POST',

@@ -1,61 +1,37 @@
-// -nocheck
 /**
- * RevenueChart Component Unit Tests
- * 測試營收趨勢圖表元件
+ * RevenueChart behavior tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { computed, watch, onMounted, nextTick } from 'vue'
+import { mount, flushPromises } from '@vue/test-utils'
 import RevenueChart from './RevenueChart.vue'
 import type { DashboardKPIs } from '~/composables/useDashboard'
 
-// ============================================
-// Mock useCharts composable
-// ============================================
+const createLineChart = vi.fn()
+const createBarChart = vi.fn()
+const destroyChart = vi.fn()
+const formatCurrency = vi.fn((value: number) => `NT$${value.toLocaleString()}`)
 
-const mockCreateLineChart = vi.fn()
-const mockCreateBarChart = vi.fn()
-const mockDestroyChart = vi.fn()
-const mockFormatCurrency = vi.fn((value: number) => `NT$${value.toLocaleString()}`)
+vi.stubGlobal('computed', computed)
+vi.stubGlobal('watch', watch)
+vi.stubGlobal('onMounted', onMounted)
+vi.stubGlobal('useCharts', () => ({ createLineChart, createBarChart, destroyChart, formatCurrency }))
 
-// Mock useCharts through globalThis for Nuxt auto-imports
-const mockUseCharts = () => ({
-  createLineChart: mockCreateLineChart,
-  createBarChart: mockCreateBarChart,
-  destroyChart: mockDestroyChart,
-  formatCurrency: mockFormatCurrency
-})
+type ByBranch = DashboardKPIs['revenue']['by_branch']
 
-// Set global mock BEFORE any imports that might use it
-globalThis.useCharts = mockUseCharts as any
-
-// ============================================
-// Test Data
-// ============================================
-
-const mockKPIs: DashboardKPIs = {
+const makeKPIs = (by_branch: ByBranch): DashboardKPIs => ({
   success: true,
-  period: {
-    type: 'today',
-    start_date: '2024-01-15',
-    end_date: '2024-01-15'
-  },
+  period: { type: 'today', start_date: '2024-01-15', end_date: '2024-01-15' },
   revenue: {
     today: 50000,
     mtd: 500000,
     ytd: 2000000,
     period: 150000,
     change: 12.5,
-    transactions: {
-      today: 15,
-      period: 45
-    },
+    transactions: { today: 15, period: 45 },
     by_payment_method: [],
-    by_branch: [
-      { branch_id: 'branch-1', branch_name: '台北總店', revenue: 80000, transactions: 25 },
-      { branch_id: 'branch-2', branch_name: '台中店', revenue: 50000, transactions: 15 },
-      { branch_id: 'branch-3', branch_name: '高雄店', revenue: 20000, transactions: 5 }
-    ]
+    by_branch
   },
   members: {
     total: 500,
@@ -85,179 +61,92 @@ const mockKPIs: DashboardKPIs = {
     by_branch: []
   },
   generated_at: '2024-01-15T10:00:00.000Z'
-}
+})
 
-// ============================================
-// Tests
-// ============================================
+const branches: ByBranch = [
+  { branch_id: 'b1', branch_name: '台北總店', revenue: 80000, transactions: 25 },
+  { branch_id: 'b2', branch_name: '台中店', revenue: 50000, transactions: 15 },
+  { branch_id: 'b3', branch_name: '高雄店', revenue: 20000, transactions: 5 }
+]
+
+const mountChart = async (props: { kpis: DashboardKPIs | null, chartType?: 'line' | 'bar', loading?: boolean }) => {
+  const wrapper = mount(RevenueChart, { props, attachTo: document.body })
+  await nextTick()
+  await flushPromises()
+  return wrapper
+}
 
 describe('RevenueChart', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  afterEach(() => {
-    vi.clearAllMocks()
+  it('draws a line chart per branch by default and shows the total revenue', async () => {
+    const wrapper = await mountChart({ kpis: makeKPIs(branches) })
+
+    expect(wrapper.find('canvas').exists()).toBe(true)
+    expect(wrapper.find('.total-revenue').text()).toBe('總營收：NT$150,000')
+    expect(createBarChart).not.toHaveBeenCalled()
+    expect(createLineChart).toHaveBeenCalledTimes(1)
+    const [canvas, id, config] = createLineChart.mock.calls[0]!
+    expect(canvas).toBeInstanceOf(HTMLCanvasElement)
+    expect(id).toBe('revenue-chart')
+    expect(config.labels).toEqual(['台北總店', '台中店', '高雄店'])
+    expect(config.datasets[0].data).toEqual([80000, 50000, 20000])
+    wrapper.unmount()
   })
 
-  // ============================================
-  // Loading 狀態測試 (不依賴 computed)
-  // ============================================
-  describe('Loading State', () => {
-    it('loading 時應該顯示載入中', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: mockKPIs,
-          loading: true
-        }
-      })
+  it('draws a bar chart when chartType is bar', async () => {
+    const wrapper = await mountChart({ kpis: makeKPIs(branches), chartType: 'bar' })
 
-      expect(wrapper.find('.chart-loading').exists()).toBe(true)
-      expect(wrapper.find('.loading-spinner').exists()).toBe(true)
-      expect(wrapper.text()).toContain('載入中')
-    })
-
-    it('loading 時不應該顯示 canvas', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: mockKPIs,
-          loading: true
-        }
-      })
-
-      expect(wrapper.find('.chart-wrapper').exists()).toBe(false)
-    })
+    expect(createLineChart).not.toHaveBeenCalled()
+    expect(createBarChart).toHaveBeenCalledTimes(1)
+    expect(createBarChart.mock.calls[0]![2].labels).toEqual(['台北總店', '台中店', '高雄店'])
+    wrapper.unmount()
   })
 
-  // ============================================
-  // 空狀態測試 (不依賴 computed)
-  // ============================================
-  describe('Empty State', () => {
-    it('kpis 為 null 時應該顯示空狀態', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null
-        }
-      })
+  it('coerces string revenue values (decimal columns) to numbers', async () => {
+    const stringy = branches.map(b => ({ ...b, revenue: String(b.revenue) })) as unknown as ByBranch
+    const wrapper = await mountChart({ kpis: makeKPIs(stringy) })
 
-      expect(wrapper.find('.chart-empty').exists()).toBe(true)
-      expect(wrapper.text()).toContain('暫無營收數據')
-    })
-
-    it('空狀態應該顯示圖示', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null
-        }
-      })
-
-      expect(wrapper.find('.chart-empty svg').exists()).toBe(true)
-    })
+    expect(createLineChart.mock.calls[0]![2].datasets[0].data).toEqual([80000, 50000, 20000])
+    wrapper.unmount()
   })
 
-  // ============================================
-  // Props 測試
-  // ============================================
-  describe('Props', () => {
-    it('應該接受 kpis prop', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: mockKPIs,
-          loading: true  // Use loading to avoid computed issues
-        }
-      })
+  it('shows the empty state and draws nothing when there are no branches', async () => {
+    const wrapper = await mountChart({ kpis: makeKPIs([]) })
 
-      expect(wrapper.props('kpis')).toEqual(mockKPIs)
-    })
-
-    it('應該接受 chartType prop', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: mockKPIs,
-          chartType: 'bar',
-          loading: true  // Use loading to avoid computed issues
-        }
-      })
-
-      expect(wrapper.props('chartType')).toBe('bar')
-    })
-
-    it('chartType 預設為 line', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null  // Use null to avoid computed issues
-        }
-      })
-
-      expect(wrapper.props('chartType')).toBe('line')
-    })
-
-    it('loading 預設為 false', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null  // Use null to avoid computed issues
-        }
-      })
-
-      expect(wrapper.props('loading')).toBe(false)
-    })
+    expect(wrapper.find('.chart-empty').text()).toContain('暫無營收數據')
+    expect(wrapper.find('canvas').exists()).toBe(false)
+    expect(createLineChart).not.toHaveBeenCalled()
+    expect(createBarChart).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
-  // ============================================
-  // CSS 容器測試
-  // ============================================
-  describe('Container', () => {
-    it('應該有正確的 CSS 容器', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null  // Use null to avoid computed issues
-        }
-      })
+  it('shows the empty state and no total when kpis is null', async () => {
+    const wrapper = await mountChart({ kpis: null })
 
-      expect(wrapper.find('.revenue-chart-container').exists()).toBe(true)
-    })
-
-    it('應該有 chart-header', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null
-        }
-      })
-
-      expect(wrapper.find('.chart-header').exists()).toBe(true)
-    })
-
-    it('應該渲染標題', () => {
-      const wrapper = mount(RevenueChart, {
-        props: {
-          kpis: null
-        }
-      })
-
-      expect(wrapper.find('.chart-title').text()).toBe('營收分佈')
-    })
+    expect(wrapper.find('.chart-empty').exists()).toBe(true)
+    expect(wrapper.find('.total-revenue').exists()).toBe(false)
+    wrapper.unmount()
   })
 
-  // ============================================
-  // Mock 驗證測試
-  // ============================================
-  describe('useCharts Mock', () => {
-    it('useCharts mock 應該被正確設置', () => {
-      expect(globalThis.useCharts).toBeDefined()
-      expect(typeof globalThis.useCharts).toBe('function')
-    })
+  it('shows the loading state instead of the chart', async () => {
+    const wrapper = await mountChart({ kpis: makeKPIs(branches), loading: true })
 
-    it('useCharts 應該返回正確的 mock 函數', () => {
-      const charts = (globalThis.useCharts as any)()
-      expect(charts.createLineChart).toBeDefined()
-      expect(charts.createBarChart).toBeDefined()
-      expect(charts.destroyChart).toBeDefined()
-      expect(charts.formatCurrency).toBeDefined()
-    })
+    expect(wrapper.find('.chart-loading').exists()).toBe(true)
+    expect(wrapper.find('canvas').exists()).toBe(false)
+    expect(createLineChart).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 
-    it('formatCurrency 應該正確格式化', () => {
-      const charts = (globalThis.useCharts as any)()
-      expect(charts.formatCurrency(150000)).toBe('NT$150,000')
-    })
+  it('redraws when chartType changes and destroys the chart on unmount', async () => {
+    const wrapper = await mountChart({ kpis: makeKPIs(branches) })
+    await wrapper.setProps({ chartType: 'bar' })
+    await flushPromises()
+    expect(createBarChart).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+    expect(destroyChart).toHaveBeenCalledWith('revenue-chart')
   })
 })

@@ -28,321 +28,146 @@ describe('FormTagInput', () => {
     })
   }
 
-  describe('初始化', () => {
-    it('應該正確渲染組件', () => {
-      const wrapper = mountFormTagInput()
-      expect(wrapper.find('.tag-input-container').exists()).toBe(true)
-    })
+  const input = (wrapper: ReturnType<typeof mountFormTagInput>) => wrapper.find<HTMLInputElement>('input[type="text"]')
+  const addButton = (wrapper: ReturnType<typeof mountFormTagInput>) => wrapper.find<HTMLButtonElement>('.tag-input-row button')
+  const lastEmit = (wrapper: ReturnType<typeof mountFormTagInput>) => wrapper.emitted('update:modelValue')!.at(-1)
 
-    it('應該渲染標籤和必填指示器', () => {
-      const wrapper = mountFormTagInput({
-        label: '標籤',
-        required: true
-      })
+  it('渲染標籤、必填標記、預設/自訂 placeholder 與按鈕文字', () => {
+    const wrapper = mountFormTagInput({ label: '標籤', required: true })
+    expect(wrapper.find('label').text()).toContain('標籤')
+    expect(wrapper.find('label').classes()).toContain('required')
+    expect(input(wrapper).attributes('placeholder')).toBe('輸入標籤...')
+    expect(addButton(wrapper).text()).toBe('新增')
 
-      expect(wrapper.find('label').text()).toContain('標籤')
-      expect(wrapper.find('label').classes()).toContain('required')
-    })
-
-    it('應該渲染輸入框和新增按鈕', () => {
-      const wrapper = mountFormTagInput()
-
-      expect(wrapper.find('input[type="text"]').exists()).toBe(true)
-      expect(wrapper.find('.btn-secondary').exists()).toBe(true)
-    })
-
-    it('應該顯示自訂的按鈕文字', () => {
-      const wrapper = mountFormTagInput({
-        addButtonText: '添加標籤'
-      })
-
-      expect(wrapper.find('.btn-secondary').text()).toBe('添加標籤')
-    })
-
-    it('應該顯示預設的佔位文字', () => {
-      const wrapper = mountFormTagInput()
-
-      expect(wrapper.find('input[type="text"]').attributes('placeholder')).toBe('輸入標籤...')
-    })
-
-    it('應該顯示自訂的佔位文字', () => {
-      const wrapper = mountFormTagInput({
-        placeholder: '請輸入標籤名稱'
-      })
-
-      expect(wrapper.find('input[type="text"]').attributes('placeholder')).toBe('請輸入標籤名稱')
-    })
+    const custom = mountFormTagInput({ placeholder: '輸入技能', addButtonText: '加入' })
+    expect(input(custom).attributes('placeholder')).toBe('輸入技能')
+    expect(addButton(custom).text()).toBe('加入')
   })
 
-  describe('標籤顯示', () => {
-    it('應該顯示已有的標籤', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['VIP', '優先', '新會員']
-      })
+  it('顯示已有標籤，沒有標籤時不渲染列表', () => {
+    const wrapper = mountFormTagInput({ modelValue: ['瑜珈', '重訓'] })
+    expect(wrapper.findAll('.tag').map(t => t.text())).toEqual(['瑜珈', '重訓'])
 
-      const tags = wrapper.findAll('.tag')
-      expect(tags.length).toBe(3)
-      expect(tags[0]!.text()).toContain('VIP')
-      expect(tags[1]!.text()).toContain('優先')
-      expect(tags[2]!.text()).toContain('新會員')
-    })
-
-    it('應該在沒有標籤時不顯示標籤列表', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: []
-      })
-
-      expect(wrapper.find('.tags-list').exists()).toBe(false)
-    })
-
-    it('應該渲染移除按鈕', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['測試']
-      })
-
-      expect(wrapper.find('.tag-remove').exists()).toBe(true)
-    })
+    expect(mountFormTagInput().find('.tags-list').exists()).toBe(false)
   })
 
   describe('新增標籤', () => {
-    it('應該在點擊按鈕時新增標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: []
-      })
+    it('點擊按鈕新增標籤並清空輸入框', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['既有'] })
+      await input(wrapper).setValue('新標籤')
+      await addButton(wrapper).trigger('click')
 
-      await wrapper.find('input[type="text"]').setValue('新標籤')
-      await wrapper.find('.btn-secondary').trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual([['新標籤']])
+      expect(lastEmit(wrapper)).toEqual([['既有', '新標籤']])
+      expect(input(wrapper).element.value).toBe('')
     })
 
-    it('應該在按 Enter 時新增標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: []
-      })
+    it('按 Enter 新增標籤', async () => {
+      const wrapper = mountFormTagInput()
+      await input(wrapper).setValue('Enter 標籤')
+      await input(wrapper).trigger('keydown', { key: 'Enter' })
 
-      const input = wrapper.find('input[type="text"]')
-      await input.setValue('Enter標籤')
-      await input.trigger('keydown', { key: 'Enter' })
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual([['Enter標籤']])
+      expect(lastEmit(wrapper)).toEqual([['Enter 標籤']])
     })
 
-    it('應該忽略空白標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: []
-      })
+    it('新增前修剪前後空白', async () => {
+      const wrapper = mountFormTagInput()
+      await input(wrapper).setValue('  trimmed  ')
+      await addButton(wrapper).trigger('click')
 
-      await wrapper.find('input[type="text"]').setValue('   ')
-      await wrapper.find('.btn-secondary').trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+      expect(lastEmit(wrapper)).toEqual([['trimmed']])
     })
 
-    it('應該忽略重複標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['已存在']
-      })
+    it('忽略空白標籤，且按鈕為 disabled', async () => {
+      const wrapper = mountFormTagInput()
+      await input(wrapper).setValue('   ')
+      expect(addButton(wrapper).element.disabled).toBe(true)
 
-      await wrapper.find('input[type="text"]').setValue('已存在')
-      await wrapper.find('.btn-secondary').trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+      await input(wrapper).trigger('keydown', { key: 'Enter' })
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     })
 
-    it('應該修剪標籤前後空白', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: []
-      })
+    it('忽略重複標籤', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['重複'] })
+      await input(wrapper).setValue('重複')
+      await addButton(wrapper).trigger('click')
 
-      await wrapper.find('input[type="text"]').setValue('  有空白  ')
-      await wrapper.find('.btn-secondary').trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual([['有空白']])
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     })
   })
 
   describe('移除標籤', () => {
-    it('應該在點擊移除按鈕時移除標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['標籤一', '標籤二', '標籤三']
-      })
+    it('點擊移除按鈕只移除該標籤', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['一', '二', '三'] })
+      await wrapper.findAll('.tag-remove')[1]!.trigger('click')
 
-      const removeButtons = wrapper.findAll('.tag-remove')
-      expect(removeButtons.length).toBeGreaterThan(1)
-      await removeButtons[1]!.trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual([['標籤一', '標籤三']])
+      expect(lastEmit(wrapper)).toEqual([['一', '三']])
     })
 
-    it('應該在輸入為空時按 Backspace 移除最後一個標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['標籤一', '標籤二']
-      })
+    it('輸入為空時 Backspace 移除最後一個標籤', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['一', '二'] })
+      await input(wrapper).trigger('keydown', { key: 'Backspace' })
 
-      const input = wrapper.find('input[type="text"]')
-      await input.trigger('keydown', { key: 'Backspace' })
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual([['標籤一']])
+      expect(lastEmit(wrapper)).toEqual([['一']])
     })
 
-    it('應該在輸入有值時按 Backspace 不移除標籤', async () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['標籤一']
-      })
+    it('輸入有內容時 Backspace 不移除標籤', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['一'] })
+      await input(wrapper).setValue('abc')
+      await input(wrapper).trigger('keydown', { key: 'Backspace' })
 
-      const input = wrapper.find('input[type="text"]')
-      await input.setValue('測試')
-      await input.trigger('keydown', { key: 'Backspace' })
-
-      expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     })
   })
 
-  describe('maxTags 限制', () => {
-    it('應該顯示標籤計數', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['一', '二', '三'],
-        maxTags: 5
-      })
-
-      expect(wrapper.find('.tags-count').exists()).toBe(true)
+  describe('maxTags', () => {
+    it('顯示標籤計數', () => {
+      const wrapper = mountFormTagInput({ modelValue: ['一', '二', '三'], maxTags: 5 })
       expect(wrapper.find('.tags-count').text()).toBe('3 / 5')
+      expect(mountFormTagInput().find('.tags-count').exists()).toBe(false)
     })
 
-    it('應該在達到最大數量時禁用輸入', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['一', '二', '三'],
-        maxTags: 3
-      })
+    it('達上限時輸入框與按鈕被禁用，Enter 不新增', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['一', '二', '三'], maxTags: 3 })
+      expect(input(wrapper).element.disabled).toBe(true)
+      expect(addButton(wrapper).element.disabled).toBe(true)
 
-      expect(wrapper.find('input[type="text"]').attributes('disabled')).toBeDefined()
+      await input(wrapper).trigger('keydown', { key: 'Enter' })
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     })
 
-    it('應該在達到最大數量時禁用按鈕', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['一', '二', '三'],
-        maxTags: 3
-      })
+    it('未達上限時仍可新增', async () => {
+      const wrapper = mountFormTagInput({ modelValue: ['一'], maxTags: 3 })
+      expect(input(wrapper).element.disabled).toBe(false)
 
-      expect(wrapper.find('.btn-secondary').attributes('disabled')).toBeDefined()
-    })
-
-    it('應該在未達到最大數量時允許輸入', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['一', '二'],
-        maxTags: 5
-      })
-
-      expect(wrapper.find('input[type="text"]').attributes('disabled')).toBeUndefined()
+      await input(wrapper).setValue('二')
+      await addButton(wrapper).trigger('click')
+      expect(lastEmit(wrapper)).toEqual([['一', '二']])
     })
   })
 
-  describe('標籤樣式變體', () => {
-    it('應該使用 primary 變體作為預設', () => {
-      const wrapper = mountFormTagInput({
-        modelValue: ['測試']
-      })
+  it('顯示錯誤，且錯誤優先於提示', () => {
+    const hintOnly = mountFormTagInput({ hint: '最多五個' })
+    expect(hintOnly.find('.form-field-hint').text()).toBe('最多五個')
 
-      expect(wrapper.find('.tag').classes()).toContain('tag-primary')
-    })
-
-    it('應該支援不同的變體', () => {
-      const variants = ['default', 'primary', 'success', 'warning', 'error'] as const
-
-      variants.forEach(variant => {
-        const wrapper = mountFormTagInput({
-          modelValue: ['測試'],
-          variant
-        })
-
-        expect(wrapper.find('.tag').classes()).toContain(`tag-${variant}`)
-      })
-    })
+    const both = mountFormTagInput({ hint: '最多五個', error: '至少一個標籤' })
+    expect(both.find('.form-field-error').text()).toBe('至少一個標籤')
+    expect(both.find('.form-field-hint').exists()).toBe(false)
   })
 
-  describe('錯誤狀態', () => {
-    it('應該顯示錯誤訊息', () => {
-      const wrapper = mountFormTagInput({
-        error: '標籤數量不足'
-      })
-
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-      expect(wrapper.find('.form-field-error').text()).toBe('標籤數量不足')
+  describe('禁用', () => {
+    it('輸入框與按鈕被禁用', () => {
+      const wrapper = mountFormTagInput({ disabled: true, modelValue: ['一'] })
+      expect(input(wrapper).element.disabled).toBe(true)
+      expect(addButton(wrapper).element.disabled).toBe(true)
+      expect(wrapper.find<HTMLButtonElement>('.tag-remove').element.disabled).toBe(true)
     })
 
-    it('應該在有錯誤時添加 is-error class', () => {
-      const wrapper = mountFormTagInput({
-        error: '無效標籤'
-      })
+    it('Enter 與 Backspace 都不會改動標籤', async () => {
+      const wrapper = mountFormTagInput({ disabled: true, modelValue: ['一'] })
+      await input(wrapper).trigger('keydown', { key: 'Enter' })
+      await input(wrapper).trigger('keydown', { key: 'Backspace' })
 
-      expect(wrapper.find('.form-field').classes()).toContain('is-error')
-    })
-  })
-
-  describe('提示文字', () => {
-    it('應該顯示提示文字', () => {
-      const wrapper = mountFormTagInput({
-        hint: '最多可添加 10 個標籤'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(true)
-      expect(wrapper.find('.form-field-hint').text()).toBe('最多可添加 10 個標籤')
-    })
-
-    it('應該在有錯誤時隱藏提示文字', () => {
-      const wrapper = mountFormTagInput({
-        hint: '最多可添加 10 個標籤',
-        error: '標籤格式錯誤'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(false)
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-    })
-  })
-
-  describe('禁用狀態', () => {
-    it('應該在禁用時添加 is-disabled class', () => {
-      const wrapper = mountFormTagInput({
-        disabled: true
-      })
-
-      expect(wrapper.find('.tag-input-container').classes()).toContain('is-disabled')
-    })
-
-    it('應該在禁用時禁用輸入框', () => {
-      const wrapper = mountFormTagInput({
-        disabled: true
-      })
-
-      expect(wrapper.find('input[type="text"]').attributes('disabled')).toBeDefined()
-    })
-
-    it('應該在禁用時不允許新增標籤', async () => {
-      const wrapper = mountFormTagInput({
-        disabled: true,
-        modelValue: []
-      })
-
-      await wrapper.find('input[type="text"]').setValue('新標籤')
-      await wrapper.find('.btn-secondary').trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeFalsy()
-    })
-
-    it('應該在禁用時不允許移除標籤', async () => {
-      const wrapper = mountFormTagInput({
-        disabled: true,
-        modelValue: ['測試']
-      })
-
-      await wrapper.find('.tag-remove').trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     })
   })
 })

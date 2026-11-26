@@ -34,232 +34,105 @@ describe('FormRadioGroup', () => {
     })
   }
 
-  describe('初始化', () => {
-    it('應該正確渲染組件', () => {
-      const wrapper = mountFormRadioGroup()
-      expect(wrapper.find('.radio-group').exists()).toBe(true)
-    })
+  const options = (wrapper: ReturnType<typeof mountFormRadioGroup>) =>
+    wrapper.findAll<HTMLButtonElement>('button.radio-option')
 
-    it('應該渲染標籤和必填指示器', () => {
-      const wrapper = mountFormRadioGroup({
-        label: '性別',
-        required: true
-      })
+  it('渲染標籤、必填標記與所有選項', () => {
+    const wrapper = mountFormRadioGroup({ label: '性別', required: true })
 
-      expect(wrapper.find('label').text()).toContain('性別')
-      expect(wrapper.find('label').classes()).toContain('required')
-    })
-
-    it('應該渲染所有選項', () => {
-      const wrapper = mountFormRadioGroup()
-      const radioOptions = wrapper.findAll('.radio-option')
-
-      expect(radioOptions.length).toBe(3)
-      expect(radioOptions[0]!.text()).toBe('男')
-      expect(radioOptions[1]!.text()).toBe('女')
-      expect(radioOptions[2]!.text()).toBe('其他')
-    })
-
-    it('應該使用 pill 變體作為預設', () => {
-      const wrapper = mountFormRadioGroup()
-      expect(wrapper.find('.radio-group').classes()).toContain('variant-pill')
-    })
-
-    it('應該支援 button 變體', () => {
-      const wrapper = mountFormRadioGroup({
-        variant: 'button'
-      })
-      expect(wrapper.find('.radio-group').classes()).toContain('variant-button')
-    })
+    expect(wrapper.find('label').text()).toContain('性別')
+    expect(wrapper.find('label').classes()).toContain('required')
+    expect(options(wrapper).map(o => o.text())).toEqual(['男', '女', '其他'])
   })
 
-  describe('v-model 綁定', () => {
-    it('應該顯示選中的值', () => {
-      const wrapper = mountFormRadioGroup({
-        modelValue: 'F'
-      })
-
-      const activeOption = wrapper.find('.radio-option.active')
-      expect(activeOption.exists()).toBe(true)
-      expect(activeOption.text()).toBe('女')
+  describe('選取', () => {
+    it('只有符合 modelValue 的選項為 active', () => {
+      const wrapper = mountFormRadioGroup({ modelValue: 'F' })
+      expect(options(wrapper).map(o => o.classes('active'))).toEqual([false, true, false])
     })
 
-    it('應該在選擇時發出 update:modelValue 事件', async () => {
+    it('支援數字值', () => {
+      const wrapper = mountFormRadioGroup({
+        options: [
+          { value: 1, label: '選項一' },
+          { value: 2, label: '選項二' }
+        ],
+        modelValue: 2
+      })
+      expect(wrapper.find('.radio-option.active').text()).toBe('選項二')
+    })
+
+    it('點擊選項時發出該選項的值', async () => {
       const wrapper = mountFormRadioGroup({ modelValue: '' })
-
-      await wrapper.findAll('.radio-option')[1]!.trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+      await options(wrapper)[1]!.trigger('click')
       expect(wrapper.emitted('update:modelValue')![0]).toEqual(['F'])
     })
 
-    it('應該支援數字值', async () => {
-      const numericOptions = [
-        { value: 1, label: '選項一' },
-        { value: 2, label: '選項二' },
-        { value: 3, label: '選項三' }
-      ]
-
+    it('數字選項發出 number 而非字串', async () => {
       const wrapper = mountFormRadioGroup({
-        options: numericOptions,
-        modelValue: 2
+        options: [{ value: 1, label: 'a' }, { value: 2, label: 'b' }],
+        modelValue: ''
       })
-
-      const activeOption = wrapper.find('.radio-option.active')
-      expect(activeOption.text()).toBe('選項二')
+      await options(wrapper)[1]!.trigger('click')
+      expect(wrapper.emitted('update:modelValue')![0]).toEqual([2])
     })
   })
 
-  describe('allowEmpty 功能', () => {
-    it('應該允許取消選擇當 allowEmpty 為 true', async () => {
-      const wrapper = mountFormRadioGroup({
-        modelValue: 'M',
-        allowEmpty: true
-      })
-
-      // Click the already selected option to deselect
-      await wrapper.findAll('.radio-option')[0]!.trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+  describe('allowEmpty', () => {
+    it('allowEmpty 時再次點擊已選項會清空', async () => {
+      const wrapper = mountFormRadioGroup({ modelValue: 'M', allowEmpty: true })
+      await options(wrapper)[0]!.trigger('click')
       expect(wrapper.emitted('update:modelValue')![0]).toEqual([''])
     })
 
-    it('應該不允許取消選擇當 allowEmpty 為 false', async () => {
-      const wrapper = mountFormRadioGroup({
-        modelValue: 'M',
-        allowEmpty: false
-      })
+    it('allowEmpty 時點擊另一選項仍是切換', async () => {
+      const wrapper = mountFormRadioGroup({ modelValue: 'M', allowEmpty: true })
+      await options(wrapper)[1]!.trigger('click')
+      expect(wrapper.emitted('update:modelValue')![0]).toEqual(['F'])
+    })
 
-      // Click the already selected option
-      await wrapper.findAll('.radio-option')[0]!.trigger('click')
-
-      // Should emit the same value again (not deselect)
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+    it('預設再次點擊已選項不會清空', async () => {
+      const wrapper = mountFormRadioGroup({ modelValue: 'M' })
+      await options(wrapper)[0]!.trigger('click')
       expect(wrapper.emitted('update:modelValue')![0]).toEqual(['M'])
     })
   })
 
-  describe('錯誤狀態', () => {
-    it('應該顯示錯誤訊息', () => {
-      const wrapper = mountFormRadioGroup({
-        error: '請選擇性別'
-      })
+  it('顯示錯誤，且錯誤優先於提示', () => {
+    const hintOnly = mountFormRadioGroup({ hint: '請選擇您的性別' })
+    expect(hintOnly.find('.form-field-hint').text()).toBe('請選擇您的性別')
 
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-      expect(wrapper.find('.form-field-error').text()).toBe('請選擇性別')
-    })
-
-    it('應該在有錯誤時添加 is-error class', () => {
-      const wrapper = mountFormRadioGroup({
-        error: '無效選擇'
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-error')
-    })
+    const both = mountFormRadioGroup({ hint: '請選擇您的性別', error: '請選擇性別' })
+    expect(both.find('.form-field-error').text()).toBe('請選擇性別')
+    expect(both.find('.form-field-hint').exists()).toBe(false)
   })
 
-  describe('提示文字', () => {
-    it('應該顯示提示文字', () => {
-      const wrapper = mountFormRadioGroup({
-        hint: '請選擇您的性別'
-      })
+  describe('禁用', () => {
+    it('整組禁用時所有按鈕 disabled 且點擊不發出事件', async () => {
+      const wrapper = mountFormRadioGroup({ disabled: true, modelValue: '' })
 
-      expect(wrapper.find('.form-field-hint').exists()).toBe(true)
-      expect(wrapper.find('.form-field-hint').text()).toBe('請選擇您的性別')
+      for (const option of options(wrapper)) {
+        expect(option.element.disabled).toBe(true)
+        await option.trigger('click')
+      }
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     })
 
-    it('應該在有錯誤時隱藏提示文字', () => {
+    it('單一選項禁用時只有該選項不可點擊', async () => {
       const wrapper = mountFormRadioGroup({
-        hint: '請選擇您的性別',
-        error: '必須選擇'
+        options: [
+          { value: 'M', label: '男' },
+          { value: 'F', label: '女', disabled: true }
+        ]
       })
 
-      expect(wrapper.find('.form-field-hint').exists()).toBe(false)
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-    })
-  })
+      expect(options(wrapper).map(o => o.element.disabled)).toEqual([false, true])
 
-  describe('禁用狀態', () => {
-    it('應該在禁用整組時不發出事件', async () => {
-      const wrapper = mountFormRadioGroup({
-        disabled: true,
-        modelValue: ''
-      })
+      await options(wrapper)[1]!.trigger('click')
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
 
-      await wrapper.findAll('.radio-option')[0]!.trigger('click')
-
-      expect(wrapper.emitted('update:modelValue')).toBeFalsy()
-    })
-
-    it('應該在禁用時添加 is-disabled class 到 FormField', () => {
-      const wrapper = mountFormRadioGroup({
-        disabled: true
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-disabled')
-    })
-
-    it('應該在禁用時添加 disabled class 到選項', () => {
-      const wrapper = mountFormRadioGroup({
-        disabled: true
-      })
-
-      const options = wrapper.findAll('.radio-option')
-      options.forEach(option => {
-        expect(option.classes()).toContain('disabled')
-      })
-    })
-
-    it('應該支援單個選項禁用', () => {
-      const optionsWithDisabled = [
-        { value: 'M', label: '男' },
-        { value: 'F', label: '女', disabled: true },
-        { value: 'O', label: '其他' }
-      ]
-
-      const wrapper = mountFormRadioGroup({
-        options: optionsWithDisabled
-      })
-
-      const options = wrapper.findAll('.radio-option')
-      expect(options[0]!.classes()).not.toContain('disabled')
-      expect(options[1]!.classes()).toContain('disabled')
-      expect(options[2]!.classes()).not.toContain('disabled')
-    })
-  })
-
-  describe('Radio 按鈕元素', () => {
-    it('應該渲染所有 radio 按鈕', () => {
-      const wrapper = mountFormRadioGroup()
-      const buttons = wrapper.findAll('.radio-option')
-
-      expect(buttons.length).toBe(3)
-      buttons.forEach(button => {
-        expect(button.element.tagName).toBe('BUTTON')
-        expect(button.attributes('type')).toBe('button')
-      })
-    })
-
-    it('應該設置正確的 active 狀態', () => {
-      const wrapper = mountFormRadioGroup({
-        modelValue: 'F'
-      })
-
-      const buttons = wrapper.findAll('.radio-option')
-      expect(buttons[0]!.classes()).not.toContain('active')
-      expect(buttons[1]!.classes()).toContain('active')
-      expect(buttons[2]!.classes()).not.toContain('active')
-    })
-
-    it('應該正確設置 disabled 屬性', () => {
-      const wrapper = mountFormRadioGroup({
-        disabled: true
-      })
-
-      const buttons = wrapper.findAll('.radio-option')
-      buttons.forEach(button => {
-        expect(button.attributes('disabled')).toBeDefined()
-      })
+      await options(wrapper)[0]!.trigger('click')
+      expect(wrapper.emitted('update:modelValue')![0]).toEqual(['M'])
     })
   })
 })

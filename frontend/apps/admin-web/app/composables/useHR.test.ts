@@ -1,8 +1,7 @@
-// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mockFetchInstance } from '@test/setup'
 import { useHR } from './useHR'
-import type { Attendance, LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/schema'
+import type { Attendance, Employee, LeaveRequest, LeaveBalance, LeaveApprovalLog } from '~/types/schema'
 
 describe('useHR', () => {
   beforeEach(() => {
@@ -254,7 +253,12 @@ describe('useHR', () => {
 
         const result = await checkOut('attendance-1')
 
-        expect(result.work_hours).toBeDefined()
+        expect(result.work_hours).toBe(8.5)
+        expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
+          'attendances',
+          'attendance-1',
+          expect.objectContaining({ work_hours: 8.5 })
+        )
       })
 
       it('應該支援添加備註', async () => {
@@ -435,7 +439,7 @@ describe('useHR', () => {
       it('應該成功申請休假', async () => {
         const leaveData = {
           employeeId: 'emp-1',
-          leaveType: 'ANNUAL',
+          leaveType: 'ANNUAL' as const,
           startDate: '2025-02-01',
           endDate: '2025-02-03',
           reason: '家庭旅遊',
@@ -462,7 +466,7 @@ describe('useHR', () => {
       it('應該支援半天假', async () => {
         const leaveData = {
           employeeId: 'emp-1',
-          leaveType: 'ANNUAL',
+          leaveType: 'ANNUAL' as const,
           startDate: '2025-02-01',
           endDate: '2025-02-01',
           daysRequested: 0.5,
@@ -739,7 +743,7 @@ describe('useHR', () => {
           },
           {
             id: 'log-3',
-            action: 'COMPLETE',
+            action: 'REVOKE',
             date_created: '2025-01-15T09:00:00Z'
           }
         ]
@@ -751,9 +755,9 @@ describe('useHR', () => {
 
         // 驗證是否按時間升序排列
         expect(result).toHaveLength(3)
-        expect(result[0].action).toBe('SUBMIT')
-        expect(result[1].action).toBe('APPROVE')
-        expect(result[2].action).toBe('COMPLETE')
+        expect(result[0]?.action).toBe('SUBMIT')
+        expect(result[1]?.action).toBe('APPROVE')
+        expect(result[2]?.action).toBe('REVOKE')
       })
 
       it('應該包含操作人資訊', async () => {
@@ -762,13 +766,13 @@ describe('useHR', () => {
             id: 'log-1',
             action: 'SUBMIT',
             action_by: 'emp-1',
-            actor: { full_name: '張三' }
+            actor: { full_name: '張三' } as Employee
           },
           {
             id: 'log-2',
             action: 'APPROVE',
             action_by: 'supervisor-1',
-            actor: { full_name: '李經理' }
+            actor: { full_name: '李經理' } as Employee
           }
         ]
 
@@ -777,8 +781,8 @@ describe('useHR', () => {
         const { fetchApprovalHistory } = useHR()
         const result = await fetchApprovalHistory('leave-1')
 
-        expect(result[0].actor).toEqual({ full_name: '張三' })
-        expect(result[1].actor).toEqual({ full_name: '李經理' })
+        expect(result[0]?.actor).toEqual({ full_name: '張三' })
+        expect(result[1]?.actor).toEqual({ full_name: '李經理' })
       })
 
       it('應該正確過濾指定的休假申請', async () => {

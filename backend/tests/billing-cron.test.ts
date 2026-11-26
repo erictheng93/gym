@@ -169,7 +169,7 @@ describe('Billing Cron', () => {
       await runBillingTasks();
 
       expect(chainFns.values).toHaveBeenCalledWith(
-        expect.objectContaining({ amountTotal: '5000' }),
+        expect.objectContaining({ amountTotal: '5000', periodStart: '2024-01-01', periodEnd: '2025-01-01' }),
       );
     });
 
@@ -196,11 +196,15 @@ describe('Billing Cron', () => {
 
       // Should have updated subscription period
       expect(chainFns.update).toHaveBeenCalled();
+      // The new period starts where the old one ended and lasts one month
       expect(chainFns.set).toHaveBeenCalledWith(
         expect.objectContaining({
-          currentPeriodStart: expect.any(String),
-          currentPeriodEnd: expect.any(String),
+          currentPeriodStart: '2024-01-01',
+          currentPeriodEnd: '2024-02-01',
         }),
+      );
+      expect(chainFns.values).toHaveBeenCalledWith(
+        expect.objectContaining({ periodStart: '2024-01-01', periodEnd: '2024-02-01' }),
       );
     });
 

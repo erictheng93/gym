@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useAttendance.test.ts
  * Tests for the attendance management composable
@@ -6,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mockFetchInstance } from '@test/setup'
-import { useAttendance } from './useAttendance'
+import { useAttendance, type AttendanceRecord } from './useAttendance'
 import type { Attendance, Employee } from '~/types/schema'
 
 describe('useAttendance', () => {
@@ -176,9 +175,41 @@ describe('useAttendance', () => {
       await fetchTodayAttendances()
 
       expect(todayAttendances.value).toHaveLength(1)
-      expect(todayAttendances.value[0].id).toBe('att-1')
+      expect(todayAttendances.value[0]).toMatchObject({
+        id: 'att-1',
+        check_in: '2025-01-15T08:00:00Z',
+        check_out: null,
+        check_type: 'REGULAR',
+        attendance_status: 'PRESENT'
+      })
       expect(todayCount.value).toBe(1)
       expect(isLoading.value).toBe(false)
+    })
+
+    it('應該以今日日期查詢，並為缺少的欄位補上預設值', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({
+        data: [{ id: 'att-bare', employee_id: 'emp-1' }],
+        total: 1
+      })
+
+      const { fetchTodayAttendances, todayAttendances } = useAttendance()
+      await fetchTodayAttendances()
+
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith(
+        'attendances',
+        expect.objectContaining({ filter: { attendance_date: '2025-01-15' } })
+      )
+      expect(todayAttendances.value[0]).toMatchObject({
+        id: 'att-bare',
+        check_in: null,
+        check_out: null,
+        attendance_date: '2025-01-15',
+        check_type: 'REGULAR',
+        attendance_status: 'PRESENT',
+        late_minutes: 0,
+        early_leave_minutes: 0,
+        work_hours: null
+      })
     })
 
     it('應該支援分店過濾', async () => {
@@ -205,12 +236,13 @@ describe('useAttendance', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
-      const { fetchTodayAttendances, isLoading } = useAttendance()
+      const { fetchTodayAttendances, isLoading, todayAttendances } = useAttendance()
 
       await fetchTodayAttendances()
 
       expect(consoleErrorSpy).toHaveBeenCalled()
       expect(isLoading.value).toBe(false)
+      expect(todayAttendances.value).toEqual([])
 
       consoleErrorSpy.mockRestore()
     })
@@ -237,8 +269,11 @@ describe('useAttendance', () => {
 
       const result = await getTodayAttendance('emp-1')
 
-      expect(result).not.toBeNull()
-      expect(result?.id).toBe('att-1')
+      expect(result).toMatchObject({ id: 'att-1', check_in: '2025-01-15T08:00:00Z', attendance_status: 'PRESENT' })
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('attendances', {
+        filter: { employee_id: 'emp-1', attendance_date: '2025-01-15' },
+        limit: 1
+      })
     })
 
     it('應該在沒有記錄時返回 null', async () => {
@@ -271,6 +306,7 @@ describe('useAttendance', () => {
 
   describe('performCheckIn', () => {
     it('應該成功執行上班打卡', async () => {
+      vi.setSystemTime(new Date('2025-01-15T08:55:00')) // on time (local)
       const createdAttendance: Partial<Attendance> = {
         id: 'att-new',
         employee_id: 'emp-1',
@@ -291,13 +327,21 @@ describe('useAttendance', () => {
         branchId: 'branch-1'
       })
 
-      expect(result.id).toBe('att-new')
+      expect(result).toMatchObject({
+        id: 'att-new',
+        check_out: null,
+        check_type: 'REGULAR',
+        attendance_status: 'PRESENT',
+        late_minutes: 0
+      })
       expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
         'attendances',
         expect.objectContaining({
           employee_id: 'emp-1',
           branch_id: 'branch-1',
-          attendance_date: '2025-01-15'
+          attendance_date: '2025-01-15',
+          late_minutes: 0,
+          attendance_status: 'PRESENT'
         })
       )
     })
@@ -321,9 +365,11 @@ describe('useAttendance', () => {
 
       const { performCheckIn } = useAttendance()
 
-      const _result = await performCheckIn({
+      const result = await performCheckIn({
         employeeId: 'emp-1'
       })
+
+      expect(result).toMatchObject({ attendance_status: 'LATE', late_minutes: 30 })
 
       expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
         'attendances',
@@ -369,7 +415,7 @@ describe('useAttendance', () => {
       await expect(performCheckIn({ employeeId: 'emp-1' })).rejects.toThrow('Failed to create attendance record')
     })
 
-    it('應該將新記錄加入 todayAttendances', async () => {
+    it('應該將新記錄加入 todayAttendances 最前面', async () => {
       const createdAttendance: Partial<Attendance> = {
         id: 'att-new',
         employee_id: 'emp-1'
@@ -381,30 +427,35 @@ describe('useAttendance', () => {
         total: 1
       })
 
-      const { performCheckIn, todayCount } = useAttendance()
+      const { performCheckIn, todayCount, todayAttendances } = useAttendance()
+      todayAttendances.value = [{ id: 'att-old' } as AttendanceRecord]
 
       const initialCount = todayCount.value
 
       await performCheckIn({ employeeId: 'emp-1' })
 
       expect(todayCount.value).toBe(initialCount + 1)
+      expect(todayAttendances.value.map(a => a.id)).toEqual(['att-new', 'att-old'])
     })
   })
 
   describe('performCheckOut', () => {
     it('應該成功執行下班打卡', async () => {
+      vi.setSystemTime(new Date('2025-01-15T18:30:00')) // after 18:00 local: no early leave
+      const checkIn = new Date('2025-01-15T09:00:00').toISOString()
+      const checkOut = new Date('2025-01-15T18:30:00').toISOString()
       const existingAttendance: Partial<Attendance> = {
         id: 'att-1',
         employee_id: 'emp-1',
-        check_in: '2025-01-15T02:00:00.000Z',
+        check_in: checkIn,
         check_out: null,
         attendance_status: 'PRESENT'
       }
 
       const updatedAttendance: Partial<Attendance> = {
         ...existingAttendance,
-        check_out: '2025-01-15T10:00:00.000Z',
-        work_hours: 8
+        check_out: checkOut,
+        work_hours: 9.5
       }
 
       mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
@@ -418,8 +469,17 @@ describe('useAttendance', () => {
 
       const result = await performCheckOut('att-1')
 
-      expect(result.check_out).toBeDefined()
-      expect(mockFetchInstance.updateItem).toHaveBeenCalled()
+      expect(result).toMatchObject({
+        check_out: checkOut,
+        work_hours: 9.5,
+        early_leave_minutes: 0,
+        attendance_status: 'PRESENT'
+      })
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
+        'attendances',
+        'att-1',
+        expect.objectContaining({ check_out: checkOut, work_hours: 9.5, early_leave_minutes: 0 })
+      )
     })
 
     it('應該在找不到記錄時拋出錯誤', async () => {
@@ -442,24 +502,27 @@ describe('useAttendance', () => {
     })
 
     it('應該計算工作時數', async () => {
+      vi.setSystemTime(new Date('2025-01-15T18:00:00'))
       const existingAttendance: Partial<Attendance> = {
         id: 'att-1',
-        check_in: '2025-01-15T01:30:00.000Z', // 8.5 hours before
+        check_in: new Date('2025-01-15T09:30:00').toISOString(), // 8.5 hours before
         attendance_status: 'PRESENT'
       }
 
       mockFetchInstance.readItem.mockResolvedValueOnce(existingAttendance)
-      mockFetchInstance.updateItem.mockResolvedValueOnce({ work_hours: 8.5 })
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [{ ...existingAttendance, work_hours: 8.5 }],
-        total: 1
-      })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
 
       const { performCheckOut } = useAttendance()
 
       const result = await performCheckOut('att-1')
 
-      expect(result.work_hours).toBeDefined()
+      expect(result.work_hours).toBe(8.5)
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
+        'attendances',
+        'att-1',
+        expect.objectContaining({ work_hours: 8.5 })
+      )
     })
 
     it('應該在早退時更新狀態', async () => {
@@ -494,7 +557,80 @@ describe('useAttendance', () => {
     })
   })
 
+  describe('performCheckOut - 狀態保留與列表更新', () => {
+    it('遲到的記錄早退時應保持 LATE 狀態', async () => {
+      vi.setSystemTime(new Date('2025-01-15T17:00:00'))
+      mockFetchInstance.readItem.mockResolvedValueOnce({
+        id: 'att-1',
+        check_in: new Date('2025-01-15T09:30:00').toISOString(),
+        attendance_status: 'LATE'
+      })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+
+      const { performCheckOut } = useAttendance()
+      const result = await performCheckOut('att-1')
+
+      expect(result.attendance_status).toBe('LATE')
+      expect(result.early_leave_minutes).toBe(60)
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
+        'attendances',
+        'att-1',
+        expect.objectContaining({ attendance_status: 'LATE', early_leave_minutes: 60 })
+      )
+    })
+
+    it('應該更新 todayAttendances 中對應的記錄', async () => {
+      vi.setSystemTime(new Date('2025-01-15T18:00:00'))
+      const checkIn = new Date('2025-01-15T09:00:00').toISOString()
+      mockFetchInstance.readItem.mockResolvedValueOnce({ id: 'att-1', check_in: checkIn, attendance_status: 'PRESENT' })
+      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+      mockFetchInstance.readItems.mockResolvedValueOnce({
+        data: [{ id: 'att-1', check_in: checkIn, check_out: new Date('2025-01-15T18:00:00').toISOString() }],
+        total: 1
+      })
+
+      const { performCheckOut, todayAttendances } = useAttendance()
+      todayAttendances.value = [
+        { id: 'att-0', check_out: null } as AttendanceRecord,
+        { id: 'att-1', check_out: null } as AttendanceRecord
+      ]
+
+      await performCheckOut('att-1')
+
+      expect(todayAttendances.value[0]!.check_out).toBeNull()
+      expect(todayAttendances.value[1]).toMatchObject({ id: 'att-1', work_hours: 9 })
+      expect(todayAttendances.value[1]!.check_out).not.toBeNull()
+    })
+  })
+
   describe('fetchTodayAttendanceSummary', () => {
+    it('應該扣除請假人數計算尚未打卡人數，且不會小於 0', async () => {
+      const respond = (employees: number, attendances: object[], onLeave: number) => {
+        mockFetchInstance.readItems.mockImplementation(async (collection: string) => {
+          if (collection === 'employees') return { data: [], total: employees }
+          if (collection === 'attendances') return { data: attendances, total: attendances.length }
+          return { data: [], total: onLeave }
+        })
+      }
+
+      const { fetchTodayAttendanceSummary } = useAttendance()
+
+      respond(10, [{ check_in: '09:00' }, { check_in: '09:05', check_out: '18:00' }], 3)
+      expect(await fetchTodayAttendanceSummary()).toEqual({
+        totalEmployees: 10,
+        checkedIn: 2,
+        notCheckedIn: 5,
+        checkedOut: 1,
+        late: 0,
+        onLeave: 3
+      })
+
+      // More check-ins + leave than employees must clamp to 0
+      respond(2, [{ check_in: '09:00' }, { check_in: '09:05' }], 1)
+      expect((await fetchTodayAttendanceSummary('branch-x')).notCheckedIn).toBe(0)
+    })
+
     it('應該返回今日考勤概況', async () => {
       // Mock employees
       mockFetchInstance.readItems.mockResolvedValueOnce({
@@ -521,9 +657,14 @@ describe('useAttendance', () => {
 
       const result = await fetchTodayAttendanceSummary()
 
-      expect(result.totalEmployees).toBe(3)
-      expect(result.checkedIn).toBe(2)
-      expect(result.late).toBe(1)
+      expect(result).toEqual({
+        totalEmployees: 3,
+        checkedIn: 2,
+        notCheckedIn: 1,
+        checkedOut: 1,
+        late: 1,
+        onLeave: 0
+      })
       expect(todayAttendanceSummary.value).toEqual(result)
     })
 
@@ -574,7 +715,7 @@ describe('useAttendance', () => {
         {
           id: 'att-1',
           employee_id: 'emp-1',
-          employee: { full_name: 'John', employee_code: 'E001' } as any,
+          employee: { full_name: 'John', employee_code: 'E001' } as Employee,
           attendance_status: 'PRESENT',
           work_hours: 8,
           late_minutes: 0
@@ -582,7 +723,7 @@ describe('useAttendance', () => {
         {
           id: 'att-2',
           employee_id: 'emp-1',
-          employee: { full_name: 'John', employee_code: 'E001' } as any,
+          employee: { full_name: 'John', employee_code: 'E001' } as Employee,
           attendance_status: 'LATE',
           work_hours: 8,
           late_minutes: 15
@@ -602,10 +743,52 @@ describe('useAttendance', () => {
       })
 
       expect(result).toHaveLength(1)
-      expect(result[0].employeeId).toBe('emp-1')
-      expect(result[0].totalDays).toBe(2)
-      expect(result[0].presentDays).toBe(2) // PRESENT + LATE both count as present
-      expect(result[0].lateDays).toBe(1)
+      expect(result[0]).toMatchObject({
+        employeeId: 'emp-1',
+        employeeName: 'John',
+        employeeCode: 'E001',
+        totalDays: 2,
+        presentDays: 2, // PRESENT + LATE both count as present
+        lateDays: 1,
+        totalWorkHours: 16,
+        totalLateMinutes: 15
+      })
+    })
+
+    it('應該依狀態分別累計各員工的出勤、缺勤、早退、請假與加班時數', async () => {
+      const att = (employee_id: string, attendance_status: string, extra: object = {}) =>
+        ({ id: `${employee_id}-${attendance_status}`, employee_id, attendance_status, ...extra })
+
+      mockFetchInstance.readItems.mockResolvedValueOnce({
+        data: [
+          att('emp-1', 'ABSENT'),
+          att('emp-1', 'EARLY_LEAVE', { work_hours: 6.5 }),
+          att('emp-1', 'LEAVE'),
+          att('emp-1', 'PRESENT', { work_hours: 9, overtime_hours: 1.5 }),
+          att('emp-2', 'LATE', { late_minutes: 20, work_hours: 7 })
+        ],
+        total: 5
+      })
+
+      const { fetchMonthlyAttendanceStats } = useAttendance()
+      const result = await fetchMonthlyAttendanceStats({ year: 2025, month: 2 })
+
+      expect(result).toHaveLength(2)
+      expect(result.find(r => r.employeeId === 'emp-1')).toMatchObject({
+        totalDays: 4,
+        presentDays: 2, // EARLY_LEAVE + PRESENT
+        absentDays: 1,
+        earlyLeaveDays: 1,
+        leaveDays: 1,
+        totalWorkHours: 15.5,
+        totalOvertimeHours: 1.5
+      })
+      expect(result.find(r => r.employeeId === 'emp-2')).toMatchObject({
+        totalDays: 1,
+        presentDays: 1,
+        lateDays: 1,
+        totalLateMinutes: 20
+      })
     })
 
     it('應該支援分店過濾', async () => {

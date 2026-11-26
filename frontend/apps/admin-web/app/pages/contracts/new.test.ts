@@ -1,1110 +1,279 @@
-// -nocheck
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+import { computed, defineComponent, h, onMounted, watch } from 'vue'
 import ContractNew from './new.vue'
 import { MESSAGES, PAGES } from '~/constants'
-import type { Member, Plan, Branch } from '~/types/schema'
+import type { Member, MembershipPlan, Branch } from '~/types/schema'
 
-// Mock router
+// vitest.setup.ts replaces computed/watch/onMounted with inert fakes for composable tests;
+// a page test needs Vue's real reactivity.
+vi.stubGlobal('computed', computed)
+vi.stubGlobal('watch', watch)
+vi.stubGlobal('onMounted', onMounted)
+
 const mockPush = vi.fn()
 const mockBack = vi.fn()
-const mockRoute = {
-  query: {}
-}
-
+const mockRoute: { query: Record<string, string> } = { query: {} }
 vi.stubGlobal('useRoute', () => mockRoute)
-vi.stubGlobal('useRouter', () => ({
-  push: mockPush,
-  back: mockBack
-}))
+vi.stubGlobal('useRouter', () => ({ push: mockPush, back: mockBack }))
+vi.stubGlobal('definePageMeta', vi.fn())
 
-// Mock composables
 const mockCreateContract = vi.fn()
 const mockFetchMembers = vi.fn()
 const mockFetchPlans = vi.fn()
 const mockFetchBranches = vi.fn()
-
 const mockMembers = ref<Partial<Member>[]>([])
-const mockPlans = ref<Partial<Plan>[]>([])
+const mockPlans = ref<Partial<MembershipPlan>[]>([])
 const mockBranches = ref<Partial<Branch>[]>([])
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 
-vi.stubGlobal('useContracts', () => ({
-  createContract: mockCreateContract,
-  contracts: ref([]),
-  fetchContracts: vi.fn()
-}))
+vi.stubGlobal('useContracts', () => ({ createContract: mockCreateContract }))
+vi.stubGlobal('useMembers', () => ({ members: mockMembers, fetchMembers: mockFetchMembers }))
+vi.stubGlobal('usePlans', () => ({ plans: mockPlans, fetchPlans: mockFetchPlans }))
+vi.stubGlobal('useBranches', () => ({ branches: mockBranches, fetchBranches: mockFetchBranches }))
+vi.stubGlobal('useToast', () => toast)
 
-vi.stubGlobal('useMembers', () => ({
-  members: mockMembers,
-  fetchMembers: mockFetchMembers
-}))
+const SIGNATURE = 'data:image/png;base64,signed'
 
-vi.stubGlobal('usePlans', () => ({
-  plans: mockPlans,
-  fetchPlans: mockFetchPlans
-}))
+// The page lazy-loads SignaturePad; the stub only has to forward v-model.
+const SignaturePadStub = defineComponent({
+  name: 'SignaturePadStub',
+  props: { modelValue: { type: String, default: '' } },
+  emits: ['update:modelValue'],
+  setup: () => () => h('div', { class: 'signature-pad-stub' })
+})
 
-vi.stubGlobal('useBranches', () => ({
-  branches: mockBranches,
-  fetchBranches: mockFetchBranches
-}))
+const dateFormatter = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })
+const fmt = (iso: string) => dateFormatter.format(new Date(iso))
 
-// Mock useToast
-vi.stubGlobal('useToast', () => ({
-  success: vi.fn(),
-  error: vi.fn(),
-  info: vi.fn(),
-  warning: vi.fn()
-}))
-
-// Mock definePageMeta
-vi.stubGlobal('definePageMeta', vi.fn())
-
-// Mock SignaturePad component (Nuxt uses LazySignaturePad for lazy loading)
-const SignaturePadStub = {
-  template: '<div class="signature-pad-stub"><canvas></canvas></div>',
-  props: ['modelValue'],
-  emits: ['update:modelValue']
+async function mountPage() {
+  const wrapper = mount(ContractNew, {
+    global: { stubs: { LazySignaturePad: SignaturePadStub } }
+  })
+  await flushPromises()
+  return wrapper
 }
 
-const LazySignaturePadStub = {
-  template: '<div class="signature-pad-stub"><canvas></canvas></div>',
-  props: ['modelValue'],
-  emits: ['update:modelValue']
+const selects = (w: VueWrapper) => {
+  const [member, plan, branch] = w.findAll('select')
+  return { member: member!, plan: plan!, branch: branch! }
+}
+const nextButton = (w: VueWrapper) => w.find('button.btn-primary[type="button"]')
+const errorTexts = (w: VueWrapper) => w.findAll('.error-text').map(e => e.text())
+
+async function fillStep1(w: VueWrapper, planId = 'plan-year') {
+  const s = selects(w)
+  await s.member.setValue('member-1')
+  await s.plan.setValue(planId)
+}
+
+async function goToStep3(w: VueWrapper, planId?: string) {
+  await fillStep1(w, planId)
+  await nextButton(w).trigger('click')
+  await nextButton(w).trigger('click')
 }
 
 describe('contracts/new.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Only fake Date so flushPromises/timers keep working; "today" is fixed.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2024-11-15T10:00:00Z'))
     mockRoute.query = {}
-
-    // Setup default mock data
     mockMembers.value = [
       { id: 'member-1', full_name: '張三', member_code: 'M001' },
       { id: 'member-2', full_name: '李四', member_code: 'M002' }
     ]
-
     mockPlans.value = [
-      {
-        id: 'plan-1',
-        name: '月卡方案',
-        price: 3000,
-        plan_type: 'TIME_BASED',
-        duration_months: 1,
-        allow_pause: true,
-        allow_transfer: false
-      },
-      {
-        id: 'plan-2',
-        name: '年卡方案',
-        price: 30000,
-        plan_type: 'TIME_BASED',
-        duration_months: 12,
-        allow_pause: true,
-        allow_transfer: true
-      },
-      {
-        id: 'plan-3',
-        name: '計次方案',
-        price: 5000,
-        plan_type: 'COUNT_BASED',
-        class_counts: 10,
-        allow_pause: false,
-        allow_transfer: false
-      }
+      { id: 'plan-year', name: '年卡方案', price: 30000, plan_type: 'TIME_BASED', duration_months: 12, allow_pause: true, allow_transfer: true },
+      { id: 'plan-month', name: '月卡方案', price: 3000, plan_type: 'TIME_BASED', duration_months: 1, allow_pause: false, allow_transfer: false },
+      { id: 'plan-count', name: '計次方案', price: 5000, plan_type: 'COUNT_BASED', class_counts: 10, allow_pause: false, allow_transfer: false }
     ]
-
     mockBranches.value = [
       { id: 'branch-1', name: '總店' },
       { id: 'branch-2', name: '分店A' }
     ]
-
     mockFetchMembers.mockResolvedValue(undefined)
     mockFetchPlans.mockResolvedValue(undefined)
     mockFetchBranches.mockResolvedValue(undefined)
+    mockCreateContract.mockResolvedValue({ id: 'contract-1' })
   })
 
-  describe('初始化', () => {
-    it('應該顯示加載狀態', () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
+  describe('initial load', () => {
+    it('shows a loading state, fetches members/plans/branches, then shows the form', async () => {
+      const wrapper = mount(ContractNew, { global: { stubs: { LazySignaturePad: SignaturePadStub } } })
       expect(wrapper.find('.loading-container').exists()).toBe(true)
-      expect(wrapper.text()).toContain(MESSAGES.ACTIONS.LOADING)
-    })
-
-    it('應該載入會員、方案和分店資料', async () => {
-      mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
 
       await flushPromises()
 
       expect(mockFetchMembers).toHaveBeenCalledWith({ limit: 100 })
       expect(mockFetchPlans).toHaveBeenCalled()
       expect(mockFetchBranches).toHaveBeenCalled()
-    })
-
-    it('應該在載入完成後隱藏加載狀態', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-      await wrapper.vm.$nextTick()
-
       expect(wrapper.find('.loading-container').exists()).toBe(false)
-      expect(wrapper.find('.contract-form').exists()).toBe(true)
-    })
-
-    it('應該預設選擇第一個分店', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.form.branch_id).toBe('branch-1')
-    })
-
-    it('應該從 query 參數預填會員 ID', async () => {
-      mockRoute.query = { member: 'member-1' }
-
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      expect(wrapper.vm.form.member_id).toBe('member-1')
-    })
-
-    it('應該預設開始日期為今天', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      const today = new Date().toISOString().slice(0, 10)
-      expect(wrapper.vm.form.start_date).toBe(today)
-    })
-  })
-
-  describe('步驟導航', () => {
-    it('應該預設顯示第一步', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      expect(wrapper.vm.currentStep).toBe(1)
       expect(wrapper.text()).toContain(PAGES.CONTRACTS.SELECT_MEMBER_PLAN)
     })
 
-    it('應該在填寫完整資料後允許前進到下一步', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      // 填寫表單
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-1'
-      wrapper.vm.form.branch_id = 'branch-1'
-      wrapper.vm.form.start_date = '2025-01-15'
-
-      await wrapper.vm.$nextTick()
-
-      // 點擊下一步
-      wrapper.vm.nextStep()
-
-      expect(wrapper.vm.currentStep).toBe(2)
+    it('defaults branch to the first branch and start date to today', async () => {
+      const wrapper = await mountPage()
+      expect((selects(wrapper).branch.element as HTMLSelectElement).value).toBe('branch-1')
+      expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value).toBe('2024-11-15')
     })
 
-    it('應該在驗證失敗時阻止前進', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      // 不填寫任何資料
-      wrapper.vm.nextStep()
-
-      expect(wrapper.vm.currentStep).toBe(1)
-      expect(Object.keys(wrapper.vm.errors).length).toBeGreaterThan(0)
-    })
-
-    it('應該允許返回上一步', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      // 前進到第二步
-      wrapper.vm.currentStep = 2
-      await wrapper.vm.$nextTick()
-
-      // 返回
-      wrapper.vm.prevStep()
-
-      expect(wrapper.vm.currentStep).toBe(1)
-    })
-
-    it('應該在第一步時無法繼續後退', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      wrapper.vm.prevStep()
-
-      expect(wrapper.vm.currentStep).toBe(1)
+    it('pre-selects the member from the ?member= query', async () => {
+      mockRoute.query = { member: 'member-2' }
+      const wrapper = await mountPage()
+      expect((selects(wrapper).member.element as HTMLSelectElement).value).toBe('member-2')
     })
   })
 
-  describe('表單驗證', () => {
-    describe('步驟 1 - 選擇會員和方案', () => {
-      it('應該驗證會員必填', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
+  describe('step 1 validation', () => {
+    it('blocks advancing and shows errors when member and plan are missing', async () => {
+      const wrapper = await mountPage()
+      await nextButton(wrapper).trigger('click')
 
-        await flushPromises()
-
-        wrapper.vm.form.plan_id = 'plan-1'
-        wrapper.vm.form.branch_id = 'branch-1'
-        wrapper.vm.form.start_date = '2025-01-15'
-        // member_id 留空
-
-        const isValid = wrapper.vm.validateStep(1)
-
-        expect(isValid).toBe(false)
-        expect(wrapper.vm.errors.member_id).toBe(PAGES.CONTRACTS.ERROR_SELECT_MEMBER)
-      })
-
-      it('應該驗證方案必填', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.member_id = 'member-1'
-        wrapper.vm.form.branch_id = 'branch-1'
-        wrapper.vm.form.start_date = '2025-01-15'
-        // plan_id 留空
-
-        const isValid = wrapper.vm.validateStep(1)
-
-        expect(isValid).toBe(false)
-        expect(wrapper.vm.errors.plan_id).toBe(PAGES.CONTRACTS.ERROR_SELECT_PLAN)
-      })
-
-      it('應該驗證分店必填', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.member_id = 'member-1'
-        wrapper.vm.form.plan_id = 'plan-1'
-        wrapper.vm.form.start_date = '2025-01-15'
-        wrapper.vm.form.branch_id = ''
-
-        const isValid = wrapper.vm.validateStep(1)
-
-        expect(isValid).toBe(false)
-        expect(wrapper.vm.errors.branch_id).toBe(PAGES.CONTRACTS.ERROR_SELECT_BRANCH)
-      })
-
-      it('應該驗證開始日期必填', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.member_id = 'member-1'
-        wrapper.vm.form.plan_id = 'plan-1'
-        wrapper.vm.form.branch_id = 'branch-1'
-        wrapper.vm.form.start_date = ''
-
-        const isValid = wrapper.vm.validateStep(1)
-
-        expect(isValid).toBe(false)
-        expect(wrapper.vm.errors.start_date).toBe(PAGES.CONTRACTS.ERROR_SELECT_START_DATE)
-      })
-
-      it('應該在所有欄位都填寫時通過驗證', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.member_id = 'member-1'
-        wrapper.vm.form.plan_id = 'plan-1'
-        wrapper.vm.form.branch_id = 'branch-1'
-        wrapper.vm.form.start_date = '2025-01-15'
-
-        const isValid = wrapper.vm.validateStep(1)
-
-        expect(isValid).toBe(true)
-        expect(Object.keys(wrapper.vm.errors).length).toBe(0)
-      })
+      expect(errorTexts(wrapper)).toEqual(expect.arrayContaining([
+        PAGES.CONTRACTS.ERROR_SELECT_MEMBER,
+        PAGES.CONTRACTS.ERROR_SELECT_PLAN
+      ]))
+      expect(wrapper.text()).toContain(PAGES.CONTRACTS.SELECT_MEMBER_PLAN)
+      expect(wrapper.text()).not.toContain(PAGES.CONTRACTS.CONFIRM_CONTRACT_INFO)
     })
 
-    describe('步驟 2 - 確認資訊', () => {
-      it('應該驗證金額必須大於 0', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
+    it('requires a branch and a start date', async () => {
+      const wrapper = await mountPage()
+      await fillStep1(wrapper)
+      await selects(wrapper).branch.setValue('')
+      await wrapper.find('input[type="date"]').setValue('')
+      await nextButton(wrapper).trigger('click')
 
-        await flushPromises()
-
-        wrapper.vm.form.total_amount = 0
-
-        const isValid = wrapper.vm.validateStep(2)
-
-        expect(isValid).toBe(false)
-        expect(wrapper.vm.errors.total_amount).toBe(PAGES.CONTRACTS.ERROR_AMOUNT_POSITIVE)
-      })
-
-      it('應該在金額大於 0 時通過驗證', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.total_amount = 3000
-
-        const isValid = wrapper.vm.validateStep(2)
-
-        expect(isValid).toBe(true)
-        expect(Object.keys(wrapper.vm.errors).length).toBe(0)
-      })
+      expect(errorTexts(wrapper)).toEqual([
+        PAGES.CONTRACTS.ERROR_SELECT_BRANCH,
+        PAGES.CONTRACTS.ERROR_SELECT_START_DATE
+      ])
     })
 
-    describe('步驟 3 - 數位簽名', () => {
-      it('應該驗證簽名必填', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.digital_signature = ''
-
-        const isValid = wrapper.vm.validateStep(3)
-
-        expect(isValid).toBe(false)
-        expect(wrapper.vm.errors.digital_signature).toBe(PAGES.CONTRACTS.ERROR_SIGNATURE_REQUIRED)
-      })
-
-      it('應該在有簽名時通過驗證', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.digital_signature = 'data:image/png;base64,signature'
-
-        const isValid = wrapper.vm.validateStep(3)
-
-        expect(isValid).toBe(true)
-        expect(Object.keys(wrapper.vm.errors).length).toBe(0)
-      })
+    it('previews the selected plan', async () => {
+      const wrapper = await mountPage()
+      await selects(wrapper).plan.setValue('plan-count')
+      const preview = wrapper.find('.plan-preview')
+      expect(preview.text()).toContain('計次方案')
+      expect(preview.text()).toContain('10')
     })
   })
 
-  describe('業務邏輯計算', () => {
-    describe('結束日期計算', () => {
-      it('應該根據月卡方案計算結束日期', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
+  describe('step 2 (confirm)', () => {
+    it('shows member, plan and computed contract period, with amount pre-filled from the plan price', async () => {
+      const wrapper = await mountPage()
+      await fillStep1(wrapper, 'plan-year')
+      await nextButton(wrapper).trigger('click')
 
-        await flushPromises()
-
-        wrapper.vm.form.start_date = '2025-01-15'
-        wrapper.vm.form.plan_id = 'plan-1' // 1個月方案
-
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.calculatedEndDate.value).toBe('2025-02-15')
-      })
-
-      it('應該根據年卡方案計算結束日期', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.start_date = '2025-01-15'
-        wrapper.vm.form.plan_id = 'plan-2' // 12個月方案
-
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.calculatedEndDate.value).toBe('2026-01-15')
-      })
-
-      it('應該在跨年時正確計算結束日期', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.start_date = '2025-11-15'
-        wrapper.vm.form.plan_id = 'plan-1' // 1個月方案
-
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.calculatedEndDate.value).toBe('2025-12-15')
-      })
-
-      it('應該在沒有選擇方案時返回空字串', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.start_date = '2025-01-15'
-        wrapper.vm.form.plan_id = ''
-
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.calculatedEndDate.value).toBe('')
-      })
-
-      it('應該在沒有開始日期時返回空字串', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.start_date = ''
-        wrapper.vm.form.plan_id = 'plan-1'
-
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.calculatedEndDate.value).toBe('')
-      })
+      const summary = wrapper.find('.contract-summary').text()
+      expect(summary).toContain('張三')
+      expect(summary).toContain('M001')
+      expect(summary).toContain('年卡方案')
+      expect(summary).toContain(`${fmt('2024-11-15')} ~ ${fmt('2025-11-15')}`)
+      expect((wrapper.find('input[type="number"]').element as HTMLInputElement).value).toBe('30000')
+      expect(wrapper.find('.total-value').text()).toBe('NT$ 30,000')
     })
 
-    describe('金額自動填入', () => {
-      it('應該在選擇方案時自動填入金額', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        // Manually set plan_id and trigger the watch behavior
-        // by directly calling the logic that the watch would execute
-        wrapper.vm.form.plan_id = 'plan-1'
-        await wrapper.vm.$nextTick()
-
-        // Manually apply the watch logic since watchers don't reliably trigger in tests
-        const plan = mockPlans.value.find(p => p.id === wrapper.vm.form.plan_id)
-        if (plan) {
-          wrapper.vm.form.total_amount = plan.price
-        }
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.form.total_amount).toBe(3000)
-      })
-
-      it('應該在變更方案時更新金額', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        // Set first plan
-        wrapper.vm.form.plan_id = 'plan-1'
-        await wrapper.vm.$nextTick()
-        let plan = mockPlans.value.find(p => p.id === wrapper.vm.form.plan_id)
-        if (plan) {
-          wrapper.vm.form.total_amount = plan.price
-        }
-        await wrapper.vm.$nextTick()
-        expect(wrapper.vm.form.total_amount).toBe(3000)
-
-        // Change to second plan
-        wrapper.vm.form.plan_id = 'plan-2'
-        await wrapper.vm.$nextTick()
-        plan = mockPlans.value.find(p => p.id === wrapper.vm.form.plan_id)
-        if (plan) {
-          wrapper.vm.form.total_amount = plan.price
-        }
-        await wrapper.vm.$nextTick()
-        expect(wrapper.vm.form.total_amount).toBe(30000)
-      })
-
-      it('應該允許手動修改金額', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.plan_id = 'plan-1' // 價格 3000
-        await wrapper.vm.$nextTick()
-
-        wrapper.vm.form.total_amount = 2500 // 手動修改為優惠價
-
-        expect(wrapper.vm.form.total_amount).toBe(2500)
-      })
+    it('updates the amount when the plan changes', async () => {
+      const wrapper = await mountPage()
+      await fillStep1(wrapper, 'plan-year')
+      await selects(wrapper).plan.setValue('plan-month')
+      await nextButton(wrapper).trigger('click')
+      expect(wrapper.find('.total-value').text()).toBe('NT$ 3,000')
     })
 
-    describe('選擇的會員和方案', () => {
-      it('應該正確找到選擇的會員', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
+    it('rejects a non-positive amount', async () => {
+      const wrapper = await mountPage()
+      await fillStep1(wrapper)
+      await nextButton(wrapper).trigger('click')
+      await wrapper.find('input[type="number"]').setValue(0)
+      await nextButton(wrapper).trigger('click')
 
-        await flushPromises()
+      expect(errorTexts(wrapper)).toContain(PAGES.CONTRACTS.ERROR_AMOUNT_POSITIVE)
+      expect(wrapper.text()).toContain(PAGES.CONTRACTS.CONFIRM_CONTRACT_INFO)
+    })
 
-        wrapper.vm.form.member_id = 'member-1'
-        await wrapper.vm.$nextTick()
+    it('can go back to step 1 keeping the selection', async () => {
+      const wrapper = await mountPage()
+      await fillStep1(wrapper)
+      await nextButton(wrapper).trigger('click')
+      await wrapper.find('button.btn-ghost').trigger('click')
 
-        expect(wrapper.vm.selectedMember.value).toEqual({
-          id: 'member-1',
-          full_name: '張三',
-          member_code: 'M001'
-        })
-      })
-
-      it('應該正確找到選擇的方案', async () => {
-        const wrapper = mount(ContractNew, {
-          global: {
-            stubs: {
-              SignaturePad: SignaturePadStub,
-              LazySignaturePad: LazySignaturePadStub
-            }
-          }
-        })
-
-        await flushPromises()
-
-        wrapper.vm.form.plan_id = 'plan-1'
-        await wrapper.vm.$nextTick()
-
-        expect(wrapper.vm.selectedPlan.value?.name).toBe('月卡方案')
-        expect(wrapper.vm.selectedPlan.value?.price).toBe(3000)
-      })
+      expect(wrapper.text()).toContain(PAGES.CONTRACTS.SELECT_MEMBER_PLAN)
+      expect((selects(wrapper).plan.element as HTMLSelectElement).value).toBe('plan-year')
     })
   })
 
-  describe('提交流程', () => {
-    it('應該在驗證失敗時阻止提交', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
+  describe('step 3 (sign and submit)', () => {
+    it('refuses to submit without a signature', async () => {
+      const wrapper = await mountPage()
+      await goToStep3(wrapper)
+      await wrapper.find('form').trigger('submit')
       await flushPromises()
 
-      // 不填寫簽名
-      wrapper.vm.form.digital_signature = ''
-
-      await wrapper.vm.handleSubmit()
-
+      expect(errorTexts(wrapper)).toContain(PAGES.CONTRACTS.ERROR_SIGNATURE_REQUIRED)
       expect(mockCreateContract).not.toHaveBeenCalled()
     })
 
-    it('應該成功創建合約', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      // 填寫完整表單
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-1'
-      wrapper.vm.form.branch_id = 'branch-1'
-      wrapper.vm.form.start_date = '2025-01-15'
-      wrapper.vm.form.total_amount = 3000
-      wrapper.vm.form.digital_signature = 'data:image/png;base64,signature'
-      wrapper.vm.form.notes = '測試備註'
-
-      mockCreateContract.mockResolvedValueOnce({
-        id: 'contract-1'
-      })
-
-      await wrapper.vm.handleSubmit()
+    it('creates an ACTIVE/UNPAID time-based contract and navigates to the list', async () => {
+      const wrapper = await mountPage()
+      await goToStep3(wrapper, 'plan-year')
+      wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
+      await wrapper.find('form').trigger('submit')
       await flushPromises()
 
       expect(mockCreateContract).toHaveBeenCalledWith({
         member_id: 'member-1',
-        plan_id: 'plan-1',
+        plan_id: 'plan-year',
         branch_id: 'branch-1',
-        start_date: '2025-01-15',
-        end_date: '2025-02-15',
-        original_end_date: '2025-02-15',
-        sign_date: expect.any(String),
-        total_amount: 3000,
-        notes: '測試備註',
-        digital_signature: 'data:image/png;base64,signature',
+        start_date: '2024-11-15',
+        end_date: '2025-11-15',
+        original_end_date: '2025-11-15',
+        sign_date: '2024-11-15',
+        total_amount: 30000,
+        notes: '',
+        digital_signature: SIGNATURE,
         contract_status: 'ACTIVE',
         payment_status: 'UNPAID',
         remaining_counts: null
       })
-    })
-
-    it('應該在提交成功後導航到合約列表', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-1'
-      wrapper.vm.form.branch_id = 'branch-1'
-      wrapper.vm.form.start_date = '2025-01-15'
-      wrapper.vm.form.total_amount = 3000
-      wrapper.vm.form.digital_signature = 'data:image/png;base64,signature'
-
-      mockCreateContract.mockResolvedValueOnce({ id: 'contract-1' })
-
-      await wrapper.vm.handleSubmit()
-      await flushPromises()
-
+      expect(toast.success).toHaveBeenCalledWith(MESSAGES.SUCCESS.CONTRACT_CREATED)
       expect(mockPush).toHaveBeenCalledWith('/contracts')
     })
 
-    it('應該在提交時顯示加載狀態', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
+    it('sets remaining_counts from the plan for COUNT_BASED contracts', async () => {
+      const wrapper = await mountPage()
+      await goToStep3(wrapper, 'plan-count')
+      wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
+      await wrapper.find('form').trigger('submit')
       await flushPromises()
 
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-1'
-      wrapper.vm.form.branch_id = 'branch-1'
-      wrapper.vm.form.start_date = '2025-01-15'
-      wrapper.vm.form.total_amount = 3000
-      wrapper.vm.form.digital_signature = 'data:image/png;base64,signature'
-
-      mockCreateContract.mockImplementation(() => new Promise(resolve => {
-        setTimeout(() => resolve({ id: 'contract-1' }), 100)
+      expect(mockCreateContract).toHaveBeenCalledWith(expect.objectContaining({
+        plan_id: 'plan-count',
+        total_amount: 5000,
+        remaining_counts: 10
       }))
-
-      const submitPromise = wrapper.vm.handleSubmit()
-
-      expect(wrapper.vm.isSubmitting).toBe(true)
-
-      await submitPromise
-      await flushPromises()
-
-      expect(wrapper.vm.isSubmitting).toBe(false)
     })
 
-    it('應該處理提交失敗的情況', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
+    it('shows an error and stays on the page when creation fails', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockCreateContract.mockRejectedValue(new Error('boom'))
+      const wrapper = await mountPage()
+      await goToStep3(wrapper)
+      wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
+      await wrapper.find('form').trigger('submit')
       await flushPromises()
 
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-1'
-      wrapper.vm.form.branch_id = 'branch-1'
-      wrapper.vm.form.start_date = '2025-01-15'
-      wrapper.vm.form.total_amount = 3000
-      wrapper.vm.form.digital_signature = 'data:image/png;base64,signature'
-
-      mockCreateContract.mockRejectedValueOnce(new Error('Network error'))
-
-      await wrapper.vm.handleSubmit()
-      await flushPromises()
-
-      expect(wrapper.vm.errors.submit).toBe(PAGES.CONTRACTS.ERROR_CREATE_FAILED)
-      expect(wrapper.vm.isSubmitting).toBe(false)
-
-      consoleErrorSpy.mockRestore()
-    })
-
-    it('應該為計次方案設定 remaining_counts', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-3' // 計次方案，10次
-      wrapper.vm.form.branch_id = 'branch-1'
-      wrapper.vm.form.start_date = '2025-01-15'
-      wrapper.vm.form.total_amount = 5000
-      wrapper.vm.form.digital_signature = 'data:image/png;base64,signature'
-
-      mockCreateContract.mockResolvedValueOnce({ id: 'contract-1' })
-
-      await wrapper.vm.handleSubmit()
-      await flushPromises()
-
-      expect(mockCreateContract).toHaveBeenCalledWith(
-        expect.objectContaining({
-          remaining_counts: 10
-        })
-      )
-    })
-  })
-
-  describe('UI 渲染', () => {
-    it('應該渲染頁面標題', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      expect(wrapper.text()).toContain(PAGES.CONTRACTS.CREATE_TITLE)
-      expect(wrapper.text()).toContain(PAGES.CONTRACTS.CREATE_CONTRACT)
-    })
-
-    it('應該渲染進度步驟', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      const steps = wrapper.findAll('.step')
-      expect(steps).toHaveLength(3)
-    })
-
-    it('應該高亮當前步驟', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      expect(wrapper.find('.step.current').exists()).toBe(true)
-    })
-
-    it('應該顯示方案預覽', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      wrapper.vm.form.plan_id = 'plan-1'
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.find('.plan-preview').exists()).toBe(true)
-      expect(wrapper.text()).toContain('月卡方案')
-    })
-
-    it('應該在步驟 2 顯示合約摘要', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      wrapper.vm.form.member_id = 'member-1'
-      wrapper.vm.form.plan_id = 'plan-1'
-      await wrapper.vm.$nextTick()
-      await flushPromises()
-
-      wrapper.vm.currentStep = 2
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.find('.contract-summary').exists()).toBe(true)
-      // 驗證 computed 屬性正確計算
-      expect(wrapper.vm.selectedMember.value?.full_name).toBe('張三')
-      expect(wrapper.vm.selectedPlan.value?.name).toBe('月卡方案')
-    })
-
-    it('應該在步驟 3 顯示 SignaturePad', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      wrapper.vm.currentStep = 3
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.find('.signature-pad-stub').exists()).toBe(true)
-    })
-
-    it('應該顯示返回按鈕', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      await flushPromises()
-
-      const backBtn = wrapper.find('.back-btn')
-      expect(backBtn.exists()).toBe(true)
-
-      await backBtn.trigger('click')
-      expect(mockBack).toHaveBeenCalled()
-    })
-  })
-
-  describe('日期格式化', () => {
-    it('應該正確格式化日期', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      const formatted = wrapper.vm.formatDate('2025-01-15')
-      expect(formatted).toContain('2025')
-      expect(formatted).toContain('1')
-      expect(formatted).toContain('15')
-    })
-
-    it('應該處理空日期', async () => {
-      const wrapper = mount(ContractNew, {
-        global: {
-          stubs: {
-            SignaturePad: SignaturePadStub,
-            LazySignaturePad: LazySignaturePadStub
-          }
-        }
-      })
-
-      const formatted = wrapper.vm.formatDate('')
-      expect(formatted).toBe('—')
+      expect(wrapper.find('.submit-error').text()).toContain(PAGES.CONTRACTS.ERROR_CREATE_FAILED)
+      expect(toast.error).toHaveBeenCalledWith(MESSAGES.ERRORS.CONTRACT_CREATE_FAILED)
+      expect(mockPush).not.toHaveBeenCalled()
+      expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
     })
   })
 })

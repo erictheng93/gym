@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -18,7 +17,7 @@ import {
 
 describe('Tenant Routes', () => {
   // ---------------------------------------------------------------------------
-  // Auth Rejection (no DB needed)
+  // Auth Rejection 
   // ---------------------------------------------------------------------------
 
   describe('auth rejection', () => {
@@ -39,26 +38,23 @@ describe('Tenant Routes', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Integration Tests (DB needed)
+  // Integration Tests 
   // ---------------------------------------------------------------------------
 
   describe('integration', () => {
     let token: string;
 
     beforeAll(async () => {
-      if (!dbAvailable) return;
       await createTestFixtures();
       token = await getAuthToken();
     });
 
     afterAll(async () => {
-      if (!dbAvailable) return;
       await cleanupTestFixtures();
     });
 
     describe('GET /api/tenant', () => {
       it('should return tenant information', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/tenant', {
           method: 'GET',
@@ -80,7 +76,6 @@ describe('Tenant Routes', () => {
 
     describe('GET /api/tenant/quota', () => {
       it('should return quota usage', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/tenant/quota', {
           method: 'GET',
@@ -105,7 +100,6 @@ describe('Tenant Routes', () => {
 
     describe('GET /api/tenant/quota/check/:resource', () => {
       it('should check members quota', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/tenant/quota/check/members', {
           method: 'GET',
@@ -125,7 +119,6 @@ describe('Tenant Routes', () => {
       });
 
       it('should check employees quota', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/tenant/quota/check/employees', {
           method: 'GET',
@@ -141,7 +134,6 @@ describe('Tenant Routes', () => {
       });
 
       it('should check branches quota', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/tenant/quota/check/branches', {
           method: 'GET',
@@ -157,7 +149,6 @@ describe('Tenant Routes', () => {
       });
 
       it('should reject invalid resource type', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/tenant/quota/check/invalid', {
           method: 'GET',

@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { db, jobTitles } from '../src/db/index.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
   authRequest,
   getAuthToken,
   TEST_JOB_TITLE_ID,
+  TEST_JOB_TITLE_B_ID,
 } from './helpers.js';
 
 describe('Job Titles API', () => {
@@ -33,6 +36,9 @@ describe('Job Titles API', () => {
       expect(data.success).toBe(true);
       expect(Array.isArray(data.data)).toBe(true);
       expect(data.data.length).toBeGreaterThanOrEqual(1);
+      const ids = data.data.map((j: { id: string }) => j.id);
+      expect(ids).toContain(TEST_JOB_TITLE_ID);
+      expect(ids).not.toContain(TEST_JOB_TITLE_B_ID);
     });
   });
 
@@ -175,6 +181,34 @@ describe('Job Titles API', () => {
       });
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('Tenant Isolation', () => {
+    it('should return 404 when getting a job title from another tenant', async () => {
+      const response = await authRequest(`/api/job-titles/${TEST_JOB_TITLE_B_ID}`, { token: authToken });
+      expect(response.status).toBe(404);
+    });
+
+    it('should return 404 when updating a job title from another tenant', async () => {
+      const response = await authRequest(`/api/job-titles/${TEST_JOB_TITLE_B_ID}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ name: 'Hijacked' }),
+      });
+      expect(response.status).toBe(404);
+    });
+
+    it('should return 404 and keep the row when deleting a job title from another tenant', async () => {
+      const response = await authRequest(`/api/job-titles/${TEST_JOB_TITLE_B_ID}`, {
+        method: 'DELETE',
+        token: authToken,
+      });
+      expect(response.status).toBe(404);
+
+      const [row] = await db.select().from(jobTitles).where(eq(jobTitles.id, TEST_JOB_TITLE_B_ID));
+      expect(row).toBeDefined();
+      expect(row.name).not.toBe('Hijacked');
     });
   });
 });

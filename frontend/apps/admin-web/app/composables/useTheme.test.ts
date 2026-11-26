@@ -1,116 +1,86 @@
-// -nocheck
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mockWatch } from '@test/setup'
 import { useTheme } from './useTheme'
 
 describe('useTheme', () => {
-  let matchMediaMock: any
-  let documentElementMock: any
+  let systemPrefersDark = false
+  let mediaListener: (() => void) | undefined
+  const removeEventListener = vi.fn()
+  let setAttributeSpy: ReturnType<typeof vi.spyOn>
+  let onUnmountedCallbacks: Array<() => void>
 
   beforeEach(() => {
-    // Mock window.matchMedia
-    matchMediaMock = {
-      matches: false,
+    systemPrefersDark = false
+    mediaListener = undefined
+    removeEventListener.mockClear()
+    onUnmountedCallbacks = []
+
+    vi.spyOn(window, 'matchMedia').mockImplementation(() => ({
+      get matches() {
+        return systemPrefersDark
+      },
       media: '(prefers-color-scheme: dark)',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }
-    global.window = {
-      matchMedia: vi.fn(() => matchMediaMock),
-    } as any
-
-    // Mock document.documentElement
-    documentElementMock = {
-      setAttribute: vi.fn(),
-    }
-    global.document = {
-      documentElement: documentElementMock,
-    } as any
-
-    // Mock import.meta.server
-    ;(global as any).import = {
-      meta: { server: false },
-    }
-  })
-
-  describe('theme initialization', () => {
-    it('should initialize with dark theme by default', () => {
-      const { userTheme } = useTheme()
-      expect(userTheme.value).toBe('dark')
+      addEventListener: vi.fn((_event: string, cb: () => void) => {
+        mediaListener = cb
+      }),
+      removeEventListener
+    }) as unknown as MediaQueryList)
+    setAttributeSpy = vi.spyOn(document.documentElement, 'setAttribute')
+    vi.stubGlobal('onUnmounted', (cb: () => void) => {
+      onUnmountedCallbacks.push(cb)
     })
 
-    it('should return dark theme on server', () => {
-      ;(global as any).import = {
-        meta: { server: true },
-      }
+    // useState is a process-wide store in the test setup; reset to the default.
+    useTheme().setTheme('dark')
+    setAttributeSpy.mockClear()
+    mockWatch.mockClear()
+    onUnmountedCallbacks = []
+  })
 
-      const { isDark, theme } = useTheme()
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  describe('isDark / theme', () => {
+    it('should follow the system preference when theme is system', () => {
+      const { isDark, theme, setTheme } = useTheme()
+      setTheme('system')
+
+      systemPrefersDark = true
       expect(isDark.value).toBe(true)
       expect(theme.value).toBe('dark')
-    })
-  })
 
-  describe('isDark computed', () => {
-    it('should detect dark mode from system preference when theme is system', () => {
-      matchMediaMock.matches = true
-      const { isDark, setTheme } = useTheme()
-      setTheme('system')
-      expect(isDark.value).toBe(true)
-    })
-
-    it('should detect light mode from system preference when theme is system', () => {
-      matchMediaMock.matches = false
-      const { isDark, setTheme } = useTheme()
-      setTheme('system')
+      systemPrefersDark = false
       expect(isDark.value).toBe(false)
+      expect(theme.value).toBe('light')
     })
 
-    it('should return true when userTheme is dark', () => {
-      const { isDark, setTheme } = useTheme()
-      setTheme('dark')
-      expect(isDark.value).toBe(true)
-    })
+    it('should ignore the system preference when theme is explicit', () => {
+      const { isDark, theme, setTheme } = useTheme()
 
-    it('should return false when userTheme is light', () => {
-      const { isDark, setTheme } = useTheme()
+      systemPrefersDark = true
       setTheme('light')
       expect(isDark.value).toBe(false)
-    })
-  })
-
-  describe('theme computed', () => {
-    it('should return "dark" when isDark is true', () => {
-      matchMediaMock.matches = true
-      const { theme, setTheme } = useTheme()
-      setTheme('system')
-      expect(theme.value).toBe('dark')
-    })
-
-    it('should return "light" when isDark is false', () => {
-      matchMediaMock.matches = false
-      const { theme, setTheme } = useTheme()
-      setTheme('system')
       expect(theme.value).toBe('light')
+
+      systemPrefersDark = false
+      setTheme('dark')
+      expect(isDark.value).toBe(true)
+      expect(theme.value).toBe('dark')
     })
   })
 
   describe('setTheme', () => {
-    it('should set theme to light', () => {
+    it.each(['light', 'dark', 'system'] as const)('should set theme to %s', (value) => {
       const { userTheme, setTheme } = useTheme()
-      setTheme('light')
-      expect(userTheme.value).toBe('light')
+      setTheme(value)
+      expect(userTheme.value).toBe(value)
     })
 
-    it('should set theme to dark', () => {
-      const { userTheme, setTheme } = useTheme()
-      setTheme('dark')
-      expect(userTheme.value).toBe('dark')
-    })
-
-    it('should set theme to system', () => {
-      const { userTheme, setTheme } = useTheme()
-      setTheme('dark')
-      setTheme('system')
-      expect(userTheme.value).toBe('system')
+    it('should share the theme between instances', () => {
+      useTheme().setTheme('light')
+      expect(useTheme().userTheme.value).toBe('light')
     })
   })
 
@@ -123,28 +93,79 @@ describe('useTheme', () => {
     })
 
     it('should toggle from dark to light', () => {
-      const { userTheme, setTheme, toggleTheme } = useTheme()
-      setTheme('dark')
+      const { userTheme, toggleTheme } = useTheme()
       toggleTheme()
       expect(userTheme.value).toBe('light')
     })
 
     it('should switch from system to light when system prefers dark', () => {
-      matchMediaMock.matches = true
+      systemPrefersDark = true
       const { userTheme, setTheme, toggleTheme } = useTheme()
       setTheme('system')
-      expect(userTheme.value).toBe('system')
       toggleTheme()
       expect(userTheme.value).toBe('light')
     })
 
     it('should switch from system to dark when system prefers light', () => {
-      matchMediaMock.matches = false
+      systemPrefersDark = false
       const { userTheme, setTheme, toggleTheme } = useTheme()
       setTheme('system')
-      expect(userTheme.value).toBe('system')
       toggleTheme()
       expect(userTheme.value).toBe('dark')
+    })
+  })
+
+  describe('applying theme to the document', () => {
+    it('should set data-theme on mount from the current theme', () => {
+      useTheme().setTheme('light')
+      setAttributeSpy.mockClear()
+
+      useTheme()
+
+      expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'light')
+    })
+
+    it('should resolve system theme to the system preference on mount', () => {
+      systemPrefersDark = true
+      useTheme().setTheme('system')
+      setAttributeSpy.mockClear()
+
+      useTheme()
+
+      expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'dark')
+    })
+
+    it('should re-apply data-theme when the user theme changes', () => {
+      const { setTheme } = useTheme()
+      const [source, applyTheme] = mockWatch.mock.calls.at(-1)!
+      expect(source.value).toBe('dark')
+
+      setTheme('light')
+      setAttributeSpy.mockClear()
+      applyTheme()
+
+      expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'light')
+    })
+
+    it('should re-apply data-theme when the system preference changes', () => {
+      const { setTheme } = useTheme()
+      setTheme('system')
+      setAttributeSpy.mockClear()
+      expect(mediaListener).toBeDefined()
+
+      systemPrefersDark = true
+      mediaListener!()
+
+      expect(setAttributeSpy).toHaveBeenCalledWith('data-theme', 'dark')
+    })
+
+    it('should remove the media query listener on unmount', () => {
+      useTheme()
+      expect(onUnmountedCallbacks).toHaveLength(1)
+
+      onUnmountedCallbacks[0]!()
+
+      expect(removeEventListener).toHaveBeenCalledWith('change', mediaListener)
     })
   })
 })

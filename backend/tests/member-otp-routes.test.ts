@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import {
   createTestFixtures,
@@ -148,12 +147,10 @@ describe('Member OTP Routes', () => {
 
   describe('integration', () => {
     beforeAll(async () => {
-      if (!dbAvailable) return;
       await createTestFixtures();
     });
 
     afterAll(async () => {
-      if (!dbAvailable) return;
       // Clean up OTP tokens
       const { db, otpTokens } = await import('../src/db/index.js');
       const { eq } = await import('drizzle-orm');
@@ -163,7 +160,6 @@ describe('Member OTP Routes', () => {
     });
 
     it('POST /send should accept valid phone OTP request', async () => {
-      if (!dbAvailable) return;
 
       const res = await app.request('/api/member/otp/send', {
         method: 'POST',
@@ -180,7 +176,6 @@ describe('Member OTP Routes', () => {
     });
 
     it('uses one quota and token identity for dashed and plain phone numbers', async () => {
-      if (!dbAvailable) return;
       const request = (endpoint: string, identifier: string, code?: string) =>
         app.request(`/api/member/otp/${endpoint}`, {
           method: 'POST',
@@ -210,7 +205,6 @@ describe('Member OTP Routes', () => {
     });
 
     it('POST /send should accept valid email OTP request', async () => {
-      if (!dbAvailable) return;
 
       const res = await app.request('/api/member/otp/send', {
         method: 'POST',
@@ -227,7 +221,6 @@ describe('Member OTP Routes', () => {
     });
 
     it('POST /verify should reject wrong code', async () => {
-      if (!dbAvailable) return;
 
       // Send OTP first
       await app.request('/api/member/otp/send', {
@@ -256,7 +249,6 @@ describe('Member OTP Routes', () => {
     });
 
     it('POST /refresh should reject token for non-existent member', async () => {
-      if (!dbAvailable) return;
 
       const tokens = generateMemberTokens({
         id: '00000000-0000-4000-8000-ffffffffffff',
@@ -277,7 +269,6 @@ describe('Member OTP Routes', () => {
     });
 
     it('POST /refresh should succeed with valid refresh token for existing member', async () => {
-      if (!dbAvailable) return;
 
       const tokens = generateMemberTokens({
         id: TEST_MEMBER_ID,

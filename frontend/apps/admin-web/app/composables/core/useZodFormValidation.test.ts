@@ -1,4 +1,3 @@
-// -nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
 import { useZodFormValidation } from './useZodFormValidation'

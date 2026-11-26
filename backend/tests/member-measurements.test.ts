@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { db, bodyMeasurements } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
@@ -10,6 +9,9 @@ import {
   TEST_MEMBER_ID,
   TEST_BRANCH_ID,
   TEST_TENANT_ID,
+  TEST_MEMBER_B_ID,
+  TEST_BRANCH_B_ID,
+  TEST_TENANT_B_ID,
 } from './helpers.js';
 
 // =============================================================================
@@ -45,13 +47,12 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Measurements Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await db.delete(bodyMeasurements).where(eq(bodyMeasurements.memberId, TEST_MEMBER_ID));
+    await db.delete(bodyMeasurements).where(eq(bodyMeasurements.memberId, TEST_MEMBER_B_ID));
     await cleanupTestFixtures();
   });
 
@@ -72,7 +73,6 @@ describe('Member Measurements Routes', () => {
 
   describe('POST /api/member/measurements', () => {
     it('should create a measurement', async () => {
-      if (!dbAvailable) return;
 
       const today = new Date().toISOString().split('T')[0];
       const res = await memberRequest('/api/member/measurements', {
@@ -97,7 +97,6 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should reject missing date', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements', {
         method: 'POST',
@@ -110,7 +109,6 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should reject invalid weight range', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements', {
         method: 'POST',
@@ -124,7 +122,6 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should reject invalid bodyFat range', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements', {
         method: 'POST',
@@ -144,7 +141,6 @@ describe('Member Measurements Routes', () => {
 
   describe('GET /api/member/measurements', () => {
     it('should return paginated measurement list', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements');
 
@@ -158,7 +154,6 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should support pagination parameters', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements?page=1&limit=5');
 
@@ -174,7 +169,6 @@ describe('Member Measurements Routes', () => {
 
   describe('GET /api/member/measurements/latest', () => {
     it('should return latest measurement', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements/latest');
 
@@ -193,7 +187,6 @@ describe('Member Measurements Routes', () => {
 
   describe('GET /api/member/measurements/progress', () => {
     it('should return progress data for weight', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements/progress?metric=weight');
 
@@ -207,7 +200,6 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should support period parameter', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements/progress?metric=bodyFat&period=30');
 
@@ -218,7 +210,6 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should reject invalid metric', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/measurements/progress?metric=invalid');
 
@@ -232,7 +223,7 @@ describe('Member Measurements Routes', () => {
 
   describe('DELETE /api/member/measurements/:id', () => {
     it('should delete a measurement', async () => {
-      if (!dbAvailable || !createdMeasurementId) return;
+      if (!createdMeasurementId) throw new Error('createdMeasurementId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/measurements/${createdMeasurementId}`, {
         method: 'DELETE',
@@ -244,13 +235,73 @@ describe('Member Measurements Routes', () => {
     });
 
     it('should return 404 for already deleted measurement', async () => {
-      if (!dbAvailable || !createdMeasurementId) return;
+      if (!createdMeasurementId) throw new Error('createdMeasurementId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/measurements/${createdMeasurementId}`, {
         method: 'DELETE',
       });
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cross-member isolation
+  // ---------------------------------------------------------------------------
+
+  describe('Cross-member isolation', () => {
+    let otherMeasurementId: string;
+
+    function otherMemberRequest(path: string, options: RequestInit = {}) {
+      const headers = new Headers(options.headers);
+      headers.set(MEMBER_TOKEN_HEADER, generateMemberTokens({
+        id: TEST_MEMBER_B_ID,
+        memberCode: 'OM0001',
+        branchId: TEST_BRANCH_B_ID,
+        tenantId: TEST_TENANT_B_ID,
+      }).accessToken);
+      if (!headers.has('Content-Type') && options.body) {
+        headers.set('Content-Type', 'application/json');
+      }
+      return app.request(path, { ...options, headers });
+    }
+
+    beforeAll(async () => {
+      const res = await otherMemberRequest('/api/member/measurements', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: new Date().toISOString().split('T')[0],
+          weight: 123.4,
+          source: 'MANUAL',
+        }),
+      });
+      expect(res.status).toBe(201);
+      otherMeasurementId = (await res.json()).data.measurement.id;
+    });
+
+    it("should not include another member's measurements in the list", async () => {
+      const data = await (await memberRequest('/api/member/measurements')).json();
+
+      expect(data.data.measurements.map((m: { id: string }) => m.id)).not.toContain(otherMeasurementId);
+
+      const theirs = await (await otherMemberRequest('/api/member/measurements')).json();
+      expect(theirs.data.measurements.map((m: { id: string }) => m.id)).toEqual([otherMeasurementId]);
+    });
+
+    it("should not return another member's measurement as latest", async () => {
+      const mine = await (await memberRequest('/api/member/measurements/latest')).json();
+      const theirs = await (await otherMemberRequest('/api/member/measurements/latest')).json();
+
+      expect(mine.data.measurement?.id).not.toBe(otherMeasurementId);
+      expect(theirs.data.measurement.id).toBe(otherMeasurementId);
+    });
+
+    it("should not delete another member's measurement", async () => {
+      const res = await memberRequest(`/api/member/measurements/${otherMeasurementId}`, { method: 'DELETE' });
+
+      expect(res.status).toBe(404);
+      const rows = await db.select().from(bodyMeasurements).where(eq(bodyMeasurements.id, otherMeasurementId));
+      expect(rows).toHaveLength(1);
     });
   });
 });

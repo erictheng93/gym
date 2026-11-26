@@ -164,23 +164,17 @@ describe('useOfflineSync', () => {
 
     it('should not throw when setting cache without IndexedDB', async () => {
       const { setCache } = useOfflineSync()
-      // Should not throw
-      await setCache('key', 'value')
-      expect(true).toBe(true)
+      await expect(setCache('key', 'value')).resolves.toBeUndefined()
     })
 
     it('should not throw when clearing cache without IndexedDB', async () => {
       const { clearCache } = useOfflineSync()
-      // Should not throw
-      await clearCache()
-      expect(true).toBe(true)
+      await expect(clearCache()).resolves.toBeUndefined()
     })
 
     it('should not throw when deleting cache without IndexedDB', async () => {
       const { deleteCache } = useOfflineSync()
-      // Should not throw
-      await deleteCache('key')
-      expect(true).toBe(true)
+      await expect(deleteCache('key')).resolves.toBeUndefined()
     })
   })
 
@@ -224,9 +218,7 @@ describe('useOfflineSync', () => {
   describe('clearQueue', () => {
     it('should not throw when IndexedDB is not available', async () => {
       const { clearQueue } = useOfflineSync()
-      // Should not throw
-      await clearQueue()
-      expect(true).toBe(true)
+      await expect(clearQueue()).resolves.toBeUndefined()
     })
   })
 

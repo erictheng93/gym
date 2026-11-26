@@ -19,6 +19,13 @@ import {
   type ExportColumn,
 } from '../src/services/export.js';
 
+async function loadWorkbook(buffer: Buffer) {
+  const ExcelJS = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+  return workbook;
+}
+
 // =============================================================================
 // EXPORT SERVICE UNIT TESTS
 // =============================================================================
@@ -209,6 +216,10 @@ describe('Export Service', () => {
       const result = await generateExcel(columns, data);
 
       expect(result.success).toBe(true);
+      const workbook = await loadWorkbook(result.buffer!);
+      expect(workbook.worksheets.map((ws) => ws.name)).toEqual(['Sheet1']);
+      expect(workbook.worksheets[0].getCell('A1').value).toBe('姓名');
+      expect(workbook.worksheets[0].getCell('A2').value).toBe('測試');
     });
 
     it('should handle special characters in data', async () => {
@@ -224,6 +235,8 @@ describe('Export Service', () => {
       const result = await generateExcel(columns, data, '特殊字元測試');
 
       expect(result.success).toBe(true);
+      const sheet = (await loadWorkbook(result.buffer!)).getWorksheet('特殊字元測試')!;
+      expect([2, 3, 4].map((r) => sheet.getCell(`A${r}`).value)).toEqual(['!@#$%^&*()', '中文字元', '日本語テスト']);
     });
   });
 

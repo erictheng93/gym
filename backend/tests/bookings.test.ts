@@ -463,6 +463,17 @@ describe('Bookings API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       expect(data.data.remainingCounts).toBe(9);
+
+      const [storedContract] = await db.select().from(contracts).where(eq(contracts.id, countContract.id));
+      expect(storedContract.remainingCounts).toBe(9);
+      const [storedBooking] = await db.select().from(bookings).where(eq(bookings.id, booking.id));
+      expect(storedBooking).toMatchObject({ bookingStatus: 'ATTENDED', countDeducted: true });
+
+      // attending the same booking again must not deduct a second session
+      const again = await authRequest(`/api/bookings/${booking.id}/attend`, { method: 'POST', token: authToken });
+      expect(again.status).toBe(400);
+      const [afterRepeat] = await db.select().from(contracts).where(eq(contracts.id, countContract.id));
+      expect(afterRepeat.remainingCounts).toBe(9);
     });
 
     it('should reject attend for non-CONFIRMED booking', async () => {

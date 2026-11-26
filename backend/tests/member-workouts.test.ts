@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { db, workoutLogs } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
@@ -10,6 +9,9 @@ import {
   TEST_MEMBER_ID,
   TEST_BRANCH_ID,
   TEST_TENANT_ID,
+  TEST_MEMBER_B_ID,
+  TEST_BRANCH_B_ID,
+  TEST_TENANT_B_ID,
 } from './helpers.js';
 
 // =============================================================================
@@ -46,13 +48,12 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Workout Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await db.delete(workoutLogs).where(eq(workoutLogs.memberId, TEST_MEMBER_ID));
+    await db.delete(workoutLogs).where(eq(workoutLogs.memberId, TEST_MEMBER_B_ID));
     await cleanupTestFixtures();
   });
 
@@ -73,7 +74,6 @@ describe('Member Workout Routes', () => {
 
   describe('POST /api/member/workouts', () => {
     it('should create a workout log', async () => {
-      if (!dbAvailable) return;
 
       const today = new Date().toISOString().split('T')[0];
       const res = await memberRequest('/api/member/workouts', {
@@ -101,7 +101,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should reject missing date', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/workouts', {
         method: 'POST',
@@ -114,7 +113,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should reject invalid duration', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/workouts', {
         method: 'POST',
@@ -134,7 +132,6 @@ describe('Member Workout Routes', () => {
 
   describe('GET /api/member/workouts', () => {
     it('should return paginated workout list', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/workouts');
 
@@ -148,7 +145,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should support pagination parameters', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/workouts?page=1&limit=5');
 
@@ -158,7 +154,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should support date filters', async () => {
-      if (!dbAvailable) return;
 
       const today = new Date().toISOString().split('T')[0];
       const res = await memberRequest(
@@ -177,7 +172,7 @@ describe('Member Workout Routes', () => {
 
   describe('GET /api/member/workouts/:id', () => {
     it('should return a specific workout', async () => {
-      if (!dbAvailable || !createdWorkoutId) return;
+      if (!createdWorkoutId) throw new Error('createdWorkoutId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/workouts/${createdWorkoutId}`);
 
@@ -188,7 +183,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should return 404 for non-existent workout', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/workouts/00000000-0000-4000-8000-000000099999'
@@ -204,7 +198,7 @@ describe('Member Workout Routes', () => {
 
   describe('PUT /api/member/workouts/:id', () => {
     it('should update a workout', async () => {
-      if (!dbAvailable || !createdWorkoutId) return;
+      if (!createdWorkoutId) throw new Error('createdWorkoutId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/workouts/${createdWorkoutId}`, {
         method: 'PUT',
@@ -222,7 +216,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should return 404 for non-existent workout', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/workouts/00000000-0000-4000-8000-000000099999',
@@ -242,7 +235,6 @@ describe('Member Workout Routes', () => {
 
   describe('GET /api/member/workouts/stats/summary', () => {
     it('should return workout statistics', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/workouts/stats/summary');
 
@@ -256,7 +248,6 @@ describe('Member Workout Routes', () => {
     });
 
     it('should support period parameter', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/workouts/stats/summary?period=7');
 
@@ -272,7 +263,7 @@ describe('Member Workout Routes', () => {
 
   describe('DELETE /api/member/workouts/:id', () => {
     it('should delete a workout', async () => {
-      if (!dbAvailable || !createdWorkoutId) return;
+      if (!createdWorkoutId) throw new Error('createdWorkoutId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/workouts/${createdWorkoutId}`, {
         method: 'DELETE',
@@ -284,13 +275,92 @@ describe('Member Workout Routes', () => {
     });
 
     it('should return 404 for already deleted workout', async () => {
-      if (!dbAvailable || !createdWorkoutId) return;
+      if (!createdWorkoutId) throw new Error('createdWorkoutId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/workouts/${createdWorkoutId}`, {
         method: 'DELETE',
       });
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cross-member isolation
+  // ---------------------------------------------------------------------------
+
+  describe('Cross-member isolation', () => {
+    let otherWorkoutId: string;
+
+    function otherMemberRequest(path: string, options: RequestInit = {}) {
+      const headers = new Headers(options.headers);
+      headers.set(MEMBER_TOKEN_HEADER, generateMemberTokens({
+        id: TEST_MEMBER_B_ID,
+        memberCode: 'OM0001',
+        branchId: TEST_BRANCH_B_ID,
+        tenantId: TEST_TENANT_B_ID,
+      }).accessToken);
+      if (!headers.has('Content-Type') && options.body) {
+        headers.set('Content-Type', 'application/json');
+      }
+      return app.request(path, { ...options, headers });
+    }
+
+    beforeAll(async () => {
+      const res = await otherMemberRequest('/api/member/workouts', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: new Date().toISOString().split('T')[0],
+          duration: 45,
+          calories: 999,
+          notes: 'Other member workout',
+        }),
+      });
+      expect(res.status).toBe(201);
+      otherWorkoutId = (await res.json()).data.id;
+    });
+
+    it("should not include another member's workouts in the list", async () => {
+      const data = await (await memberRequest('/api/member/workouts')).json();
+
+      expect(data.data.workouts.map((w: { id: string }) => w.id)).not.toContain(otherWorkoutId);
+
+      const theirs = await (await otherMemberRequest('/api/member/workouts')).json();
+      expect(theirs.data.workouts.map((w: { id: string }) => w.id)).toEqual([otherWorkoutId]);
+    });
+
+    it("should not count another member's workouts in the stats summary", async () => {
+      const mine = await (await memberRequest('/api/member/workouts/stats/summary')).json();
+      const theirs = await (await otherMemberRequest('/api/member/workouts/stats/summary')).json();
+
+      expect(theirs.data.totalWorkouts).toBe(1);
+      expect(theirs.data.totalCalories).toBe(999);
+      expect(mine.data.totalCalories).not.toBeGreaterThanOrEqual(999);
+    });
+
+    it("should return 404 when reading another member's workout", async () => {
+      const res = await memberRequest(`/api/member/workouts/${otherWorkoutId}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("should not update another member's workout", async () => {
+      const res = await memberRequest(`/api/member/workouts/${otherWorkoutId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ notes: 'Hijacked' }),
+      });
+
+      expect(res.status).toBe(404);
+      const [row] = await db.select().from(workoutLogs).where(eq(workoutLogs.id, otherWorkoutId));
+      expect(row.notes).toBe('Other member workout');
+    });
+
+    it("should not delete another member's workout", async () => {
+      const res = await memberRequest(`/api/member/workouts/${otherWorkoutId}`, { method: 'DELETE' });
+
+      expect(res.status).toBe(404);
+      const rows = await db.select().from(workoutLogs).where(eq(workoutLogs.id, otherWorkoutId));
+      expect(rows).toHaveLength(1);
     });
   });
 });

@@ -3,7 +3,6 @@ import { hash } from '@node-rs/argon2';
 import { eq } from 'drizzle-orm';
 import app from '../src/app.js';
 import { db, users } from '../src/db/index.js';
-import { dbAvailable } from './setup.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -22,7 +21,7 @@ import {
 
 describe('Staff Auth - Extended', () => {
   // ---------------------------------------------------------------------------
-  // Auth rejection (no DB needed)
+  // Auth rejection 
   // ---------------------------------------------------------------------------
 
   describe('auth rejection', () => {
@@ -54,26 +53,23 @@ describe('Staff Auth - Extended', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Integration tests (DB needed)
+  // Integration tests 
   // ---------------------------------------------------------------------------
 
   describe('integration', () => {
     let token: string;
 
     beforeAll(async () => {
-      if (!dbAvailable) return;
       await createTestFixtures();
       token = await getAuthToken();
     });
 
     afterAll(async () => {
-      if (!dbAvailable) return;
       await cleanupTestFixtures();
     });
 
     describe('POST /api/auth/change-password', () => {
       it('should reject wrong current password', async () => {
-        if (!dbAvailable) return;
 
         const res = await app.request('/api/auth/change-password', {
           method: 'POST',
@@ -93,7 +89,6 @@ describe('Staff Auth - Extended', () => {
       });
 
       it('should validate request body', async () => {
-        if (!dbAvailable) return;
 
         // Missing newPassword
         const res = await app.request('/api/auth/change-password', {
@@ -111,7 +106,6 @@ describe('Staff Auth - Extended', () => {
       });
 
       it('should change password successfully', async () => {
-        if (!dbAvailable) return;
 
         // Get a fresh token (previous tests may have invalidated sessions)
         const freshToken = await getAuthToken();
@@ -140,7 +134,6 @@ describe('Staff Auth - Extended', () => {
 
     describe('POST /api/auth/refresh', () => {
       it('should refresh session and return new token', async () => {
-        if (!dbAvailable) return;
 
         // Need a fresh login since change-password invalidates sessions
         const freshToken = await getAuthToken();
@@ -163,7 +156,6 @@ describe('Staff Auth - Extended', () => {
 
     describe('GET /api/auth/me/permissions', () => {
       it('should return permissions for authenticated user', async () => {
-        if (!dbAvailable) return;
 
         const freshToken = await getAuthToken();
 

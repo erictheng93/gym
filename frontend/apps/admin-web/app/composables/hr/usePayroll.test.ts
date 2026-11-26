@@ -1,5 +1,5 @@
-// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mockHandleError } from '@test/setup'
 import { usePayroll } from './usePayroll'
 import type { SalaryRecord, PromotionRecord } from './usePayroll'
 
@@ -15,13 +15,15 @@ vi.stubGlobal('useRuntimeConfig', () => ({
   }
 }))
 
+const requestedUrl = (callIndex = 0) => new URL(String(mockFetch.mock.calls[callIndex]![0]))
+
 describe('usePayroll', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    mockFetch.mockReset()
   })
 
   afterEach(() => {
-    vi.clearAllMocks()
+    mockFetch.mockReset()
   })
 
   describe('fetchSalaryRecords', () => {
@@ -58,6 +60,11 @@ describe('usePayroll', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
       expect(salaryRecords.value).toEqual(mockRecords)
       expect(totalCount.value).toBe(2)
+      // defaults: first page, 20 per page
+      const url = requestedUrl()
+      expect(url.pathname).toBe('/api/payroll/salary-records')
+      expect(url.searchParams.get('limit')).toBe('20')
+      expect(url.searchParams.get('offset')).toBe('0')
     })
 
     it('應該支援篩選參數', async () => {
@@ -77,12 +84,24 @@ describe('usePayroll', () => {
         limit: 10
       })
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('period=2025-01')
-      )
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('status=PENDING')
-      )
+      const url = requestedUrl()
+      expect(url.searchParams.get('period')).toBe('2025-01')
+      expect(url.searchParams.get('status')).toBe('PENDING')
+      expect(url.searchParams.get('branch_id')).toBe('branch-1')
+      expect(url.searchParams.get('limit')).toBe('10')
+      expect(url.searchParams.get('offset')).toBe('10') // page 2 of 10 per page
+      expect(url.searchParams.has('page')).toBe(false)
+    })
+
+    it('不應該送出空的篩選條件', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: [], meta: { total: 0 } })
+
+      const { fetchSalaryRecords } = usePayroll()
+
+      await fetchSalaryRecords({ employee_id: '', status: undefined, period: '2025-03' })
+
+      const url = requestedUrl()
+      expect([...url.searchParams.keys()].sort()).toEqual(['limit', 'offset', 'period'])
     })
 
     it('應該處理取得失敗的情況', async () => {
@@ -94,6 +113,7 @@ describe('usePayroll', () => {
 
       expect(salaryRecords.value).toEqual([])
       expect(totalCount.value).toBe(0)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -135,6 +155,7 @@ describe('usePayroll', () => {
       await fetchSalaryRecord('non-existent')
 
       expect(currentSalaryRecord.value).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -168,6 +189,7 @@ describe('usePayroll', () => {
         })
       )
       expect(result.generated).toBe(5)
+      expect(result.records).toEqual(generatedResult.records)
     })
 
     it('應該在產生失敗時拋出錯誤', async () => {
@@ -215,6 +237,14 @@ describe('usePayroll', () => {
       )
       expect(result.bonus).toBe(8000)
     })
+
+    it('應該在更新失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { updateSalaryRecord } = usePayroll()
+
+      await expect(updateSalaryRecord('salary-1', { bonus: 1 })).rejects.toThrow('調整薪資失敗')
+    })
   })
 
   describe('approveSalary', () => {
@@ -239,6 +269,14 @@ describe('usePayroll', () => {
       )
       expect(result.status).toBe('APPROVED')
     })
+
+    it('應該在核准失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { approveSalary } = usePayroll()
+
+      await expect(approveSalary('salary-1')).rejects.toThrow('核准薪資失敗')
+    })
   })
 
   describe('batchApproveSalary', () => {
@@ -260,6 +298,14 @@ describe('usePayroll', () => {
         })
       )
       expect(result.approved_count).toBe(3)
+    })
+
+    it('應該在批次核准失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { batchApproveSalary } = usePayroll()
+
+      await expect(batchApproveSalary(['salary-1'])).rejects.toThrow('批次核准失敗')
     })
   })
 
@@ -284,6 +330,44 @@ describe('usePayroll', () => {
         expect.objectContaining({ method: 'POST' })
       )
       expect(result.status).toBe('PAID')
+    })
+
+    it('應該在標記失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { markAsPaid } = usePayroll()
+
+      await expect(markAsPaid('salary-1')).rejects.toThrow('標記已發放失敗')
+    })
+  })
+
+  describe('exportPayroll', () => {
+    it('應該以 blob 形式請求匯出，並帶入篩選參數', async () => {
+      const blob = new Blob(['csv'])
+      mockFetch.mockResolvedValueOnce(blob)
+
+      const { exportPayroll } = usePayroll()
+
+      const result = await exportPayroll({ period: '2025-01', branch_id: 'branch-1', format: 'csv', include_details: false })
+
+      expect(result).toBe(blob)
+      const url = requestedUrl()
+      expect(url.pathname).toBe('/api/payroll/export')
+      expect(url.searchParams.get('period')).toBe('2025-01')
+      expect(url.searchParams.get('branch_id')).toBe('branch-1')
+      expect(url.searchParams.get('format')).toBe('csv')
+      expect(url.searchParams.get('include_details')).toBe('false')
+      expect(mockFetch.mock.calls[0]![1]).toEqual({ responseType: 'blob' })
+    })
+
+    it('只帶期間時不應該送出其他參數', async () => {
+      mockFetch.mockResolvedValueOnce(new Blob([]))
+
+      const { exportPayroll } = usePayroll()
+
+      await exportPayroll({ period: '2025-01' })
+
+      expect([...requestedUrl().searchParams.keys()]).toEqual(['period'])
     })
   })
 
@@ -316,6 +400,7 @@ describe('usePayroll', () => {
 
       expect(promotions.value).toEqual(mockPromotions)
       expect(promotionCount.value).toBe(2)
+      expect(requestedUrl().pathname).toBe('/api/payroll/promotions')
     })
 
     it('應該支援類型篩選', async () => {
@@ -329,9 +414,22 @@ describe('usePayroll', () => {
 
       await fetchPromotions({ type: 'PROMOTION' })
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('type=PROMOTION')
-      )
+      expect(requestedUrl().searchParams.get('type')).toBe('PROMOTION')
+    })
+
+    it('應該處理取得失敗的情況', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      const { fetchPromotions, promotions, promotionCount, isPromotionLoading } = usePayroll()
+      promotions.value = [{ id: 'old' } as PromotionRecord]
+      promotionCount.value = 1
+
+      await fetchPromotions()
+
+      expect(promotions.value).toEqual([])
+      expect(promotionCount.value).toBe(0)
+      expect(isPromotionLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -339,7 +437,7 @@ describe('usePayroll', () => {
     it('應該成功建立升遷紀錄', async () => {
       const promotionData = {
         employee_id: 'emp-1',
-        type: 'PROMOTION',
+        type: 'PROMOTION' as const,
         effective_date: '2025-03-01',
         to_job_title_id: 'jt-2',
         new_base_salary: 55000,
@@ -373,7 +471,7 @@ describe('usePayroll', () => {
     it('應該成功建立調動紀錄', async () => {
       const transferData = {
         employee_id: 'emp-1',
-        type: 'TRANSFER',
+        type: 'TRANSFER' as const,
         effective_date: '2025-03-01',
         to_branch_id: 'branch-2',
         reason: '支援新分店'
@@ -389,6 +487,15 @@ describe('usePayroll', () => {
       const result = await createPromotion(transferData)
 
       expect(result.type).toBe('TRANSFER')
+    })
+
+    it('應該在建立失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { createPromotion } = usePayroll()
+
+      await expect(createPromotion({ employee_id: 'emp-1', type: 'PROMOTION', effective_date: '2025-03-01' }))
+        .rejects.toThrow('建立異動紀錄失敗')
     })
   })
 
@@ -423,6 +530,14 @@ describe('usePayroll', () => {
       expect(formatCurrency(45000)).toBe('$45,000')
       expect(formatCurrency(1234567)).toBe('$1,234,567')
       expect(formatCurrency(0)).toBe('$0')
+    })
+
+    it('未知的狀態應該原樣返回標籤、預設樣式', () => {
+      const { getStatusLabel, getStatusVariant, getPromotionTypeLabel } = usePayroll()
+
+      expect(getStatusLabel('UNKNOWN' as SalaryRecord['status'])).toBe('UNKNOWN')
+      expect(getStatusVariant('UNKNOWN' as SalaryRecord['status'])).toBe('default')
+      expect(getPromotionTypeLabel('UNKNOWN' as PromotionRecord['type'])).toBe('UNKNOWN')
     })
   })
 })

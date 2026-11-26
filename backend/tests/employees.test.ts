@@ -12,6 +12,7 @@ import {
   TEST_JOB_TITLE_ID,
   TEST_TENANT_ID,
   TEST_EMPLOYEE_B_ID,
+  TEST_BRANCH_B_ID,
 } from './helpers.js';
 
 describe('Employees API', () => {
@@ -40,6 +41,8 @@ describe('Employees API', () => {
       expect(data.success).toBe(true);
       expect(Array.isArray(data.data)).toBe(true);
       expect(data.data.length).toBeGreaterThanOrEqual(1);
+      // Another tenant's employee must never be listed
+      expect(data.data.map((e: { id: string }) => e.id)).not.toContain(TEST_EMPLOYEE_B_ID);
 
       // Should have joined data
       const employee = data.data[0];
@@ -298,6 +301,24 @@ describe('Employees API', () => {
       });
 
       expect(response.status).toBe(403);
+
+      const [row] = await db.select().from(employees).where(eq(employees.id, TEST_EMPLOYEE_B_ID));
+      expect(row.status).not.toBe('RESIGNED');
+    });
+
+    it('should return 400 when creating an employee in another tenant branch', async () => {
+      const response = await authRequest('/api/employees', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({
+          fullName: 'Cross Tenant',
+          branchId: TEST_BRANCH_B_ID,
+          jobTitleId: TEST_JOB_TITLE_ID,
+          employmentType: 'FULL_TIME',
+        }),
+      });
+
+      expect(response.status).toBe(400);
     });
   });
 });

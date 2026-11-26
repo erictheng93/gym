@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useErrorHandler.test.ts
  * Tests for the error handling composable
@@ -292,7 +291,7 @@ describe('useErrorHandler', () => {
 
       handleError(error, { onHandled })
 
-      const passedError: AppError = onHandled.mock.calls[0][0]
+      const passedError: AppError = onHandled.mock.calls[0]![0]
       expect(passedError.type).toBe('network')
       expect(passedError.retryable).toBe(true)
       expect(passedError.details).toBeDefined()

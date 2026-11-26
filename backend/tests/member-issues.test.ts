@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { db, issueReports } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
@@ -10,6 +9,9 @@ import {
   TEST_MEMBER_ID,
   TEST_BRANCH_ID,
   TEST_TENANT_ID,
+  TEST_MEMBER_B_ID,
+  TEST_BRANCH_B_ID,
+  TEST_TENANT_B_ID,
 } from './helpers.js';
 
 // =============================================================================
@@ -45,13 +47,12 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Issues Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await db.delete(issueReports).where(eq(issueReports.memberId, TEST_MEMBER_ID));
+    await db.delete(issueReports).where(eq(issueReports.memberId, TEST_MEMBER_B_ID));
     await cleanupTestFixtures();
   });
 
@@ -72,7 +73,6 @@ describe('Member Issues Routes', () => {
 
   describe('GET /api/member/issues/types/list', () => {
     it('should return available issue types', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues/types/list');
 
@@ -93,7 +93,6 @@ describe('Member Issues Routes', () => {
 
   describe('POST /api/member/issues', () => {
     it('should create an issue', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
@@ -116,7 +115,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should reject missing branchId', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
@@ -131,7 +129,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should reject missing title', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
@@ -146,7 +143,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should reject content too short', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
@@ -162,7 +158,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should reject invalid issue type', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
@@ -178,7 +173,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should reject non-existent branch', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues', {
         method: 'POST',
@@ -200,7 +194,6 @@ describe('Member Issues Routes', () => {
 
   describe('GET /api/member/issues', () => {
     it('should return paginated issue list', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues');
 
@@ -214,7 +207,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should support pagination parameters', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues?page=1&limit=5');
 
@@ -224,7 +216,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should support status filter', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/issues?status=SUBMITTED');
 
@@ -240,7 +231,7 @@ describe('Member Issues Routes', () => {
 
   describe('GET /api/member/issues/:id', () => {
     it('should return a specific issue with details', async () => {
-      if (!dbAvailable || !createdIssueId) return;
+      if (!createdIssueId) throw new Error('createdIssueId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/issues/${createdIssueId}`);
 
@@ -254,7 +245,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should return 404 for non-existent issue', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/issues/00000000-0000-4000-8000-000000099999'
@@ -270,7 +260,7 @@ describe('Member Issues Routes', () => {
 
   describe('PUT /api/member/issues/:id', () => {
     it('should update an issue in SUBMITTED status', async () => {
-      if (!dbAvailable || !createdIssueId) return;
+      if (!createdIssueId) throw new Error('createdIssueId not set: earlier create test failed');
 
       const res = await memberRequest(`/api/member/issues/${createdIssueId}`, {
         method: 'PUT',
@@ -285,7 +275,6 @@ describe('Member Issues Routes', () => {
     });
 
     it('should return 404 for non-existent issue', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/issues/00000000-0000-4000-8000-000000099999',
@@ -299,7 +288,7 @@ describe('Member Issues Routes', () => {
     });
 
     it('should reject edit when status is not SUBMITTED', async () => {
-      if (!dbAvailable || !createdIssueId) return;
+      if (!createdIssueId) throw new Error('createdIssueId not set: earlier create test failed');
 
       // Manually update status to IN_PROGRESS to test the restriction
       await db.update(issueReports).set({
@@ -316,6 +305,86 @@ describe('Member Issues Routes', () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.code).toBe('CANNOT_EDIT');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cross-member / cross-tenant isolation
+  // ---------------------------------------------------------------------------
+
+  describe('Cross-member isolation', () => {
+    let otherIssueId: string;
+
+    function otherMemberRequest(path: string, options: RequestInit = {}) {
+      const headers = new Headers(options.headers);
+      headers.set(MEMBER_TOKEN_HEADER, generateMemberTokens({
+        id: TEST_MEMBER_B_ID,
+        memberCode: 'OM0001',
+        branchId: TEST_BRANCH_B_ID,
+        tenantId: TEST_TENANT_B_ID,
+      }).accessToken);
+      if (!headers.has('Content-Type') && options.body) {
+        headers.set('Content-Type', 'application/json');
+      }
+      return app.request(path, { ...options, headers });
+    }
+
+    beforeAll(async () => {
+      const res = await otherMemberRequest('/api/member/issues', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: TEST_BRANCH_B_ID,
+          type: 'EQUIPMENT',
+          title: '他館的問題回報',
+          content: '這是另一位會員提交的問題回報內容，用來驗證會員之間的資料隔離',
+        }),
+      });
+      expect(res.status).toBe(201);
+      otherIssueId = (await res.json()).data.issue.id;
+    });
+
+    it("should not include another member's issues in the list", async () => {
+      const data = await (await memberRequest('/api/member/issues')).json();
+
+      expect(data.data.issues.map((i: { id: string }) => i.id)).not.toContain(otherIssueId);
+
+      const theirs = await (await otherMemberRequest('/api/member/issues')).json();
+      expect(theirs.data.issues.map((i: { id: string }) => i.id)).toEqual([otherIssueId]);
+    });
+
+    it("should return 404 when reading another member's issue", async () => {
+      const res = await memberRequest(`/api/member/issues/${otherIssueId}`);
+
+      expect(res.status).toBe(404);
+      expect(JSON.stringify(await res.json())).not.toContain('他館的問題回報');
+    });
+
+    it("should not update another member's issue", async () => {
+      const res = await memberRequest(`/api/member/issues/${otherIssueId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ title: 'Hijacked' }),
+      });
+
+      expect(res.status).toBe(404);
+      const [row] = await db.select().from(issueReports).where(eq(issueReports.id, otherIssueId));
+      expect(row.title).toBe('他館的問題回報');
+    });
+
+    it('should not allow reporting an issue against a branch of another tenant', async () => {
+      const res = await memberRequest('/api/member/issues', {
+        method: 'POST',
+        body: JSON.stringify({
+          branchId: TEST_BRANCH_B_ID,
+          type: 'EQUIPMENT',
+          title: '跨租戶回報',
+          content: '嘗試對其他租戶的分店提交問題回報，應該被拒絕並且不會建立資料',
+        }),
+      });
+
+      expect(res.status).toBe(404);
+      expect((await res.json()).code).toBe('BRANCH_NOT_FOUND');
+      const rows = await db.select().from(issueReports).where(eq(issueReports.memberId, TEST_MEMBER_ID));
+      expect(rows.some(r => r.title === '跨租戶回報')).toBe(false);
     });
   });
 });

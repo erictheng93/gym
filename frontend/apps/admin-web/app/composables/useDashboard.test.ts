@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useDashboard Composable Unit Tests
  * 測試戰情室 Dashboard API 呼叫功能
@@ -236,7 +235,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs()
 
-      const callArgs = mockFetch.mock.calls[0][1]
+      const callArgs = mockFetch.mock.calls[0]![1]
       expect(callArgs.credentials).toBe('include')
     })
 
@@ -281,7 +280,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs('today')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('period=today')
     })
 
@@ -294,7 +293,7 @@ describe('useDashboard', () => {
         const { fetchKPIs } = useDashboard()
         await fetchKPIs(period)
 
-        const calledUrl = mockFetch.mock.calls[mockFetch.mock.calls.length - 1][0]
+        const calledUrl = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]![0]
         expect(calledUrl).toContain(`period=${period}`)
       }
     })
@@ -305,7 +304,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs('today', 'branch-uuid-1')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('branch_id=branch-uuid-1')
     })
 
@@ -315,7 +314,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs('today')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).not.toContain('branch_id=')
     })
 
@@ -325,7 +324,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs()
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('/api/admin/dashboard/kpis')
     })
 
@@ -383,7 +382,7 @@ describe('useDashboard', () => {
       const { fetchContractAlerts } = useDashboard()
       await fetchContractAlerts(60, 'branch-1', 100)
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('days_ahead=60')
       expect(calledUrl).toContain('branch_id=branch-1')
       expect(calledUrl).toContain('limit=100')
@@ -395,7 +394,7 @@ describe('useDashboard', () => {
       const { fetchContractAlerts } = useDashboard()
       await fetchContractAlerts()
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('days_ahead=30')
       expect(calledUrl).toContain('limit=50')
     })
@@ -406,7 +405,7 @@ describe('useDashboard', () => {
       const { fetchContractAlerts } = useDashboard()
       await fetchContractAlerts()
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('/api/admin/dashboard/contract-alerts')
     })
 
@@ -428,7 +427,7 @@ describe('useDashboard', () => {
 
       expect(result?.grouped.urgent).toHaveLength(1)
       expect(result?.grouped.soon).toHaveLength(1)
-      expect(result?.grouped.urgent[0].urgency).toBe('URGENT')
+      expect(result?.grouped.urgent[0]?.urgency).toBe('URGENT')
     })
   })
 
@@ -443,7 +442,7 @@ describe('useDashboard', () => {
       const result = await fetchRevenueTargets()
 
       expect(result).toHaveLength(2)
-      expect(result[0].target_amount).toBe(1000000)
+      expect(result?.[0]?.target_amount).toBe(1000000)
     })
 
     it('應該支持年份和分店篩選', async () => {
@@ -452,7 +451,7 @@ describe('useDashboard', () => {
       const { fetchRevenueTargets } = useDashboard()
       await fetchRevenueTargets(2024, 'branch-1')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('year=2024')
       expect(calledUrl).toContain('branch_id=branch-1')
     })
@@ -463,7 +462,7 @@ describe('useDashboard', () => {
       const { fetchRevenueTargets } = useDashboard()
       await fetchRevenueTargets()
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('/api/admin/dashboard/revenue-targets')
     })
 
@@ -589,8 +588,8 @@ describe('useDashboard', () => {
 
       const calls = mockFetch.mock.calls
       // KPIs call should have period=month and branch_id
-      expect(calls[0][0]).toContain('period=month')
-      expect(calls[0][0]).toContain('branch_id=branch-1')
+      expect(calls[0]![0]).toContain('period=month')
+      expect(calls[0]![0]).toContain('branch_id=branch-1')
     })
   })
 
@@ -623,7 +622,7 @@ describe('useDashboard', () => {
       const { exportData } = useDashboard()
       await exportData('revenue', 'json', 60, 'branch-1')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('type=revenue')
       expect(calledUrl).toContain('format=json')
       expect(calledUrl).toContain('days=60')
@@ -643,7 +642,7 @@ describe('useDashboard', () => {
         const { exportData } = useDashboard()
         await exportData(type)
 
-        const calledUrl = mockFetch.mock.calls[mockFetch.mock.calls.length - 1][0]
+        const calledUrl = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]![0]
         expect(calledUrl).toContain(`type=${type}`)
       }
     })
@@ -658,7 +657,7 @@ describe('useDashboard', () => {
       const { exportData } = useDashboard()
       await exportData('kpis')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('/api/admin/dashboard/export')
     })
 
@@ -695,7 +694,7 @@ describe('useDashboard', () => {
       const { exportData } = useDashboard()
       await exportData('kpis')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('format=csv')
       expect(calledUrl).toContain('days=30')
     })
@@ -745,28 +744,35 @@ describe('useDashboard', () => {
       stopLiveUpdates()
     })
 
-    it('stopLiveUpdates 應該清理資源', () => {
+    it('stopLiveUpdates 應該清理資源', async () => {
       mockFetch.mockResolvedValue(createMockResponse(mockKPIsResponse))
 
       const { startLiveUpdates, stopLiveUpdates } = useDashboard()
       startLiveUpdates()
+      await vi.advanceTimersByTimeAsync(100)
+      const callsAfterStart = mockFetch.mock.calls.length
       stopLiveUpdates()
 
-      // Should not throw
-      expect(true).toBe(true)
+      // 停止後不應再有 polling 請求
+      await vi.advanceTimersByTimeAsync(90000)
+      expect(mockFetch).toHaveBeenCalledTimes(callsAfterStart)
     })
 
-    it('startLiveUpdates 應該先停止現有連線', () => {
+    it('startLiveUpdates 應該先停止現有連線', async () => {
       mockFetch.mockResolvedValue(createMockResponse(mockKPIsResponse))
 
-      const { startLiveUpdates } = useDashboard()
+      const { startLiveUpdates, stopLiveUpdates } = useDashboard()
 
-      // Start twice
+      // Start twice: only one polling timer should remain
       startLiveUpdates()
       startLiveUpdates()
+      await vi.advanceTimersByTimeAsync(100)
+      const baseline = mockFetch.mock.calls.length
 
-      // Should not throw
-      expect(true).toBe(true)
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(mockFetch.mock.calls.length - baseline).toBe(1)
+
+      stopLiveUpdates()
     })
   })
 
@@ -828,7 +834,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs()
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toContain('http://localhost:8056')
     })
 
@@ -838,7 +844,7 @@ describe('useDashboard', () => {
       const { fetchKPIs } = useDashboard()
       await fetchKPIs('today', 'branch-uuid-1')
 
-      const calledUrl = mockFetch.mock.calls[0][0]
+      const calledUrl = mockFetch.mock.calls[0]![0]
       expect(calledUrl).toMatch(/period=today/)
       expect(calledUrl).toMatch(/branch_id=branch-uuid-1/)
     })
@@ -880,7 +886,7 @@ describe('useDashboard', () => {
 
       // Note: In actual Vue composition, kpis.value would be updated
       // Here we verify the function returns the data
-      expect(kpis.value).toBeDefined()
+      expect(kpis.value).toEqual(mockKPIsResponse)
     })
 
     it('應該更新 contractAlerts 狀態', async () => {
@@ -889,7 +895,7 @@ describe('useDashboard', () => {
       const { fetchContractAlerts, contractAlerts } = useDashboard()
       await fetchContractAlerts()
 
-      expect(contractAlerts.value).toBeDefined()
+      expect(contractAlerts.value).toEqual(mockContractAlertsResponse)
     })
 
     it('應該更新 revenueTargets 狀態', async () => {
@@ -898,7 +904,7 @@ describe('useDashboard', () => {
       const { fetchRevenueTargets, revenueTargets } = useDashboard()
       await fetchRevenueTargets()
 
-      expect(revenueTargets.value).toBeDefined()
+      expect(revenueTargets.value).toHaveLength(mockRevenueTargetsResponse.targets.length)
     })
   })
 })

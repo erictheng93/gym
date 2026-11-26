@@ -224,9 +224,11 @@ describe('useFocusTrap', () => {
       activate(mockElement, { escapeDeactivates: true })
       updateOptions({ onEscape })
 
-      // Options should be merged
-      // We can't directly test internal options, but we can verify no errors
-      expect(true).toBe(true)
+      // Merged: the new onEscape fires and the original escapeDeactivates still applies
+      const keydown = vi.mocked(document.addEventListener).mock.calls
+        .find(([type]) => type === 'keydown')![1] as (e: unknown) => void
+      keydown({ key: 'Escape', preventDefault: vi.fn() })
+      expect(onEscape).toHaveBeenCalledTimes(1)
     })
   })
 

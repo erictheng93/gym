@@ -1,415 +1,188 @@
 /**
  * Integration Tests: Authentication Workflow
  *
- * Tests the complete authentication flow including login, session management,
- * and permission-based access.
+ * Real useAuth (useAuthV2) + real session-storage (sessionStorage); only the network
+ * (global fetch) is mocked. Covers login/logout, session persistence and the
+ * checkAuth recovery chain the auth middleware relies on.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mockGlobalFetch, mockHandleError } from '@test/setup'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mockGlobalFetch, mockHandleError, mockNavigateTo } from '@test/setup'
 // Load useAuth at collection time: a cold transform inside the first test can
-// exceed the 5s test timeout under full-suite load, leaving the user logged in
-// and cascading into the next test. In-test `await import()` hits this cache.
-import '~/composables/useAuth'
+// exceed the 5s test timeout under full-suite load.
+import { useAuth } from '~/composables/useAuth'
+import { loadSession, saveSession } from '~/utils/session-storage'
 
-// Helper to create a mock fetch response
-const mockFetchResponse = (data: any, ok = true) => ({
+const jsonResponse = (body: unknown, ok = true, status = ok ? 200 : 401) => ({
   ok,
-  json: () => Promise.resolve(data)
+  status,
+  json: () => Promise.resolve(body)
 })
 
-// Test data types
-interface User {
-  id: string
-  email: string
-  role: string
-  employeeId: string | null
-  tenantId: string | null
+const apiUser = {
+  id: 'user-1',
+  email: 'admin@gym.com',
+  role: 'admin',
+  employeeId: 'emp-1',
+  tenantId: 'tenant-1'
 }
 
-describe('Auth Workflow Integration', () => {
-  const testUser: User = {
-    id: 'user-1',
-    email: 'admin@gym.com',
-    role: 'admin',
-    employeeId: 'emp-1',
-    tenantId: 'tenant-1'
-  }
+const apiEmployee = {
+  id: 'emp-1',
+  fullName: '管理員',
+  employeeCode: 'ADMIN001',
+  phone: null,
+  branchId: 'branch-1',
+  branchName: '總店',
+  jobTitleId: 'job-1',
+  jobTitleName: '系統管理員'
+}
 
+const meOk = () => jsonResponse({ success: true, data: { user: { ...apiUser, isActive: true }, employee: apiEmployee } })
+const unauthorized = () => jsonResponse({ success: false, error: 'Unauthorized' }, false)
+
+const calledEndpoints = () => mockGlobalFetch.mock.calls.map(([url]) => String(url).replace(/^https?:\/\/[^/]+/, ''))
+
+describe('Auth workflow (useAuth + session storage)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGlobalFetch.mockReset()
+    sessionStorage.clear()
+    vi.spyOn(console, 'log').mockImplementation(() => {})
   })
 
-  describe('Login -> Session -> Logout Flow', () => {
-    it('should complete full authentication lifecycle', async () => {
-      // Step 1: Login
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: testUser,
-          employee: {
-            id: 'emp-1',
-            fullName: '管理員',
-            employeeCode: 'ADMIN001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-1',
-            jobTitleName: '系統管理員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, user, currentEmployee, isAuthenticated, logout } = useAuth()
-
-      // Perform login
-      const loginResult = await login('admin@gym.com', 'password123')
-
-      expect(loginResult.success).toBe(true)
-      expect(user.value?.email).toBe('admin@gym.com')
-      expect(user.value?.role).toBe('admin')
-      expect(currentEmployee.value?.full_name).toBe('管理員')
-      expect(isAuthenticated.value).toBe(true)
-
-      // Step 2: Logout
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({ success: true }))
-
-      await logout()
-
-      expect(user.value).toBeNull()
-      expect(currentEmployee.value).toBeNull()
-      expect(isAuthenticated.value).toBe(false)
-    })
-
-    it('should handle login failure with invalid credentials', async () => {
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: false,
-        error: 'Invalid email or password'
-      }, false))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, isAuthenticated } = useAuth()
-
-      const result = await login('wrong@email.com', 'wrongpassword')
-
-      expect(result.success).toBe(false)
-      expect(isAuthenticated.value).toBe(false)
-      expect(mockHandleError).toHaveBeenCalled()
-    })
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  describe('Session Persistence', () => {
-    it('should verify session on checkAuth', async () => {
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: {
-            id: 'user-1',
-            email: 'admin@gym.com',
-            role: 'admin',
-            employeeId: 'emp-1',
-            tenantId: 'tenant-1',
-            isActive: true,
-          },
-          employee: {
-            id: 'emp-1',
-            fullName: '管理員',
-            employeeCode: 'ADMIN001',
-            phone: null,
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-1',
-            jobTitleName: '系統管理員'
-          }
-        }
-      }))
+  it('login maps the employee, persists the session; logout clears it and redirects', async () => {
+    mockGlobalFetch.mockResolvedValueOnce(jsonResponse({ success: true, data: { user: apiUser, employee: apiEmployee } }))
+    const { login, logout, user, currentEmployee, isAuthenticated } = useAuth()
 
-      const { useAuth } = await import('~/composables/useAuth')
-      const { checkAuth, user, isAuthenticated } = useAuth()
+    const result = await login('admin@gym.com', 'password123')
 
-      const isValid = await checkAuth()
+    expect(result).toEqual({ success: true })
+    expect(isAuthenticated.value).toBe(true)
+    expect(currentEmployee.value).toEqual({
+      id: 'emp-1',
+      full_name: '管理員',
+      employee_code: 'ADMIN001',
+      branch_id: 'branch-1',
+      branch_name: '總店',
+      job_title_id: 'job-1',
+      job_title_name: '系統管理員'
+    })
+    const [url, init] = mockGlobalFetch.mock.calls[0]!
+    expect(url).toMatch(/\/api\/auth\/login$/)
+    expect(init).toMatchObject({ method: 'POST', credentials: 'include' })
+    expect(JSON.parse(init.body)).toEqual({ email: 'admin@gym.com', password: 'password123' })
+    expect(loadSession()?.user.id).toBe('user-1')
 
-      expect(isValid).toBe(true)
+    mockGlobalFetch.mockResolvedValueOnce(jsonResponse({ success: true }))
+    await logout()
+
+    expect(user.value).toBeNull()
+    expect(currentEmployee.value).toBeNull()
+    expect(loadSession()).toBeNull()
+    expect(mockNavigateTo).toHaveBeenCalledWith('/login')
+  })
+
+  it('logout still clears local state when the server call fails', async () => {
+    mockGlobalFetch.mockResolvedValueOnce(jsonResponse({ success: true, data: { user: apiUser, employee: null } }))
+    const { login, logout, user } = useAuth()
+    await login('admin@gym.com', 'pw')
+
+    mockGlobalFetch.mockRejectedValueOnce(new Error('offline'))
+    await logout()
+
+    expect(user.value).toBeNull()
+    expect(loadSession()).toBeNull()
+  })
+
+  it('a rejected login leaves the user signed out and stores nothing', async () => {
+    mockGlobalFetch.mockResolvedValueOnce(jsonResponse({ success: false, error: 'Invalid email or password' }, false))
+    const { login, isAuthenticated } = useAuth()
+
+    const result = await login('wrong@email.com', 'wrong')
+
+    expect(result).toEqual({ success: false, error: 'Invalid email or password' })
+    expect(isAuthenticated.value).toBe(false)
+    expect(loadSession()).toBeNull()
+    expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ context: 'useAuthV2.login' }))
+  })
+
+  it('a network failure during login is reported, not thrown', async () => {
+    mockGlobalFetch.mockRejectedValueOnce(new Error('Network error'))
+    const result = await useAuth().login('admin@gym.com', 'pw')
+    expect(result).toEqual({ success: false, error: 'Network error' })
+  })
+
+  describe('checkAuth', () => {
+    it('accepts a valid cookie session and caches it', async () => {
+      mockGlobalFetch.mockResolvedValueOnce(meOk())
+      const { checkAuth, user } = useAuth()
+
+      expect(await checkAuth()).toBe(true)
       expect(user.value?.id).toBe('user-1')
-      expect(isAuthenticated.value).toBe(true)
+      expect(loadSession()?.employee?.branch_id).toBe('branch-1')
     })
 
-    it('should handle expired session', async () => {
-      mockGlobalFetch.mockRejectedValueOnce(new Error('Unauthorized'))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { checkAuth, user, isAuthenticated } = useAuth()
-
-      // Reset state
-      user.value = null
-
-      const isValid = await checkAuth()
-
-      expect(isValid).toBe(false)
-      expect(isAuthenticated.value).toBe(false)
-    })
-  })
-
-  describe('Role-based Access', () => {
-    it('should identify admin user correctly', async () => {
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: { ...testUser, role: 'admin' },
-          employee: {
-            id: 'emp-1',
-            fullName: '管理員',
-            employeeCode: 'ADMIN001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-1',
-            jobTitleName: '系統管理員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, user } = useAuth()
-
-      await login('admin@gym.com', 'password')
-
-      expect(user.value?.role).toBe('admin')
-
-      // Check if user can access admin features
-      const canAccessAdmin = user.value?.role === 'admin' || user.value?.role === 'manager'
-      expect(canAccessAdmin).toBe(true)
-    })
-
-    it('should identify coach user correctly', async () => {
-      const coachUser = { ...testUser, id: 'user-2', email: 'coach@gym.com', role: 'coach' }
-
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: coachUser,
-          employee: {
-            id: 'emp-2',
-            fullName: '教練小王',
-            employeeCode: 'COACH001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-2',
-            jobTitleName: '健身教練'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, user } = useAuth()
-
-      await login('coach@gym.com', 'password')
-
-      expect(user.value?.role).toBe('coach')
-
-      // Check coach-specific access
-      const canAccessCoachDashboard = user.value?.role === 'coach' || user.value?.role === 'admin'
-      expect(canAccessCoachDashboard).toBe(true)
-
-      // Coach should not have admin access
-      const canAccessUserManagement = user.value?.role === 'admin'
-      expect(canAccessUserManagement).toBe(false)
-    })
-
-    it('should identify staff user correctly', async () => {
-      const staffUser = { ...testUser, id: 'user-3', email: 'staff@gym.com', role: 'staff' }
-
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: staffUser,
-          employee: {
-            id: 'emp-3',
-            fullName: '櫃檯人員',
-            employeeCode: 'STAFF001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-3',
-            jobTitleName: '櫃檯人員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, user } = useAuth()
-
-      await login('staff@gym.com', 'password')
-
-      expect(user.value?.role).toBe('staff')
-
-      // Staff should have limited access
-      const canViewMembers = ['admin', 'manager', 'staff'].includes(user.value?.role || '')
-      expect(canViewMembers).toBe(true)
-
-      const canManageEmployees = ['admin', 'manager'].includes(user.value?.role || '')
-      expect(canManageEmployees).toBe(false)
-    })
-  })
-
-  describe('Branch Context', () => {
-    it('should set branch context from employee data', async () => {
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: testUser,
-          employee: {
-            id: 'emp-1',
-            fullName: '管理員',
-            employeeCode: 'ADMIN001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-1',
-            jobTitleName: '系統管理員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, currentEmployee } = useAuth()
-
-      await login('admin@gym.com', 'password')
-
-      expect(currentEmployee.value?.branch_id).toBe('branch-1')
-      expect(currentEmployee.value?.branch_name).toBe('總店')
-    })
-
-    it('should allow HQ admin to access all branches', async () => {
-      const hqAdmin = { ...testUser, role: 'admin' }
-
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: hqAdmin,
-          employee: {
-            id: 'emp-1',
-            fullName: '總部管理員',
-            employeeCode: 'HQ001',
-            branchId: null, // HQ admin might not be tied to a specific branch
-            branchName: null,
-            jobTitleId: 'job-1',
-            jobTitleName: '總部管理員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, user, currentEmployee } = useAuth()
-
-      await login('hq@gym.com', 'password')
-
-      // HQ admin should be able to access all branches
-      const canAccessAllBranches = user.value?.role === 'admin' && !currentEmployee.value?.branch_id
-      expect(canAccessAllBranches).toBe(true)
-    })
-  })
-
-  describe('Password Management', () => {
-    it('should change password successfully', async () => {
-      // First login
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: testUser,
-          employee: {
-            id: 'emp-1',
-            fullName: '管理員',
-            employeeCode: 'ADMIN001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-1',
-            jobTitleName: '系統管理員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, changePassword } = useAuth()
-
-      await login('admin@gym.com', 'oldpassword')
-
-      // Change password
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({ success: true }))
-
-      const result = await changePassword('oldpassword', 'newpassword123')
-
-      expect(result.success).toBe(true)
-      expect(mockGlobalFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/auth/change-password'),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('newpassword123')
-        })
-      )
-    })
-
-    it('should handle incorrect current password', async () => {
-      // Login first
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: true,
-        data: {
-          user: testUser,
-          employee: {
-            id: 'emp-1',
-            fullName: '管理員',
-            employeeCode: 'ADMIN001',
-            branchId: 'branch-1',
-            branchName: '總店',
-            jobTitleId: 'job-1',
-            jobTitleName: '系統管理員'
-          }
-        }
-      }))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, changePassword } = useAuth()
-
-      await login('admin@gym.com', 'password')
-
-      // Attempt to change with wrong current password
-      mockGlobalFetch.mockRejectedValueOnce(new Error('Current password is incorrect'))
-
-      const result = await changePassword('wrongpassword', 'newpassword123')
-
-      expect(result.success).toBe(false)
-      expect(mockHandleError).toHaveBeenCalled()
-    })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle network errors during login', async () => {
-      mockGlobalFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const { useAuth } = await import('~/composables/useAuth')
-      const { login, isAuthenticated } = useAuth()
-
-      const result = await login('admin@gym.com', 'password')
-
-      expect(result.success).toBe(false)
-      expect(isAuthenticated.value).toBe(false)
-      expect(mockHandleError).toHaveBeenCalledWith(
-        expect.any(Error),
-        expect.objectContaining({
-          context: 'useAuthV2.login'
-        })
-      )
-    })
-
-    it('should handle server errors during checkAuth', async () => {
-      mockGlobalFetch.mockResolvedValueOnce(mockFetchResponse({
-        success: false,
-        error: 'Internal server error'
-      }, false))
-
-      const { useAuth } = await import('~/composables/useAuth')
+    it('recovers via /refresh when /me fails but a cached session exists', async () => {
+      saveSession(apiUser, null)
+      mockGlobalFetch
+        .mockResolvedValueOnce(unauthorized()) // /me
+        .mockResolvedValueOnce(jsonResponse({ success: true })) // /refresh
+        .mockResolvedValueOnce(meOk()) // /me again
       const { checkAuth, isAuthenticated } = useAuth()
 
-      const result = await checkAuth()
+      expect(await checkAuth()).toBe(true)
+      expect(calledEndpoints()).toEqual(['/api/auth/me', '/api/auth/refresh', '/api/auth/me'])
+      expect(isAuthenticated.value).toBe(true)
+    })
 
-      expect(result).toBe(false)
+    it('clears the cached session when refresh fails', async () => {
+      saveSession(apiUser, null)
+      mockGlobalFetch
+        .mockResolvedValueOnce(unauthorized()) // /me
+        .mockResolvedValueOnce(unauthorized()) // /refresh
+      const { checkAuth, isAuthenticated } = useAuth()
+
+      expect(await checkAuth()).toBe(false)
       expect(isAuthenticated.value).toBe(false)
+      expect(loadSession()).toBeNull()
+    })
+
+    it('does not try to refresh an expired (>24h) cached session', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2024-11-14T09:00:00Z'))
+      saveSession(apiUser, null)
+      vi.setSystemTime(new Date('2024-11-15T09:00:01Z'))
+      mockGlobalFetch.mockResolvedValueOnce(unauthorized())
+
+      expect(await useAuth().checkAuth()).toBe(false)
+      expect(calledEndpoints()).toEqual(['/api/auth/me'])
+    })
+  })
+
+  describe('changePassword', () => {
+    it('posts current and new password', async () => {
+      mockGlobalFetch.mockResolvedValueOnce(jsonResponse({ success: true }))
+
+      const result = await useAuth().changePassword('oldpassword', 'newpassword123')
+
+      expect(result.success).toBe(true)
+      const [url, init] = mockGlobalFetch.mock.calls[0]!
+      expect(url).toMatch(/\/api\/auth\/change-password$/)
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(init.body)).toEqual({ currentPassword: 'oldpassword', newPassword: 'newpassword123' })
+    })
+
+    it('reports a wrong current password', async () => {
+      mockGlobalFetch.mockResolvedValueOnce(jsonResponse({ success: false, error: 'Current password is incorrect' }, false))
+
+      const result = await useAuth().changePassword('wrong', 'newpassword123')
+
+      expect(result.success).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 })
