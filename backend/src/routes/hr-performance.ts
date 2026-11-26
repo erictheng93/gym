@@ -1,19 +1,47 @@
 import { Hono } from 'hono';
-import { eq, and, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, or, sql, desc, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { performanceReviews, kpiTemplates, employees, jobTitles, branches } from '../db/schema.js';
-import { authMiddleware, requireAuth } from '../middleware/index.js';
-import type { AuthVariables } from '../middleware/index.js';
+import { authMiddleware, requireAuth, requireTenant } from '../middleware/index.js';
+import type { AuthVariables, TenantVariables } from '../middleware/index.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 // =============================================================================
 // HR PERFORMANCE ROUTES
 // =============================================================================
-// Endpoints for managing performance reviews and KPI templates
+// Endpoints for managing performance reviews and KPI templates.
+// Reviews are scoped to the caller's tenant through the reviewed employee's
+// branch; KPI templates through their tenantId (NULL = shared system template,
+// readable by every tenant but never writable).
 
-const app = new Hono<{ Variables: AuthVariables }>();
+const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
 // Apply auth middleware
-app.use('*', authMiddleware, requireAuth);
+app.use('*', authMiddleware, requireAuth, requireTenant);
+
+const TENANT_EMPLOYEE_ID_SELECT = { id: employees.id };
+
+function tenantEmployeeIds(branchIds: string[]) {
+  return db.select(TENANT_EMPLOYEE_ID_SELECT).from(employees).where(inArray(employees.branchId, branchIds));
+}
+
+async function reviewScope(tenantId: string) {
+  const branchIds = await getTenantBranchIds(tenantId);
+  return inArray(performanceReviews.employeeId, tenantEmployeeIds(branchIds));
+}
+
+async function isTenantEmployee(employeeId: string, tenantId: string): Promise<boolean> {
+  const branchIds = await getTenantBranchIds(tenantId);
+  const [row] = await db.select(TENANT_EMPLOYEE_ID_SELECT)
+    .from(employees)
+    .where(and(eq(employees.id, employeeId), inArray(employees.branchId, branchIds)))
+    .limit(1);
+  return Boolean(row);
+}
+
+function visibleTemplates(tenantId: string) {
+  return or(eq(kpiTemplates.tenantId, tenantId), isNull(kpiTemplates.tenantId));
+}
 
 const REVIEW_RETURNING = {
   id: performanceReviews.id,
@@ -102,6 +130,8 @@ const PERFORMANCE_STATUS_SELECT = {
 
 const EMPLOYEE_ID_SELECT = { id: employees.id };
 
+const JOB_TITLE_ID_SELECT = { id: jobTitles.id };
+
 const PERFORMANCE_REJECT_SELECT = {
   id: performanceReviews.id,
   status: performanceReviews.status,
@@ -141,7 +171,7 @@ app.get('/reviews', async (c) => {
     offset = '0'
   } = c.req.query();
 
-  const conditions = [];
+  const conditions = [await reviewScope(c.get('tenantId')!)];
 
   if (employee_id) {
     conditions.push(eq(performanceReviews.employeeId, employee_id));
@@ -163,7 +193,7 @@ app.get('/reviews', async (c) => {
     conditions.push(eq(performanceReviews.reviewPeriod, period));
   }
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const whereClause = and(...conditions);
 
   const [reviews, countResult] = await Promise.all([
     db.select(PERFORMANCE_REVIEW_SELECT)
@@ -223,7 +253,7 @@ app.get('/reviews/:id', async (c) => {
 
   const review = await db.select(PERFORMANCE_REVIEW_SELECT)
     .from(performanceReviews)
-    .where(eq(performanceReviews.id, id))
+    .where(and(eq(performanceReviews.id, id), await reviewScope(c.get('tenantId')!)))
     .limit(1);
 
   if (review.length === 0) {
@@ -266,6 +296,7 @@ app.get('/reviews/:id', async (c) => {
 app.post('/reviews', async (c) => {
   const body = await c.req.json();
   const { employee_id, review_period, review_type, template_id, score, comments } = body;
+  const tenantId = c.get('tenantId')!;
 
   if (!employee_id || !review_period || !review_type) {
     return c.json({
@@ -274,12 +305,16 @@ app.post('/reviews', async (c) => {
     }, 400);
   }
 
+  if (!(await isTenantEmployee(employee_id, tenantId))) {
+    return c.json({ success: false, error: '找不到員工' }, 404);
+  }
+
   // If template_id is provided, fetch KPIs from template
   let kpiData: unknown[] = [];
   if (template_id) {
     const template = await db.select(PERFORMANCE_TEMPLATE_KPIS_SELECT)
       .from(kpiTemplates)
-      .where(eq(kpiTemplates.id, template_id))
+      .where(and(eq(kpiTemplates.id, template_id), visibleTemplates(tenantId)))
       .limit(1);
 
     if (template.length > 0 && template[0].kpis) {
@@ -296,6 +331,7 @@ app.post('/reviews', async (c) => {
       overallScore: score?.toString(),
       reviewerComments: comments,
       status: 'DRAFT',
+      tenantId,
     })
     .returning(REVIEW_RETURNING);
 
@@ -320,9 +356,14 @@ app.patch('/reviews/:id', async (c) => {
   if (body.improvement_plan !== undefined) updateData.improvementPlan = body.improvement_plan;
   if (body.reviewer_id !== undefined) updateData.reviewerId = body.reviewer_id;
 
+  const tenantId = c.get('tenantId')!;
+  if (body.reviewer_id && !(await isTenantEmployee(body.reviewer_id, tenantId))) {
+    return c.json({ success: false, error: '無效的考核人' }, 400);
+  }
+
   const [updated] = await db.update(performanceReviews)
     .set(updateData)
-    .where(eq(performanceReviews.id, id))
+    .where(and(eq(performanceReviews.id, id), await reviewScope(tenantId)))
     .returning(REVIEW_RETURNING);
 
   if (!updated) {
@@ -338,6 +379,7 @@ app.patch('/reviews/:id', async (c) => {
 
 app.post('/reviews/:id/submit', async (c) => {
   const id = c.req.param('id');
+  const scope = await reviewScope(c.get('tenantId')!);
 
   // Fast-path atomic update if in DRAFT status
   const [updated] = await db.update(performanceReviews)
@@ -348,7 +390,8 @@ app.post('/reviews/:id/submit', async (c) => {
     })
     .where(and(
       eq(performanceReviews.id, id),
-      eq(performanceReviews.status, 'DRAFT')
+      eq(performanceReviews.status, 'DRAFT'),
+      scope
     ))
     .returning(REVIEW_RETURNING);
 
@@ -359,7 +402,7 @@ app.post('/reviews/:id/submit', async (c) => {
   // Discriminate between 404 and 400
   const existing = await db.select(PERFORMANCE_ID_SELECT)
     .from(performanceReviews)
-    .where(eq(performanceReviews.id, id))
+    .where(and(eq(performanceReviews.id, id), scope))
     .limit(1);
 
   if (existing.length === 0) {
@@ -376,12 +419,13 @@ app.post('/reviews/:id/submit', async (c) => {
 app.post('/reviews/:id/approve', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
+  const scope = await reviewScope(c.get('tenantId')!);
 
   // Concurrently fetch existing review and approver's employee record
   const [existingList, approverEmployeeList] = await Promise.all([
     db.select(PERFORMANCE_STATUS_SELECT)
       .from(performanceReviews)
-      .where(eq(performanceReviews.id, id))
+      .where(and(eq(performanceReviews.id, id), scope))
       .limit(1),
     user?.id
       ? db.select(EMPLOYEE_ID_SELECT)
@@ -409,8 +453,12 @@ app.post('/reviews/:id/approve', async (c) => {
       reviewedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(performanceReviews.id, id))
+    .where(and(eq(performanceReviews.id, id), eq(performanceReviews.status, 'SUBMITTED'), scope))
     .returning(REVIEW_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '只有已提交狀態才能核准' }, 400);
+  }
 
   return c.json({ success: true, data: updated });
 });
@@ -423,10 +471,11 @@ app.post('/reviews/:id/reject', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const { reason } = body;
+  const scope = await reviewScope(c.get('tenantId')!);
 
   const existing = await db.select(PERFORMANCE_REJECT_SELECT)
     .from(performanceReviews)
-    .where(eq(performanceReviews.id, id))
+    .where(and(eq(performanceReviews.id, id), scope))
     .limit(1);
 
   if (existing.length === 0) {
@@ -443,8 +492,12 @@ app.post('/reviews/:id/reject', async (c) => {
       reviewerComments: reason ? `退回原因: ${reason}` : existing[0].reviewerComments,
       updatedAt: new Date(),
     })
-    .where(eq(performanceReviews.id, id))
+    .where(and(eq(performanceReviews.id, id), eq(performanceReviews.status, 'SUBMITTED'), scope))
     .returning(REVIEW_RETURNING);
+
+  if (!updated) {
+    return c.json({ success: false, error: '只有已提交狀態才能退回' }, 400);
+  }
 
   return c.json({ success: true, data: updated });
 });
@@ -456,7 +509,7 @@ app.post('/reviews/:id/reject', async (c) => {
 app.get('/kpi-templates', async (c) => {
   const templates = await db.select(KPI_TEMPLATE_SELECT)
     .from(kpiTemplates)
-    .where(eq(kpiTemplates.isActive, true))
+    .where(and(eq(kpiTemplates.isActive, true), visibleTemplates(c.get('tenantId')!)))
     .orderBy(desc(kpiTemplates.createdAt));
 
   return c.json({ success: true, data: templates });
@@ -470,9 +523,20 @@ app.post('/kpi-templates', async (c) => {
   const body = await c.req.json();
   const { name, description, job_title_id, review_type, kpis, is_default } = body;
   const user = c.get('user');
+  const tenantId = c.get('tenantId')!;
 
   if (!name || !kpis) {
     return c.json({ success: false, error: '缺少必要欄位: name, kpis' }, 400);
+  }
+
+  if (job_title_id) {
+    const [jobTitle] = await db.select(JOB_TITLE_ID_SELECT)
+      .from(jobTitles)
+      .where(and(eq(jobTitles.id, job_title_id), eq(jobTitles.tenantId, tenantId)))
+      .limit(1);
+    if (!jobTitle) {
+      return c.json({ success: false, error: '無效的職稱' }, 400);
+    }
   }
 
   // Find creator's employee record
@@ -497,6 +561,7 @@ app.post('/kpi-templates', async (c) => {
       kpis,
       isDefault: is_default || false,
       createdBy,
+      tenantId,
     })
     .returning(KPI_TEMPLATE_RETURNING);
 
@@ -515,7 +580,8 @@ app.delete('/kpi-templates/:id', async (c) => {
       isActive: false,
       updatedAt: new Date(),
     })
-    .where(eq(kpiTemplates.id, id))
+    // Only the tenant's own templates; shared (NULL tenant) ones are read-only
+    .where(and(eq(kpiTemplates.id, id), eq(kpiTemplates.tenantId, c.get('tenantId')!)))
     .returning(KPI_TEMPLATE_ID_RETURNING);
 
   if (!updated) {
@@ -534,15 +600,15 @@ app.get('/team-dashboard', async (c) => {
   // Note: branch_id filtering would require joining with employees table
   // For now we filter by period only
 
-  const conditions = [];
+  const conditions = [await reviewScope(c.get('tenantId')!)];
   if (period) {
     conditions.push(eq(performanceReviews.reviewPeriod, period));
   }
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const whereClause = and(...conditions);
   const approvedWhere = and(
     eq(performanceReviews.status, 'APPROVED'),
-    whereClause || sql`true`,
+    whereClause,
   );
 
   // Parallelize:
