@@ -11,89 +11,37 @@ const currencyFormatter = new Intl.NumberFormat('zh-TW', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 0
 })
-
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  CASH: '現金',
-  CREDIT_CARD: '信用卡',
-  LINE_PAY: 'LINE Pay',
-  TRANSFER: '轉帳'
-}
 </script>
 
 <script setup lang="ts">
-import { useFetch } from '~/composables/core/useFetch'
+import type { MemberPayment, PaymentType } from '~/composables/usePayments'
+import { PAYMENT_METHOD_LABELS, getPaymentStatusDisplay } from '~/composables/usePayments'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const { handleError } = useApiError()
+const { payments, summary, isLoading, hasMore, fetchPayments, loadMore } = usePayments()
 
-interface Payment {
-  id: string
-  amount: number
-  payment_method: 'CASH' | 'CREDIT_CARD' | 'LINE_PAY' | 'TRANSFER' | null
-  payment_date: string | null
-  payment_type: 'INCOME' | 'REFUND'
-  notes: string | null
-  contract_id: {
-    id: string
-    contract_no: string
-    plan_id: {
-      name: string
-    } | null
-  } | null
-}
-
-const { readItems } = useFetch()
-const { member } = useMemberAuth()
-
-const payments = ref<Payment[]>([])
-const isLoading = ref(true)
-const currentPage = ref(1)
-const hasMore = ref(true)
-const pageSize = 20
-
-const fetchPayments = async (loadMore = false) => {
-  if (!member.value) return
-
+const loadFirstPage = async () => {
   try {
-    if (!loadMore) {
-      isLoading.value = true
-      currentPage.value = 1
-    }
-
-    const result = await readItems<Payment>('member/payments', {
-      filter: {
-        member_id: member.value.id
-      },
-      page: currentPage.value,
-      limit: pageSize,
-      sort: 'payment_date',
-      sortOrder: 'desc'
-    })
-
-    if (loadMore) {
-      payments.value = [...payments.value, ...result.data]
-    } else {
-      payments.value = result.data
-    }
-
-    hasMore.value = result.data.length === pageSize
+    await fetchPayments()
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入付款紀錄' })
-  } finally {
-    isLoading.value = false
   }
 }
 
-const loadMore = async () => {
-  currentPage.value++
-  await fetchPayments(true)
+const loadNextPage = async () => {
+  try {
+    await loadMore()
+  } catch (error) {
+    handleError(error, { fallbackMessage: '無法載入付款紀錄' })
+  }
 }
 
 onMounted(() => {
-  fetchPayments()
+  loadFirstPage()
 })
 
 const formatDate = (dateStr: string | null) => {
@@ -103,43 +51,19 @@ const formatDate = (dateStr: string | null) => {
   return paymentDateFormatter.format(d)
 }
 
-const formatAmount = (amount: number, type: 'INCOME' | 'REFUND') => {
+const formatAmount = (amount: number, type: PaymentType) => {
   const formatted = currencyFormatter.format(amount)
   return type === 'REFUND' ? `-${formatted}` : formatted
 }
 
 const methodLabels = PAYMENT_METHOD_LABELS
 
-// Calculate totals
-const totals = computed(() => {
-  let income = 0
-  let refund = 0
-  const list = payments.value
-
-  for (let i = 0; i < list.length; i++) {
-    const p = list[i]!
-    if (p.payment_type === 'INCOME') {
-      income += p.amount
-    } else {
-      refund += p.amount
-    }
-  }
-
-  return {
-    income,
-    refund,
-    net: income - refund
-  }
-})
-
 // Group payments by month
 const groupedPayments = computed(() => {
-  const groups: Record<string, Payment[]> = {}
-  const list = payments.value
+  const groups: Record<string, MemberPayment[]> = {}
 
-  for (let i = 0; i < list.length; i++) {
-    const payment = list[i]!
-    const date = payment.payment_date ? new Date(payment.payment_date) : new Date()
+  for (const payment of payments.value) {
+    const date = payment.paymentDate ? new Date(payment.paymentDate) : new Date()
     const monthKey = `${date.getFullYear()}年${date.getMonth() + 1}月`
 
     const group = groups[monthKey]
@@ -186,13 +110,13 @@ const groupedPayments = computed(() => {
         <div class="summary-row">
           <span class="summary-label">累計支付</span>
           <span class="summary-value income">
-            {{ formatAmount(totals.income, 'INCOME') }}
+            {{ formatAmount(summary.totalPaid, 'INCOME') }}
           </span>
         </div>
-        <div v-if="totals.refund > 0" class="summary-row">
+        <div v-if="summary.totalRefunded > 0" class="summary-row">
           <span class="summary-label">退款金額</span>
           <span class="summary-value refund">
-            {{ formatAmount(totals.refund, 'REFUND') }}
+            {{ formatAmount(summary.totalRefunded, 'REFUND') }}
           </span>
         </div>
       </div>
@@ -208,8 +132,8 @@ const groupedPayments = computed(() => {
               :key="payment.id"
               class="payment-card"
             >
-              <div class="payment-icon" :class="payment.payment_type.toLowerCase()">
-                <svg v-if="payment.payment_type === 'INCOME'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div class="payment-icon" :class="payment.type.toLowerCase()">
+                <svg v-if="payment.type === 'INCOME'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="19" x2="12" y2="5" />
                   <polyline points="5 12 12 5 19 12" />
                 </svg>
@@ -221,21 +145,30 @@ const groupedPayments = computed(() => {
 
               <div class="payment-info">
                 <div class="payment-plan">
-                  {{ payment.contract_id?.plan_id?.name || '其他款項' }}
+                  {{ payment.planName || '其他款項' }}
                 </div>
                 <div class="payment-details">
-                  <span class="payment-date">{{ formatDate(payment.payment_date) }}</span>
-                  <span v-if="payment.payment_method" class="payment-method">
-                    {{ methodLabels[payment.payment_method] || payment.payment_method }}
+                  <span class="payment-date">{{ formatDate(payment.paymentDate) }}</span>
+                  <span v-if="payment.paymentMethod" class="payment-method">
+                    {{ methodLabels[payment.paymentMethod] || payment.paymentMethod }}
                   </span>
-                </div>
-                <div v-if="payment.notes" class="payment-notes">
-                  {{ payment.notes }}
                 </div>
               </div>
 
-              <div class="payment-amount" :class="payment.payment_type.toLowerCase()">
-                {{ formatAmount(payment.amount, payment.payment_type) }}
+              <div class="payment-side">
+                <div
+                  class="payment-amount"
+                  :class="[payment.type.toLowerCase(), { inactive: payment.status !== 'COMPLETED' }]"
+                >
+                  {{ formatAmount(payment.amount, payment.type) }}
+                </div>
+                <span
+                  class="status-badge"
+                  :class="getPaymentStatusDisplay(payment.status, payment.type).tone"
+                  data-testid="payment-status"
+                >
+                  {{ getPaymentStatusDisplay(payment.status, payment.type).label }}
+                </span>
               </div>
             </div>
           </div>
@@ -245,7 +178,7 @@ const groupedPayments = computed(() => {
           v-if="hasMore"
           class="load-more-btn"
           :disabled="isLoading"
-          @click="loadMore"
+          @click="loadNextPage"
         >
           {{ isLoading ? '載入中...' : '載入更多' }}
         </button>
@@ -429,19 +362,45 @@ const groupedPayments = computed(() => {
   margin-right: 8px;
 }
 
-.payment-notes {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 6px;
-  padding: 6px 10px;
-  background-color: var(--color-border);
-  border-radius: 6px;
+.payment-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .payment-amount {
   font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.payment-amount.inactive {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.status-badge {
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-badge.success {
+  color: var(--color-success);
+  background-color: color-mix(in srgb, var(--color-success) 14%, transparent);
+}
+
+.status-badge.warning {
+  color: var(--color-warning);
+  background-color: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.status-badge.error {
+  color: var(--color-error);
+  background-color: color-mix(in srgb, var(--color-error) 14%, transparent);
 }
 
 .payment-amount.income {
