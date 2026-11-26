@@ -160,17 +160,24 @@ export const useIssues = () => {
     type: IssueType
     title: string
     content: string
+    branchId?: string
     attachments?: Array<{ id: string; filename: string; type?: string }>
   }): Promise<IssueResult> => {
     if (!member.value) {
       return { success: false, message: '請先登入' }
     }
 
+    // Backend requires a branch; default to the member's home branch
+    const branchId = data.branchId ?? member.value.branch_id
+    if (!branchId) {
+      return { success: false, message: '找不到所屬分店，請聯絡櫃台' }
+    }
+
     try {
       const response = await $fetch<IssueResult>(`${apiUrl}/api/member/issues`, {
         method: 'POST',
         headers: getAuthHeader(),
-        body: data,
+        body: { ...data, branchId },
       })
 
       if (response.success && response.data) {

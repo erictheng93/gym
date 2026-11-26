@@ -20,10 +20,10 @@ This document provides step-by-step procedures for deploying Gym Nexus to produc
 ## Pre-deployment Checklist
 
 ### Code Quality
-- [ ] All tests passing (`pnpm test`)
-- [ ] TypeScript compilation successful (`pnpm typecheck`)
-- [ ] ESLint passing (`pnpm lint`)
-- [ ] Backend builds successfully (`cd backend && pnpm build`)
+- [ ] All tests passing (`bun run test`)
+- [ ] TypeScript compilation successful (`bun run typecheck`)
+- [ ] ESLint passing (`bun run lint`)
+- [ ] Backend builds successfully (`cd backend && bun run build`)
 
 ### Database
 - [ ] Database migrations reviewed and tested locally
@@ -172,10 +172,10 @@ docker run -d \
 cd backend
 
 # Install dependencies
-pnpm install --frozen-lockfile
+bun install --frozen-lockfile
 
 # Build
-pnpm build
+bun run build
 
 # Start with PM2
 pm2 start dist/app.js --name gym-nexus-api
@@ -214,16 +214,16 @@ curl https://api.gym-nexus.com/health
 
 ```yaml
 # Admin Web
-Build command: cd frontend && pnpm install && pnpm build:admin
+Build command: cd frontend && bun install && bun run build:admin
 Build output directory: frontend/apps/admin-web/.output/public
 Root directory: /
 
 # Member App
-Build command: cd frontend && pnpm install && pnpm build:member
+Build command: cd frontend && bun install && bun run build:member
 Build output directory: frontend/apps/member-app/.output/public
 
 # Coach App
-Build command: cd frontend && pnpm install && pnpm build:coach
+Build command: cd frontend && bun install && bun run build:coach
 Build output directory: frontend/apps/coach-app/.output/public
 ```
 
@@ -238,34 +238,63 @@ API_BASE_URL=https://api.gym-nexus.com
 cd frontend
 
 # Install dependencies
-pnpm install
+bun install
 
 # Build all apps
-pnpm build
+bun run build
 
 # Or build specific app
-pnpm build:admin
-pnpm build:member
-pnpm build:coach
+bun run build:admin
+bun run build:member
+bun run build:coach
 ```
 
 ---
 
 ## Database Migrations
 
-### Using Drizzle
+### Upgrading from an older version (in order)
+
+Run these steps, in this order, on any database deployed before the changes
+listed. Take the backup (see "Backup Before Migration" below) first. All commands
+run from `backend/` against the target `DATABASE_URL`.
 
 ```bash
 cd backend
 
-# Generate migration from schema changes
-pnpm db:generate
+# 1. Backfill tenant_id on legacy rows (#109/#116). Must run BEFORE db:push,
+#    which adds NOT NULL to members/contracts/payments.tenant_id.
+bun run db:backfill-tenant -- --dry-run   # report only
+bun run db:backfill-tenant                # apply (no-op if nothing is NULL)
 
-# Apply migrations
-pnpm db:push
+# 2. Apply the schema. One db:push covers every schema change since the old version:
+#    - members/contracts/payments.tenant_id NOT NULL      (#116)
+#    - payments.receipt_no widened varchar(30) -> (100)   (#112)
+#    - payments.status added, existing rows = COMPLETED   (#119)
+#    - performance_reviews.overall_score decimal(5,2)     (#131)
+#    - bookings.override_reason / override_by added (NULL) (#136)
+bun run db:push
+```
 
-# Or run migrations manually
-pnpm db:migrate
+Verify:
+
+```bash
+# payments.status exists, and no legacy rows are left without a tenant
+psql "$DATABASE_URL" -c "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name = 'payments' AND column_name IN ('status', 'receipt_no', 'tenant_id');"
+psql "$DATABASE_URL" -c "SELECT count(*) AS payments_without_status_or_tenant FROM payments WHERE status IS NULL OR tenant_id IS NULL;"   # expect 0
+psql "$DATABASE_URL" -c "SELECT numeric_precision, numeric_scale FROM information_schema.columns WHERE table_name = 'performance_reviews' AND column_name = 'overall_score';"   # expect 5, 2
+psql "$DATABASE_URL" -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'bookings' AND column_name IN ('override_reason', 'override_by');"   # expect 2 rows (text, uuid)
+```
+
+The first query must list `status` (varchar 20), `receipt_no` (varchar 100) and
+`tenant_id`, and the bookings query must return both override columns. If `db:push` fails on NULL `tenant_id`, you skipped step 1.
+
+For a fresh database, only `bun run db:push` is needed. For other schema changes
+use the Drizzle tooling:
+
+```bash
+bun run db:generate   # generate a migration from schema changes
+bun run db:migrate    # apply generated migrations
 ```
 
 ### Performance score column widened
@@ -281,7 +310,7 @@ in-place `ALTER COLUMN TYPE`; widening precision is lossless and needs no backfi
 without a valid contract (trial / make-up class). `bun run db:push` adds them; no
 backfill is needed (existing rows stay NULL).
 
-### Tenant backfill before `db:push` (#109)
+### Tenant backfill details (#109)
 
 `members`, `contracts` and `payments` now have `tenant_id NOT NULL`. `db:push`
 fails on a database that still has legacy rows with NULL `tenant_id`, so

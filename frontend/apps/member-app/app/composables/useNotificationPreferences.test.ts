@@ -494,19 +494,16 @@ describe('useNotificationPreferences', () => {
     it('should send test notification successfully', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        channel: 'push',
+        data: { sent: 2 },
       })
 
       const { sendTestNotification } = useNotificationPreferences()
-      const result = await sendTestNotification('push', 'test')
+      const result = await sendTestNotification()
 
-      expect(result).toEqual({ success: true, channel: 'push' })
+      expect(result).toEqual({ success: true, sent: 2, error: undefined })
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/member/notifications/test',
-        expect.objectContaining({
-          method: 'POST',
-          body: { channel: 'push', type: 'test' },
-        })
+        'http://localhost:8056/api/member/push/test',
+        expect.objectContaining({ method: 'POST' })
       )
     })
 

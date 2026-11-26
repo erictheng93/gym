@@ -15,6 +15,16 @@ export const ISSUE_TYPES = {
 
 export type IssueType = keyof typeof ISSUE_TYPES
 
+/**
+ * Support page category -> issue type. The support page's "report a problem"
+ * tab files a regular issue (same backend as /profile/issues).
+ */
+export function supportCategoryToIssueType(category: string): IssueType {
+  if (category === 'facility') return 'EQUIPMENT'
+  if (category === 'service') return 'COMPLAINT'
+  return 'SERVICE'
+}
+
 // Issue status options
 export const ISSUE_STATUSES = {
   SUBMITTED: '已提交',
@@ -52,7 +62,7 @@ export const createIssueSchema = z.object({
     .transform(val => val.trim()),
   content: z
     .string()
-    .min(1, '請輸入內容')
+    .min(10, '請詳細描述問題（至少 10 字）')
     .max(CONTENT_MAX_LENGTH, `內容不能超過 ${CONTENT_MAX_LENGTH} 字`)
     .transform(val => val.trim()),
   attachments: z

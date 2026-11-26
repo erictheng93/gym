@@ -14,6 +14,7 @@ const mockMember = {
   id: 'member-1',
   member_code: 'M001',
   full_name: 'Test User',
+  branch_id: 'branch-1' as string | null,
 }
 
 // Mock issue data
@@ -394,9 +395,32 @@ describe('useIssues', () => {
           body: expect.objectContaining({
             type: 'EQUIPMENT',
             title: '跑步機故障',
+            branchId: 'branch-1',
           }),
         })
       )
+    })
+
+    it('should prefer an explicit branchId over the home branch', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, message: 'ok', data: mockIssueSubmitted })
+
+      const { createIssue } = useIssues()
+      await createIssue({ type: 'SERVICE', title: 't', content: '0123456789', branchId: 'branch-9' })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ body: expect.objectContaining({ branchId: 'branch-9' }) })
+      )
+    })
+
+    it('should fail without calling the API when member has no branch', async () => {
+      mockMemberRef.value = { ...mockMember, branch_id: null } as never
+
+      const { createIssue } = useIssues()
+      const result = await createIssue({ type: 'SERVICE', title: 't', content: '0123456789' })
+
+      expect(result.success).toBe(false)
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
     it('should handle create error', async () => {

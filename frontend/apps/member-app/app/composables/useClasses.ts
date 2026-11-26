@@ -1,6 +1,6 @@
 /**
  * useClasses composable
- * Handles fetching and managing gym classes and schedules
+ * Handles fetching class sessions for the member booking page
  */
 
 import { deduplicateRequest } from '../utils/debounce'
@@ -64,17 +64,6 @@ export interface ClassSession {
   }
 }
 
-interface ClassesResponse {
-  success: boolean
-  data: GymClass[]
-  total?: number
-}
-
-interface SchedulesResponse {
-  success: boolean
-  data: ClassSchedule[]
-}
-
 // --- Backend payload (backend/src/routes/member-classes.ts, camelCase) ---
 
 export interface ApiClassSession {
@@ -134,8 +123,6 @@ export function toClassSession(s: ApiClassSession): ClassSession {
 }
 
 // Cache settings
-const CACHE_KEY_CLASSES = 'member:classes'
-const CACHE_KEY_SCHEDULE = 'member:class-schedule'
 const CACHE_KEY_SESSIONS = 'member:class-sessions'
 const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
@@ -165,111 +152,9 @@ export const useClasses = () => {
   const { getAuthHeader } = useMemberAuth()
   const { isOnline, getCache, setCache } = useOfflineSync()
 
-  const classes = useState<GymClass[]>('gym_classes', () => [])
-  const schedules = useState<ClassSchedule[]>('class_schedules', () => [])
   const upcomingSessions = useState<ClassSession[]>('upcoming_sessions', () => [])
   const isLoading = useState('classes_loading', () => false)
   const isOfflineData = useState('classes_is_offline', () => false)
-
-  /**
-   * Fetch all active classes (with request deduplication and offline cache)
-   */
-  const fetchClasses = async (branchId?: string) => {
-    const dedupKey = `classes-${branchId || 'all'}`
-    const cacheKey = `${CACHE_KEY_CLASSES}:${branchId || 'all'}`
-
-    return deduplicateRequest(dedupKey, async () => {
-      isLoading.value = true
-      isOfflineData.value = false
-
-      try {
-        // If offline, try cached data
-        if (!isOnline.value) {
-          const cached = await getCache<GymClass[]>(cacheKey)
-          if (cached) {
-            classes.value = cached
-            isOfflineData.value = true
-            return cached
-          }
-          return []
-        }
-
-        const params = new URLSearchParams()
-        if (branchId) params.append('branch_id', branchId)
-
-        const response = await $fetch<ClassesResponse>(`${apiUrl}/api/member/classes?${params}`, {
-          headers: getAuthHeader(),
-        })
-
-        if (response.success) {
-          classes.value = response.data
-          await setCache(cacheKey, response.data, CACHE_TTL)
-        }
-        return response.data
-      } catch {
-        // Network error fallback to cache
-        const cached = await getCache<GymClass[]>(cacheKey)
-        if (cached) {
-          classes.value = cached
-          isOfflineData.value = true
-          return cached
-        }
-        return []
-      } finally {
-        isLoading.value = false
-      }
-    })
-  }
-
-  /**
-   * Fetch weekly schedule (with request deduplication and offline cache)
-   */
-  const fetchWeeklySchedule = async (branchId?: string) => {
-    const dedupKey = `schedule-${branchId || 'all'}`
-    const cacheKey = `${CACHE_KEY_SCHEDULE}:${branchId || 'all'}`
-
-    return deduplicateRequest(dedupKey, async () => {
-      isLoading.value = true
-      isOfflineData.value = false
-
-      try {
-        // If offline, try cached data
-        if (!isOnline.value) {
-          const cached = await getCache<ClassSchedule[]>(cacheKey)
-          if (cached) {
-            schedules.value = cached
-            isOfflineData.value = true
-            return cached
-          }
-          return []
-        }
-
-        const params = new URLSearchParams()
-        if (branchId) params.append('branch_id', branchId)
-
-        const response = await $fetch<SchedulesResponse>(`${apiUrl}/api/member/classes/schedule?${params}`, {
-          headers: getAuthHeader(),
-        })
-
-        if (response.success) {
-          schedules.value = response.data
-          await setCache(cacheKey, response.data, CACHE_TTL)
-        }
-        return response.data
-      } catch {
-        // Network error fallback to cache
-        const cached = await getCache<ClassSchedule[]>(cacheKey)
-        if (cached) {
-          schedules.value = cached
-          isOfflineData.value = true
-          return cached
-        }
-        return []
-      } finally {
-        isLoading.value = false
-      }
-    })
-  }
 
   /**
    * Fetch upcoming sessions for a date range (with offline cache)
@@ -346,30 +231,6 @@ export const useClasses = () => {
     })
   }
 
-  const schedulesByDayMap = computed(() => {
-    const map = new Map<number, ClassSchedule[]>()
-    for (const s of schedules.value) {
-      if (!s.is_active) continue
-      let list = map.get(s.day_of_week)
-      if (!list) {
-        list = []
-        map.set(s.day_of_week, list)
-      }
-      list.push(s)
-    }
-    for (const list of map.values()) {
-      list.sort((a, b) => a.start_time.localeCompare(b.start_time))
-    }
-    return map
-  })
-
-  /**
-   * Get schedules for a specific day of week (O(1) memoized lookup)
-   */
-  const getSchedulesByDay = (dayOfWeek: number) => {
-    return schedulesByDayMap.value.get(dayOfWeek) || []
-  }
-
   const sessionsByDateMap = computed(() => {
     const map = new Map<string, ClassSession[]>()
     for (const s of upcomingSessions.value) {
@@ -429,17 +290,12 @@ export const useClasses = () => {
   }
 
   return {
-    classes,
-    schedules,
     upcomingSessions,
     isLoading,
     isOfflineData,
     isOnline,
-    fetchClasses,
-    fetchWeeklySchedule,
     fetchUpcomingSessions,
     getSession,
-    getSchedulesByDay,
     getSessionsByDate,
     isSessionFull,
     getAvailableSpots,
