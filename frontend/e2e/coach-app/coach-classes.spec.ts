@@ -24,7 +24,12 @@ test.describe('Classes List', () => {
   })
 
   test('should select a date from the date strip', async ({ page }) => {
-    const target = page.locator('.date-item:not(.active)').first()
+    // Pin the target by index: a `:not(.active)` locator would re-resolve to another
+    // date once the clicked one becomes active.
+    const items = page.locator('.date-item')
+    await expect(items).toHaveCount(7)
+    const index = await items.evaluateAll(els => els.findIndex(el => !el.classList.contains('active')))
+    const target = items.nth(index)
     await target.click()
 
     await expect(target).toHaveClass(/active/)
