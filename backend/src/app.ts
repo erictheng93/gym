@@ -49,6 +49,7 @@ import memberWorkoutsRoutes from './routes/member-workouts.js';
 import memberGoalsRoutes from './routes/member-goals.js';
 import memberMeasurementsRoutes from './routes/member-measurements.js';
 import memberIssuesRoutes from './routes/member-issues.js';
+import memberPaymentsRoutes from './routes/member-payments.js';
 
 // Coach-App routes
 import coachAuthRoutes from './routes/coach-auth.js';
@@ -229,6 +230,7 @@ app.route('/api/member/workouts', memberWorkoutsRoutes);
 app.route('/api/member/goals', memberGoalsRoutes);
 app.route('/api/member/measurements', memberMeasurementsRoutes);
 app.route('/api/member/issues', memberIssuesRoutes);
+app.route('/api/member/payments', memberPaymentsRoutes);
 app.route('/api/member', memberProfileRoutes);
 
 // Coach-App routes (authenticated via X-Coach-Token)
