@@ -8,7 +8,18 @@
  * - useAuthTokens
  */
 
-import type { Member, Contract } from '@gym-nexus/shared/types'
+import type { Member } from '@gym-nexus/shared/types'
+
+/** Active contract summary, mapped from GET /api/member/me `contracts[]`. */
+export interface ActiveContractSummary {
+  id: string
+  contract_no: string
+  contract_status: 'ACTIVE' | 'PAUSED'
+  start_date: string
+  end_date: string | null
+  remaining_counts: number | null
+  plan: { name: string | null; plan_type: 'TIME_BASED' | 'COUNT_BASED' | null } | null
+}
 
 export interface CurrentMember {
   id: string
@@ -19,7 +30,7 @@ export interface CurrentMember {
   branch_id: string | null
   branch_name: string | null
   member_status: Member['member_status']
-  activeContract: Contract | null
+  activeContract: ActiveContractSummary | null
 }
 
 export interface AuthResult {

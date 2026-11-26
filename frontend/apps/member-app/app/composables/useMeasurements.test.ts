@@ -52,6 +52,32 @@ const mockStats = {
   bmi: { first: 24.0, last: 23.5, change: -0.5, trend: 'down' as const },
 }
 
+// Backend payload shapes (backend/src/routes/member-measurements.ts)
+const api = (m: typeof mockMeasurement1 | typeof mockMeasurement2) => ({
+  id: m.id,
+  date: m.date,
+  weight: m.weight,
+  bodyFat: m.body_fat,
+  muscleMass: m.muscle_mass,
+  bmi: m.bmi,
+  source: m.source,
+  createdAt: m.created_at,
+})
+const page = (measurements: unknown[]) => ({
+  measurements,
+  pagination: { total: measurements.length, page: 1, limit: 20, totalPages: 1 },
+})
+const apiStats = {
+  totalRecords: 10,
+  periodDays: 30,
+  weight: mockStats.weight,
+  bodyFat: mockStats.body_fat,
+  muscleMass: mockStats.muscle_mass,
+  bmi: mockStats.bmi,
+}
+// raw_data is not part of the list payload
+const mapped2 = { ...mockMeasurement2, raw_data: null }
+
 // Mock Nuxt composables
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: {
@@ -158,39 +184,39 @@ describe('useMeasurements', () => {
     it('should fetch measurements successfully', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: [mockMeasurement1, mockMeasurement2],
+        data: page([api(mockMeasurement1), api(mockMeasurement2)]),
       })
 
       const { fetchMeasurements, measurements, isLoading } = useMeasurements()
       const result = await fetchMeasurements()
 
-      expect(result).toEqual([mockMeasurement1, mockMeasurement2])
-      expect(measurements.value).toEqual([mockMeasurement1, mockMeasurement2])
+      expect(result).toEqual([mockMeasurement1, mapped2])
+      expect(measurements.value).toEqual([mockMeasurement1, mapped2])
       expect(isLoading.value).toBe(false)
     })
 
     it('should pass filter parameters', async () => {
-      mockFetch.mockResolvedValueOnce({ success: true, data: [] })
+      mockFetch.mockResolvedValueOnce({ success: true, data: page([api(mockMeasurement1), api(mockMeasurement2)]) })
 
       const { fetchMeasurements } = useMeasurements()
-      await fetchMeasurements({
-        start_date: '2024-01-01',
+      const result = await fetchMeasurements({
+        start_date: '2024-01-10',
         end_date: '2024-01-31',
         limit: 20,
-        offset: 5,
+        offset: 40,
       })
 
+      // backend pages by page/limit; the date range is applied client-side
       const url = mockFetch.mock.calls[0]![0] as string
-      expect(url).toContain('start_date=2024-01-01')
-      expect(url).toContain('end_date=2024-01-31')
       expect(url).toContain('limit=20')
-      expect(url).toContain('offset=5')
+      expect(url).toContain('page=3')
+      expect(result).toEqual([mockMeasurement1])
     })
 
     it('should cache data after successful fetch', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: [mockMeasurement1],
+        data: page([api(mockMeasurement1)]),
       })
 
       const { fetchMeasurements } = useMeasurements()
@@ -248,7 +274,7 @@ describe('useMeasurements', () => {
     it('should set loading state during fetch', async () => {
       mockFetch.mockImplementation(() =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ success: true, data: [] }), 50)
+          setTimeout(() => resolve({ success: true, data: page([]) }), 50)
         })
       )
 
@@ -276,7 +302,7 @@ describe('useMeasurements', () => {
     it('should fetch latest measurement', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: mockMeasurement1,
+        data: { measurement: api(mockMeasurement1) },
       })
 
       const { fetchLatestMeasurement, latestMeasurement } = useMeasurements()
@@ -313,7 +339,7 @@ describe('useMeasurements', () => {
     it('should fetch stats with default period', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: { stats: mockStats, daily: [] },
+        data: { stats: apiStats, daily: [] },
       })
 
       const { fetchStats, stats } = useMeasurements()
@@ -330,7 +356,7 @@ describe('useMeasurements', () => {
     it('should fetch stats with specified period', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: { stats: mockStats, daily: [] },
+        data: { stats: apiStats, daily: [] },
       })
 
       const { fetchStats } = useMeasurements()
@@ -366,7 +392,7 @@ describe('useMeasurements', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: 'Created',
-        data: mockMeasurement1,
+        data: { measurement: api(mockMeasurement1) },
       })
 
       const { createMeasurement, measurements, latestMeasurement } = useMeasurements()
@@ -385,9 +411,18 @@ describe('useMeasurements', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'X-Member-Token': 'test-token' },
-          body: expect.objectContaining({ weight: 75.5 }),
+          body: { date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), weight: 75.5, bodyFat: 20.0, source: 'MANUAL' },
         })
       )
+    })
+
+    it('sends camelCase fields and drops empty ones', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: { measurement: api(mockMeasurement1) } })
+
+      const { createMeasurement } = useMeasurements()
+      await createMeasurement({ date: '2024-02-01', weight: null, body_fat: null, muscle_mass: 33, bmi: undefined })
+
+      expect(mockFetch.mock.calls[0]![1].body).toEqual({ date: '2024-02-01', muscleMass: 33 })
     })
 
     it('should handle create error', async () => {

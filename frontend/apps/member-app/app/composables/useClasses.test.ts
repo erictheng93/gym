@@ -266,24 +266,43 @@ describe('useClasses', () => {
     })
   })
 
-  describe('fetchUpcomingSessions', () => {
-    it('should fetch upcoming sessions with options', async () => {
-      const mockSessionsData: ClassSession[] = [
-        {
-          id: 'session-1',
-          schedule_id: 'schedule-1',
-          session_date: '2024-01-15',
-          current_count: 10,
-          waitlist_count: 2,
-          session_status: 'SCHEDULED',
-        },
-      ]
+  // Backend payload (backend/src/routes/member-classes.ts)
+  const apiSession = (overrides: Record<string, unknown> = {}) => ({
+    id: 'session-1',
+    sessionDate: '2024-01-15',
+    startTime: '09:00:00',
+    endTime: '10:00:00',
+    room: 'A 教室',
+    maxCapacity: 20,
+    currentCount: 10,
+    waitlistCount: 2,
+    sessionStatus: 'SCHEDULED',
+    cancelledReason: null,
+    class: { id: 'class-1', name: 'Yoga', description: null, category: 'YOGA', difficultyLevel: 'BEGINNER', durationMinutes: 60, imageUrl: null },
+    instructor: { id: 'emp-1', fullName: '陳教練' },
+    branch: { id: 'branch-1', name: '台北總店' },
+    ...overrides,
+  })
 
+  const session = (overrides: Partial<ClassSession> = {}): ClassSession => ({
+    id: 'sess1',
+    session_date: '2024-01-15',
+    start_time: '09:00:00',
+    end_time: '10:00:00',
+    max_capacity: 20,
+    current_count: 0,
+    waitlist_count: 0,
+    session_status: 'SCHEDULED',
+    ...overrides,
+  })
+
+  describe('fetchUpcomingSessions', () => {
+    it('should fetch sessions with camelCase query and map them', async () => {
       const { fetchUpcomingSessions, upcomingSessions } = useClasses()
 
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: mockSessionsData,
+        data: { sessions: [apiSession()] },
       })
 
       const result = await fetchUpcomingSessions({
@@ -294,25 +313,48 @@ describe('useClasses', () => {
       })
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('branch_id=branch-1'),
+        'http://localhost:8056/api/member/classes/sessions?branchId=branch-1&startDate=2024-01-15&endDate=2024-01-22&limit=10',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
-      expect(result).toHaveLength(1)
-      expect(upcomingSessions.value).toEqual(mockSessionsData)
+      const expected: ClassSession = {
+        id: 'session-1',
+        session_date: '2024-01-15',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+        room: 'A 教室',
+        max_capacity: 20,
+        current_count: 10,
+        waitlist_count: 2,
+        session_status: 'SCHEDULED',
+        cancellation_reason: undefined,
+        class: {
+          id: 'class-1',
+          name: 'Yoga',
+          description: undefined,
+          duration_minutes: 60,
+          max_capacity: 20,
+          category: 'YOGA',
+          difficulty_level: 'BEGINNER',
+          status: 'ACTIVE',
+        },
+        instructor: { id: 'emp-1', full_name: '陳教練' },
+        branch: { id: 'branch-1', name: '台北總店' },
+      }
+      expect(result).toEqual([expected])
+      expect(upcomingSessions.value).toEqual([expected])
+    })
+
+    it('should map a session without instructor', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: { sessions: [apiSession({ instructor: null })] } })
+
+      const [mapped] = await useClasses().fetchUpcomingSessions()
+
+      expect(mapped!.instructor).toBeUndefined()
     })
 
     it('should use cached sessions when offline', async () => {
       mockIsOnline.value = false
-      const cachedSessions: ClassSession[] = [
-        {
-          id: 'session-1',
-          schedule_id: 'schedule-1',
-          session_date: '2024-01-15',
-          current_count: 10,
-          waitlist_count: 2,
-          session_status: 'SCHEDULED',
-        },
-      ]
+      const cachedSessions = [session()]
       mockGetCache.mockResolvedValueOnce(cachedSessions)
 
       const { fetchUpcomingSessions, upcomingSessions, isOfflineData } = useClasses()
@@ -334,40 +376,21 @@ describe('useClasses', () => {
       expect(result).toEqual([])
     })
 
-    it('should cache sessions after successful fetch', async () => {
-      const sessionsData: ClassSession[] = [
-        {
-          id: 'session-1',
-          schedule_id: 'schedule-1',
-          session_date: '2024-01-15',
-          current_count: 5,
-          waitlist_count: 0,
-          session_status: 'SCHEDULED',
-        },
-      ]
-      mockFetch.mockResolvedValueOnce({ success: true, data: sessionsData })
+    it('should cache the mapped sessions after a successful fetch', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: { sessions: [apiSession()] } })
 
       const { fetchUpcomingSessions } = useClasses()
-      await fetchUpcomingSessions()
+      const result = await fetchUpcomingSessions()
 
       expect(mockSetCache).toHaveBeenCalledWith(
         expect.stringContaining('member:class-sessions:'),
-        sessionsData,
+        result,
         10 * 60 * 1000
       )
     })
 
     it('should fallback to cache on network error for sessions', async () => {
-      const cachedSessions: ClassSession[] = [
-        {
-          id: 'session-1',
-          schedule_id: 'schedule-1',
-          session_date: '2024-01-15',
-          current_count: 10,
-          waitlist_count: 0,
-          session_status: 'SCHEDULED',
-        },
-      ]
+      const cachedSessions = [session()]
       mockFetch.mockRejectedValueOnce(new Error('Network error'))
       mockGetCache.mockResolvedValueOnce(cachedSessions)
 
@@ -380,21 +403,12 @@ describe('useClasses', () => {
   })
 
   describe('getSession', () => {
-    it('should fetch a single session', async () => {
-      const mockSession: ClassSession = {
-        id: 'session-1',
-        schedule_id: 'schedule-1',
-        session_date: '2024-01-15',
-        current_count: 10,
-        waitlist_count: 0,
-        session_status: 'SCHEDULED',
-      }
-
+    it('should fetch and map a single session', async () => {
       const { getSession } = useClasses()
 
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: mockSession,
+        data: { session: apiSession() },
       })
 
       const result = await getSession('session-1')
@@ -403,7 +417,7 @@ describe('useClasses', () => {
         'http://localhost:8056/api/member/classes/sessions/session-1',
         { headers: { 'X-Member-Token': 'mock-token' } }
       )
-      expect(result).toEqual(mockSession)
+      expect(result).toMatchObject({ id: 'session-1', start_time: '09:00:00', max_capacity: 20, class: { name: 'Yoga' } })
     })
 
     it('should return null on error', async () => {
@@ -449,37 +463,13 @@ describe('useClasses', () => {
   })
 
   describe('getSessionsByDate', () => {
-    it('should filter sessions by date and sort by time', () => {
+    it('should filter sessions by date and sort by start time', () => {
       const { getSessionsByDate, upcomingSessions } = useClasses()
 
       upcomingSessions.value = [
-        {
-          id: 'sess1',
-          schedule_id: 's1',
-          session_date: '2024-01-15',
-          current_count: 5,
-          waitlist_count: 0,
-          session_status: 'SCHEDULED',
-          schedule: { id: 's1', class_id: 'c1', day_of_week: 1, start_time: '14:00', end_time: '15:00', is_active: true },
-        },
-        {
-          id: 'sess2',
-          schedule_id: 's2',
-          session_date: '2024-01-15',
-          current_count: 10,
-          waitlist_count: 0,
-          session_status: 'SCHEDULED',
-          schedule: { id: 's2', class_id: 'c2', day_of_week: 1, start_time: '09:00', end_time: '10:00', is_active: true },
-        },
-        {
-          id: 'sess3',
-          schedule_id: 's3',
-          session_date: '2024-01-16',
-          current_count: 8,
-          waitlist_count: 0,
-          session_status: 'SCHEDULED',
-          schedule: { id: 's3', class_id: 'c3', day_of_week: 2, start_time: '10:00', end_time: '11:00', is_active: true },
-        },
+        session({ id: 'sess1', start_time: '14:00:00' }),
+        session({ id: 'sess2', start_time: '09:00:00' }),
+        session({ id: 'sess3', session_date: '2024-01-16', start_time: '10:00:00' }),
       ]
 
       const sessions = getSessionsByDate('2024-01-15')
@@ -492,109 +482,34 @@ describe('useClasses', () => {
 
   describe('isSessionFull', () => {
     it('should return true when session is at capacity', () => {
-      const { isSessionFull } = useClasses()
-
-      const session: ClassSession = {
-        id: 'sess1',
-        schedule_id: 's1',
-        session_date: '2024-01-15',
-        current_count: 20,
-        waitlist_count: 5,
-        session_status: 'SCHEDULED',
-        class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
-      }
-
-      expect(isSessionFull(session)).toBe(true)
+      expect(useClasses().isSessionFull(session({ current_count: 20, max_capacity: 20 }))).toBe(true)
     })
 
     it('should return false when session has available spots', () => {
-      const { isSessionFull } = useClasses()
-
-      const session: ClassSession = {
-        id: 'sess1',
-        schedule_id: 's1',
-        session_date: '2024-01-15',
-        current_count: 15,
-        waitlist_count: 0,
-        session_status: 'SCHEDULED',
-        class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
-      }
-
-      expect(isSessionFull(session)).toBe(false)
+      expect(useClasses().isSessionFull(session({ current_count: 15, max_capacity: 20 }))).toBe(false)
     })
 
-    it('should use schedule class capacity as fallback', () => {
-      const { isSessionFull } = useClasses()
-
-      const session: ClassSession = {
-        id: 'sess1',
-        schedule_id: 's1',
-        session_date: '2024-01-15',
+    it('should use the session capacity, not the class default', () => {
+      const s = session({
         current_count: 15,
-        waitlist_count: 0,
-        session_status: 'SCHEDULED',
-        schedule: {
-          id: 's1',
-          class_id: 'c1',
-          day_of_week: 1,
-          start_time: '09:00',
-          end_time: '10:00',
-          is_active: true,
-          class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 15, status: 'ACTIVE' },
-        },
-      }
-
-      expect(isSessionFull(session)).toBe(true)
+        max_capacity: 15,
+        class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 30, status: 'ACTIVE' },
+      })
+      expect(useClasses().isSessionFull(s)).toBe(true)
     })
   })
 
   describe('getAvailableSpots', () => {
     it('should return correct number of available spots', () => {
-      const { getAvailableSpots } = useClasses()
-
-      const session: ClassSession = {
-        id: 'sess1',
-        schedule_id: 's1',
-        session_date: '2024-01-15',
-        current_count: 12,
-        waitlist_count: 0,
-        session_status: 'SCHEDULED',
-        class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
-      }
-
-      expect(getAvailableSpots(session)).toBe(8)
+      expect(useClasses().getAvailableSpots(session({ current_count: 12, max_capacity: 20 }))).toBe(8)
     })
 
     it('should return 0 when session is full', () => {
-      const { getAvailableSpots } = useClasses()
-
-      const session: ClassSession = {
-        id: 'sess1',
-        schedule_id: 's1',
-        session_date: '2024-01-15',
-        current_count: 20,
-        waitlist_count: 5,
-        session_status: 'SCHEDULED',
-        class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
-      }
-
-      expect(getAvailableSpots(session)).toBe(0)
+      expect(useClasses().getAvailableSpots(session({ current_count: 20, max_capacity: 20 }))).toBe(0)
     })
 
     it('should never return negative', () => {
-      const { getAvailableSpots } = useClasses()
-
-      const session: ClassSession = {
-        id: 'sess1',
-        schedule_id: 's1',
-        session_date: '2024-01-15',
-        current_count: 25, // Over capacity
-        waitlist_count: 0,
-        session_status: 'SCHEDULED',
-        class: { id: 'c1', name: 'Yoga', duration_minutes: 60, max_capacity: 20, status: 'ACTIVE' },
-      }
-
-      expect(getAvailableSpots(session)).toBe(0)
+      expect(useClasses().getAvailableSpots(session({ current_count: 25, max_capacity: 20 }))).toBe(0)
     })
   })
 

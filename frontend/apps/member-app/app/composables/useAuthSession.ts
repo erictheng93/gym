@@ -5,15 +5,67 @@
  * Handles fetching member data from the API.
  */
 
-import type { Contract } from '@gym-nexus/shared/types'
-import type { CurrentMember } from '../types/auth'
+import type { ActiveContractSummary, CurrentMember } from '../types/auth'
 
-interface MemberProfileResponse {
+/** GET /api/member/me (backend/src/routes/member-profile.ts) */
+export interface MemberMeResponse {
   success: boolean
-  data: CurrentMember & {
-    branch?: { id?: string; name?: string } | null
-    branch_name?: string | null
-    contracts: (Contract & { plan_id?: { name: string; plan_type: string } })[]
+  data: {
+    member: {
+      id: string
+      memberCode: string
+      fullName: string
+      phone: string | null
+      email: string | null
+      gender: 'MALE' | 'FEMALE' | 'OTHER' | null
+      birthday: string | null
+      address: string | null
+      emergencyContact: string | null
+      emergencyPhone: string | null
+      status: CurrentMember['member_status']
+      joinDate: string | null
+      avatar: string | null
+      height: number | null
+      hasPassword: boolean
+    }
+    branch: { id: string; name: string; address: string | null; phone: string | null } | null
+    contracts: Array<{
+      id: string
+      contractNo: string
+      status: 'ACTIVE' | 'PAUSED'
+      startDate: string
+      endDate: string | null
+      remainingCounts: number | null
+      plan: { id: string | null; name: string | null; type: 'TIME_BASED' | 'COUNT_BASED' | null } | null
+    }>
+  }
+}
+
+/** Map the /me payload to the session's CurrentMember. */
+export function toCurrentMember(data: MemberMeResponse['data']): CurrentMember {
+  const active = data.contracts?.find(c => c.status === 'ACTIVE')
+  const activeContract: ActiveContractSummary | null = active
+    ? {
+        id: active.id,
+        contract_no: active.contractNo,
+        contract_status: active.status,
+        start_date: active.startDate,
+        end_date: active.endDate,
+        remaining_counts: active.remainingCounts,
+        plan: active.plan ? { name: active.plan.name, plan_type: active.plan.type } : null,
+      }
+    : null
+
+  return {
+    id: data.member.id,
+    member_code: data.member.memberCode,
+    full_name: data.member.fullName,
+    phone: data.member.phone,
+    email: data.member.email,
+    branch_id: data.branch?.id ?? null,
+    branch_name: data.branch?.name ?? null,
+    member_status: data.member.status,
+    activeContract,
   }
 }
 
@@ -64,31 +116,14 @@ export const useAuthSession = () => {
 
     const promise = (async (): Promise<boolean> => {
       try {
-        const response = await $fetch<MemberProfileResponse>(`${apiUrl}/api/member/me`, {
+        const response = await $fetch<MemberMeResponse>(`${apiUrl}/api/member/me`, {
           headers: {
             'X-Member-Token': authToken,
           },
         })
 
-        if (response.success && response.data) {
-          const data = response.data
-
-          // Find active contract
-          const contract = data.contracts?.find(
-            (c: Contract) => c.contract_status === 'ACTIVE'
-          ) || null
-
-          member.value = {
-            id: data.id,
-            member_code: data.member_code,
-            full_name: data.full_name,
-            phone: data.phone,
-            email: data.email,
-            branch_id: data.branch_id,
-            branch_name: data.branch_name || data.branch?.name || null,
-            member_status: data.member_status,
-            activeContract: contract,
-          }
+        if (response.success && response.data?.member) {
+          member.value = toCurrentMember(response.data)
           return true
         } else {
           member.value = null

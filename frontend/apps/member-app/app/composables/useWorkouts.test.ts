@@ -51,6 +51,30 @@ const mockStats = {
   workout_days: 5,
 }
 
+// Backend payload shapes (backend/src/routes/member-workouts.ts)
+const api = (w: typeof mockWorkout | typeof mockWorkout2) => ({
+  id: w.id,
+  date: w.date,
+  duration: w.duration,
+  calories: w.calories,
+  exercises: w.exercises,
+  notes: w.notes,
+  createdAt: w.created_at,
+})
+const page = (workouts: unknown[]) => ({
+  workouts,
+  pagination: { total: workouts.length, page: 1, limit: 20, totalPages: 1 },
+})
+const apiStats = {
+  period: 'week' as const,
+  totalWorkouts: 5,
+  totalDuration: 300,
+  totalCalories: 1500,
+  avgDuration: 60,
+  avgCalories: 300,
+  workoutDays: 5,
+}
+
 const mockDailyData = [
   { date: '2024-01-15', duration: 60, calories: 300, count: 1 },
   { date: '2024-01-14', duration: 45, calories: 200, count: 1 },
@@ -177,8 +201,7 @@ describe('useWorkouts', () => {
     it('should fetch workouts successfully', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: [mockWorkout, mockWorkout2],
-        total: 2,
+        data: page([api(mockWorkout), api(mockWorkout2)]),
       })
 
       const { fetchWorkouts, workouts, totalWorkouts, isLoading } = useWorkouts()
@@ -197,8 +220,7 @@ describe('useWorkouts', () => {
     it('should pass filter parameters', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: [mockWorkout],
-        total: 1,
+        data: page([api(mockWorkout)]),
       })
 
       const { fetchWorkouts } = useWorkouts()
@@ -206,21 +228,21 @@ describe('useWorkouts', () => {
         start_date: '2024-01-01',
         end_date: '2024-01-31',
         limit: 10,
-        offset: 5,
+        offset: 20,
       })
 
+      // backend takes camelCase dates and page-based paging
       const url = mockFetch.mock.calls[0]![0] as string
-      expect(url).toContain('start_date=2024-01-01')
-      expect(url).toContain('end_date=2024-01-31')
+      expect(url).toContain('startDate=2024-01-01')
+      expect(url).toContain('endDate=2024-01-31')
       expect(url).toContain('limit=10')
-      expect(url).toContain('offset=5')
+      expect(url).toContain('page=3')
     })
 
     it('should cache data after successful fetch', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: [mockWorkout],
-        total: 1,
+        data: page([api(mockWorkout)]),
       })
 
       const { fetchWorkouts } = useWorkouts()
@@ -280,7 +302,7 @@ describe('useWorkouts', () => {
     it('should set loading state during fetch', async () => {
       mockFetch.mockImplementation(() =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ success: true, data: [], total: 0 }), 50)
+          setTimeout(() => resolve({ success: true, data: page([]) }), 50)
         })
       )
 
@@ -306,7 +328,7 @@ describe('useWorkouts', () => {
     })
 
     it('should fetch a single workout', async () => {
-      mockFetch.mockResolvedValueOnce({ success: true, data: mockWorkout })
+      mockFetch.mockResolvedValueOnce({ success: true, data: { workout: api(mockWorkout) } })
 
       const { getWorkout } = useWorkouts()
       const result = await getWorkout('workout-1')
@@ -350,7 +372,7 @@ describe('useWorkouts', () => {
     it('should fetch stats with default period', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: { stats: mockStats, daily: mockDailyData },
+        data: { stats: apiStats, daily: mockDailyData },
       })
 
       const { fetchStats, stats, dailyData } = useWorkouts()
@@ -368,7 +390,7 @@ describe('useWorkouts', () => {
     it('should fetch stats with specified period', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: { stats: mockStats, daily: mockDailyData },
+        data: { stats: apiStats, daily: mockDailyData },
       })
 
       const { fetchStats } = useWorkouts()
@@ -404,7 +426,7 @@ describe('useWorkouts', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: 'Created',
-        data: mockWorkout,
+        data: { ...api(mockWorkout), workout: api(mockWorkout) },
       })
 
       const { createWorkout, workouts, totalWorkouts } = useWorkouts()
@@ -484,7 +506,7 @@ describe('useWorkouts', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: 'Updated',
-        data: updatedWorkout,
+        data: { workout: api(updatedWorkout) },
       })
 
       // Pre-populate workouts

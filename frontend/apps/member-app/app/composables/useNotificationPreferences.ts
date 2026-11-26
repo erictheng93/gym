@@ -13,24 +13,136 @@ import type {
 } from '../types/notification'
 import { deduplicateRequest } from '../utils/debounce'
 
+// --- Backend payloads (backend/src/routes/member-notifications.ts) ---
+
+type Channel = 'line' | 'push' | 'email' | 'sms'
+
+export interface ApiNotificationPreferences {
+  channels: Record<Channel, boolean>
+  types: {
+    booking_confirmation?: boolean
+    booking_reminder: boolean
+    contract_expiry: boolean
+    class_cancelled: boolean
+    payment_confirmation?: boolean
+    promotions: boolean
+    system: boolean
+  }
+  quietHours: { enabled: boolean; start: string; end: string }
+  smsFallback?: boolean
+}
+
 interface PreferencesResponse {
   success: boolean
-  preferences: NotificationPreferences
-  available_channels: AvailableChannels
+  data: { preferences: ApiNotificationPreferences }
+}
+
+export interface ApiChannel {
+  channel: Channel
+  connected: boolean
+  details: { email?: string; phone?: string; displayName?: string; devices?: number } | null
 }
 
 interface ChannelsResponse {
   success: boolean
-  channels: ChannelDetails
+  data: { channels: ApiChannel[] }
+}
+
+export interface ApiNotification {
+  id: string
+  type: string
+  title: string | null
+  message: string | null
+  isRead: boolean
+  createdAt: string
+  reference: { type: string; id: string } | null
 }
 
 interface HistoryResponse {
   success: boolean
-  data: NotificationHistory[]
-  pagination: {
-    limit: number
-    offset: number
-    total: number
+  data: {
+    notifications: ApiNotification[]
+    pagination: { total: number; page: number; limit: number; totalPages: number }
+  }
+}
+
+/** Flat app key -> [section, backend key] */
+const TYPE_KEYS = {
+  notify_booking_confirmation: 'booking_confirmation',
+  notify_booking_reminder: 'booking_reminder',
+  notify_booking_cancelled: 'class_cancelled',
+  notify_contract_expiry: 'contract_expiry',
+  notify_payment_confirmation: 'payment_confirmation',
+  notify_promotions: 'promotions',
+  notify_system: 'system',
+} as const
+
+export function toNotificationPreferences(p: ApiNotificationPreferences): NotificationPreferences {
+  return {
+    enable_line: p.channels.line,
+    enable_push: p.channels.push,
+    enable_email: p.channels.email,
+    enable_sms: p.channels.sms,
+    notify_booking_confirmation: p.types.booking_confirmation ?? true,
+    notify_booking_reminder: p.types.booking_reminder,
+    notify_booking_cancelled: p.types.class_cancelled,
+    notify_contract_expiry: p.types.contract_expiry,
+    notify_payment_confirmation: p.types.payment_confirmation ?? true,
+    notify_promotions: p.types.promotions,
+    notify_system: p.types.system,
+    quiet_hours_enabled: p.quietHours.enabled,
+    quiet_hours_start: p.quietHours.start,
+    quiet_hours_end: p.quietHours.end,
+    sms_fallback_enabled: p.smsFallback ?? false,
+    sms_otp_only: false,
+  }
+}
+
+/** PUT body: only the sections/keys present in `updates`. */
+export function toPreferencesUpdateBody(updates: Partial<NotificationPreferences>) {
+  const body: {
+    channels?: Partial<Record<Channel, boolean>>
+    types?: Record<string, boolean>
+    quietHours?: { enabled?: boolean; start?: string; end?: string }
+    smsFallback?: boolean
+  } = {}
+  for (const channel of ['line', 'push', 'email', 'sms'] as const) {
+    const value = updates[`enable_${channel}`]
+    if (value !== undefined) body.channels = { ...body.channels, [channel]: value }
+  }
+  for (const [key, apiKey] of Object.entries(TYPE_KEYS) as [keyof typeof TYPE_KEYS, string][]) {
+    const value = updates[key]
+    if (value !== undefined) body.types = { ...body.types, [apiKey]: value }
+  }
+  if (updates.quiet_hours_enabled !== undefined) body.quietHours = { ...body.quietHours, enabled: updates.quiet_hours_enabled }
+  if (updates.quiet_hours_start !== undefined) body.quietHours = { ...body.quietHours, start: updates.quiet_hours_start }
+  if (updates.quiet_hours_end !== undefined) body.quietHours = { ...body.quietHours, end: updates.quiet_hours_end }
+  if (updates.sms_fallback_enabled !== undefined) body.smsFallback = updates.sms_fallback_enabled
+  return body
+}
+
+export function toChannelDetails(channels: ApiChannel[]): ChannelDetails {
+  const get = (c: Channel) => channels.find(x => x.channel === c)
+  return {
+    line: { available: !!get('line')?.connected, displayName: get('line')?.details?.displayName },
+    push: { available: !!get('push')?.connected },
+    email: { available: !!get('email')?.connected, address: get('email')?.details?.email },
+    sms: { available: !!get('sms')?.connected, phone: get('sms')?.details?.phone },
+  }
+}
+
+export function toNotificationHistory(n: ApiNotification): NotificationHistory {
+  return {
+    id: n.id,
+    notification_type: n.type,
+    title: n.title,
+    body: n.message,
+    successful_channel: null,
+    overall_status: n.isRead ? 'READ' : 'SENT',
+    sent_at: n.createdAt,
+    reference_type: n.reference?.type ?? null,
+    reference_id: n.reference?.id ?? null,
+    date_created: n.createdAt,
   }
 }
 
@@ -74,8 +186,7 @@ export const useNotificationPreferences = () => {
         })
 
         if (response.success) {
-          preferences.value = response.preferences
-          availableChannels.value = response.available_channels
+          preferences.value = toNotificationPreferences(response.data.preferences)
           return true
         }
         return false
@@ -99,21 +210,17 @@ export const useNotificationPreferences = () => {
     error.value = null
 
     try {
-      const response = await $fetch<{
-        success: boolean
-        message: string
-        preferences: NotificationPreferences
-      }>(`${apiUrl}/api/member/notifications/preferences`, {
-        method: 'PATCH',
+      const response = await $fetch<PreferencesResponse & { message: string }>(`${apiUrl}/api/member/notifications/preferences`, {
+        method: 'PUT',
         headers: {
           ...getAuthHeader(),
           'Content-Type': 'application/json',
         },
-        body: updates,
+        body: toPreferencesUpdateBody(updates),
       })
 
       if (response.success) {
-        preferences.value = response.preferences
+        preferences.value = toNotificationPreferences(response.data.preferences)
         return true
       }
       return false
@@ -146,7 +253,14 @@ export const useNotificationPreferences = () => {
         })
 
         if (response.success) {
-          channelDetails.value = response.channels
+          const details = toChannelDetails(response.data.channels)
+          channelDetails.value = details
+          availableChannels.value = {
+            line: details.line.available,
+            push: details.push.available,
+            email: details.email.available,
+            sms: details.sms.available,
+          }
           return true
         }
         return false
@@ -168,20 +282,22 @@ export const useNotificationPreferences = () => {
     const dedupKey = `notification:history:${limit}:${offset}`
     return deduplicateRequest(dedupKey, async () => {
       try {
+        const page = Math.floor(offset / limit) + 1
         const response = await $fetch<HistoryResponse>(
-          `${apiUrl}/api/member/notifications/history?limit=${limit}&offset=${offset}`,
+          `${apiUrl}/api/member/notifications/history?limit=${limit}&page=${page}`,
           {
             headers: getAuthHeader(),
           }
         )
 
         if (response.success) {
+          const items = response.data.notifications.map(toNotificationHistory)
           if (offset === 0) {
-            history.value = response.data
+            history.value = items
           } else {
-            history.value = [...history.value, ...response.data]
+            history.value = [...history.value, ...items]
           }
-          historyPagination.value = response.pagination
+          historyPagination.value = { limit, offset, total: response.data.pagination.total }
           return true
         }
         return false
@@ -244,7 +360,7 @@ export const useNotificationPreferences = () => {
   const hasEmail = computed(() => availableChannels.value.email)
   const hasPhone = computed(() => availableChannels.value.sms)
   const hasMoreHistory = computed(
-    () => historyPagination.value.offset + history.value.length < historyPagination.value.total
+    () => history.value.length < historyPagination.value.total
   )
 
   // Channel label helpers

@@ -10,7 +10,7 @@ import type { MemberVariables } from '../middleware/index.js';
 // MEMBER WORKOUTS ROUTES
 // =============================================================================
 // Workout logging for member-app
-// Endpoints: GET /, POST /, GET /:id, PUT /:id, DELETE /:id, GET /stats
+// Endpoints: GET /, POST /, GET /stats, GET /stats/summary, GET /:id, PUT /:id, DELETE /:id
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
@@ -45,6 +45,27 @@ const WORKOUT_STATS_SELECT = {
 };
 
 const WORKOUT_RECENT_DATE_SELECT = { date: workoutLogs.date };
+
+const WORKOUT_DAILY_SELECT = {
+  date: workoutLogs.date,
+  duration: sum(workoutLogs.duration),
+  calories: sum(workoutLogs.calories),
+  count: count(workoutLogs.id),
+};
+
+// Only UUIDs reach the :id handlers, so /stats or a typo is a 404 instead of a 500.
+const ID_PARAM = ':id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}';
+
+const STATS_PERIODS = ['week', 'month', 'year'] as const;
+
+/** First day (YYYY-MM-DD, UTC) of the current calendar week (Mon), month or year. */
+export function periodStartDate(period: typeof STATS_PERIODS[number], now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (period === 'week') d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  if (period === 'month') d.setUTCDate(1);
+  if (period === 'year') d.setUTCMonth(0, 1);
+  return d.toISOString().slice(0, 10);
+}
 
 // Apply auth middleware
 app.use('*', memberAuthMiddleware);
@@ -190,10 +211,58 @@ app.post(
 );
 
 // -----------------------------------------------------------------------------
+// GET /api/member/workouts/stats?period=week|month|year - Calendar-period stats
+// -----------------------------------------------------------------------------
+
+app.get(
+  '/stats',
+  zValidator('query', z.object({ period: z.enum(STATS_PERIODS).default('week') })),
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { period } = c.req.valid('query');
+    const startDate = periodStartDate(period);
+
+    const daily = await db
+      .select(WORKOUT_DAILY_SELECT)
+      .from(workoutLogs)
+      .where(and(eq(workoutLogs.memberId, memberInfo.id), gte(workoutLogs.date, startDate)))
+      .groupBy(workoutLogs.date)
+      .orderBy(workoutLogs.date);
+
+    const days = daily.map((d) => ({
+      date: d.date,
+      duration: Number(d.duration ?? 0),
+      calories: Number(d.calories ?? 0),
+      count: Number(d.count),
+    }));
+    const totalWorkouts = days.reduce((n, d) => n + d.count, 0);
+    const totalDuration = days.reduce((n, d) => n + d.duration, 0);
+    const totalCalories = days.reduce((n, d) => n + d.calories, 0);
+
+    return c.json({
+      success: true,
+      data: {
+        stats: {
+          period,
+          startDate,
+          totalWorkouts,
+          totalDuration,
+          totalCalories,
+          avgDuration: totalWorkouts ? Math.round(totalDuration / totalWorkouts) : 0,
+          avgCalories: totalWorkouts ? Math.round(totalCalories / totalWorkouts) : 0,
+          workoutDays: days.length,
+        },
+        daily: days,
+      },
+    });
+  }
+);
+
+// -----------------------------------------------------------------------------
 // GET /api/member/workouts/:id - Get workout by ID
 // -----------------------------------------------------------------------------
 
-app.get('/:id', async (c) => {
+app.get(`/${ID_PARAM}`, async (c) => {
   const memberInfo = c.get('member')!;
   const workoutId = c.req.param('id');
 
@@ -238,7 +307,7 @@ app.get('/:id', async (c) => {
 // -----------------------------------------------------------------------------
 
 app.put(
-  '/:id',
+  `/${ID_PARAM}`,
   zValidator('json', updateWorkoutSchema),
   async (c) => {
     const memberInfo = c.get('member')!;
@@ -291,7 +360,7 @@ app.put(
 // DELETE /api/member/workouts/:id - Delete workout
 // -----------------------------------------------------------------------------
 
-app.delete('/:id', async (c) => {
+app.delete(`/${ID_PARAM}`, async (c) => {
   const memberInfo = c.get('member')!;
   const workoutId = c.req.param('id');
 

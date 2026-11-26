@@ -73,6 +73,20 @@ vi.stubGlobal('useMemberAuth', () => ({
 // Import after mocking
 import { useBookings, type Booking } from './useBookings'
 
+// Backend booking payload (backend/src/routes/member-bookings.ts)
+const ab = (o: { id: string; bookingStatus: string; sessionDate?: string; sessionId?: string }) => ({
+  id: o.id,
+  sessionId: o.sessionId ?? 'session-x',
+  contractId: null,
+  bookingStatus: o.bookingStatus,
+  waitlistPosition: null,
+  bookedAt: '2025-01-01T00:00:00Z',
+  session: { sessionDate: o.sessionDate ?? '2099-01-01', startTime: '10:00:00', endTime: '11:00:00', room: null, sessionStatus: 'SCHEDULED' },
+  class: { id: 'class-1', name: '瑜珈', category: 'YOGA' },
+  instructor: null,
+  hasReview: false,
+})
+
 describe('useBookings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -99,9 +113,9 @@ describe('useBookings', () => {
       mockMember.value = { id: 'member-1', full_name: 'Test Member' }
       mockFetch.mockResolvedValue({
         success: true,
-        data: [
-          { id: 'booking-1', booking_status: 'CONFIRMED', session_date: '2025-12-01' },
-        ],
+        data: { bookings: [
+          ab({ id: 'booking-1', bookingStatus: 'CONFIRMED', sessionDate: '2025-12-01' }),
+        ] },
       })
 
       const { fetchMyBookings } = useBookings()
@@ -113,18 +127,40 @@ describe('useBookings', () => {
           headers: { 'X-Member-Token': 'test-token' },
         })
       )
-      expect(result).toHaveLength(1)
+      expect(result).toEqual([{
+        id: 'booking-1',
+        session_id: 'session-x',
+        member_id: 'member-1',
+        contract_id: undefined,
+        booking_status: 'CONFIRMED',
+        waitlist_position: null,
+        booked_at: '2025-01-01T00:00:00Z',
+        cancelled_at: null,
+        attended_at: null,
+        class_name: '瑜珈',
+        session_date: '2025-12-01',
+        start_time: '10:00',
+        end_time: '11:00',
+        instructor_name: undefined,
+        room: undefined,
+        has_review: false,
+      }])
     })
 
     it('should pass filter options to API', async () => {
       mockMember.value = { id: 'member-1', full_name: 'Test Member' }
-      mockFetch.mockResolvedValue({ success: true, data: [] })
+      mockFetch.mockResolvedValue({ success: true, data: { bookings: [] } })
 
       const { fetchMyBookings } = useBookings()
       await fetchMyBookings({ status: 'CONFIRMED', upcoming: true, limit: 10 })
+      await fetchMyBookings({ status: 'WAITLISTED' })
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8056/api/member/bookings?status=CONFIRMED&upcoming=true&limit=10',
+        expect.any(Object)
+      )
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8056/api/member/bookings?status=WAITLIST',
         expect.any(Object)
       )
     })
@@ -138,10 +174,10 @@ describe('useBookings', () => {
 
       mockFetch.mockResolvedValue({
         success: true,
-        data: [
-          { id: 'upcoming-1', booking_status: 'CONFIRMED', session_date: futureDate.toISOString() },
-          { id: 'past-1', booking_status: 'ATTENDED', session_date: pastDate.toISOString() },
-        ],
+        data: { bookings: [
+          ab({ id: 'upcoming-1', bookingStatus: 'CONFIRMED', sessionDate: futureDate.toISOString() }),
+          ab({ id: 'past-1', bookingStatus: 'ATTENDED', sessionDate: pastDate.toISOString() }),
+        ] },
       })
 
       const { fetchMyBookings, upcomingBookings, pastBookings } = useBookings()
@@ -176,11 +212,12 @@ describe('useBookings', () => {
 
     it('should send booking request with session and contract IDs', async () => {
       mockMember.value = { id: 'member-1', full_name: 'Test Member' }
-      mockFetch.mockResolvedValue({
+      mockFetch.mockResolvedValueOnce({
         success: true,
-        message: '預約成功',
-        booking: { id: 'booking-1', booking_status: 'CONFIRMED' },
+        message: '預約成功！',
+        data: { booking: { ...ab({ id: 'booking-1', bookingStatus: 'CONFIRMED', sessionId: 'session-1' }), session: undefined, class: undefined } },
       })
+      mockFetch.mockResolvedValueOnce({ success: true, data: { bookings: [] } })
 
       const { bookSession } = useBookings()
       const result = await bookSession('session-1', 'contract-1')
@@ -189,24 +226,35 @@ describe('useBookings', () => {
         'http://localhost:8056/api/member/bookings',
         expect.objectContaining({
           method: 'POST',
-          body: { session_id: 'session-1', contract_id: 'contract-1' },
+          body: { sessionId: 'session-1', contractId: 'contract-1' },
         })
       )
       expect(result.success).toBe(true)
+      expect(result.message).toBe('預約成功！')
+      expect(result.booking?.booking_status).toBe('CONFIRMED')
     })
 
     it('should add successful booking to myBookings state', async () => {
       mockMember.value = { id: 'member-1', full_name: 'Test Member' }
-      mockFetch.mockResolvedValue({
+      mockFetch.mockResolvedValueOnce({
         success: true,
-        message: '預約成功',
-        booking: { id: 'booking-new', booking_status: 'CONFIRMED' },
+        message: '已加入候補名單，目前排序第 2 位',
+        data: { booking: { ...ab({ id: 'booking-new', bookingStatus: 'WAITLIST' }), waitlistPosition: 2 } },
+      })
+      // the list is reloaded so the new booking carries its session details
+      mockFetch.mockResolvedValueOnce({
+        success: true,
+        data: { bookings: [{ ...ab({ id: 'booking-new', bookingStatus: 'WAITLIST' }), waitlistPosition: 2 }] },
       })
 
-      const { bookSession, myBookings } = useBookings()
-      await bookSession('session-1')
+      const { bookSession, myBookings, upcomingBookings } = useBookings()
+      const result = await bookSession('session-1')
 
-      expect(myBookings.value[0]!.id).toBe('booking-new')
+      expect(mockFetch.mock.calls[0]![1].body).toEqual({ sessionId: 'session-1' })
+      expect(result.booking?.booking_status).toBe('WAITLISTED')
+      expect(result.waitlist_position).toBe(2)
+      expect(myBookings.value[0]).toMatchObject({ id: 'booking-new', class_name: '瑜珈', session_date: '2099-01-01', start_time: '10:00' })
+      expect(upcomingBookings.value).toHaveLength(1)
     })
 
     it('should extract error message on failure', async () => {
@@ -255,9 +303,9 @@ describe('useBookings', () => {
       // First set up some bookings
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: [
-          { id: 'booking-1', booking_status: 'CONFIRMED', session_date: '2099-01-01' },
-        ],
+        data: { bookings: [
+          ab({ id: 'booking-1', bookingStatus: 'CONFIRMED', sessionDate: '2099-01-01' }),
+        ] },
       })
 
       const { fetchMyBookings, cancelBooking, myBookings, upcomingBookings } = useBookings()
@@ -292,9 +340,9 @@ describe('useBookings', () => {
       mockMember.value = { id: 'member-1', full_name: 'Test Member' }
       mockFetch.mockResolvedValue({
         success: true,
-        data: [
-          { id: 'b-1', session_id: 'session-1', booking_status: 'CONFIRMED' },
-        ],
+        data: { bookings: [
+          ab({ id: 'b-1', sessionId: 'session-1', bookingStatus: 'CONFIRMED' }),
+        ] },
       })
 
       const { fetchMyBookings, hasBookedSession } = useBookings()
@@ -308,9 +356,9 @@ describe('useBookings', () => {
       mockMember.value = { id: 'member-1', full_name: 'Test Member' }
       mockFetch.mockResolvedValue({
         success: true,
-        data: [
-          { id: 'b-1', session_id: 'session-1', booking_status: 'CANCELLED' },
-        ],
+        data: { bookings: [
+          ab({ id: 'b-1', sessionId: 'session-1', bookingStatus: 'CANCELLED' }),
+        ] },
       })
 
       const { fetchMyBookings, hasBookedSession } = useBookings()
@@ -432,10 +480,10 @@ describe('useBookings', () => {
 
       mockFetch.mockResolvedValue({
         success: true,
-        data: [
-          { id: '1', booking_status: 'CONFIRMED', session_date: futureDate.toISOString() },
-          { id: '2', booking_status: 'WAITLISTED', session_date: futureDate.toISOString() },
-        ],
+        data: { bookings: [
+          ab({ id: '1', bookingStatus: 'CONFIRMED', sessionDate: futureDate.toISOString() }),
+          ab({ id: '2', bookingStatus: 'WAITLIST', sessionDate: futureDate.toISOString() }),
+        ] },
       })
 
       const { fetchMyBookings, upcomingCount } = useBookings()
@@ -451,9 +499,9 @@ describe('useBookings', () => {
 
       mockFetch.mockResolvedValue({
         success: true,
-        data: [
-          { id: '1', booking_status: 'CONFIRMED', session_date: futureDate.toISOString() },
-        ],
+        data: { bookings: [
+          ab({ id: '1', bookingStatus: 'CONFIRMED', sessionDate: futureDate.toISOString() }),
+        ] },
       })
 
       const { fetchMyBookings, hasUpcomingBookings } = useBookings()

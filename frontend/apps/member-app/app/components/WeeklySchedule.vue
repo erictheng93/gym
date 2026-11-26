@@ -49,8 +49,8 @@ const sessionsForDate = computed(() => {
   return props.sessions
     .filter(s => s.session_date === selectedDate.value)
     .sort((a, b) => {
-      const timeA = a.schedule?.start_time || ''
-      const timeB = b.schedule?.start_time || ''
+      const timeA = a.start_time || ''
+      const timeB = b.start_time || ''
       return timeA.localeCompare(timeB)
     })
 })
@@ -72,11 +72,11 @@ const getClassName = (session: ClassSession): string => {
 }
 
 const getStartTime = (session: ClassSession): string => {
-  return session.schedule?.start_time?.slice(0, 5) || ''
+  return session.start_time?.slice(0, 5) || ''
 }
 
 const getEndTime = (session: ClassSession): string => {
-  return session.schedule?.end_time?.slice(0, 5) || ''
+  return session.end_time?.slice(0, 5) || ''
 }
 
 const getInstructor = (session: ClassSession): string => {

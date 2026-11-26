@@ -10,9 +10,25 @@ import type { MemberVariables } from '../middleware/index.js';
 // MEMBER MEASUREMENTS ROUTES
 // =============================================================================
 // Body measurements tracking for member-app
-// Endpoints: GET /, POST /, DELETE /:id, GET /progress, GET /latest
+// Endpoints: GET /, POST /, DELETE /:id, GET /progress, GET /stats, GET /latest
 
 const app = new Hono<{ Variables: MemberVariables }>();
+
+// Only UUIDs reach the :id handler, so a typo is a 404 instead of a 500.
+const ID_PARAM = ':id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}';
+
+const STATS_METRICS = ['weight', 'bodyFat', 'muscleMass', 'bmi'] as const;
+type StatsMetric = typeof STATS_METRICS[number];
+
+/** first/last/change/trend of one metric; same 0.5 "stable" threshold as /progress. */
+function metricTrend(values: number[]) {
+  if (values.length === 0) return { first: null, last: null, change: null, trend: null };
+  const first = values[0]!;
+  const last = values[values.length - 1]!;
+  const change = Number((last - first).toFixed(2));
+  const trend = Math.abs(change) < 0.5 ? 'stable' : change > 0 ? 'up' : 'down';
+  return { first, last, change, trend };
+}
 
 // -----------------------------------------------------------------------------
 // Hoisted Query Projections
@@ -180,7 +196,7 @@ app.post(
 // DELETE /api/member/measurements/:id - Delete measurement
 // -----------------------------------------------------------------------------
 
-app.delete('/:id', async (c) => {
+app.delete(`/${ID_PARAM}`, async (c) => {
   const memberInfo = c.get('member')!;
   const measurementId = c.req.param('id');
 
@@ -309,6 +325,45 @@ app.get('/progress', async (c) => {
     },
   });
 });
+
+// -----------------------------------------------------------------------------
+// GET /api/member/measurements/stats?period=<days> - Trends for every metric
+// -----------------------------------------------------------------------------
+
+app.get(
+  '/stats',
+  zValidator('query', z.object({ period: z.coerce.number().int().min(1).max(365).default(30) })),
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { period } = c.req.valid('query');
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - period);
+    const startDateStr = startDate.toISOString().slice(0, 10);
+
+    const rows = await db
+      .select(MEASUREMENT_PROGRESS_LATEST_SELECT)
+      .from(bodyMeasurements)
+      .where(and(
+        eq(bodyMeasurements.memberId, memberInfo.id),
+        sql`${bodyMeasurements.date} >= ${startDateStr}`,
+      ))
+      .orderBy(asc(bodyMeasurements.date), asc(bodyMeasurements.createdAt));
+
+    const trends = {} as Record<StatsMetric, ReturnType<typeof metricTrend>>;
+    for (const metric of STATS_METRICS) {
+      trends[metric] = metricTrend(rows.map((r) => r[metric]).filter((v): v is number => v !== null));
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        stats: { totalRecords: rows.length, periodDays: period, ...trends },
+        daily: rows.map((r) => ({ date: r.date, weight: r.weight, bodyFat: r.bodyFat })),
+      },
+    });
+  }
+);
 
 // -----------------------------------------------------------------------------
 // GET /api/member/measurements/latest - Get latest measurement

@@ -47,14 +47,13 @@ const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
  */
 import { updateProfileSchema } from '../../schemas/profile.schema'
 import { useFormValidation } from '../../composables/useFormValidation'
+import type { MemberProfileUpdate } from '../../composables/useMemberProfile'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const config = useRuntimeConfig()
-const apiUrl = config.public.apiBaseUrl
-const { member, logout, fetchMember, getAuthHeader } = useMemberAuth()
+const { member, logout, fetchMember } = useMemberAuth()
 const toast = useToast()
 const { handleError } = useApiError()
 const profileForm = useFormValidation(updateProfileSchema)
@@ -79,65 +78,17 @@ const editForm = reactive({
   emergency_phone: '',
 })
 
-// API response type
-interface MemberApiResponse {
-  id: string
-  member_code: string
-  full_name: string
-  phone: string | null
-  email: string | null
-  gender: 'MALE' | 'FEMALE' | 'OTHER' | null
-  birthday: string | null
-  emergency_contact: string | null
-  emergency_phone: string | null
-  branch_id: string | null
-  branch: { name: string } | null
-  member_status: string
-  date_created: string
-  avatar: string | null
-}
-
-// 完整會員資料
-interface MemberDetail {
-  id: string
-  member_code: string
-  full_name: string
-  phone: string | null
-  email: string | null
-  gender: 'MALE' | 'FEMALE' | 'OTHER' | null
-  birthday: string | null
-  emergency_contact: string | null
-  emergency_phone: string | null
-  branch_id: string | null
-  branch: { name: string } | null
-  member_status: string
-  created_at: string
-  avatar: string | null
-}
-
-const memberDetail = ref<MemberDetail | null>(null)
-const isLoadingDetail = ref(false)
+// 完整會員資料（GET /api/member/me）
+const { profile: memberDetail, isLoading: isLoadingDetail, fetchProfile, updateProfile } = useMemberProfile()
 
 // 載入完整會員資料
 const loadMemberDetail = async () => {
   if (!member.value) return
 
-  isLoadingDetail.value = true
   try {
-    const response = await $fetch<{ success: boolean; data: MemberApiResponse }>(`${apiUrl}/api/member/profile`, {
-      headers: getAuthHeader(),
-    })
-
-    if (response.success && response.data) {
-      memberDetail.value = {
-        ...response.data,
-        created_at: response.data.date_created,
-      }
-    }
+    await fetchProfile()
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入會員資料' })
-  } finally {
-    isLoadingDetail.value = false
   }
 }
 
@@ -159,18 +110,24 @@ const cancelEdit = () => {
   profileForm.clearErrors()
 }
 
-// 儲存編輯
+// 儲存編輯：只送出有變更的欄位（未變更的舊資料不需重新驗證）
 const saveEdit = async () => {
-  if (!member.value || !memberDetail.value) return
+  const current = memberDetail.value
+  if (!member.value || !current) return
 
-  // 驗證
-  const result = profileForm.validate({
-    full_name: editForm.full_name.trim() || undefined,
-    phone: editForm.phone.trim() || undefined,
-    email: editForm.email.trim() || undefined,
-    emergency_contact: editForm.emergency_contact.trim() || undefined,
-    emergency_phone: editForm.emergency_phone.trim() || undefined,
-  })
+  const changed: MemberProfileUpdate = {}
+  for (const key of ['full_name', 'phone', 'email', 'emergency_contact', 'emergency_phone'] as const) {
+    const value = editForm[key].trim()
+    if (value && value !== (current[key] || '')) changed[key] = value
+  }
+
+  if (Object.keys(changed).length === 0) {
+    isEditing.value = false
+    profileForm.clearErrors()
+    return
+  }
+
+  const result = profileForm.validate(changed)
 
   if (!result.success) {
     const firstError = Object.values(profileForm.errors.value)[0]
@@ -180,17 +137,7 @@ const saveEdit = async () => {
 
   isSaving.value = true
   try {
-    await $fetch(`${apiUrl}/api/member/profile`, {
-      method: 'PATCH',
-      headers: getAuthHeader(),
-      body: {
-        full_name: result.data.full_name || null,
-        phone: result.data.phone || null,
-        email: result.data.email || null,
-        emergency_contact: result.data.emergency_contact || null,
-        emergency_phone: result.data.emergency_phone || null,
-      },
-    })
+    await updateProfile(changed)
 
     toast.success('資料已更新')
     isEditing.value = false
@@ -232,9 +179,9 @@ const getStatusInfo = (status: string) => {
 
 // 計算會員年資
 const membershipDuration = computed(() => {
-  if (!memberDetail.value?.created_at) return null
+  if (!memberDetail.value?.join_date) return null
 
-  const created = new Date(memberDetail.value.created_at)
+  const created = new Date(memberDetail.value.join_date)
   const now = new Date()
   const years = now.getFullYear() - created.getFullYear()
   const months = now.getMonth() - created.getMonth()
@@ -412,7 +359,7 @@ onMounted(() => {
         </div>
         <div class="info-row">
           <span class="info-label">加入日期</span>
-          <span class="info-value">{{ formatDate(memberDetail?.created_at) }}</span>
+          <span class="info-value">{{ formatDate(memberDetail?.join_date) }}</span>
         </div>
       </div>
 
