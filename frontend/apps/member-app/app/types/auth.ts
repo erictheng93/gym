@@ -42,6 +42,25 @@ export interface OtpSendResult extends AuthResult {
   otp?: string // Only in development
 }
 
+/** Body of POST /api/member/me/complete-profile. */
+export interface CompleteProfileInput {
+  phone: string
+  otpCode: string
+  fullName?: string
+  gender?: 'MALE' | 'FEMALE' | 'OTHER'
+  birthday?: string
+  emergencyContact?: string
+  emergencyPhone?: string
+}
+
+/** Result of the phone-verification / complete-profile calls. */
+export interface ProfileApiResult extends AuthResult {
+  /** Backend error code, e.g. PHONE_TAKEN, WRONG_CODE, INVALID_OTP, MAX_ATTEMPTS */
+  code?: string
+  attemptsRemaining?: number
+  otp?: string // Only in development
+}
+
 export interface OAuthResult {
   success: boolean
   error?: string

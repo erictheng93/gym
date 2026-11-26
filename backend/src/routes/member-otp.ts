@@ -1,12 +1,12 @@
-import { randomInt, timingSafeEqual } from 'node:crypto';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
-import { eq, and, gt, desc, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { rateLimiter, getClientIp } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
+import { generateOtp, consumeOtp, OTP_TTL_MS } from '../services/otp.js';
 
 // =============================================================================
 // MEMBER OTP ROUTES
@@ -19,13 +19,6 @@ type OtpVariables = {
 };
 
 const app = new Hono<{ Variables: OtpVariables }>();
-
-const OTP_VERIFY_SELECT = {
-  id: otpTokens.id,
-  code: otpTokens.code,
-  attempts: otpTokens.attempts,
-  maxAttempts: otpTokens.maxAttempts,
-};
 
 const MEMBER_OTP_AUTH_SELECT = {
   id: members.id,
@@ -123,16 +116,6 @@ const refreshTokenSchema = z.object({
 // Helpers
 // -----------------------------------------------------------------------------
 
-export function generateOtp(): string {
-  return String(randomInt(100000, 1000000));
-}
-
-function otpCodeMatches(expected: string, provided: string): boolean {
-  const a = Buffer.from(expected);
-  const b = Buffer.from(provided);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 /** Client address for the OTP logs (TRUST_PROXY-aware); undefined when unknown. */
 function otpClientIp(c: Context): string | undefined {
   const ip = getClientIp(c);
@@ -194,7 +177,7 @@ app.post(
 
     // Generate OTP
     const code = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     // Delete any existing OTP for this identifier (both raw and normalized)
     await db
@@ -276,72 +259,13 @@ app.post(
   async (c) => {
     const { identifier, type, code } = c.req.valid('json');
 
-    // Find valid OTP
-    const [otp] = await db
-      .select(OTP_VERIFY_SELECT)
-      .from(otpTokens)
-      .where(and(
-        tokenIdentifierMatches(type, identifier),
-        eq(otpTokens.identifierType, type),
-        eq(otpTokens.verified, false),
-        gt(otpTokens.expiresAt, new Date()),
-      ))
-      .orderBy(desc(otpTokens.createdAt))
-      .limit(1);
+    const result = await consumeOtp(
+      and(tokenIdentifierMatches(type, identifier), eq(otpTokens.identifierType, type)),
+      code,
+    );
 
-    if (!otp) {
-      return c.json({
-        success: false,
-        error: '驗證碼無效或已過期',
-        code: 'INVALID_OTP',
-      }, 400);
-    }
-
-    // Atomically count this attempt; fails once max attempts is reached
-    const maxAttempts = otp.maxAttempts || 3;
-    const [counted] = await db
-      .update(otpTokens)
-      .set({ attempts: sql`coalesce(${otpTokens.attempts}, 0) + 1` })
-      .where(and(
-        eq(otpTokens.id, otp.id),
-        sql`coalesce(${otpTokens.attempts}, 0) < ${maxAttempts}`,
-      ))
-      .returning({ attempts: otpTokens.attempts });
-
-    if (!counted) {
-      return c.json({
-        success: false,
-        error: '驗證次數過多，請重新獲取驗證碼',
-        code: 'MAX_ATTEMPTS',
-      }, 400);
-    }
-
-    // Verify code (constant-time)
-    if (!otpCodeMatches(otp.code, code)) {
-      return c.json({
-        success: false,
-        error: '驗證碼錯誤',
-        code: 'WRONG_CODE',
-        attemptsRemaining: maxAttempts - (counted.attempts || 0),
-      }, 400);
-    }
-
-    // Consume the OTP atomically so concurrent requests cannot reuse it
-    const [consumed] = await db
-      .update(otpTokens)
-      .set({
-        verified: true,
-        verifiedAt: new Date(),
-      })
-      .where(and(eq(otpTokens.id, otp.id), eq(otpTokens.verified, false)))
-      .returning({ id: otpTokens.id });
-
-    if (!consumed) {
-      return c.json({
-        success: false,
-        error: '驗證碼無效或已過期',
-        code: 'INVALID_OTP',
-      }, 400);
+    if (!result.ok) {
+      return c.json({ success: false, ...result.failure }, 400);
     }
 
     // Find member

@@ -140,6 +140,7 @@ export const useMemberAuth = () => {
     // ============================================
     // Profile (from useAuthMethods)
     // ============================================
+    sendPhoneVerification: methods.sendPhoneVerification,
     completeProfile: methods.completeProfile,
 
     // ============================================

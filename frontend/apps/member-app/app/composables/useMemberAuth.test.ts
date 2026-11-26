@@ -119,6 +119,7 @@ const mockMethods = {
   forgotPassword: vi.fn(),
   resetPassword: vi.fn(),
   changePassword: vi.fn(),
+  sendPhoneVerification: vi.fn(),
   completeProfile: vi.fn(),
   logout: vi.fn(),
 }
@@ -342,6 +343,7 @@ describe('useMemberAuth', () => {
         'resetPassword',
         'changePassword',
         // Profile
+        'sendPhoneVerification',
         'completeProfile',
         // Session management
         'logout',

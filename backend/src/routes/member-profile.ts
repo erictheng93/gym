@@ -1,16 +1,17 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, members, branches, contracts, membershipPlans, memberCredentials, memberSocialAccounts } from '../db/index.js';
-import { eq, and, ne, desc, inArray } from 'drizzle-orm';
-import { memberAuthMiddleware, requireMember } from '../middleware/index.js';
+import { db, members, branches, contracts, membershipPlans, memberCredentials, memberSocialAccounts, otpTokens, otpSendLogs } from '../db/index.js';
+import { eq, and, ne, desc, inArray, sql } from 'drizzle-orm';
+import { memberAuthMiddleware, requireMember, rateLimiter, limitMax, getClientIp } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
+import { generateOtp, consumeOtp, memberPhoneOtpIdentifier, OTP_TTL_MS } from '../services/otp.js';
 
 // =============================================================================
 // MEMBER PROFILE ROUTES
 // =============================================================================
 // Profile management for member-app
-// Endpoints: /me (GET, PUT), /complete-profile
+// Endpoints: /me (GET, PUT), /phone/otp, /complete-profile
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
@@ -38,8 +39,17 @@ const updateProfileSchema = z.object({
   height: z.number().min(50).max(250).optional(),
 });
 
+const phoneSchema = z.string().trim().regex(/^09\d{2}[- ]?\d{3}[- ]?\d{3}$/, '請輸入有效的手機號碼')
+  .transform(phone => phone.replace(/[- ]/g, ''));
+
+const phoneOtpSchema = z.object({
+  phone: phoneSchema,
+});
+
 const completeProfileSchema = z.object({
-  phone: z.string().regex(/^09\d{8}$/, '請輸入有效的手機號碼'),
+  phone: phoneSchema,
+  otpCode: z.string().regex(/^\d{6}$/, '驗證碼必須是 6 位數字'),
+  fullName: z.string().trim().min(2, '姓名至少 2 個字元').max(100).optional(),
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式: YYYY-MM-DD').optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   emergencyContact: z.string().max(100).optional(),
@@ -112,11 +122,6 @@ const MEMBER_SOCIAL_ACCOUNTS_SELECT = {
 };
 
 export const MEMBER_ID_SELECT = { id: members.id };
-
-export const MEMBER_PHONE_CHECK_SELECT = {
-  id: members.id,
-  phone: members.phone,
-};
 
 export const MEMBER_PROFILE_UPDATE_RETURNING = {
   id: members.id,
@@ -300,65 +305,215 @@ app.put(
 );
 
 // -----------------------------------------------------------------------------
-// POST /api/member/complete-profile - Complete profile after social login
+// Phone verification (complete-profile)
 // -----------------------------------------------------------------------------
+// The phone saved by /complete-profile must be proven with a code sent to that
+// number for this member: the token's identifier binds member + phone (see
+// memberPhoneOtpIdentifier), and consumeOtp enforces expiry, attempts and
+// single use. No login tokens are issued here.
+
+const PHONE_TAKEN_RESPONSE = {
+  success: false,
+  error: '此手機號碼已被其他會員使用，請改用其他號碼或洽櫃台協助',
+  code: 'PHONE_TAKEN',
+} as const;
+
+/** Whether another member of the tenant has `phone` (ignoring separators). */
+async function phoneTakenByOther(
+  member: { id: string; tenantId: string },
+  phone: string,
+  executor: Pick<typeof db, 'select'> = db,
+): Promise<boolean> {
+  const [taken] = await executor
+    .select(MEMBER_ID_SELECT)
+    .from(members)
+    .where(and(
+      eq(members.tenantId, member.tenantId),
+      eq(sql`translate(${members.phone}, '- ', '')`, phone),
+      ne(members.id, member.id),
+    ))
+    .limit(1);
+  return !!taken;
+}
+
+const memberRateKey = (c: Context<{ Variables: MemberVariables }>) => c.get('member')?.id ?? 'anonymous';
+
+const phoneOtpSendLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  max: limitMax(1),
+  keyGenerator: (c) => `member-phone-otp:send:${memberRateKey(c)}`,
+  message: '發送過於頻繁，請 1 分鐘後再試',
+});
+
+const phoneOtpSendHourlyLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: limitMax(5),
+  keyGenerator: (c) => `member-phone-otp:send:hourly:${memberRateKey(c)}`,
+  message: '發送次數已達上限，請稍後再試',
+});
+
+const phoneOtpSendIpLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: limitMax(20),
+  keyGenerator: (c) => `member-phone-otp:send:ip:${getClientIp(c)}`,
+  message: '發送次數已達上限，請稍後再試',
+});
+
+const completeProfileLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: limitMax(5),
+  keyGenerator: (c) => `member-phone-otp:verify:${memberRateKey(c)}`,
+  message: '驗證次數過多，請 15 分鐘後再試',
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/member/me/phone/otp - Send a phone verification code
+// -----------------------------------------------------------------------------
+
+app.post(
+  '/phone/otp',
+  zValidator('json', phoneOtpSchema),
+  phoneOtpSendLimiter,
+  phoneOtpSendHourlyLimiter,
+  phoneOtpSendIpLimiter,
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { phone } = c.req.valid('json');
+    const ip = getClientIp(c);
+    const ipAddress = ip === 'unknown' ? undefined : ip;
+
+    const [member] = await db
+      .select({ id: members.id, status: members.status })
+      .from(members)
+      .where(ownMember(memberInfo))
+      .limit(1);
+
+    if (!member) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
+    if (member.status === 'BANNED') {
+      return c.json({ success: false, error: '帳號已停權', code: 'MEMBER_BANNED' }, 403);
+    }
+    if (await phoneTakenByOther(memberInfo, phone)) {
+      return c.json(PHONE_TAKEN_RESPONSE, 409);
+    }
+
+    const identifier = memberPhoneOtpIdentifier(memberInfo.id, phone);
+    const code = generateOtp();
+
+    // One live code per member + phone: a resend replaces the previous code
+    await db.delete(otpTokens).where(and(
+      eq(otpTokens.identifier, identifier),
+      eq(otpTokens.identifierType, 'phone'),
+    ));
+    await db.insert(otpTokens).values({
+      identifier,
+      identifierType: 'phone',
+      code,
+      expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      ipAddress,
+      userAgent: c.req.header('user-agent') || '',
+    });
+
+    // TODO: Integrate SMS provider (same placeholder as /api/member/otp/send)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[SMS] Phone verification code for ${phone}: ${code}`);
+    }
+
+    await db.insert(otpSendLogs).values({
+      identifier: phone,
+      identifierType: 'phone',
+      ipAddress,
+      success: true,
+    });
+
+    const exposeCode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    return c.json({
+      success: true,
+      message: '驗證碼已發送',
+      data: {
+        expiresIn: OTP_TTL_MS / 1000,
+        ...(exposeCode && { otp: code }),
+      },
+    });
+  }
+);
+
+// -----------------------------------------------------------------------------
+// POST /api/member/me/complete-profile - Complete profile after social login
+// -----------------------------------------------------------------------------
+// Body: { phone, otpCode, fullName?, birthday?, gender?, emergencyContact?, emergencyPhone? }
+// `otpCode` must come from POST /phone/otp for this member and this phone.
+
+class PhoneTakenError extends Error {}
 
 app.post(
   '/complete-profile',
   zValidator('json', completeProfileSchema),
+  completeProfileLimiter,
   async (c) => {
     const memberInfo = c.get('member')!;
-    const profileData = c.req.valid('json');
+    const { phone, otpCode, ...fields } = c.req.valid('json');
 
-    // Concurrently fetch current member and check if new phone is already taken
-    const [[member], existingPhoneMembers] = await Promise.all([
-      db
-        .select(MEMBER_PHONE_CHECK_SELECT)
-        .from(members)
-        .where(ownMember(memberInfo))
-        .limit(1),
-      profileData.phone
-        ? db.select(MEMBER_ID_SELECT).from(members).where(and(eq(members.phone, profileData.phone), ne(members.id, memberInfo.id))).limit(1)
-        : Promise.resolve([]),
-    ]);
+    try {
+      const result = await db.transaction(async (tx) => {
+        // Serialize claims of the same phone within a tenant
+        const lockKey = `member-phone:${memberInfo.tenantId}:${phone}`;
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
 
-    if (!member) {
+        if (await phoneTakenByOther(memberInfo, phone, tx)) {
+          throw new PhoneTakenError();
+        }
+
+        const otp = await consumeOtp(
+          and(
+            eq(otpTokens.identifier, memberPhoneOtpIdentifier(memberInfo.id, phone)),
+            eq(otpTokens.identifierType, 'phone'),
+          ),
+          otpCode,
+          tx,
+        );
+        // Returning (not throwing) commits the counted attempt
+        if (!otp.ok) return { ok: false as const, failure: otp.failure };
+
+        const [updatedMember] = await tx
+          .update(members)
+          .set({
+            phone,
+            ...(fields.fullName && { fullName: fields.fullName }),
+            birthday: fields.birthday || null,
+            gender: fields.gender || null,
+            emergencyContact: fields.emergencyContact || null,
+            emergencyPhone: fields.emergencyPhone || null,
+            updatedAt: new Date(),
+          })
+          .where(ownMember(memberInfo))
+          .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
+
+        return { ok: true as const, member: updatedMember };
+      });
+
+      if (!result.ok) {
+        return c.json({ success: false, ...result.failure }, 400);
+      }
+      if (!result.member) {
+        return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+      }
+
       return c.json({
-        success: false,
-        error: '會員不存在',
-        code: 'MEMBER_NOT_FOUND',
-      }, 404);
+        success: true,
+        message: '資料已更新',
+        data: {
+          member: result.member,
+          profileComplete: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof PhoneTakenError) {
+        return c.json(PHONE_TAKEN_RESPONSE, 409);
+      }
+      throw error;
     }
-
-    if (existingPhoneMembers[0]) {
-      return c.json({
-        success: false,
-        error: '此手機號碼已被使用',
-        code: 'PHONE_TAKEN',
-      }, 400);
-    }
-
-    // Update member profile
-    const [updatedMember] = await db
-      .update(members)
-      .set({
-        phone: profileData.phone,
-        birthday: profileData.birthday || null,
-        gender: profileData.gender || null,
-        emergencyContact: profileData.emergencyContact || null,
-        emergencyPhone: profileData.emergencyPhone || null,
-        updatedAt: new Date(),
-      })
-      .where(ownMember(memberInfo))
-      .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
-
-    return c.json({
-      success: true,
-      data: {
-        member: updatedMember,
-        profileComplete: true,
-      },
-    });
   }
 );
 
