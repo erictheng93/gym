@@ -14,7 +14,8 @@ const difficultyOptions = [
  * 新增課程頁面
  */
 import { MESSAGES } from '~/constants'
-import type { ClassCategory, Employee } from '~/types/schema'
+import type { ClassCategory } from '~/types/schema'
+import type { ApiEmployee } from '~/composables/useEmployees'
 
 definePageMeta({
   middleware: 'auth'
@@ -45,7 +46,8 @@ const form = ref({
 
 const isSubmitting = ref(false)
 const categories = ref<ClassCategory[]>([])
-const instructors = ref<Employee[]>([])
+// GET /api/employees answers in camelCase (fullName), whatever fetchAllEmployees declares
+const instructors = ref<ApiEmployee[]>([])
 
 // Validation
 const errors = ref<Record<string, string>>({})
@@ -110,7 +112,7 @@ onMounted(async () => {
     }
 
     categories.value = flattenCategories(categoryTree)
-    instructors.value = allInstructors
+    instructors.value = allInstructors as unknown as ApiEmployee[]
   } catch (error) {
     console.error('Failed to load data:', error)
     toast.error('載入資料失敗')
@@ -176,7 +178,7 @@ onMounted(async () => {
               :placeholder="PAGES.CLASSES.SELECT_INSTRUCTOR"
               :options="[
                 { value: '', label: '未指定' },
-                ...instructors.map(instructor => ({ value: instructor.id, label: instructor.full_name }))
+                ...instructors.map(instructor => ({ value: instructor.id, label: instructor.fullName }))
               ]"
             />
           </FormField>

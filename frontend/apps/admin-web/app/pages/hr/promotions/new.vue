@@ -20,7 +20,10 @@ const formatSalary = (salary: number | string | null | undefined) => {
  * 新增員工異動頁面
  */
 import { MESSAGES } from '~/constants'
-import { usePayroll } from '~/composables/hr'
+import { usePayroll, useHrAccess } from '~/composables/hr'
+import type { PromotionRecord } from '~/composables/hr'
+import type { ApiEmployee } from '~/composables/useEmployees'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -28,14 +31,19 @@ definePageMeta({
 
 const toast = useToast()
 const router = useRouter()
-const { createPromotion, isLoading } = usePayroll()
-const { employees, fetchEmployees } = useEmployees()
+const { createPromotion } = usePayroll()
+const { canManagePayroll } = useHrAccess()
+const { fetchAllEmployees } = useEmployees()
+
+// GET /api/employees (active, unpaginated) answers in camelCase
+const employees = ref<ApiEmployee[]>([])
+const isSaving = ref(false)
 const { branches, fetchBranches } = useBranches()
 const { jobTitles, fetchJobTitles } = useJobTitles()
 
 const formData = ref({
   employee_id: '',
-  type: 'PROMOTION',
+  type: 'PROMOTION' as PromotionRecord['type'],
   effective_date: '',
   to_job_title_id: '',
   to_branch_id: '',
@@ -51,7 +59,9 @@ const selectedEmployee = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([fetchEmployees(), fetchBranches(), fetchJobTitles()])
+  if (!canManagePayroll.value) return
+  const [all] = await Promise.all([fetchAllEmployees(), fetchBranches(), fetchJobTitles()])
+  employees.value = all as unknown as ApiEmployee[]
 })
 
 // Validate form
@@ -84,16 +94,24 @@ const handleSubmit = async () => {
     return
   }
 
+  isSaving.value = true
   try {
     await createPromotion({
-      ...formData.value,
-      new_base_salary: formData.value.new_base_salary ? Number(formData.value.new_base_salary) : null
+      employee_id: formData.value.employee_id,
+      type: formData.value.type,
+      effective_date: formData.value.effective_date,
+      // the section that does not apply to the type is hidden but may still hold a stale value
+      to_job_title_id: formData.value.type !== 'TRANSFER' ? formData.value.to_job_title_id : undefined,
+      to_branch_id: formData.value.type === 'TRANSFER' ? formData.value.to_branch_id : undefined,
+      new_base_salary: formData.value.new_base_salary ? Number(formData.value.new_base_salary) : null,
+      reason: formData.value.reason
     })
     toast.success('異動紀錄建立成功')
-    navigateTo('/hr/promotions')
+    await navigateTo('/hr/promotions')
   } catch (error) {
-    console.error('Failed to create promotion:', error)
-    toast.error('建立失敗')
+    toast.error(apiErrorMessage(error, '建立失敗'))
+  } finally {
+    isSaving.value = false
   }
 }
 </script>
@@ -106,7 +124,16 @@ const handleSubmit = async () => {
       back-to="/hr/promotions"
     />
 
-    <form class="form-container" @submit.prevent="handleSubmit">
+    <EmptyState
+      v-if="!canManagePayroll"
+      title="無權限"
+      description="僅管理員可建立員工異動"
+      icon="alert-circle"
+      action-label="返回列表"
+      action-to="/hr/promotions"
+    />
+
+    <form v-else class="form-container" @submit.prevent="handleSubmit">
       <div class="form-card">
         <h2 class="form-section-title">異動資訊</h2>
 
@@ -118,7 +145,7 @@ const handleSubmit = async () => {
         >
           <option value="">請選擇員工</option>
           <option v-for="emp in employees" :key="emp.id" :value="emp.id">
-            {{ emp.full_name }} ({{ emp.employee_code }})
+            {{ emp.fullName }} ({{ emp.employeeCode }})
           </option>
         </FormSelect>
 
@@ -126,7 +153,7 @@ const handleSubmit = async () => {
         <div v-if="selectedEmployee" class="current-info">
           <div class="info-row">
             <span class="info-label">目前職稱</span>
-            <span class="info-value">{{ selectedEmployee.job_title?.name || '—' }}</span>
+            <span class="info-value">{{ selectedEmployee.jobTitle?.name || '—' }}</span>
           </div>
           <div class="info-row">
             <span class="info-label">目前分店</span>
@@ -134,7 +161,7 @@ const handleSubmit = async () => {
           </div>
           <div class="info-row">
             <span class="info-label">目前底薪</span>
-            <span class="info-value">{{ formatSalary(selectedEmployee.basic_salary) }}</span>
+            <span class="info-value">{{ formatSalary(selectedEmployee.basicSalary) }}</span>
           </div>
         </div>
 
@@ -160,7 +187,7 @@ const handleSubmit = async () => {
           v-if="formData.type !== 'TRANSFER'"
           v-model="formData.to_job_title_id"
           label="新職稱"
-          :required="formData.type !== 'TRANSFER'"
+          required
           :error="errors.to_job_title_id"
         >
           <option value="">請選擇職稱</option>
@@ -203,8 +230,8 @@ const handleSubmit = async () => {
         <button type="button" class="btn btn-secondary" @click="router.back()">
           取消
         </button>
-        <button type="submit" class="btn btn-primary" :disabled="isLoading">
-          {{ isLoading ? '建立中...' : '建立異動' }}
+        <button type="submit" class="btn btn-primary" :disabled="isSaving">
+          {{ isSaving ? '建立中...' : '建立異動' }}
         </button>
       </div>
     </form>

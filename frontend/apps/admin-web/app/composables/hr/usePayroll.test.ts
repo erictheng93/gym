@@ -1,158 +1,112 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mockHandleError } from '@test/setup'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { usePayroll } from './usePayroll'
 import type { SalaryRecord, PromotionRecord } from './usePayroll'
 
-// Mock $fetch
-const mockFetch = vi.fn()
-vi.stubGlobal('$fetch', mockFetch)
+// Fixtures in the exact wire format of backend/src/routes/hr-payroll.ts: snake_case rows with
+// parseFloat'ed numeric fields, a nested employee {id, full_name, employee_code} and `meta.total`.
+const makeRecord = (overrides: Partial<SalaryRecord> = {}): SalaryRecord => ({
+  id: 'a0000000-0000-4000-8000-000000000001',
+  employee_id: 'e0000000-0000-4000-8000-000000000001',
+  employee: {
+    id: 'e0000000-0000-4000-8000-000000000001',
+    full_name: '張三',
+    employee_code: 'E00001',
+    job_title: { name: '教練' },
+    branch: { name: '信義店' }
+  },
+  period: '2026-01',
+  base_salary: 45000,
+  overtime_hours: 0,
+  overtime_pay: 0,
+  commission: 0,
+  bonus: 0,
+  deductions: 0,
+  net_salary: 45000,
+  hourly_rate: 187.5,
+  work_days: 0,
+  leave_days: null,
+  notes: null,
+  status: 'PENDING',
+  approved_by: null,
+  approved_at: null,
+  paid_at: null,
+  date_created: '2026-01-31T02:00:00.000Z',
+  ...overrides
+})
 
-// Mock useRuntimeConfig
-vi.stubGlobal('useRuntimeConfig', () => ({
-  public: {
-    apiBaseUrl: 'http://localhost:8056',
-    apiUrl: 'http://localhost:8056/api'
-  }
-}))
+const makePromotion = (overrides: Partial<PromotionRecord> = {}): PromotionRecord => ({
+  id: 'p0000000-0000-4000-8000-000000000001',
+  employee_id: 'e0000000-0000-4000-8000-000000000001',
+  employee: { id: 'e0000000-0000-4000-8000-000000000001', full_name: '張三', employee_code: 'E00001' },
+  type: 'PROMOTION',
+  from_job_title_id: 'j0000000-0000-4000-8000-000000000001',
+  to_job_title_id: 'j0000000-0000-4000-8000-000000000002',
+  from_branch_id: 'b0000000-0000-4000-8000-000000000001',
+  to_branch_id: null,
+  effective_date: '2026-02-01',
+  new_base_salary: 50000,
+  reason: '表現優異',
+  date_created: '2026-01-31T02:00:00.000Z',
+  ...overrides
+})
 
-const requestedUrl = (callIndex = 0) => new URL(String(mockFetch.mock.calls[callIndex]![0]))
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
 
 describe('usePayroll', () => {
-  beforeEach(() => {
-    mockFetch.mockReset()
-  })
-
   afterEach(() => {
-    mockFetch.mockReset()
+    mockFetchInstance.apiFetch.mockReset()
+    vi.unstubAllGlobals()
   })
 
   describe('fetchSalaryRecords', () => {
-    it('應該成功取得薪資紀錄列表', async () => {
-      const mockRecords: Partial<SalaryRecord>[] = [
-        {
-          id: 'salary-1',
-          employee_id: 'emp-1',
-          period: '2025-01',
-          base_salary: 45000,
-          net_salary: 42000,
-          status: 'PENDING'
-        },
-        {
-          id: 'salary-2',
-          employee_id: 'emp-2',
-          period: '2025-01',
-          base_salary: 55000,
-          net_salary: 52000,
-          status: 'APPROVED'
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockRecords,
-        meta: { total: 2 }
-      })
+    it('通過 apiFetch（帶 session）讀取列表與 meta.total', async () => {
+      const rows = [makeRecord(), makeRecord({ id: 'a0000000-0000-4000-8000-000000000002', status: 'APPROVED' })]
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: rows, meta: { total: 42 } })
 
       const { fetchSalaryRecords, salaryRecords, totalCount } = usePayroll()
+      await fetchSalaryRecords({ page: 3, limit: 10, period: '2026-01', branch_id: 'b1', status: 'PENDING' })
 
-      await fetchSalaryRecords()
-
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-      expect(salaryRecords.value).toEqual(mockRecords)
-      expect(totalCount.value).toBe(2)
-      // defaults: first page, 20 per page
-      const url = requestedUrl()
-      expect(url.pathname).toBe('/api/payroll/salary-records')
-      expect(url.searchParams.get('limit')).toBe('20')
-      expect(url.searchParams.get('offset')).toBe('0')
+      expect(lastCall()[0]).toBe('/payroll/salary-records')
+      expect(lastCall()[1].params).toEqual({ period: '2026-01', branch_id: 'b1', status: 'PENDING', limit: 10, offset: 20 })
+      expect(salaryRecords.value).toEqual(rows)
+      expect(salaryRecords.value[0]!.employee?.full_name).toBe('張三')
+      expect(totalCount.value).toBe(42)
     })
 
-    it('應該支援篩選參數', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: [],
-        meta: { total: 0 }
-      })
+    it('失敗時清空列表並回報後端錯誤訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
-      const { fetchSalaryRecords } = usePayroll()
-
-      await fetchSalaryRecords({
-        period: '2025-01',
-        status: 'PENDING',
-        branch_id: 'branch-1',
-        page: 2,
-        limit: 10
-      })
-
-      const url = requestedUrl()
-      expect(url.searchParams.get('period')).toBe('2025-01')
-      expect(url.searchParams.get('status')).toBe('PENDING')
-      expect(url.searchParams.get('branch_id')).toBe('branch-1')
-      expect(url.searchParams.get('limit')).toBe('10')
-      expect(url.searchParams.get('offset')).toBe('10') // page 2 of 10 per page
-      expect(url.searchParams.has('page')).toBe(false)
-    })
-
-    it('不應該送出空的篩選條件', async () => {
-      mockFetch.mockResolvedValueOnce({ success: true, data: [], meta: { total: 0 } })
-
-      const { fetchSalaryRecords } = usePayroll()
-
-      await fetchSalaryRecords({ employee_id: '', status: undefined, period: '2025-03' })
-
-      const url = requestedUrl()
-      expect([...url.searchParams.keys()].sort()).toEqual(['limit', 'offset', 'period'])
-    })
-
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const { fetchSalaryRecords, salaryRecords, totalCount } = usePayroll()
-
-      await fetchSalaryRecords()
+      const { fetchSalaryRecords, salaryRecords, totalCount, isLoading } = usePayroll()
+      await fetchSalaryRecords({ period: 'x-fail' })
 
       expect(salaryRecords.value).toEqual([])
       expect(totalCount.value).toBe(0)
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(isLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ context: 'usePayroll.fetchSalaryRecords', customMessage: '權限不足' })
+      )
     })
   })
 
   describe('fetchSalaryRecord', () => {
-    it('應該成功取得單一薪資紀錄', async () => {
-      const mockRecord: Partial<SalaryRecord> = {
-        id: 'salary-1',
-        employee_id: 'emp-1',
-        period: '2025-01',
-        base_salary: 45000,
-        overtime_hours: 10,
-        overtime_pay: 2812,
-        bonus: 5000,
-        deductions: 1000,
-        net_salary: 51812,
-        status: 'PENDING'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockRecord
-      })
+    it('讀取單筆薪資', async () => {
+      const row = makeRecord()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: row })
 
       const { fetchSalaryRecord, currentSalaryRecord } = usePayroll()
+      await fetchSalaryRecord(row.id)
 
-      await fetchSalaryRecord('salary-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/salary-records/salary-1')
-      )
-      expect(currentSalaryRecord.value).toEqual(mockRecord)
+      expect(lastCall()[0]).toBe(`/payroll/salary-records/${row.id}`)
+      expect(currentSalaryRecord.value).toEqual(row)
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Not found'))
+    it('404 時清空目前紀錄', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到薪資記錄'))
 
       const { fetchSalaryRecord, currentSalaryRecord } = usePayroll()
-
-      await fetchSalaryRecord('non-existent')
+      await fetchSalaryRecord('missing')
 
       expect(currentSalaryRecord.value).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
@@ -160,384 +114,224 @@ describe('usePayroll', () => {
   })
 
   describe('generateSalaryRecords', () => {
-    it('應該成功產生薪資紀錄', async () => {
-      const generateData = {
-        period: '2025-02'
-      }
-
-      const generatedResult = {
-        generated: 5,
-        records: [
-          { id: 'salary-1', period: '2025-02' }
-        ]
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: generatedResult
-      })
+    it('送出請求並回傳 generated / skipped', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { generated: 3, skipped: 2 } })
 
       const { generateSalaryRecords } = usePayroll()
+      const result = await generateSalaryRecords({ period: '2026-01', branch_id: 'b1' })
 
-      const result = await generateSalaryRecords(generateData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/generate'),
-        expect.objectContaining({
-          method: 'POST',
-          body: generateData
-        })
-      )
-      expect(result.generated).toBe(5)
-      expect(result.records).toEqual(generatedResult.records)
+      expect(lastCall()[0]).toBe('/payroll/generate')
+      expect(lastCall()[1]).toEqual({ method: 'POST', body: { period: '2026-01', branch_id: 'b1' } })
+      expect(result).toEqual({ generated: 3, skipped: 2 })
     })
 
-    it('應該在產生失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: false,
-        error: 'Generation failed'
-      })
+    it('後端錯誤直接拋出，讓頁面顯示後端訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('無效的分店'))
 
       const { generateSalaryRecords } = usePayroll()
-
-      await expect(generateSalaryRecords({ period: '2025-02' }))
-        .rejects.toThrow('產生薪資紀錄失敗')
+      await expect(generateSalaryRecords({ period: '2026-01' })).rejects.toThrow('無效的分店')
     })
   })
 
-  describe('updateSalaryRecord', () => {
-    it('應該成功更新薪資紀錄', async () => {
-      const updateData = {
-        bonus: 8000,
-        deductions: 500,
-        notes: '績效獎金調整'
-      }
-
-      const updatedRecord: Partial<SalaryRecord> = {
-        id: 'salary-1',
-        ...updateData,
-        net_salary: 52500
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: updatedRecord
-      })
+  describe('updateSalaryRecord / approveSalary / markAsPaid（後端只回 message）', () => {
+    it('updateSalaryRecord 成功但沒有 data 時不視為失敗，且把字串數字轉成 number', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '薪資記錄已更新' })
 
       const { updateSalaryRecord } = usePayroll()
+      await expect(updateSalaryRecord('r1', {
+        overtime_hours: '5' as unknown as number,
+        bonus: '1000' as unknown as number,
+        deductions: 200,
+        notes: '加班'
+      })).resolves.toBeUndefined()
 
-      const result = await updateSalaryRecord('salary-1', updateData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/salary-records/salary-1'),
-        expect.objectContaining({
-          method: 'PATCH',
-          body: updateData
-        })
-      )
-      expect(result.bonus).toBe(8000)
+      expect(lastCall()[0]).toBe('/payroll/salary-records/r1')
+      expect(lastCall()[1]).toEqual({
+        method: 'PATCH',
+        body: { overtime_hours: 5, bonus: 1000, deductions: 200, notes: '加班' }
+      })
     })
 
-    it('應該在更新失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
+    it('updateSalaryRecord 不送出未提供的欄位', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: 'ok' })
 
       const { updateSalaryRecord } = usePayroll()
+      await updateSalaryRecord('r1', { bonus: 10 })
 
-      await expect(updateSalaryRecord('salary-1', { bonus: 1 })).rejects.toThrow('調整薪資失敗')
-    })
-  })
-
-  describe('approveSalary', () => {
-    it('應該成功核准薪資', async () => {
-      const approvedRecord: Partial<SalaryRecord> = {
-        id: 'salary-1',
-        status: 'APPROVED'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: approvedRecord
-      })
-
-      const { approveSalary } = usePayroll()
-
-      const result = await approveSalary('salary-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/salary-records/salary-1/approve'),
-        expect.objectContaining({ method: 'POST' })
-      )
-      expect(result.status).toBe('APPROVED')
+      expect(lastCall()[1].body).toEqual({ bonus: 10 })
     })
 
-    it('應該在核准失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
+    it('updateSalaryRecord 遇到已發放記錄時拋出後端錯誤', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('已發放的薪資不能修改'))
+
+      const { updateSalaryRecord } = usePayroll()
+      await expect(updateSalaryRecord('r1', { bonus: 10 })).rejects.toThrow('已發放的薪資不能修改')
+    })
+
+    it('approveSalary 成功但沒有 data 時不視為失敗', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '薪資已核准' })
 
       const { approveSalary } = usePayroll()
+      await expect(approveSalary('r1')).resolves.toBeUndefined()
 
-      await expect(approveSalary('salary-1')).rejects.toThrow('核准薪資失敗')
+      expect(lastCall()[0]).toBe('/payroll/salary-records/r1/approve')
+      expect(lastCall()[1]).toEqual({ method: 'POST' })
+    })
+
+    it('approveSalary 對無法核准的記錄拋出後端錯誤', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('此記錄無法核准'))
+
+      const { approveSalary } = usePayroll()
+      await expect(approveSalary('r1')).rejects.toThrow('此記錄無法核准')
+    })
+
+    it('markAsPaid 成功但沒有 data 時不視為失敗', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '已標記為已發放' })
+
+      const { markAsPaid } = usePayroll()
+      await expect(markAsPaid('r1')).resolves.toBeUndefined()
+
+      expect(lastCall()[0]).toBe('/payroll/salary-records/r1/pay')
+    })
+
+    it('markAsPaid 對權限不足（403）拋出後端錯誤', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
+
+      const { markAsPaid } = usePayroll()
+      await expect(markAsPaid('r1')).rejects.toThrow('權限不足')
     })
   })
 
   describe('batchApproveSalary', () => {
-    it('應該成功批次核准薪資', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: { approved_count: 3 }
-      })
+    it('回傳實際核准的筆數', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { approved_count: 2 } })
 
       const { batchApproveSalary } = usePayroll()
+      const result = await batchApproveSalary(['a', 'b', 'c'])
 
-      const result = await batchApproveSalary(['salary-1', 'salary-2', 'salary-3'])
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/batch-approve'),
-        expect.objectContaining({
-          method: 'POST',
-          body: { ids: ['salary-1', 'salary-2', 'salary-3'] }
-        })
-      )
-      expect(result.approved_count).toBe(3)
-    })
-
-    it('應該在批次核准失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { batchApproveSalary } = usePayroll()
-
-      await expect(batchApproveSalary(['salary-1'])).rejects.toThrow('批次核准失敗')
-    })
-  })
-
-  describe('markAsPaid', () => {
-    it('應該成功標記已發放', async () => {
-      const paidRecord: Partial<SalaryRecord> = {
-        id: 'salary-1',
-        status: 'PAID'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: paidRecord
-      })
-
-      const { markAsPaid } = usePayroll()
-
-      const result = await markAsPaid('salary-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/salary-records/salary-1/pay'),
-        expect.objectContaining({ method: 'POST' })
-      )
-      expect(result.status).toBe('PAID')
-    })
-
-    it('應該在標記失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { markAsPaid } = usePayroll()
-
-      await expect(markAsPaid('salary-1')).rejects.toThrow('標記已發放失敗')
+      expect(lastCall()[0]).toBe('/payroll/batch-approve')
+      expect(lastCall()[1]).toEqual({ method: 'POST', body: { ids: ['a', 'b', 'c'] } })
+      expect(result).toEqual({ approved_count: 2 })
     })
   })
 
   describe('exportPayroll', () => {
-    it('應該以 blob 形式請求匯出，並帶入篩選參數', async () => {
-      const blob = new Blob(['csv'])
-      mockFetch.mockResolvedValueOnce(blob)
+    it('以 session cookie 下載檔案', async () => {
+      const blob = new Blob(['a,b'])
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(blob) })
+      vi.stubGlobal('fetch', fetchMock)
 
       const { exportPayroll } = usePayroll()
+      const result = await exportPayroll({ period: '2026-01', branch_id: 'b1', format: 'xlsx' })
 
-      const result = await exportPayroll({ period: '2025-01', branch_id: 'branch-1', format: 'csv', include_details: false })
-
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(new URL(String(url)).pathname).toBe('/api/payroll/export')
+      expect(new URL(String(url)).searchParams.get('format')).toBe('xlsx')
+      expect(new URL(String(url)).searchParams.get('branch_id')).toBe('b1')
+      expect(init).toEqual({ credentials: 'include' })
       expect(result).toBe(blob)
-      const url = requestedUrl()
-      expect(url.pathname).toBe('/api/payroll/export')
-      expect(url.searchParams.get('period')).toBe('2025-01')
-      expect(url.searchParams.get('branch_id')).toBe('branch-1')
-      expect(url.searchParams.get('format')).toBe('csv')
-      expect(url.searchParams.get('include_details')).toBe('false')
-      expect(mockFetch.mock.calls[0]![1]).toEqual({ responseType: 'blob' })
     })
 
-    it('只帶期間時不應該送出其他參數', async () => {
-      mockFetch.mockResolvedValueOnce(new Blob([]))
+    it('失敗時拋出後端 JSON 錯誤訊息', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ success: false, error: '權限不足' })
+      }))
 
       const { exportPayroll } = usePayroll()
-
-      await exportPayroll({ period: '2025-01' })
-
-      expect([...requestedUrl().searchParams.keys()]).toEqual(['period'])
+      await expect(exportPayroll({ period: '2026-01' })).rejects.toThrow('權限不足')
     })
   })
 
   describe('fetchPromotions', () => {
-    it('應該成功取得異動紀錄列表', async () => {
-      const mockPromotions: Partial<PromotionRecord>[] = [
-        {
-          id: 'promo-1',
-          employee_id: 'emp-1',
-          type: 'PROMOTION',
-          effective_date: '2025-02-01'
-        },
-        {
-          id: 'promo-2',
-          employee_id: 'emp-2',
-          type: 'TRANSFER',
-          effective_date: '2025-02-01'
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockPromotions,
-        meta: { total: 2 }
-      })
+    it('讀取異動列表與 meta.total', async () => {
+      const rows = [makePromotion()]
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: rows, meta: { total: 7 } })
 
       const { fetchPromotions, promotions, promotionCount } = usePayroll()
+      await fetchPromotions({ type: 'PROMOTION', page: 2, limit: 5 })
 
-      await fetchPromotions()
-
-      expect(promotions.value).toEqual(mockPromotions)
-      expect(promotionCount.value).toBe(2)
-      expect(requestedUrl().pathname).toBe('/api/payroll/promotions')
+      expect(lastCall()[0]).toBe('/payroll/promotions')
+      expect(lastCall()[1].params).toEqual({ type: 'PROMOTION', limit: 5, offset: 5 })
+      expect(promotions.value).toEqual(rows)
+      expect(promotionCount.value).toBe(7)
     })
 
-    it('應該支援類型篩選', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: [],
-        meta: { total: 0 }
-      })
+    it('失敗時清空列表', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
-      const { fetchPromotions } = usePayroll()
-
-      await fetchPromotions({ type: 'PROMOTION' })
-
-      expect(requestedUrl().searchParams.get('type')).toBe('PROMOTION')
-    })
-
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const { fetchPromotions, promotions, promotionCount, isPromotionLoading } = usePayroll()
-      promotions.value = [{ id: 'old' } as PromotionRecord]
-      promotionCount.value = 1
-
-      await fetchPromotions()
+      const { fetchPromotions, promotions, promotionCount } = usePayroll()
+      await fetchPromotions({ type: 'DEMOTION' })
 
       expect(promotions.value).toEqual([])
       expect(promotionCount.value).toBe(0)
-      expect(isPromotionLoading.value).toBe(false)
       expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('createPromotion', () => {
-    it('應該成功建立升遷紀錄', async () => {
-      const promotionData = {
-        employee_id: 'emp-1',
-        type: 'PROMOTION' as const,
-        effective_date: '2025-03-01',
-        to_job_title_id: 'jt-2',
-        new_base_salary: 55000,
-        reason: '績效優異'
-      }
+    const created = {
+      id: 'p1',
+      employeeId: 'e1',
+      type: 'PROMOTION',
+      fromJobTitleId: 'j1',
+      toJobTitleId: 'j2',
+      fromBranchId: 'b1',
+      toBranchId: null,
+      effectiveDate: '2026-02-01',
+      newBaseSalary: '50000.00',
+      reason: null,
+      createdBy: null,
+      createdAt: '2026-01-31T02:00:00.000Z',
+      tenantId: 't1'
+    }
 
-      const createdPromotion: Partial<PromotionRecord> = {
-        id: 'promo-new',
-        ...promotionData
-      }
+    it('回傳後端的 camelCase 紀錄，並丟掉空字串欄位（後端要求有效 uuid）', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: created })
 
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: createdPromotion
+      const { createPromotion } = usePayroll()
+      const result = await createPromotion({
+        employee_id: 'e1',
+        type: 'PROMOTION',
+        effective_date: '2026-02-01',
+        to_job_title_id: 'j2',
+        to_branch_id: '',
+        new_base_salary: 50000,
+        reason: ''
       })
 
-      const { createPromotion } = usePayroll()
-
-      const result = await createPromotion(promotionData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/payroll/promotions'),
-        expect.objectContaining({
-          method: 'POST',
-          body: promotionData
-        })
-      )
-      expect(result.id).toBe('promo-new')
-    })
-
-    it('應該成功建立調動紀錄', async () => {
-      const transferData = {
-        employee_id: 'emp-1',
-        type: 'TRANSFER' as const,
-        effective_date: '2025-03-01',
-        to_branch_id: 'branch-2',
-        reason: '支援新分店'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: { id: 'promo-transfer', ...transferData }
+      expect(lastCall()[0]).toBe('/payroll/promotions')
+      expect(lastCall()[1]).toEqual({
+        method: 'POST',
+        body: { employee_id: 'e1', type: 'PROMOTION', effective_date: '2026-02-01', to_job_title_id: 'j2', new_base_salary: 50000 }
       })
-
-      const { createPromotion } = usePayroll()
-
-      const result = await createPromotion(transferData)
-
-      expect(result.type).toBe('TRANSFER')
+      expect(result).toEqual(created)
     })
 
-    it('應該在建立失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
+    it('後端錯誤直接拋出', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到員工'))
 
       const { createPromotion } = usePayroll()
-
-      await expect(createPromotion({ employee_id: 'emp-1', type: 'PROMOTION', effective_date: '2025-03-01' }))
-        .rejects.toThrow('建立異動紀錄失敗')
+      await expect(createPromotion({ employee_id: 'e1', type: 'TRANSFER', effective_date: '2026-02-01' }))
+        .rejects.toThrow('找不到員工')
     })
   })
 
-  describe('Helper functions', () => {
-    it('getStatusLabel 應該返回正確的標籤', () => {
-      const { getStatusLabel } = usePayroll()
+  describe('helpers', () => {
+    it('狀態與類型標籤', () => {
+      const { getStatusLabel, getStatusVariant, getPromotionTypeLabel } = usePayroll()
 
       expect(getStatusLabel('PENDING')).toBe('待審核')
       expect(getStatusLabel('APPROVED')).toBe('已核准')
       expect(getStatusLabel('PAID')).toBe('已發放')
-    })
-
-    it('getStatusVariant 應該返回正確的樣式', () => {
-      const { getStatusVariant } = usePayroll()
-
-      expect(getStatusVariant('PENDING')).toBe('warning')
-      expect(getStatusVariant('APPROVED')).toBe('info')
       expect(getStatusVariant('PAID')).toBe('success')
-    })
-
-    it('getPromotionTypeLabel 應該返回正確的標籤', () => {
-      const { getPromotionTypeLabel } = usePayroll()
-
-      expect(getPromotionTypeLabel('PROMOTION')).toBe('升遷')
       expect(getPromotionTypeLabel('TRANSFER')).toBe('調動')
-      expect(getPromotionTypeLabel('DEMOTION')).toBe('降職')
     })
 
-    it('formatCurrency 應該正確格式化金額', () => {
+    it('formatCurrency 使用新台幣格式', () => {
       const { formatCurrency } = usePayroll()
-
-      expect(formatCurrency(45000)).toBe('$45,000')
-      expect(formatCurrency(1234567)).toBe('$1,234,567')
-      expect(formatCurrency(0)).toBe('$0')
-    })
-
-    it('未知的狀態應該原樣返回標籤、預設樣式', () => {
-      const { getStatusLabel, getStatusVariant, getPromotionTypeLabel } = usePayroll()
-
-      expect(getStatusLabel('UNKNOWN' as SalaryRecord['status'])).toBe('UNKNOWN')
-      expect(getStatusVariant('UNKNOWN' as SalaryRecord['status'])).toBe('default')
-      expect(getPromotionTypeLabel('UNKNOWN' as PromotionRecord['type'])).toBe('UNKNOWN')
+      expect(formatCurrency(45000)).toContain('45,000')
     })
   })
 })

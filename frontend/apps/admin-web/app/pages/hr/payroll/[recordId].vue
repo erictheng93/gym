@@ -2,7 +2,8 @@
 /**
  * 薪資明細頁面
  */
-import { usePayroll } from '~/composables/hr'
+import { usePayroll, useHrAccess } from '~/composables/hr'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -25,6 +26,7 @@ const {
   getStatusVariant,
   formatCurrency
 } = usePayroll()
+const { canViewHr, canManagePayroll } = useHrAccess()
 
 const isEditing = ref(false)
 const editForm = ref({
@@ -35,8 +37,7 @@ const editForm = ref({
 })
 
 // Load data
-onMounted(async () => {
-  await fetchSalaryRecord(recordId.value)
+const syncEditForm = () => {
   if (currentSalaryRecord.value) {
     editForm.value = {
       overtime_hours: currentSalaryRecord.value.overtime_hours || 0,
@@ -45,6 +46,12 @@ onMounted(async () => {
       notes: currentSalaryRecord.value.notes || ''
     }
   }
+}
+
+onMounted(async () => {
+  if (!canViewHr.value) return
+  await fetchSalaryRecord(recordId.value)
+  syncEditForm()
 })
 
 
@@ -52,10 +59,13 @@ onMounted(async () => {
 const netSalaryPreview = computed(() => {
   if (!currentSalaryRecord.value) return 0
   const base = currentSalaryRecord.value.base_salary || 0
-  const overtime = (editForm.value.overtime_hours || 0) * (currentSalaryRecord.value.hourly_rate || 0) * 1.5
-  const bonus = editForm.value.bonus || 0
-  const deductions = editForm.value.deductions || 0
-  return base + overtime + bonus - deductions
+  // same formula as the backend: hours x hourly rate (monthly base / 240) x 1.33
+  const hourlyRate = currentSalaryRecord.value.hourly_rate ?? base / 240
+  const overtime = (Number(editForm.value.overtime_hours) || 0) * hourlyRate * 1.33
+  const commission = currentSalaryRecord.value.commission || 0
+  const bonus = Number(editForm.value.bonus) || 0
+  const deductions = Number(editForm.value.deductions) || 0
+  return Math.round((base + overtime + commission + bonus - deductions) * 100) / 100
 })
 
 // Save edits
@@ -65,9 +75,9 @@ const saveEdits = async () => {
     toast.success('薪資明細已更新')
     isEditing.value = false
     await fetchSalaryRecord(recordId.value)
+    syncEditForm()
   } catch (error) {
-    console.error('Failed to update salary record:', error)
-    toast.error('更新失敗')
+    toast.error(apiErrorMessage(error, '更新失敗'))
   }
 }
 
@@ -87,8 +97,7 @@ const handleApprove = async () => {
     toast.success('薪資已核准')
     await fetchSalaryRecord(recordId.value)
   } catch (error) {
-    console.error('Failed to approve salary:', error)
-    toast.error('核准失敗')
+    toast.error(apiErrorMessage(error, '核准失敗'))
   }
 }
 
@@ -108,8 +117,7 @@ const handlePaid = async () => {
     toast.success('已標記為已發放')
     await fetchSalaryRecord(recordId.value)
   } catch (error) {
-    console.error('Failed to mark as paid:', error)
-    toast.error('操作失敗')
+    toast.error(apiErrorMessage(error, '操作失敗'))
   }
 }
 </script>
@@ -121,7 +129,7 @@ const handlePaid = async () => {
       description="薪資明細與調整"
       back-to="/hr/payroll"
     >
-      <template #actions>
+      <template v-if="canManagePayroll" #actions>
         <template v-if="currentSalaryRecord?.status === 'PENDING'">
           <button class="btn btn-secondary" @click="isEditing = !isEditing">
             {{ isEditing ? '取消' : '調整' }}
@@ -138,7 +146,16 @@ const handlePaid = async () => {
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" />
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="薪資資料僅限管理員與店長檢視"
+      icon="alert-circle"
+      action-label="返回列表"
+      action-to="/hr/payroll"
+    />
+
+    <LoadingState v-else-if="isLoading" />
 
     <template v-else-if="currentSalaryRecord">
       <div class="salary-grid">
@@ -161,13 +178,13 @@ const handlePaid = async () => {
               <span class="info-label">薪資期間</span>
               <span class="info-value">{{ currentSalaryRecord.period }}</span>
             </div>
-            <div class="info-row">
+            <div v-if="currentSalaryRecord.employee?.job_title" class="info-row">
               <span class="info-label">職稱</span>
-              <span class="info-value">{{ currentSalaryRecord.employee?.job_title?.name || '—' }}</span>
+              <span class="info-value">{{ currentSalaryRecord.employee.job_title.name }}</span>
             </div>
-            <div class="info-row">
+            <div v-if="currentSalaryRecord.employee?.branch" class="info-row">
               <span class="info-label">分店</span>
-              <span class="info-value">{{ currentSalaryRecord.employee?.branch?.name || '—' }}</span>
+              <span class="info-value">{{ currentSalaryRecord.employee.branch.name }}</span>
             </div>
           </div>
         </div>

@@ -1,85 +1,133 @@
 /**
  * useCoupons - 優惠券管理 composable
+ *
+ * Wire format of backend/src/routes/coupons.ts: camelCase rows, decimals as strings,
+ * discount type PERCENTAGE | FIXED, the list answers with `pagination`. There is no
+ * lifecycle `status` to write: a coupon is enabled/disabled with `isActive`.
  */
 
+import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
+import { apiErrorMessage } from '~/utils/api-error'
 
-export interface Coupon {
+export type CouponDiscountType = 'PERCENTAGE' | 'FIXED'
+
+/** Display state derived from isActive + validity range */
+export type CouponState = 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'SCHEDULED'
+
+export interface ApiCoupon {
   id: string
+  tenantId: string
+  branchId: string | null
+  campaignId: string | null
   code: string
   name: string
-  discount_type: 'PERCENTAGE' | 'FIXED_AMOUNT'
-  discount_value: number
-  min_purchase: number
-  max_discount: number | null
-  usage_limit: number | null
-  usage_per_member: number
-  used_count: number
-  applicable_plans: string[] | null
-  start_date: string
-  end_date: string
-  status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED'
-  created_by: string | null
-  created_at: string
-  // Computed
-  is_valid?: boolean
-  remaining_uses?: number | null
-  created_by_name?: string
+  description: string | null
+  discountType: CouponDiscountType
+  discountValue: string
+  minPurchase: string | null
+  maxDiscount: string | null
+  /** YYYY-MM-DD */
+  validFrom: string
+  validUntil: string
+  usageLimit: number | null
+  usageLimitPerMember: number | null
+  isActive: boolean | null
+  applicablePlans: string[] | null
+  status: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  // GET /coupons (list)
+  branch?: { id: string | null; name: string | null } | null
+  campaign?: { id: string | null; name: string | null } | null
+  usageCount?: number
+  // GET /coupons/:id
+  stats?: { totalUsage: number; totalDiscount: number }
 }
 
-export interface CouponUsage {
+/** Body of POST /api/coupons (createCouponSchema) */
+export interface CreateCouponInput {
+  code: string
+  name: string
+  description?: string
+  discountType: CouponDiscountType
+  discountValue: number | string
+  minPurchase?: number | string
+  maxDiscount?: number | string
+  validFrom: string
+  validUntil: string
+  usageLimit?: number
+  usageLimitPerMember?: number
+  campaignId?: string
+  branchId?: string
+  isActive?: boolean
+  applicablePlans?: string[]
+}
+
+/** Body of PATCH /api/coupons/:id (updateCouponSchema): every field optional, the code cannot change */
+export type UpdateCouponInput = Partial<Omit<CreateCouponInput, 'code'>>
+
+/** data of POST /api/coupons/:id/use */
+export interface CouponUsageResult {
   id: string
-  coupon_id: string
-  member_id: string
-  contract_id: string | null
-  discount_amount: number
-  used_at: string
-  used_by: string | null
-  // Joined
-  member_name?: string
-  member_code?: string
-  contract_no?: string
-  used_by_name?: string
+  couponId: string
+  memberId: string
+  contractId: string | null
+  discountAmount: string
+  usedAt: string | null
+  createdAt: string | null
+  originalAmount: number
+  finalAmount: number
 }
 
 export interface CouponValidation {
   valid: boolean
+  /** the backend's reason when invalid */
   reason?: string
-  errors?: string[]
-  coupon_id?: string
-  coupon_code?: string
-  coupon_name?: string
-  discount_type?: string
-  discount_value?: number
-  discount_amount?: number
-  original_amount?: number
-  final_amount?: number
+  coupon?: ApiCoupon
+  discountAmount?: number
+  finalAmount?: number
+}
+
+interface CouponListResponse {
+  success: boolean
+  data: ApiCoupon[]
+  pagination?: { total: number; page: number; limit: number; totalPages: number }
 }
 
 const inFlightCouponsMap = new Map<string, Promise<void>>()
-const inFlightSingleCouponMap = new Map<string, Promise<Coupon | null>>()
-const inFlightCouponUsagesMap = new Map<string, Promise<{ data: CouponUsage[]; total: number }>>()
+const inFlightSingleCouponMap = new Map<string, Promise<ApiCoupon | null>>()
+
+/** Same day boundary the backend uses (UTC date) */
+const todayIso = () => new Date().toISOString().slice(0, 10)
+
+export const getCouponState = (
+  coupon: Pick<ApiCoupon, 'isActive' | 'validFrom' | 'validUntil'>,
+  today: string = todayIso()
+): CouponState => {
+  if (coupon.isActive === false) return 'INACTIVE'
+  if (today > coupon.validUntil) return 'EXPIRED'
+  if (today < coupon.validFrom) return 'SCHEDULED'
+  return 'ACTIVE'
+}
 
 export const useCoupons = () => {
-  const config = useRuntimeConfig()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
 
   // State
-  const coupons = useState<Coupon[]>('coupons', () => [])
+  const coupons = useState<ApiCoupon[]>('coupons', () => [])
   const isLoading = useState('coupons_loading', () => false)
   const totalCount = useState('coupons_total', () => 0)
 
-  const apiUrl = config.public.apiUrl
-
   /**
-   * Fetch coupons
+   * Fetch coupons. The backend filters by branchId and activeOnly only (no search / status).
    */
   const fetchCoupons = async (options?: {
-    status?: string
-    discountType?: string
-    search?: string
+    activeOnly?: boolean
+    branchId?: string
     page?: number
     limit?: number
   }, force = false) => {
@@ -90,30 +138,19 @@ export const useCoupons = () => {
 
     const promise = (async () => {
       isLoading.value = true
-      const { status, discountType, search, page = 1, limit = 20 } = options || {}
+      const { activeOnly, branchId, page = 1, limit = 20 } = options || {}
 
       try {
-        const params = new URLSearchParams()
-        if (status) params.append('status', status)
-        if (discountType) params.append('discount_type', discountType)
-        if (search) params.append('search', search)
-        params.append('limit', limit.toString())
-        params.append('offset', ((page - 1) * limit).toString())
+        const response = await apiFetch<ApiCoupon[]>('/coupons', {
+          params: { activeOnly: activeOnly ? true : undefined, branchId, page, limit }
+        }) as unknown as CouponListResponse
 
-        const response = await $fetch<{
-          success: boolean
-          data: Coupon[]
-          meta: { total: number }
-        }>(`${apiUrl}/coupons?${params}`)
-
-        if (response.success) {
-          coupons.value = response.data
-          totalCount.value = response.meta.total
-        }
+        coupons.value = response.data || []
+        totalCount.value = Number(response.pagination?.total ?? coupons.value.length)
       } catch (error) {
         handleError(error, {
           context: 'useCoupons.fetchCoupons',
-          customMessage: '取得優惠券列表失敗'
+          customMessage: apiErrorMessage(error, '取得優惠券列表失敗')
         })
         coupons.value = []
         totalCount.value = 0
@@ -128,21 +165,21 @@ export const useCoupons = () => {
   }
 
   /**
-   * Get single coupon
+   * Get single coupon (with usage stats)
    */
-  const getCoupon = async (id: string, force = false): Promise<Coupon | null> => {
+  const getCoupon = async (id: string, force = false): Promise<ApiCoupon | null> => {
     if (!force && inFlightSingleCouponMap.has(id)) {
       return inFlightSingleCouponMap.get(id)!
     }
 
     const promise = (async () => {
       try {
-        const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons/${id}`)
-        return response.success ? response.data : null
+        const { data } = await apiFetch<ApiCoupon>(`/coupons/${id}`)
+        return data ?? null
       } catch (error) {
         handleError(error, {
           context: 'useCoupons.getCoupon',
-          customMessage: '取得優惠券詳情失敗'
+          customMessage: apiErrorMessage(error, '取得優惠券詳情失敗')
         })
         return null
       } finally {
@@ -154,249 +191,138 @@ export const useCoupons = () => {
     return promise
   }
 
-  /**
-   * Create coupon
-   */
-  const createCoupon = async (data: Partial<Coupon>): Promise<Coupon | null> => {
+  /** Returns null on failure, after showing the backend's reason; never throws. */
+  const createCoupon = async (input: CreateCouponInput): Promise<ApiCoupon | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons`, {
-        method: 'POST',
-        body: data
-      })
-      return response.success ? response.data : null
+      const { data } = await apiFetch<ApiCoupon>('/coupons', { method: 'POST', body: input })
+      if (!data) throw new Error('建立優惠券失敗')
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useCoupons.createCoupon',
-        customMessage: '建立優惠券失敗'
+        customMessage: apiErrorMessage(error, '建立優惠券失敗')
       })
       return null
     }
   }
 
-  /**
-   * Update coupon
-   */
-  const updateCoupon = async (id: string, data: Partial<Coupon>): Promise<Coupon | null> => {
+  /** Returns null on failure, after showing the backend's reason; never throws. */
+  const updateCoupon = async (id: string, input: UpdateCouponInput): Promise<ApiCoupon | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Coupon }>(`${apiUrl}/coupons/${id}`, {
-        method: 'PATCH',
-        body: data
-      })
-      return response.success ? response.data : null
+      const { data } = await apiFetch<ApiCoupon>(`/coupons/${id}`, { method: 'PATCH', body: input })
+      if (!data) throw new Error('更新優惠券失敗')
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useCoupons.updateCoupon',
-        customMessage: '更新優惠券失敗'
+        customMessage: apiErrorMessage(error, '更新優惠券失敗')
       })
       return null
     }
   }
 
-  /**
-   * Deactivate coupon
-   */
-  const deactivateCoupon = async (id: string): Promise<boolean> => {
+  /** Enable / disable (PATCH isActive). Returns the updated coupon, or null on failure. */
+  const setCouponActive = (id: string, isActive: boolean): Promise<ApiCoupon | null> =>
+    updateCoupon(id, { isActive })
+
+  /** Permanent delete (admin only on the backend). Returns false on failure, after showing why. */
+  const deleteCoupon = async (id: string): Promise<boolean> => {
     try {
-      const response = await $fetch<{ success: boolean }>(`${apiUrl}/coupons/${id}`, {
-        method: 'DELETE'
-      })
-      return response.success
+      await apiFetch(`/coupons/${id}`, { method: 'DELETE' })
+      return true
     } catch (error) {
       handleError(error, {
-        context: 'useCoupons.deactivateCoupon',
-        customMessage: '停用優惠券失敗'
+        context: 'useCoupons.deleteCoupon',
+        customMessage: apiErrorMessage(error, '刪除優惠券失敗')
       })
       return false
     }
   }
 
   /**
-   * Validate coupon
+   * Validate a coupon code against a purchase amount. Never throws: a rejected code comes back
+   * as { valid: false, reason } with the backend's reason.
    */
   const validateCoupon = async (
     code: string,
-    memberId: string,
     amount: number,
-    planId?: string
+    memberId?: string
   ): Promise<CouponValidation> => {
     try {
-      const response = await $fetch<{ success: boolean; data: CouponValidation }>(
-        `${apiUrl}/coupons/validate`,
-        {
-          method: 'POST',
-          body: {
-            code,
-            member_id: memberId,
-            plan_id: planId,
-            amount
-          }
-        }
+      const { data } = await apiFetch<{ coupon: ApiCoupon; discountAmount: number; finalAmount: number }>(
+        '/coupons/validate',
+        { method: 'POST', body: { code, amount, memberId } }
       )
-      return response.success ? response.data : { valid: false, reason: '驗證失敗' }
+      if (!data) return { valid: false, reason: '驗證失敗' }
+      return { valid: true, coupon: data.coupon, discountAmount: data.discountAmount, finalAmount: data.finalAmount }
     } catch (error) {
+      const reason = apiErrorMessage(error, '驗證失敗')
       handleError(error, {
         context: 'useCoupons.validateCoupon',
-        customMessage: '驗證優惠券失敗',
+        customMessage: reason,
         showToast: false
       })
-      return { valid: false, reason: '驗證失敗' }
+      return { valid: false, reason }
     }
   }
 
   /**
-   * Get coupon usages
+   * Redeem a coupon against a member's contract. The server computes the discount from the
+   * coupon and the contract amount, so no amount is sent. Returns null on failure.
    */
-  const getCouponUsages = async (
+  const redeemCoupon = async (
     couponId: string,
-    options?: { page?: number; limit?: number },
-    force = false
-  ): Promise<{ data: CouponUsage[]; total: number }> => {
-    const key = `${couponId}:${JSON.stringify(options || {})}`
-    if (!force && inFlightCouponUsagesMap.has(key)) {
-      return inFlightCouponUsagesMap.get(key)!
-    }
-
-    const promise = (async () => {
-      const { page = 1, limit = 50 } = options || {}
-      try {
-        const params = new URLSearchParams()
-        params.append('limit', limit.toString())
-        params.append('offset', ((page - 1) * limit).toString())
-
-        const response = await $fetch<{
-          success: boolean
-          data: CouponUsage[]
-          meta: { total: number }
-        }>(`${apiUrl}/coupons/${couponId}/usages?${params}`)
-
-        return response.success
-          ? { data: response.data, total: response.meta.total }
-          : { data: [], total: 0 }
-      } catch (error) {
-        handleError(error, {
-          context: 'useCoupons.getCouponUsages',
-          customMessage: '取得使用紀錄失敗'
-        })
-        return { data: [], total: 0 }
-      } finally {
-        inFlightCouponUsagesMap.delete(key)
-      }
-    })()
-
-    inFlightCouponUsagesMap.set(key, promise)
-    return promise
-  }
-
-  /**
-   * Generate batch coupons
-   */
-  const generateBatch = async (data: {
-    prefix?: string
-    count: number
-    name: string
-    discount_type: string
-    discount_value: number
-    min_purchase?: number
-    max_discount?: number
-    usage_limit?: number
-    usage_per_member?: number
-    applicable_plans?: string[]
-    start_date: string
-    end_date: string
-    created_by?: string
-  }): Promise<{ count: number; codes: string[] } | null> => {
+    input: { memberId: string; contractId: string }
+  ): Promise<CouponUsageResult | null> => {
     try {
-      const response = await $fetch<{
-        success: boolean
-        data: { count: number; codes: string[] }
-      }>(`${apiUrl}/coupons/generate-batch`, {
+      const { data } = await apiFetch<CouponUsageResult>(`/coupons/${couponId}/use`, {
         method: 'POST',
-        body: data
+        body: { memberId: input.memberId, contractId: input.contractId }
       })
-      return response.success ? response.data : null
+      if (!data) throw new Error('套用優惠券失敗')
+      invalidateCache([CACHE_KEYS.CONTRACTS])
+      return data
     } catch (error) {
       handleError(error, {
-        context: 'useCoupons.generateBatch',
-        customMessage: '批次產生優惠券失敗'
-      })
-      return null
-    }
-  }
-
-  /**
-   * Apply coupon (internal use for contract creation)
-   */
-  const applyCoupon = async (data: {
-    coupon_id: string
-    member_id: string
-    contract_id?: string
-    discount_amount: number
-    used_by?: string
-  }): Promise<CouponUsage | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: CouponUsage }>(
-        `${apiUrl}/coupons/apply`,
-        {
-          method: 'POST',
-          body: data
-        }
-      )
-      if (response.success) {
-        invalidateCache([CACHE_KEYS.CONTRACTS])
-      }
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCoupons.applyCoupon',
-        customMessage: '套用優惠券失敗'
+        context: 'useCoupons.redeemCoupon',
+        customMessage: apiErrorMessage(error, '套用優惠券失敗')
       })
       return null
     }
   }
 
   // Helpers
-  const getDiscountTypeLabel = (type: Coupon['discount_type']): string => {
+  const getDiscountTypeLabel = (type: CouponDiscountType): string => {
     return type === 'PERCENTAGE' ? '百分比折扣' : '固定金額折扣'
   }
 
-  const formatDiscount = (coupon: Coupon): string => {
-    if (coupon.discount_type === 'PERCENTAGE') {
-      return `${coupon.discount_value}% OFF`
+  const formatDiscount = (coupon: Pick<ApiCoupon, 'discountType' | 'discountValue'>): string => {
+    const value = Number(coupon.discountValue)
+    if (coupon.discountType === 'PERCENTAGE') {
+      return `${value}% OFF`
     }
-    return `$${coupon.discount_value}`
+    return `$${value}`
   }
 
-  const getStatusLabel = (status: Coupon['status']): string => {
-    const labels: Record<Coupon['status'], string> = {
+  const getStatusLabel = (state: CouponState): string => {
+    const labels: Record<CouponState, string> = {
       ACTIVE: '啟用中',
       INACTIVE: '已停用',
-      EXPIRED: '已過期'
+      EXPIRED: '已過期',
+      SCHEDULED: '尚未開始'
     }
-    return labels[status] || status
+    return labels[state] || state
   }
 
-  const getStatusColor = (status: Coupon['status']): string => {
-    const colors: Record<Coupon['status'], string> = {
-      ACTIVE: 'bg-green-100 text-green-800',
-      INACTIVE: 'bg-gray-100 text-gray-800',
-      EXPIRED: 'bg-red-100 text-red-800'
-    }
-    return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusVariant = (status: Coupon['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
-    const variants: Record<Coupon['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+  const getStatusVariant = (state: CouponState): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<CouponState, 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
       ACTIVE: 'success',
       INACTIVE: 'default',
-      EXPIRED: 'error'
+      EXPIRED: 'error',
+      SCHEDULED: 'warning'
     }
-    return variants[status] || 'default'
+    return variants[state] || 'default'
   }
-
-  /**
-   * Delete coupon (alias for deactivateCoupon)
-   */
-  const deleteCoupon = deactivateCoupon
 
   return {
     // State
@@ -408,17 +334,15 @@ export const useCoupons = () => {
     getCoupon,
     createCoupon,
     updateCoupon,
-    deactivateCoupon,
+    setCouponActive,
     deleteCoupon,
     validateCoupon,
-    getCouponUsages,
-    generateBatch,
-    applyCoupon,
+    redeemCoupon,
     // Helpers
+    getCouponState,
     getDiscountTypeLabel,
     formatDiscount,
     getStatusLabel,
-    getStatusColor,
     getStatusVariant
   }
 }

@@ -1,460 +1,325 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useCoupons } from './useCoupons'
-import type { Coupon, CouponUsage, CouponValidation } from './useCoupons'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
+import { useCoupons, getCouponState, type ApiCoupon } from './useCoupons'
 
-// Mock $fetch
-const mockFetch = vi.fn()
-vi.stubGlobal('$fetch', mockFetch)
+const mockInvalidateCache = vi.hoisted(() => vi.fn())
 
-// Mock useRuntimeConfig
-vi.stubGlobal('useRuntimeConfig', () => ({
-  public: {
-    apiBaseUrl: 'http://localhost:8056',
-    apiUrl: 'http://localhost:8056/api'
+vi.mock('~/composables/core/useApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('~/composables/core/useApi')>()
+  return {
+    ...actual,
+    useApi: () => ({ invalidateCache: mockInvalidateCache })
   }
-}))
-
-// Mock useState
-const mockState: Record<string, unknown> = {}
-vi.stubGlobal('useState', (key: string, init: () => unknown) => {
-  if (!(key in mockState)) {
-    mockState[key] = { value: init() }
-  }
-  return mockState[key]
 })
 
-// Mock useErrorHandler
-vi.mock('~/composables/core/useErrorHandler', () => ({
-  useErrorHandler: () => ({
-    handleError: vi.fn()
-  })
-}))
+// Fixtures in the exact wire format of backend/src/routes/coupons.ts: COUPON_SELECT spread flat
+// (camelCase, decimals as strings, discountType PERCENTAGE | FIXED) plus the joined extras.
+const makeCoupon = (overrides: Partial<ApiCoupon> = {}): ApiCoupon => ({
+  id: 'd0000000-0000-4000-8000-000000000001',
+  tenantId: 't0000000-0000-4000-8000-000000000001',
+  branchId: null,
+  campaignId: null,
+  code: 'SUMMER2026',
+  name: '夏季折扣',
+  description: null,
+  discountType: 'PERCENTAGE',
+  discountValue: '15.00',
+  minPurchase: '1000.00',
+  maxDiscount: '500.00',
+  validFrom: '2026-06-01',
+  validUntil: '2026-08-31',
+  usageLimit: 100,
+  usageLimitPerMember: 1,
+  isActive: true,
+  applicablePlans: [],
+  status: 'active',
+  createdAt: '2026-05-20T02:00:00.000Z',
+  updatedAt: null,
+  ...overrides
+})
 
-// Mock useApi
-vi.mock('~/composables/core/useApi', () => ({
-  useApi: () => ({
-    invalidateCache: vi.fn()
-  }),
-  CACHE_KEYS: {
-    CONTRACTS: 'contracts'
-  }
-}))
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
 
 describe('useCoupons', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    Object.keys(mockState).forEach(key => delete mockState[key])
-  })
-
   afterEach(() => {
-    vi.clearAllMocks()
+    mockFetchInstance.apiFetch.mockReset()
+    mockHandleError.mockClear()
+    mockInvalidateCache.mockClear()
   })
 
   describe('fetchCoupons', () => {
-    it('應該成功取得優惠券列表', async () => {
-      const mockCoupons: Partial<Coupon>[] = [
-        {
-          id: 'coupon-1',
-          code: 'SUMMER2025',
-          name: '夏季促銷',
-          discount_type: 'PERCENTAGE',
-          discount_value: 10,
-          status: 'ACTIVE'
-        },
-        {
-          id: 'coupon-2',
-          code: 'FLAT500',
-          name: '固定折扣',
-          discount_type: 'FIXED_AMOUNT',
-          discount_value: 500,
-          status: 'ACTIVE'
-        }
+    it('讀取 camelCase 列表（含 usageCount）與 pagination.total', async () => {
+      const rows = [
+        makeCoupon({ branch: { id: null, name: null }, campaign: { id: null, name: null }, usageCount: 7 }),
+        makeCoupon({ id: 'd0000000-0000-4000-8000-000000000002', code: 'WINTER', usageCount: 0 })
       ]
-
-      mockFetch.mockResolvedValueOnce({
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
         success: true,
-        data: mockCoupons,
-        meta: { total: 2 }
+        data: rows,
+        pagination: { total: 33, page: 1, limit: 20, totalPages: 2 }
       })
 
       const { fetchCoupons, coupons, totalCount } = useCoupons()
+      await fetchCoupons({}, true)
 
-      await fetchCoupons()
-
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-      expect(coupons.value).toEqual(mockCoupons)
-      expect(totalCount.value).toBe(2)
+      expect(coupons.value).toEqual(rows)
+      expect(coupons.value[0]!.usageCount).toBe(7)
+      expect(totalCount.value).toBe(33)
     })
 
-    it('應該支援篩選參數', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: [],
-        meta: { total: 0 }
-      })
+    it('只送後端支援的查詢參數（activeOnly / branchId / page / limit）', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
 
       const { fetchCoupons } = useCoupons()
+      await fetchCoupons({ activeOnly: true, page: 2, limit: 10 }, true)
 
-      await fetchCoupons({
-        status: 'ACTIVE',
-        discountType: 'PERCENTAGE',
-        search: 'SUMMER',
-        page: 2,
-        limit: 10
-      })
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('status=ACTIVE')
-      )
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('discount_type=PERCENTAGE')
-      )
+      const [endpoint, options] = lastCall()
+      expect(endpoint).toBe('/coupons')
+      expect(options.params).toEqual({ activeOnly: true, branchId: undefined, page: 2, limit: 10 })
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+    it('取得失敗時清空列表並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 500'))
 
-      const { fetchCoupons, coupons, totalCount } = useCoupons()
-
-      await fetchCoupons()
+      const { fetchCoupons, coupons, totalCount, isLoading } = useCoupons()
+      await fetchCoupons({}, true)
 
       expect(coupons.value).toEqual([])
       expect(totalCount.value).toBe(0)
+      expect(isLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('getCoupon', () => {
-    it('應該成功取得單一優惠券', async () => {
-      const mockCoupon: Partial<Coupon> = {
-        id: 'coupon-1',
-        code: 'SUMMER2025',
-        name: '夏季促銷',
-        discount_type: 'PERCENTAGE',
-        discount_value: 10,
-        status: 'ACTIVE'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockCoupon
-      })
+    it('取得含 stats 的單一優惠券', async () => {
+      const coupon = makeCoupon({ stats: { totalUsage: 4, totalDiscount: 1200 } })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: coupon })
 
       const { getCoupon } = useCoupons()
+      const result = await getCoupon(coupon.id, true)
 
-      const result = await getCoupon('coupon-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/coupon-1')
-      )
-      expect(result).toEqual(mockCoupon)
+      expect(result).toEqual(coupon)
+      expect(lastCall()[0]).toBe(`/coupons/${coupon.id}`)
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Not found'))
+    it('找不到時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('優惠碼不存在'))
 
       const { getCoupon } = useCoupons()
-
-      const result = await getCoupon('non-existent')
+      const result = await getCoupon('missing', true)
 
       expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '優惠碼不存在'
+      }))
     })
   })
 
   describe('createCoupon', () => {
-    it('應該成功建立優惠券', async () => {
-      const newCoupon = {
-        code: 'NEW2025',
-        name: '新年優惠',
-        discount_type: 'PERCENTAGE' as const,
-        discount_value: 15,
-        start_date: '2025-01-01',
-        end_date: '2025-01-31'
-      }
-
-      const createdCoupon: Partial<Coupon> = {
-        id: 'coupon-new',
-        ...newCoupon,
-        status: 'ACTIVE'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: createdCoupon
-      })
+    it('以 createCouponSchema 的 camelCase 欄位 POST 並返回建立的優惠券', async () => {
+      const created = makeCoupon()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: created })
 
       const { createCoupon } = useCoupons()
+      const input = {
+        code: 'SUMMER2026',
+        name: '夏季折扣',
+        discountType: 'PERCENTAGE' as const,
+        discountValue: 15,
+        validFrom: '2026-06-01',
+        validUntil: '2026-08-31',
+        usageLimitPerMember: 1
+      }
+      const result = await createCoupon(input)
 
-      const result = await createCoupon(newCoupon)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons'),
-        expect.objectContaining({
-          method: 'POST',
-          body: newCoupon
-        })
-      )
-      expect(result?.id).toBe('coupon-new')
+      expect(result).toEqual(created)
+      expect(lastCall()).toEqual(['/coupons', { method: 'POST', body: input }])
     })
-  })
 
-  describe('updateCoupon', () => {
-    it('應該成功更新優惠券', async () => {
-      const updateData = {
-        name: '更新名稱',
-        discount_value: 20
-      }
+    it('優惠碼重複時返回 null，並把後端的訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('優惠碼已存在'))
 
-      const updatedCoupon: Partial<Coupon> = {
-        id: 'coupon-1',
-        ...updateData
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: updatedCoupon
+      const { createCoupon } = useCoupons()
+      const result = await createCoupon({
+        code: 'DUP', name: 'x', discountType: 'FIXED', discountValue: 100, validFrom: '2026-06-01', validUntil: '2026-08-31'
       })
 
-      const { updateCoupon } = useCoupons()
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '優惠碼已存在'
+      }))
+    })
 
-      const result = await updateCoupon('coupon-1', updateData)
+    it('沒有可讀的錯誤訊息時使用預設的失敗訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 500'))
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/coupon-1'),
-        expect.objectContaining({
-          method: 'PATCH',
-          body: updateData
-        })
-      )
-      expect(result?.discount_value).toBe(20)
+      const { createCoupon } = useCoupons()
+      const result = await createCoupon({
+        code: 'X', name: 'x', discountType: 'FIXED', discountValue: 100, validFrom: '2026-06-01', validUntil: '2026-08-31'
+      })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '建立優惠券失敗'
+      }))
     })
   })
 
-  describe('deactivateCoupon', () => {
-    it('應該成功停用優惠券', async () => {
-      mockFetch.mockResolvedValueOnce({ success: true })
+  describe('updateCoupon / setCouponActive', () => {
+    it('以 PATCH 送出 camelCase 欄位', async () => {
+      const updated = makeCoupon({ name: '改名' })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: updated })
 
-      const { deactivateCoupon } = useCoupons()
+      const { updateCoupon } = useCoupons()
+      const result = await updateCoupon(updated.id, { name: '改名', usageLimit: 50 })
 
-      const result = await deactivateCoupon('coupon-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/coupon-1'),
-        expect.objectContaining({ method: 'DELETE' })
-      )
-      expect(result).toBe(true)
+      expect(result).toEqual(updated)
+      expect(lastCall()).toEqual([`/coupons/${updated.id}`, { method: 'PATCH', body: { name: '改名', usageLimit: 50 } }])
     })
 
-    it('應該處理停用失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Deactivate failed'))
+    it('停用 / 啟用只送 isActive（後端沒有 status 欄位可寫）', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: makeCoupon({ isActive: false }) })
 
-      const { deactivateCoupon } = useCoupons()
+      const { setCouponActive } = useCoupons()
+      const result = await setCouponActive('d-1', false)
 
-      const result = await deactivateCoupon('coupon-1')
+      expect(result?.isActive).toBe(false)
+      expect(lastCall()).toEqual(['/coupons/d-1', { method: 'PATCH', body: { isActive: false } }])
+    })
 
-      expect(result).toBe(false)
+    it('更新失敗時返回 null，並把後端的訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
+
+      const { setCouponActive } = useCoupons()
+      const result = await setCouponActive('d-1', true)
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '權限不足'
+      }))
+    })
+  })
+
+  describe('deleteCoupon', () => {
+    it('成功時以 DELETE 返回 true', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '優惠碼已刪除' })
+
+      const { deleteCoupon } = useCoupons()
+
+      expect(await deleteCoupon('d-1')).toBe(true)
+      expect(lastCall()).toEqual(['/coupons/d-1', { method: 'DELETE' }])
+    })
+
+    it('失敗時返回 false，並把後端的訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
+
+      const { deleteCoupon } = useCoupons()
+
+      expect(await deleteCoupon('d-1')).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '權限不足'
+      }))
     })
   })
 
   describe('validateCoupon', () => {
-    it('應該成功驗證有效優惠券', async () => {
-      const validation: CouponValidation = {
-        valid: true,
-        coupon_id: 'coupon-1',
-        coupon_code: 'SUMMER2025',
-        coupon_name: '夏季促銷',
-        discount_type: 'PERCENTAGE',
-        discount_value: 10,
-        discount_amount: 500,
-        original_amount: 5000,
-        final_amount: 4500
-      }
-
-      mockFetch.mockResolvedValueOnce({
+    it('以 { code, amount, memberId } POST，並讀取 data.discountAmount / finalAmount', async () => {
+      const coupon = makeCoupon()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
         success: true,
-        data: validation
+        data: { coupon, discountAmount: 300, finalAmount: 1700 }
       })
 
       const { validateCoupon } = useCoupons()
+      const result = await validateCoupon('SUMMER2026', 2000, 'a1b2c3d4-0000-4000-8000-000000000001')
 
-      const result = await validateCoupon('SUMMER2025', 'member-1', 5000, 'plan-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/validate'),
-        expect.objectContaining({
-          method: 'POST',
-          body: {
-            code: 'SUMMER2025',
-            member_id: 'member-1',
-            plan_id: 'plan-1',
-            amount: 5000
-          }
-        })
-      )
-      expect(result.valid).toBe(true)
-      expect(result.discount_amount).toBe(500)
+      expect(result).toEqual({ valid: true, coupon, discountAmount: 300, finalAmount: 1700 })
+      expect(lastCall()).toEqual(['/coupons/validate', {
+        method: 'POST',
+        body: { code: 'SUMMER2026', amount: 2000, memberId: 'a1b2c3d4-0000-4000-8000-000000000001' }
+      }])
     })
 
-    it('應該處理無效優惠券', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: { valid: false, reason: '優惠券已過期' }
-      })
+    it('被後端拒絕時返回 { valid:false, reason } 且不彈 toast', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('無效的優惠碼或已過期'))
 
       const { validateCoupon } = useCoupons()
+      const result = await validateCoupon('NOPE', 100)
 
-      const result = await validateCoupon('EXPIRED', 'member-1', 5000)
-
-      expect(result.valid).toBe(false)
-      expect(result.reason).toBe('優惠券已過期')
-    })
-
-    it('應該處理驗證失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Validation error'))
-
-      const { validateCoupon } = useCoupons()
-
-      const result = await validateCoupon('ERROR', 'member-1', 5000)
-
-      expect(result.valid).toBe(false)
-      expect(result.reason).toBe('驗證失敗')
+      expect(result).toEqual({ valid: false, reason: '無效的優惠碼或已過期' })
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ showToast: false }))
     })
   })
 
-  describe('getCouponUsages', () => {
-    it('應該成功取得使用紀錄', async () => {
-      const mockUsages: Partial<CouponUsage>[] = [
-        {
-          id: 'usage-1',
-          coupon_id: 'coupon-1',
-          member_id: 'member-1',
-          discount_amount: 500
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockUsages,
-        meta: { total: 1 }
-      })
-
-      const { getCouponUsages } = useCoupons()
-
-      const result = await getCouponUsages('coupon-1', { page: 1, limit: 50 })
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/coupon-1/usages')
-      )
-      expect(result.data).toEqual(mockUsages)
-      expect(result.total).toBe(1)
-    })
-  })
-
-  describe('generateBatch', () => {
-    it('應該成功批次產生優惠券', async () => {
-      const batchData = {
-        prefix: 'BATCH',
-        count: 10,
-        name: '批次優惠券',
-        discount_type: 'FIXED_AMOUNT',
-        discount_value: 100,
-        start_date: '2025-01-01',
-        end_date: '2025-12-31'
+  describe('redeemCoupon', () => {
+    it('只送 memberId 與 contractId，折扣金額由伺服器計算', async () => {
+      const usage = {
+        id: 'u-1',
+        couponId: 'd-1',
+        memberId: 'm-1',
+        contractId: 'c-1',
+        discountAmount: '300',
+        usedAt: '2026-07-01T02:00:00.000Z',
+        createdAt: '2026-07-01T02:00:00.000Z',
+        originalAmount: 2000,
+        finalAmount: 1700
       }
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: usage })
 
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: {
-          count: 10,
-          codes: ['BATCH001', 'BATCH002', 'BATCH003']
-        }
-      })
+      const { redeemCoupon } = useCoupons()
+      const result = await redeemCoupon('d-1', { memberId: 'm-1', contractId: 'c-1' })
 
-      const { generateBatch } = useCoupons()
+      expect(result).toEqual(usage)
+      const [endpoint, options] = lastCall()
+      expect(endpoint).toBe('/coupons/d-1/use')
+      expect(options).toEqual({ method: 'POST', body: { memberId: 'm-1', contractId: 'c-1' } })
+      expect(options.body).not.toHaveProperty('discountAmount')
+      expect(mockInvalidateCache).toHaveBeenCalled()
+    })
 
-      const result = await generateBatch(batchData)
+    it('後端拒絕時返回 null、顯示後端原因，且不清合約快取', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('此合約已使用過此優惠碼'))
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/generate-batch'),
-        expect.objectContaining({
-          method: 'POST',
-          body: batchData
-        })
-      )
-      expect(result?.count).toBe(10)
+      const { redeemCoupon } = useCoupons()
+      const result = await redeemCoupon('d-1', { memberId: 'm-1', contractId: 'c-1' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '此合約已使用過此優惠碼'
+      }))
+      expect(mockInvalidateCache).not.toHaveBeenCalled()
     })
   })
 
-  describe('applyCoupon', () => {
-    it('應該成功套用優惠券', async () => {
-      const applyData = {
-        coupon_id: 'coupon-1',
-        member_id: 'member-1',
-        contract_id: 'contract-1',
-        discount_amount: 500,
-        used_by: 'emp-1'
-      }
+  describe('getCouponState', () => {
+    const base = { isActive: true, validFrom: '2026-06-01', validUntil: '2026-08-31' }
 
-      const usage: Partial<CouponUsage> = {
-        id: 'usage-new',
-        ...applyData
-      }
+    it('isActive=false 一律是已停用', () => {
+      expect(getCouponState({ ...base, isActive: false }, '2026-07-01')).toBe('INACTIVE')
+    })
 
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: usage
-      })
-
-      const { applyCoupon } = useCoupons()
-
-      const result = await applyCoupon(applyData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/coupons/apply'),
-        expect.objectContaining({
-          method: 'POST',
-          body: applyData
-        })
-      )
-      expect(result?.id).toBe('usage-new')
+    it('依有效期間判斷尚未開始 / 啟用中 / 已過期', () => {
+      expect(getCouponState(base, '2026-05-31')).toBe('SCHEDULED')
+      expect(getCouponState(base, '2026-06-01')).toBe('ACTIVE')
+      expect(getCouponState(base, '2026-08-31')).toBe('ACTIVE')
+      expect(getCouponState(base, '2026-09-01')).toBe('EXPIRED')
     })
   })
 
-  describe('Helper functions', () => {
-    it('getDiscountTypeLabel 應該返回正確的標籤', () => {
-      const { getDiscountTypeLabel } = useCoupons()
-
-      expect(getDiscountTypeLabel('PERCENTAGE')).toBe('百分比折扣')
-      expect(getDiscountTypeLabel('FIXED_AMOUNT')).toBe('固定金額折扣')
-    })
-
-    it('formatDiscount 應該正確格式化折扣', () => {
+  describe('helpers', () => {
+    it('formatDiscount 依 discountType 顯示（decimal 字串轉數字）', () => {
       const { formatDiscount } = useCoupons()
-
-      expect(formatDiscount({
-        discount_type: 'PERCENTAGE',
-        discount_value: 10
-      } as Coupon)).toBe('10% OFF')
-
-      expect(formatDiscount({
-        discount_type: 'FIXED_AMOUNT',
-        discount_value: 500
-      } as Coupon)).toBe('$500')
+      expect(formatDiscount(makeCoupon())).toBe('15% OFF')
+      expect(formatDiscount(makeCoupon({ discountType: 'FIXED', discountValue: '200.00' }))).toBe('$200')
     })
 
-    it('getStatusLabel 應該返回正確的標籤', () => {
-      const { getStatusLabel } = useCoupons()
-
-      expect(getStatusLabel('ACTIVE')).toBe('啟用中')
-      expect(getStatusLabel('INACTIVE')).toBe('已停用')
+    it('getDiscountTypeLabel / getStatusLabel / getStatusVariant', () => {
+      const { getDiscountTypeLabel, getStatusLabel, getStatusVariant } = useCoupons()
+      expect(getDiscountTypeLabel('PERCENTAGE')).toBe('百分比折扣')
+      expect(getDiscountTypeLabel('FIXED')).toBe('固定金額折扣')
       expect(getStatusLabel('EXPIRED')).toBe('已過期')
-    })
-
-    it('getStatusColor 應該返回正確的顏色', () => {
-      const { getStatusColor } = useCoupons()
-
-      expect(getStatusColor('ACTIVE')).toContain('green')
-      expect(getStatusColor('INACTIVE')).toContain('gray')
-      expect(getStatusColor('EXPIRED')).toContain('red')
+      expect(getStatusVariant('ACTIVE')).toBe('success')
     })
   })
 })

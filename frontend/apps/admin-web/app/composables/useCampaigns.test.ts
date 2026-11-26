@@ -1,463 +1,272 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useCampaigns } from './useCampaigns'
-import type { Campaign, CampaignMetrics, ROIReport, ROISummary } from './useCampaigns'
+import { describe, it, expect, afterEach } from 'vitest'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
+import { useCampaigns, getCampaignState, type ApiCampaign } from './useCampaigns'
 
-// Mock $fetch
-const mockFetch = vi.fn()
-vi.stubGlobal('$fetch', mockFetch)
-
-// Mock useRuntimeConfig
-vi.stubGlobal('useRuntimeConfig', () => ({
-  public: {
-    apiBaseUrl: 'http://localhost:8056',
-    apiUrl: 'http://localhost:8056/api'
-  }
-}))
-
-// Mock useState
-const mockState: Record<string, unknown> = {}
-vi.stubGlobal('useState', (key: string, init: () => unknown) => {
-  if (!(key in mockState)) {
-    mockState[key] = { value: init() }
-  }
-  return mockState[key]
+// Fixtures in the exact wire format of backend/src/routes/campaigns.ts: CAMPAIGN_SELECT spread
+// flat (camelCase, decimals as strings) with the joined branch / createdBy.
+const makeCampaign = (overrides: Partial<ApiCampaign> = {}): ApiCampaign => ({
+  id: 'c0000000-0000-4000-8000-000000000001',
+  tenantId: 't0000000-0000-4000-8000-000000000001',
+  branchId: null,
+  name: '夏季促銷',
+  description: '夏季限定',
+  campaignType: 'PROMOTION',
+  startDate: '2026-06-01',
+  endDate: '2026-08-31',
+  targetAudience: null,
+  budget: '50000.00',
+  discountType: null,
+  discountValue: null,
+  isActive: true,
+  terms: null,
+  createdById: 'e0000000-0000-4000-8000-000000000001',
+  status: 'active',
+  createdAt: '2026-05-20T02:00:00.000Z',
+  updatedAt: null,
+  branch: { id: null, name: null },
+  createdBy: { id: 'e0000000-0000-4000-8000-000000000001', fullName: '王經理' },
+  ...overrides
 })
 
-// Mock useErrorHandler
-vi.mock('~/composables/core/useErrorHandler', () => ({
-  useErrorHandler: () => ({
-    handleError: vi.fn()
-  })
-}))
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
 
 describe('useCampaigns', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    Object.keys(mockState).forEach(key => delete mockState[key])
-  })
-
   afterEach(() => {
-    vi.clearAllMocks()
+    mockFetchInstance.apiFetch.mockReset()
+    mockHandleError.mockClear()
   })
 
   describe('fetchCampaigns', () => {
-    it('應該成功取得活動列表', async () => {
-      const mockCampaigns: Partial<Campaign>[] = [
-        {
-          id: 'campaign-1',
-          name: '夏季促銷',
-          type: 'PROMOTION',
-          status: 'ACTIVE'
-        },
-        {
-          id: 'campaign-2',
-          name: '轉介紹獎勵',
-          type: 'REFERRAL',
-          status: 'ACTIVE'
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
+    it('讀取 camelCase 列表與 pagination.total', async () => {
+      const rows = [makeCampaign(), makeCampaign({ id: 'c0000000-0000-4000-8000-000000000002', name: '冬季活動' })]
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
         success: true,
-        data: mockCampaigns,
-        meta: { total: 2 }
+        data: rows,
+        pagination: { total: 42, page: 2, limit: 20, totalPages: 3 }
       })
 
       const { fetchCampaigns, campaigns, totalCount } = useCampaigns()
+      await fetchCampaigns({ page: 2 }, true)
 
-      await fetchCampaigns()
-
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-      expect(campaigns.value).toEqual(mockCampaigns)
-      expect(totalCount.value).toBe(2)
+      expect(campaigns.value).toEqual(rows)
+      expect(totalCount.value).toBe(42)
     })
 
-    it('應該支援篩選參數', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: [],
-        meta: { total: 0 }
-      })
+    it('只送後端支援的查詢參數（campaignType / activeOnly / branchId / page / limit）', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
 
       const { fetchCampaigns } = useCampaigns()
+      await fetchCampaigns({ campaignType: 'REFERRAL', activeOnly: true, page: 3, limit: 10 }, true)
 
-      await fetchCampaigns({
-        type: 'PROMOTION',
-        status: 'ACTIVE',
-        search: '夏季',
-        page: 2,
+      const [endpoint, options] = lastCall()
+      expect(endpoint).toBe('/campaigns')
+      expect(options.params).toEqual({
+        campaignType: 'REFERRAL',
+        activeOnly: true,
+        branchId: undefined,
+        page: 3,
         limit: 10
       })
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('type=PROMOTION')
-      )
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('status=ACTIVE')
-      )
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+    it('沒有 activeOnly 時不送出該參數', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [] })
 
-      const { fetchCampaigns, campaigns, totalCount } = useCampaigns()
+      const { fetchCampaigns } = useCampaigns()
+      await fetchCampaigns({ activeOnly: false }, true)
 
-      await fetchCampaigns()
+      expect(lastCall()[1].params.activeOnly).toBeUndefined()
+    })
+
+    it('取得失敗時清空列表並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 500'))
+
+      const { fetchCampaigns, campaigns, totalCount, isLoading } = useCampaigns()
+      await fetchCampaigns({}, true)
 
       expect(campaigns.value).toEqual([])
       expect(totalCount.value).toBe(0)
+      expect(isLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
-  describe('getCampaign', () => {
-    it('應該成功取得單一活動', async () => {
-      const mockCampaign: Partial<Campaign> = {
-        id: 'campaign-1',
-        name: '夏季促銷',
-        type: 'PROMOTION',
-        status: 'ACTIVE',
-        metrics: {
-          impressions: 10000,
-          clicks: 500,
-          conversions: 50,
-          revenue: 100000
-        }
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockCampaign
-      })
+  describe('getCampaign / fetchCampaign', () => {
+    it('取得單一活動', async () => {
+      const campaign = makeCampaign()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: campaign })
 
       const { getCampaign } = useCampaigns()
+      const result = await getCampaign(campaign.id, true)
 
-      const result = await getCampaign('campaign-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/campaign-1')
-      )
-      expect(result).toEqual(mockCampaign)
+      expect(result).toEqual(campaign)
+      expect(lastCall()[0]).toBe(`/campaigns/${campaign.id}`)
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Not found'))
+    it('找不到時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('活動不存在'))
 
       const { getCampaign } = useCampaigns()
-
-      const result = await getCampaign('non-existent')
+      const result = await getCampaign('missing', true)
 
       expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '活動不存在'
+      }))
+    })
+
+    it('fetchCampaign 把結果存進 currentCampaign', async () => {
+      const campaign = makeCampaign()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: campaign })
+
+      const { fetchCampaign, currentCampaign } = useCampaigns()
+      await fetchCampaign(campaign.id)
+
+      expect(currentCampaign.value).toEqual(campaign)
     })
   })
 
   describe('createCampaign', () => {
-    it('應該成功建立活動', async () => {
-      const newCampaign = {
-        name: '新年活動',
-        type: 'PROMOTION' as const,
-        start_date: '2025-01-01',
-        end_date: '2025-01-31',
-        budget: 50000
-      }
-
-      const createdCampaign: Partial<Campaign> = {
-        id: 'campaign-new',
-        ...newCampaign,
-        status: 'DRAFT'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: createdCampaign
-      })
+    it('以 createCampaignSchema 的 camelCase 欄位 POST 並返回建立的活動', async () => {
+      const created = makeCampaign()
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: created })
 
       const { createCampaign } = useCampaigns()
+      const input = {
+        name: '夏季促銷',
+        campaignType: 'PROMOTION' as const,
+        startDate: '2026-06-01',
+        endDate: '2026-08-31',
+        budget: 50000,
+        isActive: true
+      }
+      const result = await createCampaign(input)
 
-      const result = await createCampaign(newCampaign)
+      expect(result).toEqual(created)
+      const [endpoint, options] = lastCall()
+      expect(endpoint).toBe('/campaigns')
+      expect(options).toEqual({ method: 'POST', body: input })
+    })
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns'),
-        expect.objectContaining({
-          method: 'POST',
-          body: newCampaign
-        })
-      )
-      expect(result?.id).toBe('campaign-new')
+    it('後端回 400 時返回 null，並把後端的錯誤訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('開始日期不能晚於結束日期'))
+
+      const { createCampaign } = useCampaigns()
+      const result = await createCampaign({ name: 'x', startDate: '2026-09-01', endDate: '2026-08-01' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '開始日期不能晚於結束日期'
+      }))
+    })
+
+    it('沒有可讀的錯誤訊息時使用預設的失敗訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('HTTP 500'))
+
+      const { createCampaign } = useCampaigns()
+      const result = await createCampaign({ name: 'x', startDate: '2026-06-01', endDate: '2026-08-01' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '建立活動失敗'
+      }))
+    })
+
+    it('回應沒有 data 時視為失敗', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true })
+
+      const { createCampaign } = useCampaigns()
+      const result = await createCampaign({ name: 'x', startDate: '2026-06-01', endDate: '2026-08-01' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('updateCampaign', () => {
-    it('應該成功更新活動', async () => {
-      const updateData = {
-        name: '更新名稱',
-        budget: 80000
-      }
-
-      const updatedCampaign: Partial<Campaign> = {
-        id: 'campaign-1',
-        ...updateData
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: updatedCampaign
-      })
+    it('以 PATCH 送出 isActive 等 camelCase 欄位', async () => {
+      const updated = makeCampaign({ isActive: false })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: updated })
 
       const { updateCampaign } = useCampaigns()
+      const result = await updateCampaign(updated.id, { isActive: false })
 
-      const result = await updateCampaign('campaign-1', updateData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/campaign-1'),
-        expect.objectContaining({
-          method: 'PATCH',
-          body: updateData
-        })
-      )
-      expect(result?.budget).toBe(80000)
-    })
-  })
-
-  describe('cancelCampaign', () => {
-    it('應該成功取消活動', async () => {
-      mockFetch.mockResolvedValueOnce({ success: true })
-
-      const { cancelCampaign } = useCampaigns()
-
-      const result = await cancelCampaign('campaign-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/campaign-1'),
-        expect.objectContaining({ method: 'DELETE' })
-      )
-      expect(result).toBe(true)
+      expect(result).toEqual(updated)
+      const [endpoint, options] = lastCall()
+      expect(endpoint).toBe(`/campaigns/${updated.id}`)
+      expect(options).toEqual({ method: 'PATCH', body: { isActive: false } })
     })
 
-    it('應該處理取消失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Cancel failed'))
+    it('更新失敗時返回 null，並把後端的訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
-      const { cancelCampaign } = useCampaigns()
-
-      const result = await cancelCampaign('campaign-1')
-
-      expect(result).toBe(false)
-    })
-  })
-
-  describe('getCampaignMetrics', () => {
-    it('應該成功取得活動指標', async () => {
-      const mockMetrics: CampaignMetrics = {
-        impressions: 10000,
-        clicks: 500,
-        conversions: 50,
-        revenue: 100000,
-        leads_generated: 100,
-        contracts_created: 30,
-        roi: '150%'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: {
-          campaign_id: 'campaign-1',
-          campaign_name: '夏季促銷',
-          period: { start_date: '2025-01-01', end_date: '2025-01-31' },
-          budget: 50000,
-          actual_cost: 40000,
-          metrics: mockMetrics
-        }
-      })
-
-      const { getCampaignMetrics } = useCampaigns()
-
-      const result = await getCampaignMetrics('campaign-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/campaign-1/metrics')
-      )
-      expect(result).toEqual(mockMetrics)
-    })
-  })
-
-  describe('updateCampaignMetrics', () => {
-    it('應該成功更新活動指標', async () => {
-      const metricsData = {
-        impressions: 15000,
-        clicks: 750,
-        actual_cost: 45000
-      }
-
-      const updatedCampaign: Partial<Campaign> = {
-        id: 'campaign-1',
-        metrics: { ...metricsData, conversions: 0, revenue: 0 }
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: updatedCampaign
-      })
-
-      const { updateCampaignMetrics } = useCampaigns()
-
-      const result = await updateCampaignMetrics('campaign-1', metricsData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/campaign-1/update-metrics'),
-        expect.objectContaining({
-          method: 'POST',
-          body: metricsData
-        })
-      )
-      expect(result?.metrics?.impressions).toBe(15000)
-    })
-  })
-
-  describe('addAsset', () => {
-    it('應該成功新增素材', async () => {
-      const assetData = {
-        name: '宣傳圖片',
-        type: 'IMAGE',
-        category: 'banner',
-        file_id: 'file-1'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: { id: 'asset-1', ...assetData }
-      })
-
-      const { addAsset } = useCampaigns()
-
-      const result = await addAsset('campaign-1', assetData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/campaign-1/assets'),
-        expect.objectContaining({
-          method: 'POST',
-          body: assetData
-        })
-      )
-      expect(result).not.toBeNull()
-    })
-  })
-
-  describe('getROIReport', () => {
-    it('應該成功取得 ROI 報表', async () => {
-      const mockSummary: ROISummary = {
-        total_campaigns: 5,
-        total_budget: 200000,
-        total_cost: 180000,
-        total_revenue: 500000,
-        total_profit: 320000,
-        total_conversions: 150,
-        average_roi: '178%',
-        best_performing: null,
-        worst_performing: null
-      }
-
-      const mockReports: ROIReport[] = [
-        {
-          id: 'campaign-1',
-          name: '夏季促銷',
-          type: 'PROMOTION',
-          status: 'ENDED',
-          period: { start: '2025-01-01', end: '2025-01-31' },
-          budget: 50000,
-          actual_cost: 45000,
-          revenue: 150000,
-          profit: 105000,
-          roi: 233,
-          conversions: 50
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        period: { start_date: '2025-01-01', end_date: '2025-12-31' },
-        summary: mockSummary,
-        data: mockReports
-      })
-
-      const { getROIReport } = useCampaigns()
-
-      const result = await getROIReport({
-        startDate: '2025-01-01',
-        endDate: '2025-12-31',
-        type: 'PROMOTION'
-      })
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/campaigns/roi-report')
-      )
-      expect(result?.summary.total_campaigns).toBe(5)
-      expect(result?.data).toHaveLength(1)
-    })
-
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Report failed'))
-
-      const { getROIReport } = useCampaigns()
-
-      const result = await getROIReport()
+      const { updateCampaign } = useCampaigns()
+      const result = await updateCampaign('c-1', { name: 'x' })
 
       expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '權限不足'
+      }))
     })
   })
 
-  describe('Helper functions', () => {
-    it('getTypeLabel 應該返回正確的標籤', () => {
+  describe('deleteCampaign', () => {
+    it('成功時以 DELETE 返回 true', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '活動已刪除' })
+
+      const { deleteCampaign } = useCampaigns()
+      const result = await deleteCampaign('c-1')
+
+      expect(result).toBe(true)
+      expect(lastCall()).toEqual(['/campaigns/c-1', { method: 'DELETE' }])
+    })
+
+    it('後端回 403 時返回 false，並把後端的訊息交給 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
+
+      const { deleteCampaign } = useCampaigns()
+      const result = await deleteCampaign('c-1')
+
+      expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        customMessage: '權限不足'
+      }))
+    })
+  })
+
+  describe('getCampaignState', () => {
+    const base = { isActive: true, startDate: '2026-06-01', endDate: '2026-08-31' }
+
+    it('isActive=false 一律是已停用', () => {
+      expect(getCampaignState({ ...base, isActive: false }, '2026-07-01')).toBe('INACTIVE')
+    })
+
+    it('開始日之前是已排程，結束日之後是已結束，區間內（含首尾日）是進行中', () => {
+      expect(getCampaignState(base, '2026-05-31')).toBe('SCHEDULED')
+      expect(getCampaignState(base, '2026-06-01')).toBe('ACTIVE')
+      expect(getCampaignState(base, '2026-08-31')).toBe('ACTIVE')
+      expect(getCampaignState(base, '2026-09-01')).toBe('ENDED')
+    })
+
+    it('isActive 為 null（資料庫預設）視為啟用', () => {
+      expect(getCampaignState({ ...base, isActive: null }, '2026-07-01')).toBe('ACTIVE')
+    })
+  })
+
+  describe('helpers', () => {
+    it('getTypeLabel 對應後端的活動類型', () => {
       const { getTypeLabel } = useCampaigns()
-
       expect(getTypeLabel('PROMOTION')).toBe('促銷活動')
-      expect(getTypeLabel('EVENT')).toBe('線下活動')
-      expect(getTypeLabel('CHECKIN')).toBe('打卡活動')
-      expect(getTypeLabel('REFERRAL')).toBe('轉介紹')
+      expect(getTypeLabel('MEMBERSHIP')).toBe('會籍活動')
+      expect(getTypeLabel(null)).toBe('—')
     })
 
-    it('getTypeColor 應該返回正確的顏色', () => {
-      const { getTypeColor } = useCampaigns()
-
-      expect(getTypeColor('PROMOTION')).toContain('purple')
-      expect(getTypeColor('EVENT')).toContain('blue')
-      expect(getTypeColor('CHECKIN')).toContain('green')
-      expect(getTypeColor('REFERRAL')).toContain('orange')
-    })
-
-    it('getStatusLabel 應該返回正確的標籤', () => {
-      const { getStatusLabel } = useCampaigns()
-
-      expect(getStatusLabel('DRAFT')).toBe('草稿')
+    it('getStatusLabel / getStatusVariant 以衍生狀態顯示', () => {
+      const { getStatusLabel, getStatusVariant } = useCampaigns()
       expect(getStatusLabel('ACTIVE')).toBe('進行中')
-      expect(getStatusLabel('ENDED')).toBe('已結束')
-      expect(getStatusLabel('CANCELLED')).toBe('已取消')
-    })
-
-    it('getStatusColor 應該返回正確的顏色', () => {
-      const { getStatusColor } = useCampaigns()
-
-      expect(getStatusColor('DRAFT')).toContain('gray')
-      expect(getStatusColor('ACTIVE')).toContain('green')
-      expect(getStatusColor('ENDED')).toContain('blue')
-      expect(getStatusColor('CANCELLED')).toContain('red')
-    })
-
-    it('formatROI 應該正確格式化 ROI', () => {
-      const { formatROI } = useCampaigns()
-
-      expect(formatROI(150)).toBe('+150%')
-      expect(formatROI(0)).toBe('+0%')
-      expect(formatROI(-20)).toBe('-20%')
-      expect(formatROI(null)).toBe('-')
-    })
-
-    it('getROIColor 應該返回正確的顏色', () => {
-      const { getROIColor } = useCampaigns()
-
-      expect(getROIColor(150)).toContain('emerald')
-      expect(getROIColor(75)).toContain('green')
-      expect(getROIColor(25)).toContain('yellow')
-      expect(getROIColor(-10)).toContain('red')
-      expect(getROIColor(null)).toContain('gray')
+      expect(getStatusLabel('INACTIVE')).toBe('已停用')
+      expect(getStatusVariant('ACTIVE')).toBe('success')
+      expect(getStatusVariant('SCHEDULED')).toBe('warning')
     })
   })
 })

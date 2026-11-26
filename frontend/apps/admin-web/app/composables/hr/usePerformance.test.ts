@@ -1,510 +1,276 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mockHandleError } from '@test/setup'
+import { describe, it, expect, afterEach } from 'vitest'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { usePerformance } from './usePerformance'
 import type { PerformanceReview, KPITemplate, TeamDashboard } from './usePerformance'
 
-// Mock $fetch
-const mockFetch = vi.fn()
-vi.stubGlobal('$fetch', mockFetch)
+// Fixtures in the exact wire format of backend/src/routes/hr-performance.ts: reads are
+// snake_case with the decimal `score` as a string and `meta.total`; writes return camelCase rows.
+const makeReview = (overrides: Record<string, unknown> = {}) => ({
+  id: 'a0000000-0000-4000-8000-000000000001',
+  employee_id: 'e0000000-0000-4000-8000-000000000001',
+  reviewer_id: null,
+  review_period: '2026-01',
+  review_type: 'MONTHLY',
+  kpi_data: [],
+  score: '85.50',
+  comments: null,
+  improvement_plan: null,
+  status: 'DRAFT',
+  reviewed_at: null,
+  date_created: '2026-01-31T02:00:00.000Z',
+  employee: {
+    id: 'e0000000-0000-4000-8000-000000000001',
+    full_name: '張三',
+    employee_code: 'E00001',
+    job_title: { id: 'j1', name: '教練' },
+    branch: { id: 'b1', name: '信義店' }
+  },
+  ...overrides
+}) as unknown as PerformanceReview
 
-// Mock useRuntimeConfig
-vi.stubGlobal('useRuntimeConfig', () => ({
-  public: {
-    apiBaseUrl: 'http://localhost:8056',
-    apiUrl: 'http://localhost:8056/api'
-  }
-}))
+const reviewRow = {
+  id: 'a0000000-0000-4000-8000-000000000001',
+  employeeId: 'e0000000-0000-4000-8000-000000000001',
+  reviewerId: null,
+  reviewPeriod: '2026-01',
+  reviewType: 'MONTHLY',
+  status: 'SUBMITTED',
+  overallScore: '85.50',
+  reviewerComments: null,
+  improvementPlan: null,
+  approvedBy: null,
+  approvedAt: null,
+  submittedAt: '2026-02-01T02:00:00.000Z',
+  reviewedAt: null,
+  kpiData: [],
+  createdAt: '2026-01-31T02:00:00.000Z',
+  updatedAt: null
+}
 
-const requestedUrl = (callIndex = 0) => new URL(String(mockFetch.mock.calls[callIndex]![0]))
+const lastCall = () => mockFetchInstance.apiFetch.mock.calls.at(-1)!
 
 describe('usePerformance', () => {
-  beforeEach(() => {
-    mockFetch.mockReset()
-  })
-
   afterEach(() => {
-    mockFetch.mockReset()
+    mockFetchInstance.apiFetch.mockReset()
   })
 
   describe('fetchReviews', () => {
-    it('應該成功取得績效考核列表', async () => {
-      const mockReviews: Partial<PerformanceReview>[] = [
-        {
-          id: 'review-1',
-          employee_id: 'emp-1',
-          review_period: '2025-01',
-          review_type: 'MONTHLY',
-          status: 'DRAFT',
-          score: null
-        },
-        {
-          id: 'review-2',
-          employee_id: 'emp-2',
-          review_period: '2025-01',
-          review_type: 'MONTHLY',
-          status: 'APPROVED',
-          score: 85
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
+    it('通過 apiFetch 讀取列表，meta.total 當總數，字串分數轉成數字', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
         success: true,
-        data: mockReviews,
-        meta: { total: 2 }
+        data: [makeReview(), makeReview({ id: 'r2', score: null })],
+        meta: { total: 30 }
       })
 
       const { fetchReviews, reviews, totalCount } = usePerformance()
+      await fetchReviews({ page: 2, limit: 10, status: 'SUBMITTED', employee_id: 'e1' })
 
-      await fetchReviews()
-
-      expect(mockFetch).toHaveBeenCalledTimes(1)
-      expect(reviews.value).toEqual(mockReviews)
-      expect(totalCount.value).toBe(2)
-      const url = requestedUrl()
-      expect(url.pathname).toBe('/api/performance/reviews')
-      expect(url.searchParams.get('limit')).toBe('20')
-      expect(url.searchParams.get('offset')).toBe('0')
+      expect(lastCall()[0]).toBe('/performance/reviews')
+      expect(lastCall()[1].params).toEqual({ status: 'SUBMITTED', employee_id: 'e1', limit: 10, offset: 10 })
+      expect(reviews.value[0]!.score).toBe(85.5)
+      expect(reviews.value[1]!.score).toBeNull()
+      expect(reviews.value[0]!.employee?.full_name).toBe('張三')
+      expect(totalCount.value).toBe(30)
     })
 
-    it('應該支援篩選參數', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: [],
-        meta: { total: 0 }
-      })
+    it('失敗時清空列表並回報後端錯誤訊息', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
-      const { fetchReviews } = usePerformance()
-
-      await fetchReviews({
-        employee_id: 'emp-1',
-        status: 'SUBMITTED',
-        review_type: 'MONTHLY',
-        page: 3,
-        limit: 10
-      })
-
-      const url = requestedUrl()
-      expect(url.searchParams.get('employee_id')).toBe('emp-1')
-      expect(url.searchParams.get('status')).toBe('SUBMITTED')
-      expect(url.searchParams.get('review_type')).toBe('MONTHLY')
-      expect(url.searchParams.get('limit')).toBe('10')
-      expect(url.searchParams.get('offset')).toBe('20') // page 3 of 10 per page
-      expect(url.searchParams.has('page')).toBe(false)
-    })
-
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const { fetchReviews, reviews, totalCount } = usePerformance()
-
-      await fetchReviews()
+      const { fetchReviews, reviews, totalCount, isLoading } = usePerformance()
+      await fetchReviews({ period: 'x-fail' })
 
       expect(reviews.value).toEqual([])
       expect(totalCount.value).toBe(0)
-      expect(mockHandleError).toHaveBeenCalled()
+      expect(isLoading.value).toBe(false)
+      expect(mockHandleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ context: 'usePerformance.fetchReviews', customMessage: '權限不足' })
+      )
     })
   })
 
   describe('fetchReview', () => {
-    it('應該成功取得單一績效考核', async () => {
-      const mockReview: Partial<PerformanceReview> = {
-        id: 'review-1',
-        employee_id: 'emp-1',
-        review_period: '2025-01',
-        review_type: 'MONTHLY',
-        status: 'DRAFT',
-        score: 78
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockReview
-      })
+    it('讀取單筆並轉換分數', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: makeReview() })
 
       const { fetchReview, currentReview } = usePerformance()
+      await fetchReview('r1')
 
-      await fetchReview('review-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/reviews/review-1')
-      )
-      expect(currentReview.value).toEqual(mockReview)
+      expect(lastCall()[0]).toBe('/performance/reviews/r1')
+      expect(currentReview.value?.score).toBe(85.5)
     })
 
-    it('應該處理取得失敗的情況', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Not found'))
+    it('404 時清空目前考核', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到績效考核記錄'))
 
       const { fetchReview, currentReview } = usePerformance()
-
-      await fetchReview('non-existent')
+      await fetchReview('missing')
 
       expect(currentReview.value).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
-  describe('createReview', () => {
-    it('應該成功建立績效考核', async () => {
-      const newReview = {
-        employee_id: 'emp-1',
-        review_period: '2025-02',
-        review_type: 'MONTHLY' as const
-      }
-
-      const createdReview: Partial<PerformanceReview> = {
-        id: 'review-new',
-        ...newReview,
-        status: 'DRAFT'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: createdReview
-      })
+  describe('寫入（回傳 camelCase 紀錄）', () => {
+    it('createReview 回傳新建的紀錄', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { ...reviewRow, status: 'DRAFT' } })
 
       const { createReview } = usePerformance()
+      const result = await createReview({ employee_id: 'e1', review_period: '2026-01', review_type: 'MONTHLY' })
 
-      const result = await createReview(newReview)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/reviews'),
-        expect.objectContaining({
-          method: 'POST',
-          body: newReview
-        })
-      )
-      expect(result).toEqual(createdReview)
+      expect(lastCall()[0]).toBe('/performance/reviews')
+      expect(lastCall()[1]).toEqual({
+        method: 'POST',
+        body: { employee_id: 'e1', review_period: '2026-01', review_type: 'MONTHLY' }
+      })
+      expect(result.id).toBe(reviewRow.id)
     })
 
-    it('應該在建立失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: false,
-        error: 'Validation failed'
-      })
+    it('createReview 後端錯誤直接拋出', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到員工'))
 
       const { createReview } = usePerformance()
-
-      await expect(createReview({
-        employee_id: '',
-        review_period: '',
-        review_type: 'MONTHLY'
-      })).rejects.toThrow('建立績效考核失敗')
+      await expect(createReview({ employee_id: 'e1', review_period: '2026-01', review_type: 'MONTHLY' }))
+        .rejects.toThrow('找不到員工')
     })
-  })
 
-  describe('updateReview', () => {
-    it('應該成功更新績效考核', async () => {
-      const updateData = {
-        score: 85,
-        comments: '表現良好'
-      }
-
-      const updatedReview: Partial<PerformanceReview> = {
-        id: 'review-1',
-        ...updateData,
-        status: 'DRAFT'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: updatedReview
-      })
+    it('updateReview 以 snake_case 欄位 PATCH', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: reviewRow })
 
       const { updateReview } = usePerformance()
+      await updateReview('r1', { score: 90, comments: 'good', improvement_plan: 'plan' })
 
-      const result = await updateReview('review-1', updateData)
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/reviews/review-1'),
-        expect.objectContaining({
-          method: 'PATCH',
-          body: updateData
-        })
-      )
-      expect(result.score).toBe(85)
-    })
-
-    it('應該在更新失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { updateReview } = usePerformance()
-
-      await expect(updateReview('review-1', { score: 1 })).rejects.toThrow('更新績效考核失敗')
-    })
-  })
-
-  describe('submitReview', () => {
-    it('應該成功提交績效考核', async () => {
-      const submittedReview: Partial<PerformanceReview> = {
-        id: 'review-1',
-        status: 'SUBMITTED'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: submittedReview
+      expect(lastCall()[0]).toBe('/performance/reviews/r1')
+      expect(lastCall()[1]).toEqual({
+        method: 'PATCH',
+        body: { score: 90, comments: 'good', improvement_plan: 'plan' }
       })
+    })
+
+    it('submitReview 對非草稿拋出後端錯誤', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('只有草稿狀態才能提交'))
 
       const { submitReview } = usePerformance()
-
-      const result = await submitReview('review-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/reviews/review-1/submit'),
-        expect.objectContaining({ method: 'POST' })
-      )
-      expect(result.status).toBe('SUBMITTED')
+      await expect(submitReview('r1')).rejects.toThrow('只有草稿狀態才能提交')
+      expect(lastCall()[0]).toBe('/performance/reviews/r1/submit')
     })
 
-    it('應該在提交失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { submitReview } = usePerformance()
-
-      await expect(submitReview('review-1')).rejects.toThrow('提交績效考核失敗')
-    })
-  })
-
-  describe('approveReview', () => {
-    it('應該成功核准績效考核', async () => {
-      const approvedReview: Partial<PerformanceReview> = {
-        id: 'review-1',
-        status: 'APPROVED'
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: approvedReview
-      })
+    it('approveReview 成功回傳紀錄；403 時拋出後端錯誤', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { ...reviewRow, status: 'APPROVED' } })
 
       const { approveReview } = usePerformance()
-
-      const result = await approveReview('review-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/reviews/review-1/approve'),
-        expect.objectContaining({ method: 'POST' })
-      )
+      const result = await approveReview('r1')
       expect(result.status).toBe('APPROVED')
+      expect(lastCall()[0]).toBe('/performance/reviews/r1/approve')
+
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
+      await expect(approveReview('r1')).rejects.toThrow('權限不足')
     })
 
-    it('應該在核准失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
+    it('rejectReview 帶上退回原因', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { ...reviewRow, status: 'DRAFT' } })
 
-      const { approveReview } = usePerformance()
+      const { rejectReview } = usePerformance()
+      await rejectReview('r1', '資料不完整')
 
-      await expect(approveReview('review-1')).rejects.toThrow('核准績效考核失敗')
+      expect(lastCall()[0]).toBe('/performance/reviews/r1/reject')
+      expect(lastCall()[1]).toEqual({ method: 'POST', body: { reason: '資料不完整' } })
     })
   })
 
-  describe('rejectReview', () => {
-    it('應該成功退回績效考核', async () => {
-      const rejectedReview: Partial<PerformanceReview> = {
-        id: 'review-1',
-        status: 'DRAFT'
-      }
+  describe('KPI 範本', () => {
+    const template: KPITemplate = {
+      id: 't1',
+      name: '教練季考核',
+      description: '',
+      job_title_id: null,
+      review_type: 'QUARTERLY',
+      kpis: [{ id: 'kpi_1', name: '出席率', weight: 100, target: 90 }],
+      is_default: false,
+      is_active: true,
+      date_created: '2026-01-01T00:00:00.000Z'
+    }
 
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: rejectedReview
-      })
-
-      const { rejectReview } = usePerformance()
-
-      const result = await rejectReview('review-1', '需要補充說明')
-
-      expect(result).toEqual(rejectedReview)
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/reviews/review-1/reject'),
-        expect.objectContaining({
-          method: 'POST',
-          body: { reason: '需要補充說明' }
-        })
-      )
-    })
-
-    it('應該在退回失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { rejectReview } = usePerformance()
-
-      await expect(rejectReview('review-1', 'x')).rejects.toThrow('退回績效考核失敗')
-    })
-  })
-
-  describe('fetchKPITemplates', () => {
-    it('應該成功取得 KPI 範本列表', async () => {
-      const mockTemplates: Partial<KPITemplate>[] = [
-        {
-          id: 'tpl-1',
-          name: '業務人員 KPI',
-          kpis: [
-            { id: 'kpi-1', name: '業績目標', weight: 50, target: 100000 }
-          ]
-        }
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockTemplates
-      })
+    it('fetchKPITemplates 讀取範本', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: [template] })
 
       const { fetchKPITemplates, kpiTemplates } = usePerformance()
-
       await fetchKPITemplates()
 
-      expect(kpiTemplates.value).toEqual(mockTemplates)
-      expect(requestedUrl().pathname).toBe('/api/performance/kpi-templates')
+      expect(lastCall()[0]).toBe('/performance/kpi-templates')
+      expect(kpiTemplates.value).toEqual([template])
     })
 
-    it('應該在取得失敗時清空範本並呼叫 handleError', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+    it('fetchKPITemplates 失敗時清空', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
       const { fetchKPITemplates, kpiTemplates } = usePerformance()
-      kpiTemplates.value = [{ id: 'old' } as KPITemplate]
-
       await fetchKPITemplates()
 
       expect(kpiTemplates.value).toEqual([])
       expect(mockHandleError).toHaveBeenCalled()
     })
-  })
 
-  describe('createKPITemplate', () => {
-    it('應該成功建立 KPI 範本', async () => {
-      const newTemplate = {
-        name: '新範本',
-        kpis: [
-          { id: 'kpi-1', name: '指標一', weight: 100, target: 10 }
-        ]
-      }
-
-      const createdTemplate: Partial<KPITemplate> = {
-        id: 'tpl-new',
-        ...newTemplate
-      }
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: createdTemplate
-      })
+    it('createKPITemplate 回傳後端的 camelCase 紀錄', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: { id: 't1', name: '教練季考核', kpis: template.kpis } })
 
       const { createKPITemplate } = usePerformance()
+      const result = await createKPITemplate({ name: '教練季考核', kpis: template.kpis })
 
-      const result = await createKPITemplate(newTemplate)
-
-      expect(result.id).toBe('tpl-new')
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/kpi-templates'),
-        expect.objectContaining({ method: 'POST', body: newTemplate })
-      )
+      expect(lastCall()[0]).toBe('/performance/kpi-templates')
+      expect(result.id).toBe('t1')
     })
 
-    it('應該在建立失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { createKPITemplate } = usePerformance()
-
-      await expect(createKPITemplate({ name: 'x', kpis: [] })).rejects.toThrow('建立 KPI 範本失敗')
-    })
-  })
-
-  describe('deleteKPITemplate', () => {
-    it('應該成功刪除 KPI 範本', async () => {
-      mockFetch.mockResolvedValueOnce({ success: true })
+    it('deleteKPITemplate 只回 success 也視為成功；共用範本的 404 會拋出後端錯誤', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true })
 
       const { deleteKPITemplate } = usePerformance()
+      await expect(deleteKPITemplate('t1')).resolves.toBeUndefined()
+      expect(lastCall()[0]).toBe('/performance/kpi-templates/t1')
+      expect(lastCall()[1]).toEqual({ method: 'DELETE' })
 
-      await deleteKPITemplate('tpl-1')
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/performance/kpi-templates/tpl-1'),
-        expect.objectContaining({ method: 'DELETE' })
-      )
-    })
-
-    it('應該在刪除失敗時拋出錯誤', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
-
-      const { deleteKPITemplate } = usePerformance()
-
-      await expect(deleteKPITemplate('tpl-1')).rejects.toThrow('刪除 KPI 範本失敗')
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到 KPI 範本'))
+      await expect(deleteKPITemplate('shared')).rejects.toThrow('找不到 KPI 範本')
     })
   })
 
   describe('fetchTeamDashboard', () => {
-    it('應該成功取得團隊儀表板', async () => {
-      const mockDashboard: TeamDashboard = {
-        total_reviews: 10,
-        pending_reviews: 3,
-        completed_reviews: 7,
-        average_score: 82.5,
-        score_distribution: {
-          excellent: 3,
-          good: 4,
-          poor: 0
-        },
-        top_performers: [
-          { id: 'emp-1', full_name: '張三', score: 95 }
-        ]
-      }
+    const dashboard: TeamDashboard = {
+      total_reviews: 10,
+      pending_reviews: 4,
+      completed_reviews: 6,
+      average_score: 82.5,
+      score_distribution: { excellent: 2, good: 3, poor: 1 },
+      top_performers: [{ id: 'e1', full_name: '張三', score: 95 }]
+    }
 
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: mockDashboard
-      })
+    it('只送 period（後端沒有分店篩選）', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: dashboard })
 
       const { fetchTeamDashboard } = usePerformance()
+      const result = await fetchTeamDashboard({ period: '2026-01' })
 
-      const result = await fetchTeamDashboard({ period: '2025-01' })
-
-      expect(result).toEqual(mockDashboard)
-      const url = requestedUrl()
-      expect(url.pathname).toBe('/api/performance/team-dashboard')
-      expect(url.searchParams.get('period')).toBe('2025-01')
-      expect(url.searchParams.has('branch_id')).toBe(false)
+      expect(lastCall()[0]).toBe('/performance/team-dashboard')
+      expect(lastCall()[1].params).toEqual({ period: '2026-01' })
+      expect(result).toEqual(dashboard)
     })
 
-    it('應該在 API 回報失敗時返回 null', async () => {
-      mockFetch.mockResolvedValueOnce({ success: false })
+    it('失敗時回傳 null', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
       const { fetchTeamDashboard } = usePerformance()
-
-      expect(await fetchTeamDashboard({ branch_id: 'branch-1' })).toBeNull()
-    })
-
-    it('應該在請求錯誤時返回 null 並呼叫 handleError', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const { fetchTeamDashboard } = usePerformance()
-
-      expect(await fetchTeamDashboard()).toBeNull()
+      expect(await fetchTeamDashboard({ period: '2025-12' })).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
-  describe('Helper functions', () => {
-    it('getReviewTypeLabel 應該返回正確的標籤', () => {
-      const { getReviewTypeLabel } = usePerformance()
+  describe('helpers', () => {
+    it('標籤與樣式', () => {
+      const { getReviewTypeLabel, getStatusLabel, getStatusVariant } = usePerformance()
 
-      expect(getReviewTypeLabel('MONTHLY')).toBe('月考核')
       expect(getReviewTypeLabel('QUARTERLY')).toBe('季考核')
-      expect(getReviewTypeLabel('ANNUAL')).toBe('年度考核')
-    })
-
-    it('getStatusLabel 應該返回正確的標籤', () => {
-      const { getStatusLabel } = usePerformance()
-
-      expect(getStatusLabel('DRAFT')).toBe('草稿')
       expect(getStatusLabel('SUBMITTED')).toBe('待審核')
       expect(getStatusLabel('APPROVED')).toBe('已核准')
-    })
-
-    it('getStatusVariant 應該返回正確的樣式', () => {
-      const { getStatusVariant } = usePerformance()
-
-      expect(getStatusVariant('DRAFT')).toBe('default')
-      expect(getStatusVariant('SUBMITTED')).toBe('warning')
       expect(getStatusVariant('APPROVED')).toBe('success')
     })
   })

@@ -1,9 +1,8 @@
 <script lang="ts">
+// The backend can only filter on "valid now" (enabled and today inside the validity range)
 const STATUS_OPTIONS = [
-  { value: '', label: '全部狀態' },
-  { value: 'ACTIVE', label: '啟用中' },
-  { value: 'INACTIVE', label: '已停用' },
-  { value: 'EXPIRED', label: '已過期' }
+  { value: '', label: '全部優惠券' },
+  { value: 'ACTIVE', label: '僅有效中' }
 ]
 
 const COUPON_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW')
@@ -11,14 +10,15 @@ const COUPON_NUMBER_FORMATTER = new Intl.NumberFormat('zh-TW')
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return COUPON_DATE_FORMATTER.format(new Date(dateStr))
+  // date-only strings (YYYY-MM-DD) are shown as that calendar day, not shifted by the timezone
+  return COUPON_DATE_FORMATTER.format(new Date(`${dateStr.slice(0, 10)}T00:00:00`))
 }
 
-const formatDiscount = (coupon: { discount_type: string; discount_value: number }) => {
-  if (coupon.discount_type === 'PERCENTAGE') {
-    return `${coupon.discount_value}% 折扣`
+const formatDiscount = (coupon: { discountType: string; discountValue: string }) => {
+  if (coupon.discountType === 'PERCENTAGE') {
+    return `${Number(coupon.discountValue)}% 折扣`
   }
-  return `折 NT$ ${COUPON_NUMBER_FORMATTER.format(coupon.discount_value)}`
+  return `折 NT$ ${COUPON_NUMBER_FORMATTER.format(Number(coupon.discountValue))}`
 }
 
 const COLUMNS = [
@@ -35,7 +35,7 @@ const COLUMNS = [
 /**
  * 優惠券管理頁面
  */
-import { MESSAGES, PAGINATION, TIMING } from '~/constants'
+import { MESSAGES, PAGINATION } from '~/constants'
 
 definePageMeta({
   middleware: 'auth'
@@ -49,13 +49,13 @@ const {
   totalCount,
   isLoading,
   fetchCoupons,
-  deleteCoupon,
+  setCouponActive,
+  getCouponState,
   getStatusLabel,
   getStatusVariant
 } = useCoupons()
 
 // Filter state
-const search = ref('')
 const selectedStatus = ref('')
 const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
@@ -67,19 +67,8 @@ const loadCoupons = async () => {
   await fetchCoupons({
     page: currentPage.value,
     limit: pageSize,
-    search: search.value || undefined,
-    status: selectedStatus.value || undefined
+    activeOnly: selectedStatus.value === 'ACTIVE'
   })
-}
-
-// Debounced search
-let searchTimeout: ReturnType<typeof setTimeout>
-const handleSearch = () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    currentPage.value = 1
-    loadCoupons()
-  }, TIMING.DEBOUNCE)
 }
 
 // Watch filters
@@ -92,17 +81,13 @@ watch(currentPage, loadCoupons)
 
 onMounted(loadCoupons)
 
-onBeforeUnmount(() => {
-  clearTimeout(searchTimeout)
-})
-
 // Row click
 const handleRowClick = (coupon: typeof coupons.value[0]) => {
   navigateTo(`/marketing/coupons/${coupon.id}`)
 }
 
-// Delete coupon
-const handleDelete = async (coupon: typeof coupons.value[0]) => {
+// Disable coupon (PATCH isActive=false)
+const handleDeactivate = async (coupon: typeof coupons.value[0]) => {
   const confirmed = await confirm({
     title: '停用優惠券',
     message: `確定要停用優惠券「${coupon.name}」嗎？`,
@@ -112,14 +97,11 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
 
   if (!confirmed) return
 
-  try {
-    await deleteCoupon(coupon.id)
-    toast.success('優惠券已停用')
-    await loadCoupons()
-  } catch (error) {
-    console.error('Failed to delete coupon:', error)
-    toast.error('停用失敗')
-  }
+  // setCouponActive shows the backend's error itself and returns null on failure
+  const result = await setCouponActive(coupon.id, false)
+  if (!result) return
+  toast.success('優惠券已停用')
+  await loadCoupons()
 }
 </script>
 
@@ -136,15 +118,6 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
 
     <!-- Filters -->
     <FilterBar>
-      <template #search>
-        <input
-          v-model="search"
-          type="text"
-          class="input input-search"
-          placeholder="搜尋代碼、名稱..."
-          @input="handleSearch"
-        />
-      </template>
       <template #filters>
         <select v-model="selectedStatus" class="input filter-select">
           <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
@@ -185,11 +158,11 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
       <!-- Usage Cell -->
       <template #usage="{ row }">
         <div class="usage-info">
-          <span>{{ row.used_count || 0 }} / {{ row.usage_limit || '∞' }}</span>
-          <div v-if="row.usage_limit" class="usage-bar">
+          <span>{{ row.usageCount || 0 }} / {{ row.usageLimit || '∞' }}</span>
+          <div v-if="row.usageLimit" class="usage-bar">
             <div
               class="usage-fill"
-              :style="{ width: `${Math.min((row.used_count / row.usage_limit) * 100, 100)}%` }"
+              :style="{ width: `${Math.min(((row.usageCount || 0) / row.usageLimit) * 100, 100)}%` }"
             ></div>
           </div>
         </div>
@@ -198,17 +171,17 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
       <!-- Validity Cell -->
       <template #validity="{ row }">
         <div class="validity-info">
-          <span>{{ formatDate(row.start_date) }}</span>
+          <span>{{ formatDate(row.validFrom) }}</span>
           <span class="validity-separator">~</span>
-          <span>{{ formatDate(row.end_date) }}</span>
+          <span>{{ formatDate(row.validUntil) }}</span>
         </div>
       </template>
 
       <!-- Status Cell -->
       <template #status="{ row }">
         <AppBadge
-          :label="getStatusLabel(row.status)"
-          :variant="getStatusVariant(row.status)"
+          :label="getStatusLabel(getCouponState(row))"
+          :variant="getStatusVariant(getCouponState(row))"
         />
       </template>
 
@@ -222,10 +195,10 @@ const handleDelete = async (coupon: typeof coupons.value[0]) => {
             </svg>
           </NuxtLink>
           <button
-            v-if="row.status === 'ACTIVE'"
+            v-if="getCouponState(row) === 'ACTIVE'"
             class="action-btn danger"
             title="停用"
-            @click.stop="handleDelete(row)"
+            @click.stop="handleDeactivate(row)"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" />

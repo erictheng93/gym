@@ -18,6 +18,7 @@ export { useShiftSchedules } from './useShiftSchedules'
 export { useMakeupRequests } from './useMakeupRequests'
 export { usePerformance } from './usePerformance'
 export { usePayroll } from './usePayroll'
+export { useHrAccess, HR_READ_ROLES, HR_ADMIN_ROLES } from './useHrAccess'
 
 // Types - Attendance
 export type {
@@ -31,6 +32,9 @@ export type {
   PerformanceReview,
   KPIItem,
   KPITemplate,
+  ReviewRecord,
+  KpiTemplateRecord,
+  UpdateReviewInput,
   TeamDashboard
 } from './usePerformance'
 
@@ -38,5 +42,7 @@ export type {
 export type {
   SalaryRecord,
   PromotionRecord,
-  PayrollSummary
+  PromotionCreated,
+  CreatePromotionInput,
+  UpdateSalaryInput
 } from './usePayroll'

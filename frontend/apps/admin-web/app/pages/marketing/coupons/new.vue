@@ -1,7 +1,7 @@
 <script lang="ts">
 const DISCOUNT_TYPE_OPTIONS = [
   { value: 'PERCENTAGE', label: '百分比折扣' },
-  { value: 'FIXED_AMOUNT', label: '固定金額折扣' }
+  { value: 'FIXED', label: '固定金額折扣' }
 ]
 
 const COUPON_PLAN_NUMBER_FORMATTER = new Intl.NumberFormat('zh-TW')
@@ -17,7 +17,7 @@ const formatPrice = (price?: number | null) => {
  * 新增優惠券頁面
  */
 import { MESSAGES } from '~/constants'
-import { createCouponSchema, type CreateCouponInput } from '~/schemas/coupon.schema'
+import { createCouponSchema, type CouponFormInput } from '~/schemas/coupon.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
 
@@ -30,18 +30,18 @@ const { createCoupon } = useCoupons()
 const { plans, fetchPlans } = usePlans()
 
 // Form state
-const initialData: CreateCouponInput = {
+const initialData: CouponFormInput = {
   code: '',
   name: '',
-  discount_type: 'PERCENTAGE',
-  discount_value: 10,
-  min_purchase: 0,
-  max_discount: null,
-  usage_limit: null,
-  usage_per_member: 1,
-  applicable_plans: null,
-  start_date: new Date().toISOString().slice(0, 10),
-  end_date: ''
+  discountType: 'PERCENTAGE',
+  discountValue: 10,
+  minPurchase: 0,
+  maxDiscount: null,
+  usageLimit: null,
+  usageLimitPerMember: 1,
+  applicablePlans: null,
+  validFrom: new Date().toISOString().slice(0, 10),
+  validUntil: ''
 }
 
 const {
@@ -71,7 +71,7 @@ onMounted(async () => {
   // Set default end date to 30 days from now
   const endDate = new Date()
   endDate.setDate(endDate.getDate() + 30)
-  form.end_date = endDate.toISOString().slice(0, 10)
+  form.validUntil = endDate.toISOString().slice(0, 10)
 })
 
 // Form submission
@@ -82,15 +82,20 @@ const handleSubmit = async () => {
 
   await submit(
     async () => {
-      const couponData = {
-        ...form,
-        code: form.code || undefined,
-        max_discount: form.max_discount || null,
-        usage_limit: form.usage_limit || null,
-        applicable_plans: form.applicable_plans?.length ? form.applicable_plans : null
-      }
-
-      const result = await createCoupon(couponData)
+      // createCoupon shows the backend's error itself and returns null on failure
+      const result = await createCoupon({
+        code: form.code,
+        name: form.name,
+        discountType: form.discountType,
+        discountValue: form.discountValue,
+        minPurchase: form.minPurchase || undefined,
+        maxDiscount: form.discountType === 'PERCENTAGE' && form.maxDiscount ? form.maxDiscount : undefined,
+        usageLimit: form.usageLimit || undefined,
+        usageLimitPerMember: form.usageLimitPerMember,
+        validFrom: form.validFrom,
+        validUntil: form.validUntil,
+        applicablePlans: form.applicablePlans?.length ? form.applicablePlans : undefined
+      })
       if (!result) {
         throw new Error('建立優惠券失敗')
       }
@@ -98,7 +103,7 @@ const handleSubmit = async () => {
     },
     {
       successMessage: '已成功建立優惠券',
-      errorMessage: '建立優惠券失敗',
+      showErrorToast: false,
       onSuccess: async () => { await router.push('/marketing/coupons') },
       onError: (error) => setError('submit', error.message)
     }
@@ -146,13 +151,14 @@ const handleSubmit = async () => {
 
         <div class="form-grid">
           <div class="form-group code-group">
-            <label class="form-label">優惠碼</label>
+            <label class="form-label">優惠碼（最多 20 字）</label>
             <div class="code-input-wrapper">
               <input
                 v-model="form.code"
                 type="text"
                 class="input code-input"
-                placeholder="留空自動產生"
+                maxlength="20"
+                placeholder="例：NEWMEMBER10"
               />
               <button type="button" class="btn btn-secondary btn-small" @click="generateCode">
                 產生
@@ -185,24 +191,24 @@ const handleSubmit = async () => {
 
         <div class="form-grid">
           <FormRadioGroup
-            v-model="form.discount_type"
+            v-model="form.discountType"
             label="折扣類型"
             :options="DISCOUNT_TYPE_OPTIONS"
           />
 
           <FormInput
-            v-model="form.discount_value"
-            :label="form.discount_type === 'PERCENTAGE' ? '折扣百分比 (%)' : '折扣金額 (NT$)'"
+            v-model="form.discountValue"
+            :label="form.discountType === 'PERCENTAGE' ? '折扣百分比 (%)' : '折扣金額 (NT$)'"
             type="number"
-            :placeholder="form.discount_type === 'PERCENTAGE' ? '例：10' : '例：500'"
+            :placeholder="form.discountType === 'PERCENTAGE' ? '例：10' : '例：500'"
             :min="1"
-            :max="form.discount_type === 'PERCENTAGE' ? 100 : undefined"
+            :max="form.discountType === 'PERCENTAGE' ? 100 : undefined"
             :required="true"
-            :error="errors.discount_value"
+            :error="errors.discountValue"
           />
 
           <FormInput
-            v-model="form.min_purchase"
+            v-model="form.minPurchase"
             label="最低消費門檻 (NT$)"
             type="number"
             placeholder="0 表示無門檻"
@@ -210,8 +216,8 @@ const handleSubmit = async () => {
           />
 
           <FormInput
-            v-if="form.discount_type === 'PERCENTAGE'"
-            v-model="form.max_discount"
+            v-if="form.discountType === 'PERCENTAGE'"
+            v-model="form.maxDiscount"
             label="折扣上限 (NT$)"
             type="number"
             placeholder="留空表示無上限"
@@ -231,7 +237,7 @@ const handleSubmit = async () => {
 
         <div class="form-grid">
           <FormInput
-            v-model="form.usage_limit"
+            v-model="form.usageLimit"
             label="總使用次數上限"
             type="number"
             placeholder="留空表示無限制"
@@ -239,7 +245,7 @@ const handleSubmit = async () => {
           />
 
           <FormInput
-            v-model="form.usage_per_member"
+            v-model="form.usageLimitPerMember"
             label="每人使用次數上限"
             type="number"
             placeholder="1"
@@ -261,18 +267,18 @@ const handleSubmit = async () => {
 
         <div class="form-grid">
           <FormDatePicker
-            v-model="form.start_date"
+            v-model="form.validFrom"
             label="開始日期"
             :required="true"
-            :error="errors.start_date"
+            :error="errors.validFrom"
           />
 
           <FormDatePicker
-            v-model="form.end_date"
+            v-model="form.validUntil"
             label="結束日期"
             :required="true"
-            :min="form.start_date"
-            :error="errors.end_date"
+            :min="form.validFrom"
+            :error="errors.validUntil"
           />
         </div>
       </section>
@@ -300,13 +306,13 @@ const handleSubmit = async () => {
               <input
                 type="checkbox"
                 :value="plan.id"
-                :checked="form.applicable_plans?.includes(plan.id)"
+                :checked="form.applicablePlans?.includes(plan.id)"
                 @change="(e) => {
                   const target = e.target as HTMLInputElement
                   if (target.checked) {
-                    form.applicable_plans = [...(form.applicable_plans || []), plan.id]
+                    form.applicablePlans = [...(form.applicablePlans || []), plan.id]
                   } else {
-                    form.applicable_plans = form.applicable_plans?.filter(id => id !== plan.id) || null
+                    form.applicablePlans = form.applicablePlans?.filter(id => id !== plan.id) || null
                   }
                 }"
               />

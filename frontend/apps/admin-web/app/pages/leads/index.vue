@@ -3,20 +3,11 @@ const STATUS_OPTIONS = [
   { value: '', label: '全部狀態' },
   { value: 'NEW', label: '新建' },
   { value: 'CONTACTED', label: '已聯繫' },
-  { value: 'TRIAL_BOOKED', label: '已預約體驗' },
-  { value: 'VISITED', label: '已到訪' },
+  { value: 'QUALIFIED', label: '有意願' },
+  { value: 'TRIAL', label: '體驗中' },
+  { value: 'NEGOTIATION', label: '洽談中' },
   { value: 'CONVERTED', label: '已轉換' },
   { value: 'LOST', label: '已流失' }
-]
-
-const SOURCE_OPTIONS = [
-  { value: '', label: '全部來源' },
-  { value: 'FB_AD', label: 'Facebook 廣告' },
-  { value: 'IG_AD', label: 'Instagram 廣告' },
-  { value: 'GOOGLE_AD', label: 'Google 廣告' },
-  { value: 'WEBSITE', label: '網站' },
-  { value: 'WALK_IN', label: '現場' },
-  { value: 'REFERRAL', label: '推薦' }
 ]
 
 const LEAD_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW')
@@ -27,12 +18,12 @@ const formatDate = (dateStr: string | null) => {
 }
 
 const COLUMNS = [
-  { key: 'name', label: '姓名', slot: 'name' },
+  { key: 'fullName', label: '姓名', slot: 'name' },
   { key: 'phone', label: '電話' },
   { key: 'source', label: '來源', slot: 'source' },
   { key: 'status', label: '狀態', slot: 'status' },
-  { key: 'assigned_to', label: '負責人', slot: 'assignee', hideOnMobile: true },
-  { key: 'date_created', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
+  { key: 'assignedTo', label: '負責人', slot: 'assignee', hideOnMobile: true },
+  { key: 'createdAt', label: '建立日期', format: (v: string) => formatDate(v), hideOnMobile: true }
 ]
 </script>
 
@@ -69,7 +60,6 @@ const { confirm } = useConfirm()
 const search = ref('')
 const selectedBranch = ref('')
 const selectedStatus = ref('')
-const selectedSource = ref('')
 const selectedAssignee = ref('')
 const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
@@ -87,8 +77,7 @@ const loadLeads = async () => {
     search: search.value || undefined,
     branchId: selectedBranch.value || undefined,
     status: selectedStatus.value || undefined,
-    source: selectedSource.value || undefined,
-    assignedTo: selectedAssignee.value || undefined
+    assignedToId: selectedAssignee.value || undefined
   })
 }
 
@@ -103,7 +92,7 @@ const handleSearch = () => {
 }
 
 // Watch filters
-watch([selectedBranch, selectedStatus, selectedSource, selectedAssignee], () => {
+watch([selectedBranch, selectedStatus, selectedAssignee], () => {
   currentPage.value = 1
   loadLeads()
 })
@@ -138,17 +127,16 @@ const handleBatchAssign = async (employeeId: string) => {
 
   if (!confirmed) return
 
-  try {
-    await Promise.all(
-      selectedIds.value.map(id => assignLead(id, employeeId))
-    )
-    toast.success(`成功指派 ${selectedIds.value.length} 筆潛在客戶`)
-    selectedIds.value = []
-    await loadLeads()
-  } catch (error) {
-    console.error('Failed to batch assign:', error)
-    toast.error('批量指派失敗')
-  }
+  // assignLead shows the backend's reason itself and resolves null on failure
+  const results = await Promise.all(
+    selectedIds.value.map(id => assignLead(id, employeeId))
+  )
+  const succeeded = results.filter(Boolean).length
+  const failed = results.length - succeeded
+  if (succeeded > 0) toast.success(`成功指派 ${succeeded} 筆潛在客戶`)
+  if (failed > 0) toast.error(`${failed} 筆潛在客戶指派失敗`)
+  selectedIds.value = []
+  await loadLeads()
 }
 
 const handleBatchDelete = async () => {
@@ -163,15 +151,14 @@ const handleBatchDelete = async () => {
 
   if (!confirmed) return
 
-  try {
-    await Promise.all(selectedIds.value.map(id => deleteLead(id)))
-    toast.success(`成功刪除 ${selectedIds.value.length} 筆潛在客戶`)
-    selectedIds.value = []
-    await loadLeads()
-  } catch (error) {
-    console.error('Failed to batch delete:', error)
-    toast.error('批量刪除失敗')
-  }
+  // deleteLead shows the backend's reason itself and resolves false on failure
+  const results = await Promise.all(selectedIds.value.map(id => deleteLead(id)))
+  const succeeded = results.filter(Boolean).length
+  const failed = results.length - succeeded
+  if (succeeded > 0) toast.success(`成功刪除 ${succeeded} 筆潛在客戶`)
+  if (failed > 0) toast.error(`${failed} 筆潛在客戶刪除失敗`)
+  selectedIds.value = []
+  await loadLeads()
 }
 
 const handleExportSelected = () => {
@@ -179,15 +166,17 @@ const handleExportSelected = () => {
   const selectedLeads = leads.value.filter(l => selectedSet.has(l.id))
   const headers = ['姓名', '電話', 'Email', '來源', '狀態', '建立日期']
   const rows = selectedLeads.map(l => [
-    l.name,
+    l.fullName,
     l.phone || '',
     l.email || '',
     getSourceLabel(l.source),
     getStatusLabel(l.status),
-    l.date_created ? LEAD_DATE_FORMATTER.format(new Date(l.date_created)) : ''
+    l.createdAt ? LEAD_DATE_FORMATTER.format(new Date(l.createdAt)) : ''
   ])
 
-  const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
+  const csv = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
@@ -256,11 +245,6 @@ const confirmAssign = async () => {
         </select>
         <select v-model="selectedStatus" class="input filter-select">
           <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-        <select v-model="selectedSource" class="input filter-select">
-          <option v-for="opt in SOURCE_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
@@ -336,9 +320,9 @@ const confirmAssign = async () => {
       <!-- Name Cell -->
       <template #name="{ row }">
         <div class="lead-cell">
-          <AppAvatar :name="row.name" size="md" variant="purple" />
+          <AppAvatar :name="row.fullName" size="md" variant="purple" />
           <div class="lead-info">
-            <span class="lead-name">{{ row.name }}</span>
+            <span class="lead-name">{{ row.fullName }}</span>
             <span v-if="row.email" class="lead-email text-caption text-tertiary">{{ row.email }}</span>
           </div>
         </div>
@@ -346,9 +330,10 @@ const confirmAssign = async () => {
 
       <!-- Source Cell -->
       <template #source="{ row }">
-        <span class="source-badge" :class="`source-${row.source.toLowerCase().replace('_', '-')}`">
+        <span v-if="row.source" class="source-badge" :class="`source-${row.source.toLowerCase().replace('_', '-')}`">
           {{ getSourceLabel(row.source) }}
         </span>
+        <span v-else class="text-tertiary">—</span>
       </template>
 
       <!-- Status Cell -->
@@ -361,9 +346,9 @@ const confirmAssign = async () => {
 
       <!-- Assignee Cell -->
       <template #assignee="{ row }">
-        <div v-if="row.assigned_to && typeof row.assigned_to === 'object'" class="assignee-cell">
-          <AppAvatar :name="row.assigned_to.full_name" size="sm" variant="blue" />
-          <span>{{ row.assigned_to.full_name }}</span>
+        <div v-if="row.assignedTo" class="assignee-cell">
+          <AppAvatar :name="row.assignedTo.fullName" size="sm" variant="blue" />
+          <span>{{ row.assignedTo.fullName }}</span>
         </div>
         <span v-else class="text-tertiary">未指派</span>
       </template>
@@ -411,7 +396,7 @@ const confirmAssign = async () => {
                 <select v-model="assignEmployeeId" class="input">
                   <option value="">請選擇</option>
                   <option v-for="emp in employees" :key="emp.id" :value="emp.id">
-                    {{ emp.full_name }}
+                    {{ emp.fullName }}
                   </option>
                 </select>
               </div>
@@ -465,19 +450,24 @@ const confirmAssign = async () => {
   font-weight: 500;
 }
 
-.source-fb-ad {
-  background: rgba(66, 103, 178, 0.15);
-  color: #4267b2;
-}
-
-.source-ig-ad {
+.source-social-media {
   background: rgba(225, 48, 108, 0.15);
   color: #e1306c;
 }
 
-.source-google-ad {
-  background: rgba(219, 68, 55, 0.15);
-  color: #db4437;
+.source-event {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9500;
+}
+
+.source-ad {
+  background: rgba(66, 103, 178, 0.15);
+  color: #4267b2;
+}
+
+.source-other {
+  background: rgba(142, 142, 147, 0.15);
+  color: #636366;
 }
 
 .source-website {

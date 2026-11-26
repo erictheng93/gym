@@ -2,18 +2,17 @@
 const TYPE_OPTIONS = [
   { value: '', label: '全部類型' },
   { value: 'PROMOTION', label: '促銷活動' },
-  { value: 'SEASONAL', label: '季節活動' },
   { value: 'REFERRAL', label: '推薦活動' },
-  { value: 'RETENTION', label: '留存活動' }
+  { value: 'SEASONAL', label: '季節活動' },
+  { value: 'MEMBERSHIP', label: '會籍活動' },
+  { value: 'EVENT', label: '線下活動' },
+  { value: 'OTHER', label: '其他' }
 ]
 
+// The backend can only filter on "running now" (isActive and today inside the date range)
 const STATUS_OPTIONS = [
-  { value: '', label: '全部狀態' },
-  { value: 'DRAFT', label: '草稿' },
-  { value: 'SCHEDULED', label: '已排程' },
-  { value: 'ACTIVE', label: '進行中' },
-  { value: 'PAUSED', label: '已暫停' },
-  { value: 'ENDED', label: '已結束' }
+  { value: '', label: '全部活動' },
+  { value: 'ACTIVE', label: '僅進行中' }
 ]
 
 const CAMPAIGN_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
@@ -34,13 +33,13 @@ const formatDate = (dateStr: string | null) => {
   return isNaN(d.getTime()) ? '—' : CAMPAIGN_DATE_FORMATTER.format(d)
 }
 
-const formatCurrency = (amount: number) => {
-  return CAMPAIGN_CURRENCY_FORMATTER.format(amount)
+const formatCurrency = (amount: number | string) => {
+  return CAMPAIGN_CURRENCY_FORMATTER.format(Number(amount))
 }
 
 const COLUMNS = [
   { key: 'name', label: '活動名稱', slot: 'name' },
-  { key: 'type', label: '類型', slot: 'type' },
+  { key: 'campaignType', label: '類型', slot: 'type' },
   { key: 'date_range', label: '活動期間', slot: 'dates' },
   { key: 'budget', label: '預算', slot: 'budget' },
   { key: 'status', label: '狀態', slot: 'status' }
@@ -62,6 +61,7 @@ const {
   totalCount,
   isLoading,
   fetchCampaigns,
+  getCampaignState,
   getStatusLabel,
   getStatusVariant,
   getTypeLabel
@@ -80,8 +80,8 @@ const loadCampaigns = async () => {
   await fetchCampaigns({
     page: currentPage.value,
     limit: pageSize,
-    type: selectedType.value || undefined,
-    status: selectedStatus.value || undefined
+    campaignType: selectedType.value || undefined,
+    activeOnly: selectedStatus.value === 'ACTIVE'
   })
 }
 
@@ -109,17 +109,7 @@ const handleRowClick = (campaign: typeof campaigns.value[0]) => {
       action-label="新增活動"
       action-to="/marketing/campaigns/new"
       action-icon="megaphone"
-    >
-      <template #actions>
-        <NuxtLink to="/marketing/reports/roi" class="btn btn-secondary">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 3v18h18" />
-            <path d="m19 9-5 5-4-4-3 3" />
-          </svg>
-          ROI 報表
-        </NuxtLink>
-      </template>
-    </PageHeader>
+    />
 
     <!-- Filters -->
     <FilterBar>
@@ -164,17 +154,17 @@ const handleRowClick = (campaign: typeof campaigns.value[0]) => {
 
       <!-- Type Cell -->
       <template #type="{ row }">
-        <span class="type-badge" :class="`type-${row.type?.toLowerCase()}`">
-          {{ getTypeLabel(row.type) }}
+        <span class="type-badge" :class="`type-${row.campaignType?.toLowerCase()}`">
+          {{ getTypeLabel(row.campaignType) }}
         </span>
       </template>
 
       <!-- Dates Cell -->
       <template #dates="{ row }">
         <div class="date-range">
-          <span>{{ formatDate(row.start_date) }}</span>
+          <span>{{ formatDate(row.startDate) }}</span>
           <span class="date-separator">~</span>
-          <span>{{ formatDate(row.end_date) }}</span>
+          <span>{{ formatDate(row.endDate) }}</span>
         </div>
       </template>
 
@@ -187,8 +177,8 @@ const handleRowClick = (campaign: typeof campaigns.value[0]) => {
       <!-- Status Cell -->
       <template #status="{ row }">
         <AppBadge
-          :label="getStatusLabel(row.status)"
-          :variant="getStatusVariant(row.status)"
+          :label="getStatusLabel(getCampaignState(row))"
+          :variant="getStatusVariant(getCampaignState(row))"
         />
       </template>
 
@@ -253,9 +243,19 @@ const handleRowClick = (campaign: typeof campaigns.value[0]) => {
   color: #007aff;
 }
 
-.type-retention {
+.type-membership {
   background: rgba(175, 82, 222, 0.1);
   color: #af52de;
+}
+
+.type-event {
+  background: rgba(90, 200, 250, 0.15);
+  color: #1a8fc4;
+}
+
+.type-other {
+  background: rgba(142, 142, 147, 0.12);
+  color: #636366;
 }
 
 /* Date Range */

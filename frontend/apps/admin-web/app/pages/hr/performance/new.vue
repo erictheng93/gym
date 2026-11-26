@@ -11,7 +11,9 @@ const typeOptions = [
  * 新增績效考核頁面
  */
 import { MESSAGES } from '~/constants'
-import { usePerformance } from '~/composables/hr'
+import { usePerformance, useHrAccess } from '~/composables/hr'
+import type { ApiEmployee } from '~/composables/useEmployees'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -19,8 +21,13 @@ definePageMeta({
 
 const toast = useToast()
 const router = useRouter()
-const { createReview, kpiTemplates, fetchKPITemplates, isLoading } = usePerformance()
-const { employees, fetchEmployees } = useEmployees()
+const { createReview, kpiTemplates, fetchKPITemplates } = usePerformance()
+const { fetchAllEmployees } = useEmployees()
+const { canViewHr } = useHrAccess()
+
+// GET /api/employees (active, unpaginated) answers in camelCase
+const employees = ref<ApiEmployee[]>([])
+const isSaving = ref(false)
 
 const formData = ref({
   employee_id: '',
@@ -76,7 +83,9 @@ watch(() => formData.value.review_type, () => {
 })
 
 onMounted(async () => {
-  await Promise.all([fetchEmployees(), fetchKPITemplates()])
+  if (!canViewHr.value) return
+  const [all] = await Promise.all([fetchAllEmployees(), fetchKPITemplates()])
+  employees.value = all as unknown as ApiEmployee[]
 })
 
 // Validate form
@@ -101,16 +110,19 @@ const handleSubmit = async () => {
     return
   }
 
+  isSaving.value = true
   try {
     const result = await createReview({
       ...formData.value,
+      template_id: formData.value.template_id || undefined,
       score: formData.value.score ? Number(formData.value.score) : null
     })
     toast.success('考核建立成功')
-    navigateTo(`/hr/performance/${result.id}`)
+    await navigateTo(`/hr/performance/${result.id}`)
   } catch (error) {
-    console.error('Failed to create review:', error)
-    toast.error('建立考核失敗')
+    toast.error(apiErrorMessage(error, '建立考核失敗'))
+  } finally {
+    isSaving.value = false
   }
 }
 </script>
@@ -123,7 +135,14 @@ const handleSubmit = async () => {
       back-to="/hr/performance"
     />
 
-    <form class="form-container" @submit.prevent="handleSubmit">
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="績效考核僅限管理員與店長檢視"
+      icon="alert-circle"
+    />
+
+    <form v-else class="form-container" @submit.prevent="handleSubmit">
       <div class="form-card">
         <h2 class="form-section-title">考核資訊</h2>
 
@@ -135,7 +154,7 @@ const handleSubmit = async () => {
         >
           <option value="">請選擇員工</option>
           <option v-for="emp in employees" :key="emp.id" :value="emp.id">
-            {{ emp.full_name }} ({{ emp.employee_code }})
+            {{ emp.fullName }} ({{ emp.employeeCode }})
           </option>
         </FormSelect>
 
@@ -193,8 +212,8 @@ const handleSubmit = async () => {
         <button type="button" class="btn btn-secondary" @click="router.back()">
           取消
         </button>
-        <button type="submit" class="btn btn-primary" :disabled="isLoading">
-          {{ isLoading ? '建立中...' : '建立考核' }}
+        <button type="submit" class="btn btn-primary" :disabled="isSaving">
+          {{ isSaving ? '建立中...' : '建立考核' }}
         </button>
       </div>
     </form>

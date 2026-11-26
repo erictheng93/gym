@@ -1,18 +1,8 @@
 <script lang="ts">
-type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
-
 const LEAD_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
   year: 'numeric',
   month: 'long',
   day: 'numeric'
-})
-
-const LEAD_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
 })
 
 const formatDate = (dateStr: string | null | undefined) => {
@@ -20,48 +10,12 @@ const formatDate = (dateStr: string | null | undefined) => {
   return LEAD_DATE_FORMATTER.format(new Date(dateStr))
 }
 
-const formatDateTime = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '—'
-  return LEAD_DATE_TIME_FORMATTER.format(new Date(dateStr))
-}
-
-const ACTIVITY_TYPE_OPTIONS = [
-  { value: 'CALL', label: '電話', icon: 'phone' },
-  { value: 'SMS', label: '簡訊', icon: 'message' },
-  { value: 'EMAIL', label: 'Email', icon: 'mail' },
-  { value: 'VISIT', label: '到訪', icon: 'map-pin' },
-  { value: 'TRIAL', label: '體驗', icon: 'calendar' }
-] as const
-
-const ACTIVITY_TYPE_LABEL_MAP: Record<string, string> = {
-  CALL: '電話',
-  SMS: '簡訊',
-  EMAIL: 'Email',
-  VISIT: '到訪',
-  TRIAL: '體驗'
-}
-
-const ACTIVITY_TYPE_COLOR_MAP: Record<string, string> = {
-  CALL: '#007aff',
-  SMS: '#34c759',
-  EMAIL: '#5856d6',
-  VISIT: '#ff9500',
-  TRIAL: '#af52de'
-}
-
-const getActivityTypeLabel = (type: string) => {
-  return ACTIVITY_TYPE_LABEL_MAP[type] || type
-}
-
-const getActivityTypeColor = (type: string) => {
-  return ACTIVITY_TYPE_COLOR_MAP[type] || '#8e8e93'
-}
-
 const STATUS_OPTIONS = [
   { value: 'NEW', label: '新建' },
   { value: 'CONTACTED', label: '已聯繫' },
-  { value: 'TRIAL_BOOKED', label: '已預約體驗' },
-  { value: 'VISITED', label: '已到訪' },
+  { value: 'QUALIFIED', label: '有意願' },
+  { value: 'TRIAL', label: '體驗中' },
+  { value: 'NEGOTIATION', label: '洽談中' },
   { value: 'CONVERTED', label: '已轉換' },
   { value: 'LOST', label: '已流失' }
 ] as const
@@ -71,10 +25,11 @@ const STATUS_OPTIONS = [
 /**
  * 潛在客戶詳情頁面
  *
- * 顯示詳情 + 活動時間軸 + 轉換為會員
+ * 顯示詳情、變更階段、指派、轉換為會員
  */
 import { MESSAGES } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
+import type { LeadStatus } from '~/composables/useLeads'
 
 definePageMeta({
   middleware: 'auth',
@@ -89,8 +44,8 @@ const { confirm } = useConfirm()
 const {
   getLead,
   updateLead,
+  assignLead,
   deleteLead,
-  addActivity,
   convertToMember,
   getStatusLabel,
   getStatusVariant,
@@ -103,17 +58,12 @@ const isLoading = ref(true)
 const isDeleting = ref(false)
 
 const leadId = computed(() => route.params.leadId as string)
-
-// Activity form state
-const showActivityModal = ref(false)
-const activityForm = ref({
-  activity_type: 'CALL' as 'CALL' | 'SMS' | 'EMAIL' | 'VISIT' | 'TRIAL',
-  content: '',
-  result: '',
-  next_action: '',
-  next_action_date: ''
-})
-const isSubmittingActivity = ref(false)
+// The backend marks a converted lead with convertedMemberId (and status CONVERTED)
+const isConverted = computed(() => lead.value?.status === 'CONVERTED' || !!lead.value?.convertedMemberId)
+// CONVERTED is only reachable through the convert action (it creates the member), not by hand
+const statusOptions = computed(() =>
+  STATUS_OPTIONS.filter(opt => opt.value !== 'CONVERTED' || lead.value?.status === 'CONVERTED')
+)
 
 // Convert modal state
 const showConvertModal = ref(false)
@@ -132,10 +82,8 @@ const isAssigning = ref(false)
 const loadLead = async () => {
   isLoading.value = true
   try {
-    lead.value = await getLead(leadId.value)
-  } catch (error) {
-    console.error('Failed to load lead:', error)
-    toast.error('載入潛在客戶資料失敗')
+    // getLead shows the backend's reason itself and resolves null on failure
+    lead.value = await getLead(leadId.value, true)
   } finally {
     isLoading.value = false
   }
@@ -145,53 +93,18 @@ onMounted(async () => {
   await Promise.all([loadLead(), fetchEmployees()])
 })
 
-// Add activity
-const handleAddActivity = async () => {
-  if (!activityForm.value.content) {
-    toast.warning('請輸入活動內容')
-    return
-  }
-
-  isSubmittingActivity.value = true
-  try {
-    await addActivity(leadId.value, {
-      activity_type: activityForm.value.activity_type,
-      content: activityForm.value.content,
-      result: activityForm.value.result || undefined,
-      next_action: activityForm.value.next_action || undefined,
-      next_action_date: activityForm.value.next_action_date || undefined
-    })
-    toast.success('活動紀錄已新增')
-    showActivityModal.value = false
-    activityForm.value = {
-      activity_type: 'CALL',
-      content: '',
-      result: '',
-      next_action: '',
-      next_action_date: ''
-    }
-    await loadLead()
-  } catch (error) {
-    console.error('Failed to add activity:', error)
-    toast.error('新增活動紀錄失敗')
-  } finally {
-    isSubmittingActivity.value = false
-  }
-}
-
 // Update status
 const handleUpdateStatus = async () => {
   if (!newStatus.value) return
 
   isUpdatingStatus.value = true
   try {
-    await updateLead(leadId.value, { status: newStatus.value as LeadStatus })
+    // updateLead shows the backend's reason itself and resolves null on failure
+    const updated = await updateLead(leadId.value, { status: newStatus.value as LeadStatus })
+    if (!updated) return
     toast.success('狀態已更新')
     showStatusModal.value = false
     await loadLead()
-  } catch (error) {
-    console.error('Failed to update status:', error)
-    toast.error('更新狀態失敗')
   } finally {
     isUpdatingStatus.value = false
   }
@@ -203,13 +116,11 @@ const handleAssign = async () => {
 
   isAssigning.value = true
   try {
-    await updateLead(leadId.value, { assigned_to: newAssigneeId.value })
+    const updated = await assignLead(leadId.value, newAssigneeId.value)
+    if (!updated) return
     toast.success('已成功指派')
     showAssignModal.value = false
     await loadLead()
-  } catch (error) {
-    console.error('Failed to assign lead:', error)
-    toast.error('指派失敗')
   } finally {
     isAssigning.value = false
   }
@@ -219,16 +130,12 @@ const handleAssign = async () => {
 const handleConvert = async () => {
   isConverting.value = true
   try {
+    // convertToMember shows the backend's reason itself and resolves null on failure
     const result = await convertToMember(leadId.value)
+    if (!result) return
     toast.success('已成功轉換為會員')
     showConvertModal.value = false
-    // Navigate to new member page
-    if (result?.member_id) {
-      router.push(`/members/${result.member_id}`)
-    }
-  } catch (error) {
-    console.error('Failed to convert lead:', error)
-    toast.error('轉換為會員失敗')
+    await router.push(`/members/${result.member.id}`)
   } finally {
     isConverting.value = false
   }
@@ -247,12 +154,11 @@ const handleDelete = async () => {
 
   isDeleting.value = true
   try {
-    await deleteLead(leadId.value)
+    // deleteLead shows the backend's reason itself and resolves false on failure
+    const deleted = await deleteLead(leadId.value)
+    if (!deleted) return
     toast.success('已刪除潛在客戶')
-    router.push('/leads')
-  } catch (error) {
-    console.error('Failed to delete lead:', error)
-    toast.error('刪除失敗')
+    await router.push('/leads')
   } finally {
     isDeleting.value = false
   }
@@ -268,11 +174,7 @@ const openStatusModal = () => {
 
 // Open assign modal
 const openAssignModal = () => {
-  if (lead.value?.assigned_to) {
-    newAssigneeId.value = typeof lead.value.assigned_to === 'object'
-      ? lead.value.assigned_to.id
-      : lead.value.assigned_to
-  }
+  newAssigneeId.value = lead.value?.assignedToId ?? ''
   showAssignModal.value = true
 }
 </script>
@@ -296,7 +198,7 @@ const openAssignModal = () => {
         </button>
         <div class="header-actions">
           <button
-            v-if="lead.status !== 'CONVERTED' && lead.status !== 'LOST'"
+            v-if="!isConverted && lead.status !== 'LOST'"
             class="btn btn-primary"
             @click="showConvertModal = true"
           >
@@ -319,11 +221,11 @@ const openAssignModal = () => {
       <!-- Profile Hero -->
       <section class="profile-hero glass-card">
         <div class="profile-avatar-large">
-          {{ lead.name[0] }}
+          {{ lead.fullName[0] }}
         </div>
         <div class="profile-info">
           <div class="profile-header-row">
-            <h1 class="text-display">{{ lead.name }}</h1>
+            <h1 class="text-display">{{ lead.fullName }}</h1>
             <button class="status-badge-btn" @click="openStatusModal">
               <AppBadge
                 :label="getStatusLabel(lead.status)"
@@ -336,7 +238,7 @@ const openAssignModal = () => {
             </button>
           </div>
           <div class="profile-meta">
-            <span class="meta-item source-badge" :class="`source-${lead.source.toLowerCase().replace('_', '-')}`">
+            <span v-if="lead.source" class="meta-item source-badge" :class="`source-${lead.source.toLowerCase().replace('_', '-')}`">
               {{ getSourceLabel(lead.source) }}
             </span>
             <span v-if="lead.branch" class="meta-item">
@@ -349,7 +251,7 @@ const openAssignModal = () => {
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
               </svg>
-              {{ formatDate(lead.date_created || lead.created_at || null) }} 建立
+              {{ formatDate(lead.createdAt) }} 建立
             </span>
           </div>
         </div>
@@ -374,6 +276,16 @@ const openAssignModal = () => {
               <label>Email</label>
               <span>{{ lead.email || '—' }}</span>
             </div>
+            <div v-if="lead.sourceDetail" class="info-item">
+              <label>來源說明</label>
+              <span>{{ lead.sourceDetail }}</span>
+            </div>
+            <div v-if="lead.convertedMember" class="info-item">
+              <label>已轉換會員</label>
+              <NuxtLink :to="`/members/${lead.convertedMember.id}`">
+                {{ lead.convertedMember.fullName }}（{{ lead.convertedMember.memberCode }}）
+              </NuxtLink>
+            </div>
           </div>
         </section>
 
@@ -386,44 +298,18 @@ const openAssignModal = () => {
             負責人
           </h3>
           <div class="assignee-section">
-            <div v-if="lead.assigned_to && typeof lead.assigned_to === 'object'" class="assignee-display">
-              <AppAvatar :name="lead.assigned_to.full_name" size="lg" variant="blue" />
+            <div v-if="lead.assignedTo" class="assignee-display">
+              <AppAvatar :name="lead.assignedTo.fullName" size="lg" variant="blue" />
               <div class="assignee-info">
-                <span class="assignee-name">{{ lead.assigned_to.full_name }}</span>
-                <span class="assignee-code text-tertiary">{{ lead.assigned_to.employee_code }}</span>
+                <span class="assignee-name">{{ lead.assignedTo.fullName }}</span>
               </div>
             </div>
             <div v-else class="no-assignee">
               <span class="text-tertiary">尚未指派</span>
             </div>
             <button class="btn btn-secondary btn-small" @click="openAssignModal">
-              {{ lead.assigned_to ? '變更負責人' : '指派負責人' }}
+              {{ lead.assignedTo ? '變更負責人' : '指派負責人' }}
             </button>
-          </div>
-        </section>
-
-        <!-- UTM Info -->
-        <section v-if="lead.utm_source || lead.utm_medium || lead.utm_campaign" class="detail-card card">
-          <h3 class="card-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3v18h18" />
-              <path d="m19 9-5 5-4-4-3 3" />
-            </svg>
-            UTM 追蹤
-          </h3>
-          <div class="info-grid">
-            <div v-if="lead.utm_source" class="info-item">
-              <label>utm_source</label>
-              <span>{{ lead.utm_source }}</span>
-            </div>
-            <div v-if="lead.utm_medium" class="info-item">
-              <label>utm_medium</label>
-              <span>{{ lead.utm_medium }}</span>
-            </div>
-            <div v-if="lead.utm_campaign" class="info-item full-width">
-              <label>utm_campaign</label>
-              <span>{{ lead.utm_campaign }}</span>
-            </div>
           </div>
         </section>
 
@@ -439,154 +325,7 @@ const openAssignModal = () => {
           <p class="notes-content">{{ lead.notes }}</p>
         </section>
       </div>
-
-      <!-- Activity Timeline -->
-      <section class="activities-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            活動紀錄
-          </h2>
-          <button class="btn btn-primary" @click="showActivityModal = true">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" x2="12" y1="5" y2="19" />
-              <line x1="5" x2="19" y1="12" y2="12" />
-            </svg>
-            新增活動
-          </button>
-        </div>
-
-        <div v-if="lead.activities && lead.activities.length > 0" class="timeline">
-          <div
-            v-for="activity in lead.activities"
-            :key="activity.id"
-            class="timeline-item"
-          >
-            <div
-              class="timeline-dot"
-              :style="{ background: getActivityTypeColor(activity.activity_type) }"
-            ></div>
-            <div class="timeline-content">
-              <div class="timeline-header">
-                <span class="activity-type" :style="{ color: getActivityTypeColor(activity.activity_type) }">
-                  {{ getActivityTypeLabel(activity.activity_type) }}
-                </span>
-                <span class="timeline-time">{{ formatDateTime(activity.date_created || activity.created_at || null) }}</span>
-              </div>
-              <p class="activity-content">{{ activity.content }}</p>
-              <div v-if="activity.result" class="activity-result">
-                <strong>結果：</strong>{{ activity.result }}
-              </div>
-              <div v-if="activity.next_action" class="activity-next">
-                <strong>下一步：</strong>{{ activity.next_action }}
-                <span v-if="activity.next_action_date" class="next-date">
-                  ({{ formatDate(activity.next_action_date) }})
-                </span>
-              </div>
-              <div v-if="activity.created_by && typeof activity.created_by === 'object'" class="activity-author">
-                {{ activity.created_by.full_name }}
-              </div>
-            </div>
-          </div>
-        </div>
-        <EmptyState
-          v-else
-          title="暫無活動紀錄"
-          description="點擊上方按鈕新增第一筆活動紀錄"
-          icon="clock"
-        />
-      </section>
     </template>
-
-    <!-- Activity Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div v-if="showActivityModal" class="modal-overlay" @click.self="showActivityModal = false">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h3>新增活動紀錄</h3>
-              <button class="modal-close" @click="showActivityModal = false">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" x2="6" y1="6" y2="18" />
-                  <line x1="6" x2="18" y1="6" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div class="modal-body">
-              <div class="form-group">
-                <label class="form-label">活動類型</label>
-                <div class="type-selector">
-                  <button
-                    v-for="opt in ACTIVITY_TYPE_OPTIONS"
-                    :key="opt.value"
-                    type="button"
-                    :class="['type-option', { active: activityForm.activity_type === opt.value }]"
-                    :style="{ '--type-color': getActivityTypeColor(opt.value) }"
-                    @click="activityForm.activity_type = opt.value as typeof activityForm.activity_type"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">活動內容 *</label>
-                <textarea
-                  v-model="activityForm.content"
-                  class="input textarea"
-                  rows="3"
-                  placeholder="描述此次聯繫或互動的內容..."
-                ></textarea>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">結果</label>
-                <input
-                  v-model="activityForm.result"
-                  type="text"
-                  class="input"
-                  placeholder="例：已約定體驗時間"
-                />
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">下一步行動</label>
-                  <input
-                    v-model="activityForm.next_action"
-                    type="text"
-                    class="input"
-                    placeholder="例：發送方案報價"
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">預計日期</label>
-                  <input
-                    v-model="activityForm.next_action_date"
-                    type="date"
-                    class="input"
-                  />
-                </div>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button class="btn btn-ghost" @click="showActivityModal = false">取消</button>
-              <button
-                class="btn btn-primary"
-                :disabled="isSubmittingActivity || !activityForm.content"
-                @click="handleAddActivity"
-              >
-                <span v-if="isSubmittingActivity" class="btn-spinner"></span>
-                {{ isSubmittingActivity ? '儲存中...' : '儲存' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
 
     <!-- Status Modal -->
     <Teleport to="body">
@@ -606,7 +345,7 @@ const openAssignModal = () => {
               <div class="form-group">
                 <label class="form-label">選擇狀態</label>
                 <select v-model="newStatus" class="input">
-                  <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
+                  <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
                     {{ opt.label }}
                   </option>
                 </select>
@@ -647,7 +386,7 @@ const openAssignModal = () => {
                 <select v-model="newAssigneeId" class="input">
                   <option value="">請選擇</option>
                   <option v-for="emp in employees" :key="emp.id" :value="emp.id">
-                    {{ emp.full_name }}
+                    {{ emp.fullName }}
                   </option>
                 </select>
               </div>
@@ -691,7 +430,7 @@ const openAssignModal = () => {
                   </svg>
                 </div>
                 <p class="convert-message">
-                  確定要將 <strong>{{ lead?.name }}</strong> 轉換為正式會員嗎？
+                  確定要將 <strong>{{ lead?.fullName }}</strong> 轉換為正式會員嗎？
                 </p>
                 <p class="convert-hint text-secondary">
                   轉換後將自動建立會員資料，此潛在客戶狀態將更新為「已轉換」。
@@ -851,9 +590,10 @@ const openAssignModal = () => {
   font-weight: 500;
 }
 
-.source-fb-ad { background: rgba(66, 103, 178, 0.15); color: #4267b2; }
-.source-ig-ad { background: rgba(225, 48, 108, 0.15); color: #e1306c; }
-.source-google-ad { background: rgba(219, 68, 55, 0.15); color: #db4437; }
+.source-social-media { background: rgba(225, 48, 108, 0.15); color: #e1306c; }
+.source-event { background: rgba(255, 149, 0, 0.15); color: #ff9500; }
+.source-ad { background: rgba(66, 103, 178, 0.15); color: #4267b2; }
+.source-other { background: rgba(142, 142, 147, 0.15); color: #636366; }
 .source-website { background: rgba(0, 122, 255, 0.15); color: #007aff; }
 .source-walk-in { background: rgba(52, 199, 89, 0.15); color: #34c759; }
 .source-referral { background: rgba(175, 82, 222, 0.15); color: #af52de; }
@@ -955,115 +695,6 @@ const openAssignModal = () => {
   white-space: pre-wrap;
 }
 
-/* Activities Section */
-.activities-section {
-  animation: fadeUp 0.6s var(--ease-out) 0.35s backwards;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-xl);
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.section-title svg {
-  color: var(--color-accent);
-}
-
-/* Timeline */
-.timeline {
-  position: relative;
-  padding-left: var(--space-2xl);
-}
-
-.timeline::before {
-  content: '';
-  position: absolute;
-  left: 8px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--color-border);
-}
-
-.timeline-item {
-  position: relative;
-  padding-bottom: var(--space-xl);
-}
-
-.timeline-item:last-child {
-  padding-bottom: 0;
-}
-
-.timeline-dot {
-  position: absolute;
-  left: -24px;
-  top: 4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 3px solid var(--color-bg-primary);
-  box-shadow: 0 0 0 2px var(--color-border);
-}
-
-.timeline-content {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-}
-
-.timeline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-sm);
-}
-
-.activity-type {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.timeline-time {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-}
-
-.activity-content {
-  font-size: 14px;
-  color: var(--color-text-primary);
-  margin-bottom: var(--space-md);
-}
-
-.activity-result,
-.activity-next {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-xs);
-}
-
-.next-date {
-  color: var(--color-text-tertiary);
-}
-
-.activity-author {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-  margin-top: var(--space-md);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-divider);
-}
-
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -1157,34 +788,6 @@ const openAssignModal = () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-lg);
-}
-
-.type-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
-.type-option {
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.type-option:hover {
-  border-color: var(--type-color);
-  color: var(--type-color);
-}
-
-.type-option.active {
-  background: var(--type-color);
-  border-color: var(--type-color);
-  color: white;
 }
 
 .textarea {
