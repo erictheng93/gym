@@ -55,9 +55,9 @@ bunx playwright show-report
 
 ## CI
 
-`.github/workflows/ci.yml` 的 `e2e` job（matrix：目前只有 `admin-web`）：PostGIS service →
+`.github/workflows/ci.yml` 的 `e2e` job（matrix：`admin-web`、`coach-app`）：PostGIS service →
 `drizzle-kit push` → `db:seed` → 以 `ENABLE_CRON=false RELAX_RATE_LIMITS=true` 啟動後端 →
-`E2E_APPS=admin-web bunx playwright test --project=admin-web`。失敗時上傳 `playwright-report/`、
+`E2E_APPS=<app> bunx playwright test --project=<app>`。失敗時上傳 `playwright-report/`、
 `test-results/`（含 trace 與 `backend.log`）為 artifact：`gh run download <run-id>`。
 
 - `E2E_APPS`（逗號分隔）決定 `webServer` 啟動哪些 dev server，未設定時三個都啟動。
@@ -66,7 +66,18 @@ bunx playwright show-report
 
 ### 尚未接入 CI 的 project
 
-- `member-app`、`coach-app`：尚未在 CI 執行過（`--list` 可解析），待 admin-web 穩定後另行加入 matrix。
+`member-app` 不在 matrix 中。在 CI 上試跑（剛 seed 的資料庫）時 50 個測試有 16 個失敗，原因是後端缺漏而非測試或 seed：
+
+| 失敗的 spec | 後端回應 |
+|------|------|
+| `member-profile`（標頭、會員資料、統計卡、編輯）、`member-entry`（會員編號 `MEM001`、會員狀態「有效會員」） | `GET /api/member/profile` 404（profile 路由掛在 `/api/member/me` 與 `/api/member`，沒有 `/profile`） |
+| `member-workouts` 空狀態 | `GET /api/member/workouts/stats` 500 |
+| `member-measurements` 空狀態 | `GET /api/member/measurements/stats` 404 |
+| `member-contracts` 暫停 modal（找不到「申請暫停」按鈕） | 合約卡片未顯示暫停操作，需再調查 |
+| `member-issues`、`member-notifications`（頁面 `<h1>` 未出現） | 需再調查；可能與 profile 404 連帶有關 |
+| （booking 相關請求） | `GET /api/member/classes/sessions`、`GET /api/member/bookings` 404 |
+
+修好上述端點後，在 matrix 加入 `member-app` 即可。
 
 ### 已知的 production bug（`test.fail()`）
 
