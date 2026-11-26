@@ -130,6 +130,8 @@ export default tseslint.config(
         useDashboard: 'readonly',
         useFocusTrap: 'readonly',
         useGoals: 'readonly',
+        useMemberContracts: 'readonly',
+        useCheckIns: 'readonly',
         useIssues: 'readonly',
         useLeads: 'readonly',
         useLessonPlans: 'readonly',

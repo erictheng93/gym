@@ -366,7 +366,11 @@ app.get(
     const { page, limit, startDate, endDate } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    const conditions = [eq(checkIns.memberId, memberInfo.id)];
+    // check_ins has no tenant column: scope through the branch's tenant
+    const conditions = [
+      eq(checkIns.memberId, memberInfo.id),
+      eq(branches.tenantId, memberInfo.tenantId),
+    ];
 
     if (startDate) {
       conditions.push(gte(checkIns.checkInTime, new Date(startDate)));
@@ -383,13 +387,14 @@ app.get(
       db
         .select(CHECK_IN_HISTORY_COUNT_SELECT)
         .from(checkIns)
+        .innerJoin(branches, eq(checkIns.branchId, branches.id))
         .where(and(...conditions)),
       db
         .select(CHECK_IN_HISTORY_LIST_SELECT)
         .from(checkIns)
-        .leftJoin(branches, eq(checkIns.branchId, branches.id))
+        .innerJoin(branches, eq(checkIns.branchId, branches.id))
         .where(and(...conditions))
-        .orderBy(desc(checkIns.checkInTime))
+        .orderBy(desc(checkIns.checkInTime), desc(checkIns.id))
         .limit(limit)
         .offset(offset),
     ]);
@@ -407,6 +412,7 @@ app.get(
             name: ci.branchName,
           },
           contractId: ci.contractId,
+          isCrossBranch: ci.branchId !== memberInfo.branchId,
         })),
         pagination: {
           total: Number(total),
@@ -515,5 +521,81 @@ app.get('/stats', async (c) => {
     },
   });
 });
+
+// -----------------------------------------------------------------------------
+// GET /api/member/check-in/:id - Single check-in detail (own records only)
+// -----------------------------------------------------------------------------
+// Registered last so it never shadows /qr-data, /history, /today, /stats.
+// Staff-internal data (notes, processedById, IP/device) is not exposed.
+
+app.get(
+  '/:id',
+  zValidator('param', z.object({ id: z.string().uuid() })),
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { id } = c.req.valid('param');
+
+    const [row] = await db
+      .select({
+        id: checkIns.id,
+        checkInTime: checkIns.checkInTime,
+        checkInType: checkIns.checkInType,
+        checkInMethod: checkIns.checkInMethod,
+        branchId: branches.id,
+        branchName: branches.name,
+        branchAddress: branches.address,
+        branchPhone: branches.phone,
+        contractId: contracts.id,
+        contractNo: contracts.contractNo,
+        remainingCounts: contracts.remainingCounts,
+        planName: membershipPlans.name,
+        planType: membershipPlans.planType,
+      })
+      .from(checkIns)
+      .innerJoin(branches, eq(checkIns.branchId, branches.id))
+      .leftJoin(contracts, and(
+        eq(checkIns.contractId, contracts.id),
+        eq(contracts.memberId, memberInfo.id),
+        eq(contracts.tenantId, memberInfo.tenantId),
+      ))
+      .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .where(and(
+        eq(checkIns.id, id),
+        eq(checkIns.memberId, memberInfo.id),
+        eq(branches.tenantId, memberInfo.tenantId),
+      ))
+      .limit(1);
+
+    if (!row) {
+      return c.json({ success: false, error: '找不到入場記錄', code: 'NOT_FOUND' }, 404);
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        id: row.id,
+        checkInTime: row.checkInTime,
+        checkInType: row.checkInType,
+        checkInMethod: row.checkInMethod,
+        isCrossBranch: row.branchId !== memberInfo.branchId,
+        branch: {
+          id: row.branchId,
+          name: row.branchName,
+          address: row.branchAddress,
+          phone: row.branchPhone,
+        },
+        contract: row.contractId
+          ? {
+              id: row.contractId,
+              contractNo: row.contractNo,
+              planName: row.planName,
+              planType: row.planType,
+              remainingCounts: row.remainingCounts,
+            }
+          : null,
+      },
+    });
+  }
+);
 
 export default app;

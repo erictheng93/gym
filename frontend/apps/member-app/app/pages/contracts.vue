@@ -1,69 +1,27 @@
 <script lang="ts">
-const CONTRACT_STATUS_LABELS: Record<string, string> = {
-  DRAFT: '草稿',
-  ACTIVE: '有效',
-  PAUSED: '暫停中',
-  EXPIRED: '已到期',
-  TERMINATED: '已終止'
-}
-
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  UNPAID: '未付款',
-  PARTIAL: '部分付款',
-  PAID: '已付清'
-}
-
 const contractDateFormatter = new Intl.DateTimeFormat('zh-TW')
 </script>
 
 <script setup lang="ts">
-import type { Contract } from '@gym-nexus/shared/types'
-import { useFetch } from '~/composables/core/useFetch'
+import { CONTRACT_STATUS_LABELS, CONTRACT_PAYMENT_STATUS_LABELS } from '~/composables/useMemberContracts'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const config = useRuntimeConfig()
-const apiUrl = config.public.apiBaseUrl
-
-const { readItems } = useFetch()
-const { member, accessToken } = useMemberAuth()
 const { handleError } = useApiError()
+const { contracts, isLoading, fetchContracts } = useMemberContracts()
 
-const contracts = ref<Array<Contract & { plan?: { name: string, plan_type: string } }>>([])
-const isLoading = ref(true)
-
-// Pause modal state
-const showPauseModal = ref(false)
-const selectedContract = ref<Contract | null>(null)
-const pauseReason = ref('')
-const isSubmitting = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
-
-const fetchContracts = async () => {
-  if (!member.value) return
-
+const loadContracts = async () => {
   try {
-    isLoading.value = true
-    const result = await readItems<Contract & { plan?: { name: string, plan_type: string } }>('member/contracts', {
-      filter: {
-        member_id: member.value.id
-      },
-      sort: 'start_date',
-      sortOrder: 'desc'
-    })
-    contracts.value = result.data
+    await fetchContracts()
   } catch (error) {
     handleError(error, { fallbackMessage: '無法載入合約資料' })
-  } finally {
-    isLoading.value = false
   }
 }
 
 onMounted(() => {
-  fetchContracts()
+  loadContracts()
 })
 
 const formatDate = (dateStr: string | null) => {
@@ -74,127 +32,7 @@ const formatDate = (dateStr: string | null) => {
 }
 
 const statusLabels = CONTRACT_STATUS_LABELS
-const paymentLabels = PAYMENT_STATUS_LABELS
-
-let successMessageTimer: ReturnType<typeof setTimeout> | null = null
-
-const showSuccess = (msg: string) => {
-  successMessage.value = msg
-  if (successMessageTimer) {
-    clearTimeout(successMessageTimer)
-  }
-  successMessageTimer = setTimeout(() => {
-    successMessage.value = ''
-    successMessageTimer = null
-  }, 3000)
-}
-
-onBeforeUnmount(() => {
-  if (successMessageTimer) {
-    clearTimeout(successMessageTimer)
-    successMessageTimer = null
-  }
-})
-
-// Open pause modal
-const openPauseModal = (contract: Contract) => {
-  selectedContract.value = contract
-  pauseReason.value = ''
-  errorMessage.value = ''
-  showPauseModal.value = true
-}
-
-// Close pause modal
-const closePauseModal = () => {
-  showPauseModal.value = false
-  selectedContract.value = null
-  pauseReason.value = ''
-  errorMessage.value = ''
-}
-
-// Submit pause request
-const submitPause = async () => {
-  if (!selectedContract.value || !accessToken.value) return
-
-  if (pauseReason.value.trim().length < 5) {
-    errorMessage.value = '請輸入暫停原因（至少 5 個字）'
-    return
-  }
-
-  isSubmitting.value = true
-  errorMessage.value = ''
-
-  try {
-    const response = await $fetch<{ success: boolean; message: string }>(`${apiUrl}/api/member/contracts/${selectedContract.value.id}/pause`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken.value}`,
-      },
-      body: {
-        reason: pauseReason.value.trim(),
-      },
-    })
-
-    if (response.success) {
-      showSuccess(response.message)
-      closePauseModal()
-      await fetchContracts()
-    } else {
-      errorMessage.value = response.message || '操作失敗'
-    }
-  } catch (error: unknown) {
-    if (typeof error === 'object' && error !== null && 'data' in error) {
-      const fetchError = error as { data?: { message?: string } }
-      errorMessage.value = fetchError.data?.message || '操作失敗，請稍後再試'
-    } else {
-      errorMessage.value = '操作失敗，請稍後再試'
-    }
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-// Resume contract
-const resumeContract = async (contract: Contract) => {
-  if (!accessToken.value) return
-
-  if (!confirm('確定要恢復此合約嗎？暫停期間將自動順延合約到期日。')) {
-    return
-  }
-
-  isSubmitting.value = true
-  errorMessage.value = ''
-
-  try {
-    const response = await $fetch<{
-      success: boolean
-      message: string
-      new_end_date?: string
-      days_extended?: number
-    }>(`${apiUrl}/api/member/contracts/${contract.id}/resume`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken.value}`,
-      },
-    })
-
-    if (response.success) {
-      showSuccess(response.message)
-      await fetchContracts()
-    } else {
-      errorMessage.value = response.message || '操作失敗'
-    }
-  } catch (error: unknown) {
-    if (typeof error === 'object' && error !== null && 'data' in error) {
-      const fetchError = error as { data?: { message?: string } }
-      errorMessage.value = fetchError.data?.message || '操作失敗，請稍後再試'
-    } else {
-      errorMessage.value = '操作失敗，請稍後再試'
-    }
-  } finally {
-    isSubmitting.value = false
-  }
-}
+const paymentLabels = CONTRACT_PAYMENT_STATUS_LABELS
 </script>
 
 <template>
@@ -202,14 +40,6 @@ const resumeContract = async (contract: Contract) => {
     <header class="page-header">
       <h1 class="page-title">我的合約</h1>
     </header>
-
-    <!-- Success/Error Messages -->
-    <div v-if="successMessage" class="message success">
-      {{ successMessage }}
-    </div>
-    <div v-if="errorMessage && !showPauseModal" class="message error">
-      {{ errorMessage }}
-    </div>
 
     <div v-if="isLoading" class="loading">
       <p>載入中...</p>
@@ -229,108 +59,45 @@ const resumeContract = async (contract: Contract) => {
         :key="contract.id"
         class="contract-card"
         :class="{
-          active: contract.contract_status === 'ACTIVE',
-          paused: contract.contract_status === 'PAUSED'
+          active: contract.status === 'ACTIVE',
+          paused: contract.status === 'PAUSED'
         }"
       >
         <div class="contract-header">
-          <h3 class="contract-plan">{{ contract.plan?.name || '方案' }}</h3>
-          <span class="contract-status" :class="contract.contract_status.toLowerCase()">
-            {{ statusLabels[contract.contract_status] || contract.contract_status }}
+          <h3 class="contract-plan">{{ contract.planName || '方案' }}</h3>
+          <span class="contract-status" :class="contract.status.toLowerCase()">
+            {{ statusLabels[contract.status] || contract.status }}
           </span>
         </div>
 
         <div class="contract-details">
           <div class="detail-row">
             <span class="detail-label">合約編號</span>
-            <span class="detail-value">{{ contract.contract_no }}</span>
+            <span class="detail-value">{{ contract.contractNo }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">有效期間</span>
             <span class="detail-value">
-              {{ formatDate(contract.start_date) }} ~ {{ formatDate(contract.end_date) }}
+              {{ formatDate(contract.startDate) }} ~ {{ formatDate(contract.endDate) }}
             </span>
           </div>
-          <div v-if="contract.plan?.plan_type === 'COUNT_BASED'" class="detail-row">
+          <div v-if="contract.planType === 'COUNT_BASED'" class="detail-row">
             <span class="detail-label">剩餘次數</span>
-            <span class="detail-value highlight">{{ contract.remaining_counts }} 次</span>
+            <span class="detail-value highlight">{{ contract.remainingCounts }} 次</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">付款狀態</span>
-            <span class="detail-value" :class="'payment-' + contract.payment_status.toLowerCase()">
-              {{ paymentLabels[contract.payment_status] || contract.payment_status }}
+            <span class="detail-value" :class="'payment-' + contract.paymentStatus.toLowerCase()">
+              {{ paymentLabels[contract.paymentStatus] || contract.paymentStatus }}
             </span>
           </div>
         </div>
 
-        <div v-if="contract.contract_status === 'ACTIVE' || contract.contract_status === 'PAUSED'" class="contract-actions">
-          <button
-            v-if="contract.contract_status === 'ACTIVE'"
-            class="action-btn pause"
-            :disabled="isSubmitting"
-            @click="openPauseModal(contract)"
-          >
-            申請暫停
-          </button>
-          <button
-            v-else-if="contract.contract_status === 'PAUSED'"
-            class="action-btn resume"
-            :disabled="isSubmitting"
-            @click="resumeContract(contract)"
-          >
-            恢復合約
-          </button>
-        </div>
+        <p v-if="contract.status === 'ACTIVE' || contract.status === 'PAUSED'" class="contract-hint">
+          如需暫停或恢復合約，請洽櫃檯協助。
+        </p>
       </div>
     </div>
-
-    <!-- Pause Modal -->
-    <Teleport to="body">
-      <div v-if="showPauseModal" class="modal-overlay" @click.self="closePauseModal">
-        <div class="modal">
-          <div class="modal-header">
-            <h3>申請暫停合約</h3>
-            <button class="close-btn" @click="closePauseModal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-
-          <div class="modal-body">
-            <p class="modal-info">
-              暫停期間合約將無法使用，恢復後到期日將自動順延。
-            </p>
-
-            <div class="form-group">
-              <label for="pauseReason">暫停原因</label>
-              <textarea
-                id="pauseReason"
-                v-model="pauseReason"
-                placeholder="請輸入暫停原因（至少 5 個字）"
-                rows="3"
-              />
-            </div>
-
-            <div v-if="errorMessage" class="modal-error">
-              {{ errorMessage }}
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn-cancel" @click="closePauseModal">取消</button>
-            <button
-              class="btn-confirm"
-              :disabled="isSubmitting || pauseReason.trim().length < 5"
-              @click="submitPause"
-            >
-              {{ isSubmitting ? '處理中...' : '確認暫停' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -350,23 +117,6 @@ const resumeContract = async (contract: Contract) => {
   font-weight: 700;
   color: var(--color-text);
   letter-spacing: -0.4px;
-}
-
-.message {
-  margin: 0 16px 16px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  font-size: 14px;
-}
-
-.message.success {
-  background-color: rgba(52, 199, 89, 0.12);
-  color: #34c759;
-}
-
-.message.error {
-  background-color: rgba(255, 59, 48, 0.12);
-  color: #ff3b30;
 }
 
 .loading {
@@ -467,7 +217,8 @@ const resumeContract = async (contract: Contract) => {
 }
 
 .contract-status.expired,
-.contract-status.terminated {
+.contract-status.cancelled,
+.contract-status.transferred {
   background-color: rgba(142, 142, 147, 0.12);
   color: #8e8e93;
 }
@@ -513,195 +264,9 @@ const resumeContract = async (contract: Contract) => {
   color: var(--color-error);
 }
 
-.contract-actions {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--color-divider);
-}
-
-.action-btn {
-  width: 100%;
-  padding: 11px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.action-btn.pause {
-  background-color: rgba(118, 118, 128, 0.12);
-  border: none;
-  color: var(--color-text);
-}
-
-.action-btn.pause:active {
-  background-color: rgba(118, 118, 128, 0.2);
-}
-
-.action-btn.resume {
-  background-color: #34c759;
-  border: none;
-  color: white;
-}
-
-.action-btn.resume:active {
-  background-color: #30b350;
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  z-index: 1000;
-}
-
-.modal {
-  background-color: var(--color-surface);
-  border-radius: 20px;
-  width: 100%;
-  max-width: 400px;
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  border-radius: 8px;
-}
-
-.close-btn:active {
-  background-color: var(--color-border);
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-.modal-info {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-  margin-bottom: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.form-group textarea {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  font-size: 14px;
-  color: var(--color-text);
-  background-color: var(--color-background);
-  resize: none;
-  font-family: inherit;
-}
-
-.form-group textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-.form-group textarea::placeholder {
-  color: var(--color-text-secondary);
-}
-
-.modal-error {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background-color: rgba(239, 68, 68, 0.1);
-  border-radius: 8px;
+.contract-hint {
+  margin: 12px 0 0;
   font-size: 13px;
-  color: var(--color-error);
-}
-
-.modal-footer {
-  display: flex;
-  gap: 12px;
-  padding: 20px;
-  border-top: 1px solid var(--color-border);
-}
-
-.btn-cancel,
-.btn-confirm {
-  flex: 1;
-  padding: 14px;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-cancel {
-  background-color: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-
-.btn-cancel:active {
-  background-color: var(--color-border);
-}
-
-.btn-confirm {
-  background-color: #f59e0b;
-  border: none;
-  color: white;
-}
-
-.btn-confirm:active {
-  opacity: 0.9;
-}
-
-.btn-confirm:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  color: var(--color-text-secondary);
 }
 </style>

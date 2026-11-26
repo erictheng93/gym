@@ -13,101 +13,60 @@ const checkinDetailTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
 })
 
 const verificationLabels: Record<string, string> = {
-  BARCODE: '條碼掃描',
   QR_CODE: 'QR Code 掃描',
   MANUAL: '人工驗證',
-  FACE_ID: '人臉辨識',
-  FINGERPRINT: '指紋辨識',
-  BATCH: '批次簽到'
+  CARD: '感應卡',
+  BIOMETRIC: '生物辨識'
 }
 
 const verificationIcons: Record<string, string> = {
-  BARCODE: 'barcode',
   QR_CODE: 'qr',
   MANUAL: 'user',
-  FACE_ID: 'face',
-  FINGERPRINT: 'fingerprint',
-  BATCH: 'users'
+  CARD: 'barcode',
+  BIOMETRIC: 'user'
+}
+
+const typeLabels: Record<string, string> = {
+  ENTRY: '入場',
+  CLASS: '課程',
+  FACILITY: '設施'
 }
 </script>
 
 <script setup lang="ts">
-import { useFetch } from '~/composables/core/useFetch'
+import type { CheckInDetail } from '~/composables/useCheckIns'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-interface CheckinDetail {
-  id: string
-  check_time: string
-  check_type: 'ENTRY' | 'EXIT'
-  verification_method: string | null
-  is_cross_branch: boolean
-  notes: string | null
-  date_created: string
-  member_id?: string
-  branch_id: {
-    id: string
-    name: string
-    address: string | null
-    phone: string | null
-  } | null
-  contract_id: {
-    id: string
-    contract_no: string
-    contract_type: 'TIME_BASED' | 'COUNT_BASED'
-    remaining_counts: number | null
-    plan_id: {
-      id: string
-      name: string
-    } | null
-  } | null
-  verified_by: {
-    id: string
-    full_name: string
-  } | null
-}
-
 const route = useRoute()
 const router = useRouter()
-const { readItem } = useFetch()
+const { fetchCheckIn } = useCheckIns()
 const { member } = useMemberAuth()
 
-const checkin = ref<CheckinDetail | null>(null)
+const checkin = ref<CheckInDetail | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 
-const fetchCheckin = async () => {
+const loadCheckin = async () => {
   if (!member.value) return
 
-  try {
-    isLoading.value = true
-    error.value = null
+  isLoading.value = true
+  error.value = null
 
-    const result = await readItem<CheckinDetail>('member_checkins', route.params.id as string)
-
-    if (!result) {
-      error.value = '無法載入入場記錄'
-      return
-    }
-
-    // Verify this checkin belongs to the current member
-    if (result.member_id !== member.value.id) {
-      error.value = '無權查看此記錄'
-      return
-    }
-
-    checkin.value = result
-  } catch {
+  // The backend only returns the member's own records (404 otherwise).
+  const result = await fetchCheckIn(route.params.id as string)
+  if (!result) {
     error.value = '無法載入入場記錄'
-  } finally {
-    isLoading.value = false
+  } else {
+    checkin.value = result
   }
+  isLoading.value = false
 }
 
 onMounted(() => {
-  fetchCheckin()
+  loadCheckin()
 })
 
 const formatDateTime = (dateStr: string) => {
@@ -151,8 +110,8 @@ const goBack = () => {
     <template v-else-if="checkin">
       <!-- Main Info Card -->
       <div class="main-card">
-        <div class="type-badge" :class="checkin.check_type.toLowerCase()">
-          <svg v-if="checkin.check_type === 'ENTRY'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="type-badge" :class="checkin.checkInType.toLowerCase()">
+          <svg v-if="checkin.checkInType === 'ENTRY'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
             <polyline points="10 17 15 12 10 7" />
             <line x1="15" y1="12" x2="3" y2="12" />
@@ -162,15 +121,15 @@ const goBack = () => {
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          <span>{{ checkin.check_type === 'ENTRY' ? '入場' : '離場' }}</span>
+          <span>{{ typeLabels[checkin.checkInType] || checkin.checkInType }}</span>
         </div>
 
         <div class="datetime-info">
-          <div class="date">{{ formatDateTime(checkin.check_time).date }}</div>
-          <div class="time">{{ formatDateTime(checkin.check_time).time }}</div>
+          <div class="date">{{ formatDateTime(checkin.checkInTime).date }}</div>
+          <div class="time">{{ formatDateTime(checkin.checkInTime).time }}</div>
         </div>
 
-        <span v-if="checkin.is_cross_branch" class="cross-branch-badge">
+        <span v-if="checkin.isCrossBranch" class="cross-branch-badge">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="2" y1="12" x2="22" y2="12" />
@@ -192,16 +151,16 @@ const goBack = () => {
         <div class="info-card">
           <div class="info-row">
             <span class="info-label">分店名稱</span>
-            <span class="info-value">{{ checkin.branch_id?.name || '未知分店' }}</span>
+            <span class="info-value">{{ checkin.branch.name || '未知分店' }}</span>
           </div>
-          <div v-if="checkin.branch_id?.address" class="info-row">
+          <div v-if="checkin.branch.address" class="info-row">
             <span class="info-label">地址</span>
-            <span class="info-value">{{ checkin.branch_id.address }}</span>
+            <span class="info-value">{{ checkin.branch.address }}</span>
           </div>
-          <div v-if="checkin.branch_id?.phone" class="info-row">
+          <div v-if="checkin.branch.phone" class="info-row">
             <span class="info-label">電話</span>
-            <a :href="`tel:${checkin.branch_id.phone}`" class="info-value link">
-              {{ checkin.branch_id.phone }}
+            <a :href="`tel:${checkin.branch.phone}`" class="info-value link">
+              {{ checkin.branch.phone }}
             </a>
           </div>
         </div>
@@ -219,7 +178,7 @@ const goBack = () => {
           <div class="info-row">
             <span class="info-label">驗證方式</span>
             <span class="info-value verification-badge">
-              <svg v-if="verificationIcons[checkin.verification_method || ''] === 'qr'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-if="verificationIcons[checkin.checkInMethod || ''] === 'qr'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7" />
                 <rect x="14" y="3" width="7" height="7" />
                 <rect x="3" y="14" width="7" height="7" />
@@ -228,14 +187,14 @@ const goBack = () => {
                 <rect x="14" y="18" width="3" height="3" />
                 <rect x="18" y="18" width="3" height="3" />
               </svg>
-              <svg v-else-if="verificationIcons[checkin.verification_method || ''] === 'barcode'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-else-if="verificationIcons[checkin.checkInMethod || ''] === 'barcode'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 5v14" />
                 <path d="M8 5v14" />
                 <path d="M12 5v14" />
                 <path d="M17 5v14" />
                 <path d="M21 5v14" />
               </svg>
-              <svg v-else-if="verificationIcons[checkin.verification_method || ''] === 'user'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-else-if="verificationIcons[checkin.checkInMethod || ''] === 'user'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -243,18 +202,14 @@ const goBack = () => {
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
-              {{ verificationLabels[checkin.verification_method || ''] || checkin.verification_method || '未知' }}
+              {{ verificationLabels[checkin.checkInMethod || ''] || checkin.checkInMethod || '未知' }}
             </span>
-          </div>
-          <div v-if="checkin.verified_by" class="info-row">
-            <span class="info-label">驗證人員</span>
-            <span class="info-value">{{ checkin.verified_by.full_name }}</span>
           </div>
         </div>
       </div>
 
       <!-- Contract Info -->
-      <div v-if="checkin.contract_id" class="info-section">
+      <div v-if="checkin.contract" class="info-section">
         <h3 class="section-title">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -267,22 +222,22 @@ const goBack = () => {
         <div class="info-card">
           <div class="info-row">
             <span class="info-label">合約編號</span>
-            <span class="info-value">{{ checkin.contract_id.contract_no }}</span>
+            <span class="info-value">{{ checkin.contract.contractNo }}</span>
           </div>
-          <div v-if="checkin.contract_id.plan_id" class="info-row">
+          <div v-if="checkin.contract.planName" class="info-row">
             <span class="info-label">方案名稱</span>
-            <span class="info-value">{{ checkin.contract_id.plan_id.name }}</span>
+            <span class="info-value">{{ checkin.contract.planName }}</span>
           </div>
           <div class="info-row">
             <span class="info-label">合約類型</span>
             <span class="info-value">
-              {{ checkin.contract_id.contract_type === 'TIME_BASED' ? '期限制' : '計次制' }}
+              {{ checkin.contract.planType === 'TIME_BASED' ? '期限制' : '計次制' }}
             </span>
           </div>
-          <div v-if="checkin.contract_id.contract_type === 'COUNT_BASED'" class="info-row">
+          <div v-if="checkin.contract.planType === 'COUNT_BASED'" class="info-row">
             <span class="info-label">剩餘次數</span>
             <span class="info-value highlight">
-              {{ checkin.contract_id.remaining_counts ?? '-' }} 次
+              {{ checkin.contract.remainingCounts ?? '-' }} 次
             </span>
           </div>
         </div>
@@ -293,28 +248,6 @@ const goBack = () => {
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </NuxtLink>
-      </div>
-
-      <!-- Notes -->
-      <div v-if="checkin.notes" class="info-section">
-        <h3 class="section-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <path d="M14 2v6h6" />
-            <path d="M16 13H8" />
-            <path d="M16 17H8" />
-            <path d="M10 9H8" />
-          </svg>
-          備註
-        </h3>
-        <div class="notes-card">
-          {{ checkin.notes }}
-        </div>
-      </div>
-
-      <!-- Record Info -->
-      <div class="record-info">
-        <span>記錄建立於 {{ formatDateTime(checkin.date_created).date }} {{ formatDateTime(checkin.date_created).time }}</span>
       </div>
     </template>
   </div>
@@ -414,6 +347,8 @@ const goBack = () => {
   margin-bottom: 16px;
 }
 
+.type-badge.class,
+.type-badge.facility,
 .type-badge.exit {
   background-color: rgba(255, 255, 255, 0.15);
 }
