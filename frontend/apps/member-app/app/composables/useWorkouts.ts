@@ -46,17 +46,72 @@ interface WorkoutResult {
   data?: Workout
 }
 
+// --- Backend payloads (backend/src/routes/member-workouts.ts, camelCase) ---
+
+export interface ApiWorkout {
+  id: string
+  date: string
+  duration: number | null
+  calories: number | null
+  exercises: Exercise[] | null
+  notes: string | null
+  createdAt?: string
+}
+
 interface WorkoutsResponse {
   success: boolean
-  data: Workout[]
-  total: number
+  data: {
+    workouts: ApiWorkout[]
+    pagination: { total: number; page: number; limit: number; totalPages: number }
+  }
+}
+
+interface WorkoutResponse {
+  success: boolean
+  message?: string
+  data?: { workout: ApiWorkout }
+}
+
+export interface ApiWorkoutStats {
+  period: WorkoutStatsPeriod
+  totalWorkouts: number
+  totalDuration: number
+  totalCalories: number
+  avgDuration: number
+  avgCalories: number
+  workoutDays: number
 }
 
 interface StatsResponse {
   success: boolean
   data: {
-    stats: WorkoutStats
+    stats: ApiWorkoutStats
     daily: DailyWorkoutData[]
+  }
+}
+
+export function toWorkout(w: ApiWorkout, memberId: string): Workout {
+  return {
+    id: w.id,
+    member_id: memberId,
+    date: w.date,
+    duration: w.duration,
+    calories: w.calories,
+    exercises: w.exercises,
+    notes: w.notes,
+    created_at: w.createdAt ?? '',
+  }
+}
+
+export function toWorkoutStats(s: ApiWorkoutStats): WorkoutStats {
+  return {
+    period: s.period,
+    total_workouts: s.totalWorkouts,
+    total_duration: s.totalDuration,
+    total_calories: s.totalCalories,
+    avg_duration: s.avgDuration,
+    avg_calories: s.avgCalories,
+    workout_days: s.workoutDays,
   }
 }
 
@@ -103,22 +158,23 @@ export const useWorkouts = () => {
           return []
         }
 
+        const limit = options?.limit ?? 20
         const params = new URLSearchParams()
-        if (options?.start_date) params.append('start_date', options.start_date)
-        if (options?.end_date) params.append('end_date', options.end_date)
-        if (options?.limit) params.append('limit', String(options.limit))
-        if (options?.offset) params.append('offset', String(options.offset))
+        if (options?.start_date) params.append('startDate', options.start_date)
+        if (options?.end_date) params.append('endDate', options.end_date)
+        params.append('limit', String(limit))
+        params.append('page', String(Math.floor((options?.offset ?? 0) / limit) + 1))
 
         const response = await $fetch<WorkoutsResponse>(`${apiUrl}/api/member/workouts?${params}`, {
           headers: getAuthHeader(),
         })
 
-        if (response.success) {
-          workouts.value = response.data
-          totalWorkouts.value = response.total
-          await setCache(cacheKey, response.data, CACHE_TTL)
-        }
-        return response.data
+        if (!response.success) return []
+        const list = response.data.workouts.map(w => toWorkout(w, member.value!.id))
+        workouts.value = list
+        totalWorkouts.value = response.data.pagination.total
+        await setCache(cacheKey, list, CACHE_TTL)
+        return list
       } catch {
         // Try cached data on network error
         const cached = await getCache<Workout[]>(cacheKey)
@@ -143,12 +199,12 @@ export const useWorkouts = () => {
     const dedupKey = `workout:${member.value.id}:${id}`
     return deduplicateRequest(dedupKey, async () => {
       try {
-        const response = await $fetch<{ success: boolean; data: Workout }>(
+        const response = await $fetch<WorkoutResponse>(
           `${apiUrl}/api/member/workouts/${id}`,
           { headers: getAuthHeader() }
         )
 
-        return response.success ? response.data : null
+        return response.success && response.data ? toWorkout(response.data.workout, member.value!.id) : null
       } catch {
         return null
       }
@@ -169,11 +225,10 @@ export const useWorkouts = () => {
           { headers: getAuthHeader() }
         )
 
-        if (response.success) {
-          stats.value = response.data.stats
-          dailyData.value = response.data.daily
-        }
-        return response.data.stats
+        if (!response.success) return null
+        stats.value = toWorkoutStats(response.data.stats)
+        dailyData.value = response.data.daily
+        return stats.value
       } catch {
         return null
       }
@@ -228,18 +283,19 @@ export const useWorkouts = () => {
     }
 
     try {
-      const response = await $fetch<WorkoutResult>(`${apiUrl}/api/member/workouts`, {
+      const response = await $fetch<WorkoutResponse>(`${apiUrl}/api/member/workouts`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: data,
       })
 
-      if (response.success && response.data) {
-        workouts.value.unshift(response.data)
+      const created = response.success && response.data ? toWorkout(response.data.workout, member.value.id) : undefined
+      if (created) {
+        workouts.value.unshift(created)
         totalWorkouts.value++
       }
 
-      return response
+      return { success: response.success, message: response.message ?? '', data: created }
     } catch (error: unknown) {
       // Network error fallback: queue the request
       try {
@@ -293,20 +349,21 @@ export const useWorkouts = () => {
     }
 
     try {
-      const response = await $fetch<WorkoutResult>(`${apiUrl}/api/member/workouts/${id}`, {
+      const response = await $fetch<WorkoutResponse>(`${apiUrl}/api/member/workouts/${id}`, {
         method: 'PUT',
         headers: getAuthHeader(),
         body: data,
       })
 
-      if (response.success && response.data) {
+      const updated = response.success && response.data ? toWorkout(response.data.workout, member.value.id) : undefined
+      if (updated) {
         const index = workouts.value.findIndex(w => w.id === id)
         if (index !== -1) {
-          workouts.value[index] = response.data
+          workouts.value[index] = { ...workouts.value[index]!, ...updated, created_at: workouts.value[index]!.created_at }
         }
       }
 
-      return response
+      return { success: response.success, message: response.message ?? '', data: updated }
     } catch (error: unknown) {
       // Network error fallback: queue the request
       try {

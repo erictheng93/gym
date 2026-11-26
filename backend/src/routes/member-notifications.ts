@@ -68,7 +68,7 @@ app.use('*', requireMember);
 
 type NotificationChannel = 'push' | 'email' | 'line' | 'sms';
 // Notification type used in preferences
-type NotificationType = 'booking_reminder' | 'contract_expiry' | 'class_cancelled' | 'promotions' | 'system';
+type NotificationType = 'booking_confirmation' | 'booking_reminder' | 'contract_expiry' | 'class_cancelled' | 'payment_confirmation' | 'promotions' | 'system';
 void (0 as unknown as NotificationType); // prevent unused warning
 
 interface NotificationPreferences {
@@ -79,9 +79,11 @@ interface NotificationPreferences {
     sms: boolean;
   };
   types: {
+    booking_confirmation: boolean;
     booking_reminder: boolean;
     contract_expiry: boolean;
     class_cancelled: boolean;
+    payment_confirmation: boolean;
     promotions: boolean;
     system: boolean;
   };
@@ -90,6 +92,8 @@ interface NotificationPreferences {
     start: string; // HH:mm
     end: string;   // HH:mm
   };
+  /** Fall back to SMS when the other channels fail (member-app 簡訊備援). */
+  smsFallback: boolean;
 }
 
 // Default preferences stored as member metadata
@@ -101,9 +105,11 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
     sms: false,
   },
   types: {
+    booking_confirmation: true,
     booking_reminder: true,
     contract_expiry: true,
     class_cancelled: true,
+    payment_confirmation: true,
     promotions: false,
     system: true,
   },
@@ -112,6 +118,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
     start: '22:00',
     end: '08:00',
   },
+  smsFallback: false,
 };
 
 // -----------------------------------------------------------------------------
@@ -126,9 +133,11 @@ const preferencesSchema = z.object({
     sms: z.boolean().optional(),
   }).optional(),
   types: z.object({
+    booking_confirmation: z.boolean().optional(),
     booking_reminder: z.boolean().optional(),
     contract_expiry: z.boolean().optional(),
     class_cancelled: z.boolean().optional(),
+    payment_confirmation: z.boolean().optional(),
     promotions: z.boolean().optional(),
     system: z.boolean().optional(),
   }).optional(),
@@ -137,6 +146,7 @@ const preferencesSchema = z.object({
     start: z.string().regex(/^\d{2}:\d{2}$/, '時間格式: HH:mm').optional(),
     end: z.string().regex(/^\d{2}:\d{2}$/, '時間格式: HH:mm').optional(),
   }).optional(),
+  smsFallback: z.boolean().optional(),
 });
 
 const historyQuerySchema = z.object({
@@ -157,7 +167,7 @@ app.get('/preferences', async (c) => {
   const [member] = await db
     .select(MEMBER_TAGS_SELECT)
     .from(members)
-    .where(eq(members.id, memberInfo.id))
+    .where(and(eq(members.id, memberInfo.id), eq(members.tenantId, memberInfo.tenantId)))
     .limit(1);
 
   // Extract preferences from member data
@@ -198,17 +208,22 @@ app.put(
     const [member] = await db
       .select(MEMBER_TAGS_SELECT)
       .from(members)
-      .where(eq(members.id, memberInfo.id))
+      .where(and(eq(members.id, memberInfo.id), eq(members.tenantId, memberInfo.tenantId)))
       .limit(1);
+
+    if (!member) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
 
     // Merge with existing preferences
     const currentTags = (member?.tags || {}) as { notificationPreferences?: NotificationPreferences };
     const currentPreferences = currentTags.notificationPreferences || DEFAULT_PREFERENCES;
 
     const newPreferences: NotificationPreferences = {
-      channels: { ...currentPreferences.channels, ...updates.channels },
-      types: { ...currentPreferences.types, ...updates.types },
-      quietHours: { ...currentPreferences.quietHours, ...updates.quietHours },
+      channels: { ...DEFAULT_PREFERENCES.channels, ...currentPreferences.channels, ...updates.channels },
+      types: { ...DEFAULT_PREFERENCES.types, ...currentPreferences.types, ...updates.types },
+      quietHours: { ...DEFAULT_PREFERENCES.quietHours, ...currentPreferences.quietHours, ...updates.quietHours },
+      smsFallback: updates.smsFallback ?? currentPreferences.smsFallback ?? DEFAULT_PREFERENCES.smsFallback,
     };
 
     // Update member tags with new preferences
@@ -224,7 +239,7 @@ app.put(
           tags: newTags,
           updatedAt: new Date(),
         })
-        .where(eq(members.id, memberInfo.id)),
+        .where(and(eq(members.id, memberInfo.id), eq(members.tenantId, memberInfo.tenantId))),
     ];
 
     // Also update push subscription preferences if push settings changed
@@ -266,7 +281,7 @@ app.get('/channels', async (c) => {
     db
       .select(MEMBER_CONTACT_SELECT)
       .from(members)
-      .where(eq(members.id, memberInfo.id))
+      .where(and(eq(members.id, memberInfo.id), eq(members.tenantId, memberInfo.tenantId)))
       .limit(1),
     db
       .select(PUSH_SUB_ID_SELECT)

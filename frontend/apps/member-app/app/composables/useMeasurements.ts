@@ -53,17 +53,99 @@ interface MeasurementResult {
   data?: Measurement
 }
 
+// --- Backend payloads (backend/src/routes/member-measurements.ts, camelCase) ---
+
+export interface ApiMeasurement {
+  id: string
+  date: string
+  weight: number | null
+  bodyFat: number | null
+  muscleMass: number | null
+  bmi: number | null
+  source: MeasurementSource
+  createdAt?: string
+}
+
 interface MeasurementsResponse {
   success: boolean
-  data: Measurement[]
+  data: {
+    measurements: ApiMeasurement[]
+    pagination: { total: number; page: number; limit: number; totalPages: number }
+  }
+}
+
+interface MeasurementResponse {
+  success: boolean
+  message?: string
+  data?: { measurement: ApiMeasurement | null }
+}
+
+export interface ApiMeasurementStats {
+  totalRecords: number
+  periodDays: number
+  weight: TrendData
+  bodyFat: TrendData
+  muscleMass: TrendData
+  bmi: TrendData
 }
 
 interface StatsResponse {
   success: boolean
   data: {
-    stats: MeasurementStats
-    daily: Array<{ date: string; weight?: number; body_fat?: number }>
+    stats: ApiMeasurementStats
+    daily: Array<{ date: string; weight: number | null; bodyFat: number | null }>
   }
+}
+
+export function toMeasurement(m: ApiMeasurement, memberId: string): Measurement {
+  return {
+    id: m.id,
+    member_id: memberId,
+    date: m.date,
+    weight: m.weight,
+    body_fat: m.bodyFat,
+    muscle_mass: m.muscleMass,
+    bmi: m.bmi,
+    source: m.source,
+    raw_data: null,
+    created_at: m.createdAt ?? '',
+  }
+}
+
+export function toMeasurementStats(s: ApiMeasurementStats): MeasurementStats {
+  return {
+    total_records: s.totalRecords,
+    period_days: s.periodDays,
+    weight: s.weight,
+    body_fat: s.bodyFat,
+    muscle_mass: s.muscleMass,
+    bmi: s.bmi,
+  }
+}
+
+/** POST body: camelCase, empty values dropped (the backend accepts omitted, not null). */
+export function toMeasurementBody(data: {
+  date?: string
+  weight?: number | null
+  body_fat?: number | null
+  muscle_mass?: number | null
+  bmi?: number | null
+  source?: MeasurementSource
+  raw_data?: Record<string, unknown>
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    date: data.date || new Date().toISOString().slice(0, 10),
+    weight: data.weight,
+    bodyFat: data.body_fat,
+    muscleMass: data.muscle_mass,
+    bmi: data.bmi,
+    source: data.source,
+    rawData: data.raw_data,
+  }
+  for (const key of Object.keys(body)) {
+    if (body[key] === null || body[key] === undefined) delete body[key]
+  }
+  return body
 }
 
 export const useMeasurements = () => {
@@ -108,21 +190,23 @@ export const useMeasurements = () => {
           return []
         }
 
+        // The backend lists newest first with page-based paging (no date filter).
+        const limit = options?.limit ?? 20
         const params = new URLSearchParams()
-        if (options?.start_date) params.append('start_date', options.start_date)
-        if (options?.end_date) params.append('end_date', options.end_date)
-        if (options?.limit) params.append('limit', String(options.limit))
-        if (options?.offset) params.append('offset', String(options.offset))
+        params.append('limit', String(limit))
+        params.append('page', String(Math.floor((options?.offset ?? 0) / limit) + 1))
 
         const response = await $fetch<MeasurementsResponse>(`${apiUrl}/api/member/measurements?${params}`, {
           headers: getAuthHeader(),
         })
 
-        if (response.success) {
-          measurements.value = response.data
-          await setCache(cacheKey, response.data, CACHE_TTL)
-        }
-        return response.data
+        if (!response.success) return []
+        let list = response.data.measurements.map(m => toMeasurement(m, member.value!.id))
+        if (options?.start_date) list = list.filter(m => m.date >= options.start_date!)
+        if (options?.end_date) list = list.filter(m => m.date <= options.end_date!)
+        measurements.value = list
+        await setCache(cacheKey, list, CACHE_TTL)
+        return list
       } catch {
         // Try cached data on network error
         const cached = await getCache<Measurement[]>(cacheKey)
@@ -147,15 +231,15 @@ export const useMeasurements = () => {
     const dedupKey = `measurement-latest:${member.value.id}`
     return deduplicateRequest(dedupKey, async () => {
       try {
-        const response = await $fetch<{ success: boolean; data: Measurement | null }>(
+        const response = await $fetch<MeasurementResponse>(
           `${apiUrl}/api/member/measurements/latest`,
           { headers: getAuthHeader() }
         )
 
-        if (response.success) {
-          latestMeasurement.value = response.data
-        }
-        return response.data
+        if (!response.success) return null
+        const latest = response.data?.measurement
+        latestMeasurement.value = latest ? toMeasurement(latest, member.value!.id) : null
+        return latestMeasurement.value
       } catch {
         return null
       }
@@ -176,10 +260,9 @@ export const useMeasurements = () => {
           { headers: getAuthHeader() }
         )
 
-        if (response.success) {
-          stats.value = response.data.stats
-        }
-        return response.data.stats
+        if (!response.success) return null
+        stats.value = toMeasurementStats(response.data.stats)
+        return stats.value
       } catch {
         return null
       }
@@ -203,18 +286,21 @@ export const useMeasurements = () => {
     }
 
     try {
-      const response = await $fetch<MeasurementResult>(`${apiUrl}/api/member/measurements`, {
+      const response = await $fetch<MeasurementResponse>(`${apiUrl}/api/member/measurements`, {
         method: 'POST',
         headers: getAuthHeader(),
-        body: data,
+        body: toMeasurementBody(data),
       })
 
-      if (response.success && response.data) {
-        measurements.value.unshift(response.data)
-        latestMeasurement.value = response.data
+      const created = response.success && response.data?.measurement
+        ? toMeasurement(response.data.measurement, member.value.id)
+        : undefined
+      if (created) {
+        measurements.value.unshift(created)
+        latestMeasurement.value = created
       }
 
-      return response
+      return { success: response.success, message: response.message ?? '', data: created }
     } catch (error: unknown) {
       return {
         success: false,

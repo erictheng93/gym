@@ -131,6 +131,7 @@ export default tseslint.config(
         useFocusTrap: 'readonly',
         useGoals: 'readonly',
         useMemberContracts: 'readonly',
+        useMemberProfile: 'readonly',
         useCheckIns: 'readonly',
         useIssues: 'readonly',
         useLeads: 'readonly',

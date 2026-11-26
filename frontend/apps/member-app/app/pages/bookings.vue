@@ -161,8 +161,8 @@ const getClassName = (session: ClassSession | null): string => {
 
 const getSessionTime = (session: ClassSession | null): string => {
   if (!session) return ''
-  const start = session.schedule?.start_time?.slice(0, 5) || ''
-  const end = session.schedule?.end_time?.slice(0, 5) || ''
+  const start = session.start_time?.slice(0, 5) || ''
+  const end = session.end_time?.slice(0, 5) || ''
   return `${start} - ${end}`
 }
 
@@ -320,9 +320,9 @@ const displayedPastBookings = computed(() => pastBookings.value.slice(0, 10))
                   <span class="detail-label">教練</span>
                   <span class="detail-value">{{ selectedSession.instructor.full_name }}</span>
                 </div>
-                <div v-if="selectedSession?.schedule?.room" class="detail-item">
+                <div v-if="selectedSession?.room" class="detail-item">
                   <span class="detail-label">教室</span>
-                  <span class="detail-value">{{ selectedSession.schedule.room }}</span>
+                  <span class="detail-value">{{ selectedSession.room }}</span>
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">課程時長</span>

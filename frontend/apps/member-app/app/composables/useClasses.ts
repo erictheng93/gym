@@ -42,9 +42,13 @@ export interface ClassSchedule {
 
 export interface ClassSession {
   id: string
-  schedule_id: string
+  schedule_id?: string | null
   schedule?: ClassSchedule
   session_date: string
+  start_time: string // HH:MM:SS
+  end_time: string
+  room?: string | null
+  max_capacity: number
   current_count: number
   waitlist_count: number
   session_status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
@@ -71,10 +75,62 @@ interface SchedulesResponse {
   data: ClassSchedule[]
 }
 
+// --- Backend payload (backend/src/routes/member-classes.ts, camelCase) ---
+
+export interface ApiClassSession {
+  id: string
+  sessionDate: string
+  startTime: string
+  endTime: string
+  room: string | null
+  maxCapacity: number
+  currentCount: number
+  waitlistCount: number
+  sessionStatus: ClassSession['session_status']
+  cancelledReason: string | null
+  class: {
+    id: string
+    name: string
+    description: string | null
+    category: string | null
+    difficultyLevel: string | null
+    durationMinutes: number
+    imageUrl: string | null
+  }
+  instructor: { id: string; fullName: string } | null
+  branch: { id: string; name: string } | null
+}
+
 interface SessionsResponse {
   success: boolean
-  data: ClassSession[]
-  total?: number
+  data: { sessions: ApiClassSession[] }
+}
+
+export function toClassSession(s: ApiClassSession): ClassSession {
+  return {
+    id: s.id,
+    session_date: s.sessionDate,
+    start_time: s.startTime,
+    end_time: s.endTime,
+    room: s.room,
+    max_capacity: s.maxCapacity,
+    current_count: s.currentCount,
+    waitlist_count: s.waitlistCount,
+    session_status: s.sessionStatus,
+    cancellation_reason: s.cancelledReason ?? undefined,
+    class: {
+      id: s.class.id,
+      name: s.class.name,
+      description: s.class.description ?? undefined,
+      duration_minutes: s.class.durationMinutes,
+      max_capacity: s.maxCapacity,
+      category: s.class.category ?? undefined,
+      difficulty_level: s.class.difficultyLevel ?? undefined,
+      status: 'ACTIVE',
+    },
+    instructor: s.instructor ? { id: s.instructor.id, full_name: s.instructor.fullName } : undefined,
+    branch: s.branch ?? undefined,
+  }
 }
 
 // Cache settings
@@ -244,20 +300,20 @@ export const useClasses = () => {
         }
 
         const params = new URLSearchParams()
-        if (options?.branchId) params.append('branch_id', options.branchId)
-        if (options?.startDate) params.append('start_date', options.startDate)
-        if (options?.endDate) params.append('end_date', options.endDate)
+        if (options?.branchId) params.append('branchId', options.branchId)
+        if (options?.startDate) params.append('startDate', options.startDate)
+        if (options?.endDate) params.append('endDate', options.endDate)
         if (options?.limit) params.append('limit', String(options.limit))
 
         const response = await $fetch<SessionsResponse>(`${apiUrl}/api/member/classes/sessions?${params}`, {
           headers: getAuthHeader(),
         })
 
-        if (response.success) {
-          upcomingSessions.value = response.data
-          await setCache(cacheKey, response.data, CACHE_TTL)
-        }
-        return response.data
+        if (!response.success) return []
+        const sessions = response.data.sessions.map(toClassSession)
+        upcomingSessions.value = sessions
+        await setCache(cacheKey, sessions, CACHE_TTL)
+        return sessions
       } catch {
         // Network error fallback to cache
         const cached = await getCache<ClassSession[]>(cacheKey)
@@ -279,11 +335,11 @@ export const useClasses = () => {
   const getSession = async (sessionId: string): Promise<ClassSession | null> => {
     return deduplicateRequest(`member:session:${sessionId}`, async () => {
       try {
-        const response = await $fetch<{ success: boolean; data: ClassSession }>(
+        const response = await $fetch<{ success: boolean; data: { session: ApiClassSession } }>(
           `${apiUrl}/api/member/classes/sessions/${sessionId}`,
           { headers: getAuthHeader() }
         )
-        return response.success ? response.data : null
+        return response.success ? toClassSession(response.data.session) : null
       } catch {
         return null
       }
@@ -325,11 +381,7 @@ export const useClasses = () => {
       list.push(s)
     }
     for (const list of map.values()) {
-      list.sort((a, b) => {
-        const timeA = a.schedule?.start_time || ''
-        const timeB = b.schedule?.start_time || ''
-        return timeA.localeCompare(timeB)
-      })
+      list.sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''))
     }
     return map
   })
@@ -345,16 +397,14 @@ export const useClasses = () => {
    * Check if a session is full
    */
   const isSessionFull = (session: ClassSession): boolean => {
-    const maxCapacity = session.class?.max_capacity || session.schedule?.class?.max_capacity || 0
-    return session.current_count >= maxCapacity
+    return session.current_count >= session.max_capacity
   }
 
   /**
    * Get available spots for a session
    */
   const getAvailableSpots = (session: ClassSession): number => {
-    const maxCapacity = session.class?.max_capacity || session.schedule?.class?.max_capacity || 0
-    return Math.max(0, maxCapacity - session.current_count)
+    return Math.max(0, session.max_capacity - session.current_count)
   }
 
   /**

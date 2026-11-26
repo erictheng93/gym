@@ -14,6 +14,10 @@ import type { MemberVariables } from '../middleware/index.js';
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
+/** The token's member, only within the token's tenant. */
+const ownMember = (m: { id: string; tenantId: string }) =>
+  and(eq(members.id, m.id), eq(members.tenantId, m.tenantId));
+
 // Apply member auth middleware
 app.use('*', memberAuthMiddleware);
 app.use('*', requireMember);
@@ -142,7 +146,7 @@ app.get('/', async (c) => {
       .select(MEMBER_PROFILE_FULL_SELECT)
       .from(members)
       .leftJoin(branches, eq(members.branchId, branches.id))
-      .where(eq(members.id, memberInfo.id))
+      .where(ownMember(memberInfo))
       .limit(1),
     db
       .select(MEMBER_ACTIVE_CONTRACTS_SELECT)
@@ -150,6 +154,7 @@ app.get('/', async (c) => {
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
       .where(and(
         eq(contracts.memberId, memberInfo.id),
+        eq(contracts.tenantId, memberInfo.tenantId),
         inArray(contracts.status, ['ACTIVE', 'PAUSED']),
       ))
       .orderBy(desc(contracts.endDate)),
@@ -278,8 +283,12 @@ app.put(
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(members.id, memberInfo.id))
+      .where(ownMember(memberInfo))
       .returning(MEMBER_PROFILE_UPDATE_RETURNING);
+
+    if (!updatedMember) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
 
     return c.json({
       success: true,
@@ -306,7 +315,7 @@ app.post(
       db
         .select(MEMBER_PHONE_CHECK_SELECT)
         .from(members)
-        .where(eq(members.id, memberInfo.id))
+        .where(ownMember(memberInfo))
         .limit(1),
       profileData.phone
         ? db.select(MEMBER_ID_SELECT).from(members).where(and(eq(members.phone, profileData.phone), ne(members.id, memberInfo.id))).limit(1)
@@ -340,7 +349,7 @@ app.post(
         emergencyPhone: profileData.emergencyPhone || null,
         updatedAt: new Date(),
       })
-      .where(eq(members.id, memberInfo.id))
+      .where(ownMember(memberInfo))
       .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
 
     return c.json({

@@ -36,27 +36,6 @@ const mockAvailableChannels = {
   sms: false,
 }
 
-const mockChannelDetails = {
-  line: {
-    available: true,
-    displayName: 'John Doe',
-    linkedAt: '2024-01-01T00:00:00Z',
-  },
-  push: {
-    available: true,
-    deviceName: 'iPhone',
-    subscribedAt: '2024-01-01T00:00:00Z',
-  },
-  email: {
-    available: true,
-    address: 'test@example.com',
-  },
-  sms: {
-    available: false,
-    phone: undefined,
-  },
-}
-
 const mockNotificationHistory = [
   {
     id: 'notif-1',
@@ -159,6 +138,44 @@ describe('useNotificationPreferences', () => {
     })
   })
 
+  // Backend payloads (backend/src/routes/member-notifications.ts)
+  const apiPreferences = {
+    channels: { line: true, push: true, email: true, sms: false },
+    types: {
+      booking_confirmation: true,
+      booking_reminder: true,
+      contract_expiry: true,
+      class_cancelled: true,
+      payment_confirmation: true,
+      promotions: false,
+      system: true,
+    },
+    quietHours: { enabled: false, start: '22:00', end: '08:00' },
+    smsFallback: true,
+  }
+  const apiChannels = [
+    { channel: 'push', connected: true, details: { devices: 1 } },
+    { channel: 'email', connected: true, details: { email: 'tes***@example.com' } },
+    { channel: 'line', connected: true, details: { displayName: 'John Doe' } },
+    { channel: 'sms', connected: false, details: null },
+  ]
+  const apiNotification = (id: string, type: string, isRead = false) => ({
+    id,
+    type,
+    title: `T-${id}`,
+    message: `M-${id}`,
+    data: null,
+    isRead,
+    readAt: null,
+    priority: 'normal',
+    createdAt: '2024-01-01T10:00:00Z',
+    reference: { type: 'booking', id: 'booking-123' },
+  })
+  const historyPage = (items: unknown[], total: number, page = 1) => ({
+    notifications: items,
+    pagination: { total, page, limit: 20, totalPages: Math.ceil(total / 20) },
+  })
+
   describe('fetchPreferences', () => {
     it('should return false when not authenticated', async () => {
       mockIsAuthenticated.value = false
@@ -170,14 +187,10 @@ describe('useNotificationPreferences', () => {
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should fetch preferences successfully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        preferences: mockPreferences,
-        available_channels: mockAvailableChannels,
-      })
+    it('should fetch and flatten the nested preferences', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: { preferences: apiPreferences } })
 
-      const { fetchPreferences, preferences, availableChannels, isLoading } = useNotificationPreferences()
+      const { fetchPreferences, preferences, isLoading } = useNotificationPreferences()
       const result = await fetchPreferences()
 
       expect(result).toBe(true)
@@ -186,8 +199,24 @@ describe('useNotificationPreferences', () => {
         { headers: { 'X-Member-Token': 'test-token' } }
       )
       expect(preferences.value).toEqual(mockPreferences)
-      expect(availableChannels.value).toEqual(mockAvailableChannels)
       expect(isLoading.value).toBe(false)
+    })
+
+    it('defaults the keys older stored preferences do not have', async () => {
+      const { booking_confirmation: _a, payment_confirmation: _b, ...oldTypes } = apiPreferences.types
+      mockFetch.mockResolvedValueOnce({
+        success: true,
+        data: { preferences: { channels: apiPreferences.channels, types: oldTypes, quietHours: apiPreferences.quietHours } },
+      })
+
+      const { fetchPreferences, preferences } = useNotificationPreferences()
+      await fetchPreferences()
+
+      expect(preferences.value).toMatchObject({
+        notify_booking_confirmation: true,
+        notify_payment_confirmation: true,
+        sms_fallback_enabled: false,
+      })
     })
 
     it('should handle fetch error', async () => {
@@ -214,11 +243,7 @@ describe('useNotificationPreferences', () => {
 
       mockFetch.mockImplementation(() => {
         return new Promise((resolve) => {
-          setTimeout(() => resolve({
-            success: true,
-            preferences: mockPreferences,
-            available_channels: mockAvailableChannels,
-          }), 100)
+          setTimeout(() => resolve({ success: true, data: { preferences: apiPreferences } }), 100)
         })
       })
 
@@ -245,11 +270,11 @@ describe('useNotificationPreferences', () => {
       expect(result).toBe(false)
     })
 
-    it('should update preferences successfully', async () => {
+    it('should PUT the nested shape the backend expects', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: 'Updated',
-        preferences: { ...mockPreferences, notify_promotions: true },
+        data: { preferences: { ...apiPreferences, types: { ...apiPreferences.types, promotions: true } } },
       })
 
       const { updatePreferences, preferences } = useNotificationPreferences()
@@ -259,15 +284,35 @@ describe('useNotificationPreferences', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8056/api/member/notifications/preferences',
         expect.objectContaining({
-          method: 'PATCH',
+          method: 'PUT',
           headers: expect.objectContaining({
             'X-Member-Token': 'test-token',
             'Content-Type': 'application/json',
           }),
-          body: { notify_promotions: true },
+          body: { types: { promotions: true } },
         })
       )
       expect(preferences.value?.notify_promotions).toBe(true)
+    })
+
+    it('maps every flat key to its backend section', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: { preferences: apiPreferences } })
+
+      await useNotificationPreferences().updatePreferences({
+        enable_sms: true,
+        notify_booking_cancelled: false,
+        quiet_hours_enabled: true,
+        quiet_hours_start: '23:00',
+        quiet_hours_end: '07:00',
+        sms_fallback_enabled: false,
+      })
+
+      expect(mockFetch.mock.calls[0]![1].body).toEqual({
+        channels: { sms: true },
+        types: { class_cancelled: false },
+        quietHours: { enabled: true, start: '23:00', end: '07:00' },
+        smsFallback: false,
+      })
     })
 
     it('should handle update error', async () => {
@@ -286,19 +331,20 @@ describe('useNotificationPreferences', () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
         message: 'Updated',
-        preferences: { ...mockPreferences, enable_line: false },
+        data: { preferences: { ...apiPreferences, channels: { ...apiPreferences.channels, line: false } } },
       })
 
-      const { togglePreference } = useNotificationPreferences()
+      const { togglePreference, preferences } = useNotificationPreferences()
       const result = await togglePreference('enable_line', false)
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8056/api/member/notifications/preferences',
         expect.objectContaining({
-          body: { enable_line: false },
+          body: { channels: { line: false } },
         })
       )
+      expect(preferences.value?.enable_line).toBe(false)
     })
   })
 
@@ -312,13 +358,10 @@ describe('useNotificationPreferences', () => {
       expect(result).toBe(false)
     })
 
-    it('should fetch channel details successfully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        channels: mockChannelDetails,
-      })
+    it('should map the channel list to details and available channels', async () => {
+      mockFetch.mockResolvedValueOnce({ success: true, data: { channels: apiChannels } })
 
-      const { fetchChannelDetails, channelDetails } = useNotificationPreferences()
+      const { fetchChannelDetails, channelDetails, availableChannels } = useNotificationPreferences()
       const result = await fetchChannelDetails()
 
       expect(result).toBe(true)
@@ -326,7 +369,13 @@ describe('useNotificationPreferences', () => {
         'http://localhost:8056/api/member/notifications/channels',
         { headers: { 'X-Member-Token': 'test-token' } }
       )
-      expect(channelDetails.value).toEqual(mockChannelDetails)
+      expect(channelDetails.value).toEqual({
+        line: { available: true, displayName: 'John Doe' },
+        push: { available: true },
+        email: { available: true, address: 'tes***@example.com' },
+        sms: { available: false, phone: undefined },
+      })
+      expect(availableChannels.value).toEqual(mockAvailableChannels)
     })
 
     it('should return false on fetch failure', async () => {
@@ -349,11 +398,10 @@ describe('useNotificationPreferences', () => {
       expect(result).toBe(false)
     })
 
-    it('should fetch history successfully', async () => {
+    it('should fetch page 1 and map the notifications', async () => {
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: mockNotificationHistory,
-        pagination: { limit: 20, offset: 0, total: 2 },
+        data: historyPage([apiNotification('n1', 'booking_confirmation', true)], 2),
       })
 
       const { fetchHistory, history, historyPagination } = useNotificationPreferences()
@@ -361,73 +409,46 @@ describe('useNotificationPreferences', () => {
 
       expect(result).toBe(true)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/member/notifications/history?limit=20&offset=0',
+        'http://localhost:8056/api/member/notifications/history?limit=20&page=1',
         { headers: { 'X-Member-Token': 'test-token' } }
       )
-      expect(history.value).toEqual(mockNotificationHistory)
+      expect(history.value).toEqual([{
+        id: 'n1',
+        notification_type: 'booking_confirmation',
+        title: 'T-n1',
+        body: 'M-n1',
+        successful_channel: null,
+        overall_status: 'READ',
+        sent_at: '2024-01-01T10:00:00Z',
+        reference_type: 'booking',
+        reference_id: 'booking-123',
+        date_created: '2024-01-01T10:00:00Z',
+      }])
       expect(historyPagination.value).toEqual({ limit: 20, offset: 0, total: 2 })
     })
 
     it('should append history on offset > 0', async () => {
-      // First fetch
       stateStore.set('notification_history', { value: mockNotificationHistory })
-      stateStore.set('notification_history_pagination', { value: { limit: 20, offset: 0, total: 4 } })
+      stateStore.set('notification_history_pagination', { value: { limit: 20, offset: 0, total: 21 } })
 
-      const additionalHistory = [
-        {
-          id: 'notif-3',
-          notification_type: 'test',
-          title: 'Test',
-          body: 'Test body',
-          successful_channel: 'email',
-          overall_status: 'delivered',
-          sent_at: '2024-01-03T10:00:00Z',
-          reference_type: null,
-          reference_id: null,
-          date_created: '2024-01-03T10:00:00Z',
-        },
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: additionalHistory,
-        pagination: { limit: 20, offset: 20, total: 4 },
-      })
+      mockFetch.mockResolvedValueOnce({ success: true, data: historyPage([apiNotification('n3', 'test')], 21, 2) })
 
       const { fetchHistory, history } = useNotificationPreferences()
       await fetchHistory(20, 20)
 
+      expect(mockFetch.mock.calls[0]![0]).toBe('http://localhost:8056/api/member/notifications/history?limit=20&page=2')
       expect(history.value.length).toBe(3)
     })
 
     it('should replace history on offset = 0', async () => {
       stateStore.set('notification_history', { value: mockNotificationHistory })
 
-      const newHistory = [
-        {
-          id: 'notif-new',
-          notification_type: 'new',
-          title: 'New',
-          body: 'New body',
-          successful_channel: 'push',
-          overall_status: 'delivered',
-          sent_at: '2024-01-04T10:00:00Z',
-          reference_type: null,
-          reference_id: null,
-          date_created: '2024-01-04T10:00:00Z',
-        },
-      ]
-
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: newHistory,
-        pagination: { limit: 20, offset: 0, total: 1 },
-      })
+      mockFetch.mockResolvedValueOnce({ success: true, data: historyPage([apiNotification('new', 'new')], 1) })
 
       const { fetchHistory, history } = useNotificationPreferences()
       await fetchHistory()
 
-      expect(history.value).toEqual(newHistory)
+      expect(history.value.map(h => h.id)).toEqual(['new'])
     })
   })
 
@@ -436,28 +457,25 @@ describe('useNotificationPreferences', () => {
       stateStore.set('notification_history', { value: mockNotificationHistory })
       stateStore.set('notification_history_pagination', { value: { limit: 20, offset: 0, total: 2 } })
 
-      const { loadMoreHistory } = useNotificationPreferences()
+      const { loadMoreHistory, hasMoreHistory } = useNotificationPreferences()
       const result = await loadMoreHistory()
 
       expect(result).toBe(false)
+      expect(hasMoreHistory.value).toBe(false)
       expect(mockFetch).not.toHaveBeenCalled()
     })
 
-    it('should load more items when available', async () => {
+    it('should load the next page when available', async () => {
       stateStore.set('notification_history', { value: mockNotificationHistory })
       stateStore.set('notification_history_pagination', { value: { limit: 20, offset: 0, total: 40 } })
 
-      mockFetch.mockResolvedValueOnce({
-        success: true,
-        data: [],
-        pagination: { limit: 20, offset: 20, total: 40 },
-      })
+      mockFetch.mockResolvedValueOnce({ success: true, data: historyPage([], 40, 2) })
 
       const { loadMoreHistory } = useNotificationPreferences()
       await loadMoreHistory()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/member/notifications/history?limit=20&offset=20',
+        'http://localhost:8056/api/member/notifications/history?limit=20&page=2',
         expect.any(Object)
       )
     })

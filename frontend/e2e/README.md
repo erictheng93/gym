@@ -55,7 +55,7 @@ bunx playwright show-report
 
 ## CI
 
-`.github/workflows/ci.yml` 的 `e2e` job（matrix：`admin-web`、`coach-app`）：PostGIS service →
+`.github/workflows/ci.yml` 的 `e2e` job（matrix：`admin-web`、`coach-app`、`member-app`）：PostGIS service →
 `drizzle-kit push` → `db:seed` → 以 `ENABLE_CRON=false RELAX_RATE_LIMITS=true` 啟動後端 →
 `E2E_APPS=<app> bunx playwright test --project=<app>`。失敗時上傳 `playwright-report/`、
 `test-results/`（含 trace 與 `backend.log`）為 artifact：`gh run download <run-id>`。
@@ -64,21 +64,20 @@ bunx playwright show-report
 - `RELAX_RATE_LIMITS=true`：整套測試約登入 50 次，正式環境的登入限制（15 分鐘 5 次）會鎖住；
   `NODE_ENV=production` 時此變數無效。
 
-### 尚未接入 CI 的 project
+### member-app 使用的會員 API
 
-`member-app` 不在 matrix 中。在 CI 上試跑（剛 seed 的資料庫、已等待 hydration、已修正 `/profile/*` 路由）時
-49 個測試有 11 個失敗，原因是後端缺漏而非測試或 seed：
+`member-app` 已在 matrix 中。先前在 CI 上試跑時的失敗都是前後端 API 不一致，已修正（前端 composable 負責把後端 camelCase 回應轉成頁面使用的格式）：
 
-| 失敗的 spec | 後端回應 |
-|------|------|
-| `member-profile`（標頭、會員資料、統計卡、編輯）、`member-entry`（會員編號 `MEM001`、會員狀態「有效會員」）、`member-notifications` 設定頁 | `GET /api/member/profile` 404（profile 路由掛在 `/api/member/me` 與 `/api/member`，沒有 `/profile`） |
-| `member-workouts` 空狀態 | `GET /api/member/workouts/stats` 500 |
-| `member-measurements` 空狀態 | `GET /api/member/measurements/stats` 404 |
-| `member-contracts` 暫停 modal（合約卡片沒有「申請暫停」按鈕） | 待調查（可能也依賴 profile） |
+| 頁面 | 後端端點 |
+|------|---------|
+| 首頁（入場 QR）、個人資料 | `GET /api/member/me`、`PUT /api/member/me`（沒有 `/api/member/profile`） |
+| 通知設定 | `GET/PUT /api/member/notifications/preferences`（巢狀 `channels`／`types`／`quietHours`）、`/channels`、`/history?page=` |
+| 運動紀錄 | `GET /api/member/workouts`、`GET /api/member/workouts/stats?period=week\|month\|year` |
+| 體態記錄 | `GET /api/member/measurements`、`GET /api/member/measurements/stats?period=<天數>` |
+| 課程預約 | `GET /api/member/classes/sessions`、`GET/POST /api/member/bookings`、`DELETE /api/member/bookings/:id` |
+| 我的合約 | `GET /api/member/contracts`（唯讀；暫停／恢復請洽櫃檯，#121） |
 
-另外 `GET /api/member/classes/sessions`、`GET /api/member/bookings` 也回 404（目前的 booking spec 只檢查空狀態，所以仍通過）。
-
-修好上述端點後，在 matrix 加入 `member-app` 即可。
+seed 沒有課程場次與預約，所以 booking spec 只檢查空狀態；預約規則（容量／候補、需有效合約、上課簽到時才扣堂數）由後端測試 `backend/tests/member-app-endpoints.test.ts` 涵蓋。
 
 ### 已知的 production bug（`test.fail()`）
 

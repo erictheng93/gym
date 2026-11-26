@@ -51,6 +51,8 @@ import memberMeasurementsRoutes from './routes/member-measurements.js';
 import memberIssuesRoutes from './routes/member-issues.js';
 import memberPaymentsRoutes from './routes/member-payments.js';
 import memberContractsRoutes from './routes/member-contracts.js';
+import memberClassesRoutes from './routes/member-classes.js';
+import memberBookingsRoutes from './routes/member-bookings.js';
 
 // Coach-App routes
 import coachAuthRoutes from './routes/coach-auth.js';
@@ -233,6 +235,8 @@ app.route('/api/member/measurements', memberMeasurementsRoutes);
 app.route('/api/member/issues', memberIssuesRoutes);
 app.route('/api/member/payments', memberPaymentsRoutes);
 app.route('/api/member/contracts', memberContractsRoutes);
+app.route('/api/member/classes', memberClassesRoutes);
+app.route('/api/member/bookings', memberBookingsRoutes);
 app.route('/api/member', memberProfileRoutes);
 
 // Coach-App routes (authenticated via X-Coach-Token)

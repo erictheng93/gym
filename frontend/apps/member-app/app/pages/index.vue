@@ -171,9 +171,9 @@ const contractStatusText = computed(() => {
   const contract = member.value?.activeContract
   if (!contract) return '無有效合約'
 
-  const plan = (contract as { plan?: { name: string, plan_type: string } }).plan
+  const plan = contract.plan
   if (plan?.plan_type === 'COUNT_BASED') {
-    return `${plan.name} - 剩餘 ${contract.remaining_counts} 次`
+    return `${plan.name || '堂數方案'} - 剩餘 ${contract.remaining_counts ?? 0} 次`
   }
 
   if (contract.end_date) {

@@ -65,10 +65,59 @@ interface BookingResult {
   waitlist_position?: number
 }
 
+// --- Backend payloads (backend/src/routes/member-bookings.ts, camelCase) ---
+
+type ApiBookingStatus = 'CONFIRMED' | 'WAITLIST' | 'CANCELLED' | 'ATTENDED' | 'NO_SHOW'
+
+export interface ApiBooking {
+  id: string
+  sessionId: string
+  contractId: string | null
+  bookingStatus: ApiBookingStatus
+  waitlistPosition: number | null
+  bookedAt: string | null
+  cancelledAt?: string | null
+  attendedAt?: string | null
+  session?: { sessionDate: string; startTime: string; endTime: string; room: string | null; sessionStatus: string }
+  class?: { id: string; name: string; category: string | null }
+  instructor?: { id: string; fullName: string } | null
+  hasReview?: boolean
+}
+
 interface BookingsResponse {
   success: boolean
-  data: Booking[]
-  total?: number
+  data: { bookings: ApiBooking[] }
+}
+
+interface CreateBookingResponse {
+  success: boolean
+  message?: string
+  data?: { booking: ApiBooking }
+}
+
+/** The backend calls the waitlist state WAITLIST; the app uses WAITLISTED. */
+const toBookingStatus = (status: ApiBookingStatus): Booking['booking_status'] =>
+  status === 'WAITLIST' ? 'WAITLISTED' : status
+
+export function toBooking(b: ApiBooking, memberId: string): Booking {
+  return {
+    id: b.id,
+    session_id: b.sessionId,
+    member_id: memberId,
+    contract_id: b.contractId ?? undefined,
+    booking_status: toBookingStatus(b.bookingStatus),
+    waitlist_position: b.waitlistPosition,
+    booked_at: b.bookedAt ?? '',
+    cancelled_at: b.cancelledAt ?? null,
+    attended_at: b.attendedAt ?? null,
+    class_name: b.class?.name,
+    session_date: b.session?.sessionDate,
+    start_time: b.session?.startTime?.slice(0, 5),
+    end_time: b.session?.endTime?.slice(0, 5),
+    instructor_name: b.instructor?.fullName,
+    room: b.session?.room ?? undefined,
+    has_review: b.hasReview ?? false,
+  }
 }
 
 export const useBookings = () => {
@@ -140,7 +189,7 @@ export const useBookings = () => {
         }
 
         const params = new URLSearchParams()
-        if (options?.status) params.append('status', options.status)
+        if (options?.status) params.append('status', options.status === 'WAITLISTED' ? 'WAITLIST' : options.status)
         if (options?.upcoming !== undefined) params.append('upcoming', String(options.upcoming))
         if (options?.limit) params.append('limit', String(options.limit))
 
@@ -148,14 +197,14 @@ export const useBookings = () => {
           headers: getAuthHeader(),
         })
 
-        if (response.success) {
-          myBookings.value = response.data
-          splitBookings(response.data)
+        if (!response.success) return []
+        const list = response.data.bookings.map(b => toBooking(b, member.value!.id))
+        myBookings.value = list
+        splitBookings(list)
 
-          // Cache the response for offline use
-          await setCache(cacheKey, response.data, CACHE_TTL)
-        }
-        return response.data
+        // Cache the response for offline use
+        await setCache(cacheKey, list, CACHE_TTL)
+        return list
       } catch {
         // On network error, try to use cached data
         const cached = await getCache<Booking[]>(cacheKey)
@@ -181,24 +230,24 @@ export const useBookings = () => {
     }
 
     try {
-      const response = await $fetch<BookingResult>(`${apiUrl}/api/member/bookings`, {
+      const response = await $fetch<CreateBookingResponse>(`${apiUrl}/api/member/bookings`, {
         method: 'POST',
         headers: getAuthHeader(),
-        body: {
-          session_id: sessionId,
-          contract_id: contractId,
-        },
+        body: contractId ? { sessionId, contractId } : { sessionId },
       })
 
-      if (response.success && response.booking) {
-        // Add to bookings list
-        myBookings.value.unshift(response.booking)
-        if (response.booking.booking_status === 'CONFIRMED' || response.booking.booking_status === 'WAITLISTED') {
-          upcomingBookings.value.unshift(response.booking)
-        }
+      const booking = response.success && response.data ? toBooking(response.data.booking, member.value.id) : undefined
+      if (booking) {
+        // Reload so the new booking comes with its session/class details
+        await fetchMyBookings()
       }
 
-      return response
+      return {
+        success: response.success,
+        message: response.message ?? '',
+        booking,
+        waitlist_position: booking?.waitlist_position ?? undefined,
+      }
     } catch (error: unknown) {
       return {
         success: false,

@@ -203,24 +203,35 @@ describe('useAuthSession', () => {
       expect(member.value).toBeNull()
     })
 
-    it('should fetch and set member data on success', async () => {
+    // Shape of GET /api/member/me (backend/src/routes/member-profile.ts)
+    const apiContract = (id: string) => ({
+      id,
+      contractNo: `NO-${id}`,
+      status: 'ACTIVE',
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+      remainingCounts: 8,
+      plan: { id: 'p1', name: '10 堂課', type: 'COUNT_BASED' },
+    })
+    const meData = (contracts: unknown[]) => ({
+      member: {
+        id: 'member-1',
+        memberCode: 'M001',
+        fullName: 'Test User',
+        phone: '0912345678',
+        email: 'test@example.com',
+        status: 'ACTIVE',
+      },
+      branch: { id: 'branch-1', name: '台北總店' },
+      contracts,
+    })
+
+    it('should map the nested /me payload to the session member', async () => {
       cookieStore.set('member_access_token', { value: 'valid-token' })
 
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: {
-          id: 'member-1',
-          member_code: 'M001',
-          full_name: 'Test User',
-          phone: '0912345678',
-          email: 'test@example.com',
-          branch_id: 'branch-1',
-          member_status: 'ACTIVE',
-          contracts: [
-            { id: 'c1', contract_status: 'ACTIVE', start_date: '2024-01-01', end_date: '2024-12-31' },
-            { id: 'c2', contract_status: 'EXPIRED', start_date: '2023-01-01', end_date: '2023-12-31' },
-          ],
-        },
+        data: meData([{ ...apiContract('c0'), status: 'PAUSED' }, apiContract('c1')]),
       })
 
       const { fetchMember, member } = useAuthSession()
@@ -231,9 +242,25 @@ describe('useAuthSession', () => {
         'http://localhost:8056/api/member/me',
         { headers: { 'X-Member-Token': 'valid-token' } }
       )
-      expect(member.value).toBeTruthy()
-      expect(member.value?.id).toBe('member-1')
-      expect(member.value?.activeContract?.id).toBe('c1')
+      expect(member.value).toEqual({
+        id: 'member-1',
+        member_code: 'M001',
+        full_name: 'Test User',
+        phone: '0912345678',
+        email: 'test@example.com',
+        branch_id: 'branch-1',
+        branch_name: '台北總店',
+        member_status: 'ACTIVE',
+        activeContract: {
+          id: 'c1',
+          contract_no: 'NO-c1',
+          contract_status: 'ACTIVE',
+          start_date: '2024-01-01',
+          end_date: '2024-12-31',
+          remaining_counts: 8,
+          plan: { name: '10 堂課', plan_type: 'COUNT_BASED' },
+        },
+      })
     })
 
     it('should use provided token instead of stored token', async () => {
@@ -241,16 +268,7 @@ describe('useAuthSession', () => {
 
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: {
-          id: 'member-1',
-          member_code: 'M001',
-          full_name: 'Test User',
-          phone: null,
-          email: null,
-          branch_id: null,
-          member_status: 'ACTIVE',
-          contracts: [],
-        },
+        data: meData([]),
       })
 
       const { fetchMember } = useAuthSession()
@@ -281,19 +299,7 @@ describe('useAuthSession', () => {
 
       mockFetch.mockResolvedValueOnce({
         success: true,
-        data: {
-          id: 'member-1',
-          member_code: 'M001',
-          full_name: 'Test User',
-          phone: null,
-          email: null,
-          branch_id: null,
-          member_status: 'ACTIVE',
-          contracts: [
-            { id: 'c1', contract_status: 'EXPIRED' },
-            { id: 'c2', contract_status: 'CANCELLED' },
-          ],
-        },
+        data: meData([{ ...apiContract('c1'), status: 'PAUSED' }]),
       })
 
       const { fetchMember, member } = useAuthSession()
