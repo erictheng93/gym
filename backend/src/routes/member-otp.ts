@@ -1,18 +1,35 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, otpTokens, otpSendLogs, members, branches } from '../db/index.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { db, otpTokens, otpSendLogs, members, branches, tenants } from '../db/index.js';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { rateLimiter, getClientIp } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
-import { generateOtp, consumeOtp, OTP_TTL_MS } from '../services/otp.js';
+import { smsService } from '../services/sms.js';
+import {
+  generateOtp,
+  consumeOtp,
+  deliverPhoneOtp,
+  otpDevMode,
+  phoneOtpLogError,
+  OTP_TTL_MS,
+  SMS_UNAVAILABLE_RESPONSE,
+} from '../services/otp.js';
 
 // =============================================================================
 // MEMBER OTP ROUTES
 // =============================================================================
 // OTP-based authentication for member-app
 // Endpoints: /send, /verify, /refresh
+//
+// Tenant scope: one phone/email can belong to members of several gyms
+// (tenants). The member-app is deployed per gym and sends that gym's
+// `tenantSlug`; the lookup is then limited to that tenant. Without it, a
+// login that matches more than one member is refused (MULTIPLE_ACCOUNTS)
+// rather than logging into an arbitrary gym. That answer is only given after
+// the code is verified, so an unverified caller learns nothing about which
+// gyms a number belongs to.
 
 type OtpVariables = {
   otpRateKey: string;
@@ -20,28 +37,23 @@ type OtpVariables = {
 
 const app = new Hono<{ Variables: OtpVariables }>();
 
-const MEMBER_OTP_AUTH_SELECT = {
+const LOGIN_MEMBER_SELECT = {
   id: members.id,
   memberCode: members.memberCode,
   branchId: members.branchId,
   tenantId: members.tenantId,
   fullName: members.fullName,
+  email: members.email,
   status: members.status,
 };
 
 const BRANCH_OTP_AUTH_SELECT = {
   id: branches.id,
   name: branches.name,
-  tenantId: branches.tenantId,
 };
 
-const OTP_MEMBER_SELECT = {
-  id: members.id,
-  phone: members.phone,
-  email: members.email,
-  fullName: members.fullName,
-  status: members.status,
-};
+/** More rows than this are never needed: any count above 1 is "ambiguous". */
+const LOGIN_MEMBER_LOOKUP_LIMIT = 10;
 
 const OTP_REFRESH_MEMBER_JOIN_SELECT = {
   id: members.id,
@@ -104,7 +116,14 @@ const setOtpRateKey: MiddlewareHandler<
   await next();
 };
 
-const verifyOtpSchema = otpIdentifierSchema.and(z.object({
+/** The gym the member-app is deployed for (tenants.slug); see the header note. */
+const loginScopeSchema = z.object({
+  tenantSlug: z.string().trim().min(1).max(100).optional(),
+});
+
+const sendOtpSchema = otpIdentifierSchema.and(loginScopeSchema);
+
+const verifyOtpSchema = otpIdentifierSchema.and(loginScopeSchema).and(z.object({
   code: z.string().length(6, 'OTP 必須是 6 位數'),
 }));
 
@@ -135,45 +154,74 @@ function tokenIdentifierMatches(type: 'phone' | 'email', identifier: string) {
     : eq(otpTokens.identifier, identifier);
 }
 
+/**
+ * Members a login identifier can mean: matching phone/email, within the
+ * tenant named by `tenantSlug` when given. Deterministic order.
+ */
+async function findLoginMembers(type: 'phone' | 'email', identifier: string, tenantSlug?: string) {
+  const query = db.select(LOGIN_MEMBER_SELECT).from(members);
+  const scoped = tenantSlug
+    ? query
+      .innerJoin(tenants, eq(tenants.id, members.tenantId))
+      .where(and(memberIdentifierMatches(type, identifier), eq(tenants.slug, tenantSlug)))
+    : query.where(memberIdentifierMatches(type, identifier));
+  return scoped
+    .orderBy(asc(members.createdAt), asc(members.id))
+    .limit(LOGIN_MEMBER_LOOKUP_LIMIT);
+}
+
+const SEND_ACCEPTED_RESPONSE = {
+  success: true,
+  message: '如果此帳號存在，驗證碼已發送',
+} as const;
+
 // -----------------------------------------------------------------------------
 // POST /api/member/otp/send - Send OTP
 // -----------------------------------------------------------------------------
 
 app.post(
   '/send',
-  zValidator('json', otpIdentifierSchema),
+  zValidator('json', sendOtpSchema),
   setOtpRateKey,
   otpSendRateLimiter,
   otpSendHourlyRateLimiter,
   async (c) => {
-    const { identifier, type } = c.req.valid('json');
+    const { identifier, type, tenantSlug } = c.req.valid('json');
     const ipAddress = otpClientIp(c);
     const userAgent = c.req.header('user-agent') || '';
 
-    // Find member by phone or email
-    const [member] = await db
-      .select(OTP_MEMBER_SELECT)
-      .from(members)
-      .where(memberIdentifierMatches(type, identifier))
-      .limit(1);
-
-    // Always return success to prevent enumeration
-    // But only send OTP if member exists and is active
-    if (!member || member.status === 'BANNED') {
-      // Log failed attempt
+    // No SMS account at all: refuse every phone request alike (before the
+    // member lookup, so the answer does not reveal whether the number exists)
+    if (type === 'phone' && !otpDevMode() && !(await smsService.isAnySmsConfigured())) {
       await db.insert(otpSendLogs).values({
         identifier,
         identifierType: type,
         ipAddress,
         success: false,
-        errorMessage: !member ? '會員不存在' : '會員已停權',
+        errorMessage: 'SMS 未設定',
+      });
+      return c.json(SMS_UNAVAILABLE_RESPONSE, 503);
+    }
+
+    const candidates = (await findLoginMembers(type, identifier, tenantSlug))
+      .filter(m => m.status !== 'BANNED');
+
+    // Always return success to prevent enumeration
+    // But only send OTP if a usable member exists
+    if (candidates.length === 0) {
+      await db.insert(otpSendLogs).values({
+        identifier,
+        identifierType: type,
+        ipAddress,
+        success: false,
+        errorMessage: '會員不存在或已停權',
       });
 
-      return c.json({
-        success: true,
-        message: '如果此帳號存在，驗證碼已發送',
-      });
+      return c.json(SEND_ACCEPTED_RESPONSE);
     }
+    // Several gyms may match; /verify decides. Name/branch only for a single match.
+    const member = candidates[0];
+    const singleMatch = candidates.length === 1;
 
     // Generate OTP
     const code = generateOtp();
@@ -199,15 +247,17 @@ app.post(
 
     // Send OTP via appropriate channel
     let sendSuccess = false;
+    let sendError: string | null = '發送失敗';
+    let smsUnavailable = false;
 
-    if (type === 'email' && member.email) {
+    if (type === 'email') {
       sendSuccess = await emailService.send({
-        to: member.email,
+        to: identifier,
         subject: '您的登入驗證碼',
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>登入驗證碼</h2>
-            <p>親愛的 ${member.fullName}，</p>
+            <p>親愛的 ${singleMatch ? member.fullName : '會員'}，</p>
             <p>您的驗證碼是：</p>
             <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #333; background: #f5f5f5; padding: 16px; text-align: center; border-radius: 8px;">
               ${code}
@@ -217,10 +267,17 @@ app.post(
           </div>
         `,
       });
-    } else if (type === 'phone') {
-      // TODO: Integrate SMS provider (e.g., Twilio, AWS SNS)
-      console.log(`[SMS] OTP for ${identifier}: ${code}`);
-      sendSuccess = true; // Assume success for now
+      if (sendSuccess) sendError = null;
+    } else {
+      const delivery = await deliverPhoneOtp({
+        phone: identifier,
+        code,
+        memberId: singleMatch ? member.id : undefined,
+        branchId: member.branchId,
+      });
+      sendSuccess = delivery.ok && delivery.delivered;
+      sendError = phoneOtpLogError(delivery);
+      smsUnavailable = !delivery.ok;
     }
 
     // Log send attempt
@@ -229,14 +286,23 @@ app.post(
       identifierType: type,
       ipAddress,
       success: sendSuccess,
-      errorMessage: sendSuccess ? null : '發送失敗',
+      errorMessage: sendError,
     });
 
+    if (smsUnavailable) {
+      // The code never reached the phone: drop it and say so
+      await db.delete(otpTokens).where(and(
+        eq(otpTokens.identifier, identifier),
+        eq(otpTokens.identifierType, type),
+        eq(otpTokens.code, code),
+      ));
+      return c.json(SMS_UNAVAILABLE_RESPONSE, 503);
+    }
+
     return c.json({
-      success: true,
-      message: '如果此帳號存在，驗證碼已發送',
+      ...SEND_ACCEPTED_RESPONSE,
       // In development/test, return code for testing and frontend display
-      ...((process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') && {
+      ...(otpDevMode() && {
         _devCode: code,
         data: {
           otp: code,
@@ -257,7 +323,7 @@ app.post(
   setOtpRateKey,
   otpVerifyRateLimiter,
   async (c) => {
-    const { identifier, type, code } = c.req.valid('json');
+    const { identifier, type, code, tenantSlug } = c.req.valid('json');
 
     const result = await consumeOtp(
       and(tokenIdentifierMatches(type, identifier), eq(otpTokens.identifierType, type)),
@@ -268,28 +334,27 @@ app.post(
       return c.json({ success: false, ...result.failure }, 400);
     }
 
-    // Find member
-    const [member] = await db
-      .select(MEMBER_OTP_AUTH_SELECT)
-      .from(members)
-      .where(memberIdentifierMatches(type, identifier))
-      .limit(1);
+    // The caller has now proven the phone/email; decide which member it means
+    const matches = await findLoginMembers(type, identifier, tenantSlug);
+    const candidates = matches.filter(m => m.status !== 'BANNED');
 
-    if (!member) {
-      return c.json({
-        success: false,
-        error: '會員不存在',
-        code: 'MEMBER_NOT_FOUND',
-      }, 404);
+    if (candidates.length === 0) {
+      return matches.length > 0
+        ? c.json({ success: false, error: '帳號已停權', code: 'MEMBER_BANNED' }, 403)
+        : c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
     }
 
-    if (member.status === 'BANNED') {
+    if (candidates.length > 1) {
       return c.json({
         success: false,
-        error: '帳號已停權',
-        code: 'MEMBER_BANNED',
-      }, 403);
+        error: type === 'phone'
+          ? '此手機號碼在多個場館都有會員資料，請使用您所屬場館的會員 App 登入，或洽櫃台協助'
+          : '此 Email 在多個場館都有會員資料，請使用您所屬場館的會員 App 登入，或洽櫃台協助',
+        code: 'MULTIPLE_ACCOUNTS',
+      }, 409);
     }
+
+    const member = candidates[0];
 
     // Get branch info
     const [branch] = await db
@@ -303,7 +368,7 @@ app.post(
       id: member.id,
       memberCode: member.memberCode,
       branchId: member.branchId,
-      tenantId: member.tenantId || branch?.tenantId || '',
+      tenantId: member.tenantId,
     });
 
     return c.json({

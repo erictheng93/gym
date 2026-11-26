@@ -5,13 +5,22 @@ import { db, members, branches, contracts, membershipPlans, memberCredentials, m
 import { eq, and, ne, desc, inArray, sql } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter, limitMax, getClientIp } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
-import { generateOtp, consumeOtp, memberPhoneOtpIdentifier, OTP_TTL_MS } from '../services/otp.js';
+import {
+  generateOtp,
+  consumeOtp,
+  deliverPhoneOtp,
+  memberPhoneOtpIdentifier,
+  otpDevMode,
+  phoneOtpLogError,
+  OTP_TTL_MS,
+  SMS_UNAVAILABLE_RESPONSE,
+} from '../services/otp.js';
 
 // =============================================================================
 // MEMBER PROFILE ROUTES
 // =============================================================================
 // Profile management for member-app
-// Endpoints: /me (GET, PUT), /phone/otp, /complete-profile
+// Endpoints: /me (GET, PUT), /phone/otp, /phone, /complete-profile
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
@@ -27,10 +36,12 @@ app.use('*', requireMember);
 // Validation Schemas
 // -----------------------------------------------------------------------------
 
+// No `phone`: a phone change must be proven with a code (POST /phone/otp, then
+// POST /phone). A body that still carries one is refused, not silently ignored.
 const updateProfileSchema = z.object({
   fullName: z.string().min(2, '姓名至少 2 個字元').max(100).optional(),
-  phone: z.string().regex(/^09\d{8}$/, '請輸入有效的手機號碼').optional(),
-  email: z.string().email('請輸入有效的 Email').optional(),
+  phone: z.unknown().optional(),
+  email:z.string().email('請輸入有效的 Email').optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式: YYYY-MM-DD').optional(),
   address: z.string().max(500).optional(),
@@ -46,9 +57,16 @@ const phoneOtpSchema = z.object({
   phone: phoneSchema,
 });
 
+const otpCodeSchema = z.string().regex(/^\d{6}$/, '驗證碼必須是 6 位數字');
+
+const changePhoneSchema = z.object({
+  phone: phoneSchema,
+  otpCode: otpCodeSchema,
+});
+
 const completeProfileSchema = z.object({
   phone: phoneSchema,
-  otpCode: z.string().regex(/^\d{6}$/, '驗證碼必須是 6 位數字'),
+  otpCode: otpCodeSchema,
   fullName: z.string().trim().min(2, '姓名至少 2 個字元').max(100).optional(),
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式: YYYY-MM-DD').optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
@@ -253,31 +271,25 @@ app.put(
   zValidator('json', updateProfileSchema),
   async (c) => {
     const memberInfo = c.get('member')!;
-    const updates = c.req.valid('json');
+    const { phone, ...updates } = c.req.valid('json');
 
-    // Concurrently check if email or phone is already taken by another member
-    const [existingEmailMembers, existingPhoneMembers] = await Promise.all([
-      updates.email
-        ? db.select(MEMBER_ID_SELECT).from(members).where(and(eq(members.email, updates.email), ne(members.id, memberInfo.id))).limit(1)
-        : Promise.resolve([]),
-      updates.phone
-        ? db.select(MEMBER_ID_SELECT).from(members).where(and(eq(members.phone, updates.phone), ne(members.id, memberInfo.id))).limit(1)
-        : Promise.resolve([]),
-    ]);
+    if (phone !== undefined) {
+      return c.json({
+        success: false,
+        error: '變更手機號碼需要簡訊驗證，請使用手機驗證流程',
+        code: 'PHONE_VERIFICATION_REQUIRED',
+      }, 400);
+    }
 
-    if (existingEmailMembers[0]) {
+    const [existingEmailMember] = updates.email
+      ? await db.select(MEMBER_ID_SELECT).from(members).where(and(eq(members.email, updates.email), ne(members.id, memberInfo.id))).limit(1)
+      : [];
+
+    if (existingEmailMember) {
       return c.json({
         success: false,
         error: '此 Email 已被使用',
         code: 'EMAIL_TAKEN',
-      }, 400);
-    }
-
-    if (existingPhoneMembers[0]) {
-      return c.json({
-        success: false,
-        error: '此手機號碼已被使用',
-        code: 'PHONE_TAKEN',
       }, 400);
     }
 
@@ -383,7 +395,7 @@ app.post(
     const ipAddress = ip === 'unknown' ? undefined : ip;
 
     const [member] = await db
-      .select({ id: members.id, status: members.status })
+      .select({ id: members.id, status: members.status, branchId: members.branchId })
       .from(members)
       .where(ownMember(memberInfo))
       .limit(1);
@@ -415,19 +427,26 @@ app.post(
       userAgent: c.req.header('user-agent') || '',
     });
 
-    // TODO: Integrate SMS provider (same placeholder as /api/member/otp/send)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[SMS] Phone verification code for ${phone}: ${code}`);
-    }
+    const delivery = await deliverPhoneOtp({ phone, code, memberId: member.id, branchId: member.branchId });
 
     await db.insert(otpSendLogs).values({
       identifier: phone,
       identifierType: 'phone',
       ipAddress,
-      success: true,
+      success: delivery.ok && delivery.delivered,
+      errorMessage: phoneOtpLogError(delivery),
     });
 
-    const exposeCode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    if (!delivery.ok) {
+      // The code never reached the phone: drop it and say so
+      await db.delete(otpTokens).where(and(
+        eq(otpTokens.identifier, identifier),
+        eq(otpTokens.identifierType, 'phone'),
+      ));
+      return c.json(SMS_UNAVAILABLE_RESPONSE, 503);
+    }
+
+    const exposeCode = otpDevMode();
     return c.json({
       success: true,
       message: '驗證碼已發送',
@@ -447,6 +466,53 @@ app.post(
 
 class PhoneTakenError extends Error {}
 
+/**
+ * Save `phone` (plus `fields`) on the member if `otpCode` is the code sent to
+ * that phone for this member. Same-phone claims in a tenant are serialized by
+ * an advisory lock, and a phone held by another member of the tenant is refused.
+ */
+async function saveVerifiedPhone(
+  memberInfo: { id: string; tenantId: string },
+  phone: string,
+  otpCode: string,
+  fields: Partial<Pick<typeof members.$inferInsert,
+    'fullName' | 'birthday' | 'gender' | 'emergencyContact' | 'emergencyPhone'>> = {},
+) {
+  try {
+    return await db.transaction(async (tx) => {
+      // Serialize claims of the same phone within a tenant
+      const lockKey = `member-phone:${memberInfo.tenantId}:${phone}`;
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+
+      if (await phoneTakenByOther(memberInfo, phone, tx)) {
+        throw new PhoneTakenError();
+      }
+
+      const otp = await consumeOtp(
+        and(
+          eq(otpTokens.identifier, memberPhoneOtpIdentifier(memberInfo.id, phone)),
+          eq(otpTokens.identifierType, 'phone'),
+        ),
+        otpCode,
+        tx,
+      );
+      // Returning (not throwing) commits the counted attempt
+      if (!otp.ok) return { ok: false as const, failure: otp.failure };
+
+      const [updatedMember] = await tx
+        .update(members)
+        .set({ ...fields, phone, updatedAt: new Date() })
+        .where(ownMember(memberInfo))
+        .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
+
+      return { ok: true as const, member: updatedMember };
+    });
+  } catch (error) {
+    if (error instanceof PhoneTakenError) return { ok: false as const, taken: true as const };
+    throw error;
+  }
+}
+
 app.post(
   '/complete-profile',
   zValidator('json', completeProfileSchema),
@@ -455,65 +521,65 @@ app.post(
     const memberInfo = c.get('member')!;
     const { phone, otpCode, ...fields } = c.req.valid('json');
 
-    try {
-      const result = await db.transaction(async (tx) => {
-        // Serialize claims of the same phone within a tenant
-        const lockKey = `member-phone:${memberInfo.tenantId}:${phone}`;
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+    const result = await saveVerifiedPhone(memberInfo, phone, otpCode, {
+      ...(fields.fullName && { fullName: fields.fullName }),
+      birthday: fields.birthday || null,
+      gender: fields.gender || null,
+      emergencyContact: fields.emergencyContact || null,
+      emergencyPhone: fields.emergencyPhone || null,
+    });
 
-        if (await phoneTakenByOther(memberInfo, phone, tx)) {
-          throw new PhoneTakenError();
-        }
-
-        const otp = await consumeOtp(
-          and(
-            eq(otpTokens.identifier, memberPhoneOtpIdentifier(memberInfo.id, phone)),
-            eq(otpTokens.identifierType, 'phone'),
-          ),
-          otpCode,
-          tx,
-        );
-        // Returning (not throwing) commits the counted attempt
-        if (!otp.ok) return { ok: false as const, failure: otp.failure };
-
-        const [updatedMember] = await tx
-          .update(members)
-          .set({
-            phone,
-            ...(fields.fullName && { fullName: fields.fullName }),
-            birthday: fields.birthday || null,
-            gender: fields.gender || null,
-            emergencyContact: fields.emergencyContact || null,
-            emergencyPhone: fields.emergencyPhone || null,
-            updatedAt: new Date(),
-          })
-          .where(ownMember(memberInfo))
-          .returning(MEMBER_COMPLETE_PROFILE_RETURNING);
-
-        return { ok: true as const, member: updatedMember };
-      });
-
-      if (!result.ok) {
-        return c.json({ success: false, ...result.failure }, 400);
-      }
-      if (!result.member) {
-        return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
-      }
-
-      return c.json({
-        success: true,
-        message: '資料已更新',
-        data: {
-          member: result.member,
-          profileComplete: true,
-        },
-      });
-    } catch (error) {
-      if (error instanceof PhoneTakenError) {
-        return c.json(PHONE_TAKEN_RESPONSE, 409);
-      }
-      throw error;
+    if (!result.ok) {
+      return 'taken' in result
+        ? c.json(PHONE_TAKEN_RESPONSE, 409)
+        : c.json({ success: false, ...result.failure }, 400);
     }
+    if (!result.member) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
+
+    return c.json({
+      success: true,
+      message: '資料已更新',
+      data: {
+        member: result.member,
+        profileComplete: true,
+      },
+    });
+  }
+);
+
+// -----------------------------------------------------------------------------
+// POST /api/member/me/phone - Change the phone of an existing profile
+// -----------------------------------------------------------------------------
+// Body: { phone, otpCode } — `otpCode` from POST /phone/otp for this member and
+// this phone. Only the phone changes (complete-profile also rewrites the other
+// profile fields).
+
+app.post(
+  '/phone',
+  zValidator('json', changePhoneSchema),
+  completeProfileLimiter,
+  async (c) => {
+    const memberInfo = c.get('member')!;
+    const { phone, otpCode } = c.req.valid('json');
+
+    const result = await saveVerifiedPhone(memberInfo, phone, otpCode);
+
+    if (!result.ok) {
+      return 'taken' in result
+        ? c.json(PHONE_TAKEN_RESPONSE, 409)
+        : c.json({ success: false, ...result.failure }, 400);
+    }
+    if (!result.member) {
+      return c.json({ success: false, error: '會員不存在', code: 'MEMBER_NOT_FOUND' }, 404);
+    }
+
+    return c.json({
+      success: true,
+      message: '手機號碼已更新',
+      data: { member: result.member },
+    });
   }
 );
 

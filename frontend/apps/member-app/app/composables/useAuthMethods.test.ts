@@ -48,11 +48,11 @@ const mockSetLoading = vi.fn((loading: boolean) => {
 const mockNavigateTo = vi.fn()
 
 // Mock Nuxt composables
-vi.stubGlobal('useRuntimeConfig', () => ({
-  public: {
-    apiBaseUrl: 'http://localhost:8056',
-  },
-}))
+const runtimePublic: { apiBaseUrl: string; tenantSlug: string } = {
+  apiBaseUrl: 'http://localhost:8056',
+  tenantSlug: '',
+}
+vi.stubGlobal('useRuntimeConfig', () => ({ public: runtimePublic }))
 
 vi.stubGlobal('useState', (key: string, init?: () => unknown) => {
   if (!stateStore.has(key)) {
@@ -95,6 +95,28 @@ describe('useAuthMethods', () => {
     cookieStore.clear()
     stateStore.set('current_member', { value: null })
     mockFetchMember.mockResolvedValue(true)
+    runtimePublic.tenantSlug = ''
+  })
+
+  describe('OTP login tenant scope', () => {
+    it('sends the deployment tenantSlug with send and verify when configured', async () => {
+      runtimePublic.tenantSlug = 'my-gym'
+      mockFetch.mockResolvedValueOnce({ success: true, message: 'ok' })
+      mockFetch.mockResolvedValueOnce({ success: false, message: 'x' })
+
+      const { sendOtp, verifyOtp } = useAuthMethods()
+      await sendOtp('0912345678')
+      await verifyOtp('0912345678', '123456')
+
+      expect(mockFetch).toHaveBeenNthCalledWith(1, 'http://localhost:8056/api/member/otp/send', {
+        method: 'POST',
+        body: { identifier: '0912345678', type: 'phone', tenantSlug: 'my-gym' },
+      })
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://localhost:8056/api/member/otp/verify', {
+        method: 'POST',
+        body: { identifier: '0912345678', type: 'phone', code: '123456', tenantSlug: 'my-gym' },
+      })
+    })
   })
 
   describe('sendOtp', () => {
@@ -471,6 +493,41 @@ describe('useAuthMethods', () => {
       const result = await completeProfile({ phone: '0912345678', otpCode: '000000' })
 
       expect(result).toEqual({ success: false, message: '驗證碼錯誤', code: 'WRONG_CODE', attemptsRemaining: 2 })
+    })
+  })
+
+  describe('changePhone', () => {
+    it('posts phone + code to /api/member/me/phone and refreshes the member', async () => {
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+      mockFetch.mockResolvedValueOnce({ success: true, message: '手機號碼已更新' })
+
+      const { changePhone } = useAuthMethods()
+      const result = await changePhone('0933111222', '123456')
+
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8056/api/member/me/phone', {
+        method: 'POST',
+        headers: { 'X-Member-Token': 'valid-token' },
+        body: { phone: '0933111222', otpCode: '123456' },
+      })
+      expect(mockFetchMember).toHaveBeenCalledWith('valid-token')
+      expect(result).toEqual({ success: true, message: '手機號碼已更新' })
+    })
+
+    it('returns the backend code (e.g. PHONE_TAKEN)', async () => {
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+      mockFetch.mockRejectedValueOnce(Object.assign(new Error('[POST] 409'), {
+        data: { success: false, error: '此手機號碼已被其他會員使用', code: 'PHONE_TAKEN' },
+      }))
+
+      const result = await useAuthMethods().changePhone('0933111222', '123456')
+      expect(result).toMatchObject({ success: false, code: 'PHONE_TAKEN' })
+      expect(mockFetchMember).not.toHaveBeenCalled()
+    })
+
+    it('requires a session', async () => {
+      const result = await useAuthMethods().changePhone('0933111222', '123456')
+      expect(result.code).toBe('UNAUTHORIZED')
+      expect(mockFetch).not.toHaveBeenCalled()
     })
   })
 

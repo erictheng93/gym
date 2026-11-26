@@ -80,6 +80,8 @@ export function toProfileApiFailure(error: unknown, fallback: string): ProfileAp
 export const useAuthMethods = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
+  // The gym this app is deployed for: OTP login only looks for members there
+  const tenantScope = config.public.tenantSlug ? { tenantSlug: config.public.tenantSlug as string } : {}
 
   const { setTokens, clearTokens, getAuthHeader } = useAuthTokens()
   const { fetchMember, clearSession, setLoading } = useAuthSession()
@@ -101,6 +103,7 @@ export const useAuthMethods = () => {
         body: {
           identifier: phone,
           type: 'phone',
+          ...tenantScope,
         },
       })
 
@@ -131,6 +134,7 @@ export const useAuthMethods = () => {
           identifier: phone,
           type: 'phone',
           code,
+          ...tenantScope,
         },
       })
 
@@ -403,6 +407,32 @@ export const useAuthMethods = () => {
     }
   }
 
+  /**
+   * Change the phone of an existing profile (POST /api/member/me/phone).
+   * `otpCode` must come from sendPhoneVerification for the same phone.
+   */
+  const changePhone = async (phone: string, otpCode: string): Promise<ProfileApiResult> => {
+    const headers = getAuthHeader()
+    if (!headers['X-Member-Token']) {
+      return { success: false, message: '請先登入', code: 'UNAUTHORIZED' }
+    }
+
+    try {
+      const response = await $fetch<{ success: boolean; message?: string }>(`${apiUrl}/api/member/me/phone`, {
+        method: 'POST',
+        headers,
+        body: { phone, otpCode },
+      })
+      if (response.success) {
+        await fetchMember(headers['X-Member-Token'])
+        return { success: true, message: response.message || '手機號碼已更新' }
+      }
+      return { success: false, message: response.message || '變更手機號碼失敗' }
+    } catch (error: unknown) {
+      return toProfileApiFailure(error, '變更手機號碼失敗，請稍後再試')
+    }
+  }
+
   // ============================================
   // Logout
   // ============================================
@@ -441,6 +471,7 @@ export const useAuthMethods = () => {
     // Profile
     sendPhoneVerification,
     completeProfile,
+    changePhone,
 
     // Logout
     logout,

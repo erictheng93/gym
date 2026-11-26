@@ -90,7 +90,7 @@ VAPID_SUBJECT=mailto:admin@gym-nexus.com
 LINE_CHANNEL_ACCESS_TOKEN=<your-line-token>
 LINE_MESSAGING_CHANNEL_SECRET=<your-line-secret>
 
-# SMS (Mitake)
+# SMS (Mitake) - Required for member phone OTP (login, phone change, complete-profile)
 MITAKE_USERNAME=<username>
 MITAKE_PASSWORD=<password>
 
@@ -106,6 +106,32 @@ R2_PUBLIC_URL=https://files.gym-nexus.com
 STRIPE_SECRET_KEY=sk_live_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 ```
+
+### Member phone OTP: SMS (`MITAKE_*`) and gym scope (`TENANT_SLUG`)
+
+Member phone codes (OTP login `POST /api/member/otp/send`, phone verification
+`POST /api/member/me/phone/otp`) go out by Mitake SMS. In production:
+
+- `MITAKE_USERNAME` / `MITAKE_PASSWORD` are **required** (or per-branch Mitake
+  credentials with SMS enabled in `branch_notification_config`; a branch's own
+  account is used for its members, the env account otherwise). Without any SMS
+  account these endpoints answer `503 SMS_UNAVAILABLE` and record
+  `success=false` in `otp_send_logs`; a Mitake error does the same. Codes are
+  never written to the application log or to `sms_logs`.
+- In `development`/`test` without credentials no SMS is sent and the code is
+  returned in the response (`_devCode` / `data.otp`), as before.
+
+The member-app's `TENANT_SLUG` (the gym's `tenants.slug`, already read for
+branding) is now also sent with OTP login, so a phone or email registered at
+several gyms logs into this deployment's gym. Set it on every member-app
+deployment. A login without it that matches members of several gyms is refused
+after the code is verified (`409 MULTIPLE_ACCOUNTS`) instead of picking one.
+A wrong slug makes OTP login find no one (send still answers 200), so check it
+against `select slug from tenants`.
+
+Check after deploying: request a login code for a real member and confirm the
+SMS arrives and `otp_send_logs` has `success = true`; `docker compose logs api`
+must not contain the code.
 
 ### Client address behind the proxy (`TRUST_PROXY`)
 

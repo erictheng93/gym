@@ -22,10 +22,12 @@ export interface MemberProfile {
   branch: { id: string; name: string } | null
 }
 
-/** Editable fields, in the form's snake_case. */
+/**
+ * Editable fields, in the form's snake_case. No phone: a phone change needs an
+ * SMS code (useMemberAuth().sendPhoneVerification + changePhone); PUT refuses it.
+ */
 export interface MemberProfileUpdate {
   full_name?: string
-  phone?: string
   email?: string
   emergency_contact?: string
   emergency_phone?: string
@@ -33,7 +35,6 @@ export interface MemberProfileUpdate {
 
 const UPDATE_FIELD_MAP: Record<keyof MemberProfileUpdate, string> = {
   full_name: 'fullName',
-  phone: 'phone',
   email: 'email',
   emergency_contact: 'emergencyContact',
   emergency_phone: 'emergencyPhone',

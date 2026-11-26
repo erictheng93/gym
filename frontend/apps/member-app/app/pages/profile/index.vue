@@ -61,6 +61,8 @@ const profileForm = useFormValidation(updateProfileSchema)
 // 編輯模式
 const isEditing = ref(false)
 const isSaving = ref(false)
+// 變更手機（需簡訊驗證，與一般編輯分開）
+const isChangingPhone = ref(false)
 
 // Pull-to-refresh
 const isPulling = ref(false)
@@ -72,7 +74,6 @@ const PULL_THRESHOLD = 80
 // 編輯表單
 const editForm = reactive({
   full_name: '',
-  phone: '',
   email: '',
   emergency_contact: '',
   emergency_phone: '',
@@ -96,7 +97,6 @@ const loadMemberDetail = async () => {
 const startEdit = () => {
   if (memberDetail.value) {
     editForm.full_name = memberDetail.value.full_name || ''
-    editForm.phone = memberDetail.value.phone || ''
     editForm.email = memberDetail.value.email || ''
     editForm.emergency_contact = memberDetail.value.emergency_contact || ''
     editForm.emergency_phone = memberDetail.value.emergency_phone || ''
@@ -116,7 +116,7 @@ const saveEdit = async () => {
   if (!member.value || !current) return
 
   const changed: MemberProfileUpdate = {}
-  for (const key of ['full_name', 'phone', 'email', 'emergency_contact', 'emergency_phone'] as const) {
+  for (const key of ['full_name', 'email', 'emergency_contact', 'emergency_phone'] as const) {
     const value = editForm[key].trim()
     if (value && value !== (current[key] || '')) changed[key] = value
   }
@@ -150,6 +150,16 @@ const saveEdit = async () => {
   } finally {
     isSaving.value = false
   }
+}
+
+const startPhoneChange = () => {
+  isEditing.value = false
+  isChangingPhone.value = true
+}
+
+const onPhoneChanged = async () => {
+  isChangingPhone.value = false
+  await loadMemberDetail()
 }
 
 // 登出
@@ -318,7 +328,7 @@ onMounted(() => {
     <section class="section">
       <div class="section-header">
         <h2 class="section-title">個人資料</h2>
-        <button v-if="!isEditing" class="edit-btn" @click="startEdit">
+        <button v-if="!isEditing && !isChangingPhone" class="edit-btn" @click="startEdit">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -327,15 +337,34 @@ onMounted(() => {
         </button>
       </div>
 
+      <!-- Phone change (SMS verification) -->
+      <PhoneChangeCard
+        v-if="isChangingPhone"
+        :current-phone="memberDetail?.phone ?? null"
+        @changed="onPhoneChanged"
+        @cancel="isChangingPhone = false"
+      />
+
       <!-- View Mode -->
-      <div v-if="!isEditing" class="info-card">
+      <div v-else-if="!isEditing" class="info-card">
         <div class="info-row">
           <span class="info-label">姓名</span>
           <span class="info-value">{{ memberDetail?.full_name || '-' }}</span>
         </div>
         <div class="info-row">
           <span class="info-label">手機</span>
-          <span class="info-value">{{ memberDetail?.phone || '-' }}</span>
+          <span class="info-value phone-value">
+            {{ memberDetail?.phone || '-' }}
+            <button
+              v-if="memberDetail"
+              type="button"
+              class="change-pill"
+              aria-label="變更手機號碼"
+              @click="startPhoneChange"
+            >
+              變更
+            </button>
+          </span>
         </div>
         <div class="info-row">
           <span class="info-label">Email</span>
@@ -372,16 +401,6 @@ onMounted(() => {
             v-model="editForm.full_name"
             type="text"
             placeholder="請輸入姓名"
-          >
-        </div>
-        <div class="input-group">
-          <label for="edit-phone">手機</label>
-          <input
-            id="edit-phone"
-            v-model="editForm.phone"
-            type="tel"
-            placeholder="0912 345 678"
-            inputmode="tel"
           >
         </div>
         <div class="input-group">
@@ -429,7 +448,7 @@ onMounted(() => {
             <circle cx="12" cy="12" r="10" />
             <path d="M12 16v-4M12 8h.01" />
           </svg>
-          如需修改性別或生日，請至櫃台辦理
+          手機號碼請於資料頁點「變更」以簡訊驗證；如需修改性別或生日，請至櫃台辦理
         </p>
       </div>
     </section>
@@ -936,6 +955,29 @@ onMounted(() => {
 
 :root.theme-dark .edit-card {
   background: var(--color-surface);
+}
+
+.phone-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.change-pill {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(0, 122, 255, 0.1);
+  color: #007aff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 200ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.change-pill:active {
+  opacity: 0.7;
 }
 
 .input-group {

@@ -104,10 +104,9 @@ describe('useMemberProfile', () => {
   it('maps every editable field and skips undefined ones', () => {
     expect(toProfileUpdateBody({
       full_name: 'a',
-      phone: '0911111111',
       email: 'x@y.z',
       emergency_contact: 'b',
       emergency_phone: undefined,
-    })).toEqual({ fullName: 'a', phone: '0911111111', email: 'x@y.z', emergencyContact: 'b' })
+    })).toEqual({ fullName: 'a', email: 'x@y.z', emergencyContact: 'b' })
   })
 })

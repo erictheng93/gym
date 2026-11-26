@@ -1,6 +1,7 @@
 import { randomInt, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, gt, sql, type SQL } from 'drizzle-orm';
 import { db, otpTokens } from '../db/index.js';
+import { smsService } from './sms.js';
 
 // =============================================================================
 // OTP SERVICE
@@ -102,4 +103,58 @@ export async function consumeOtp(
   }
 
   return { ok: true };
+}
+
+// -----------------------------------------------------------------------------
+// Phone delivery
+// -----------------------------------------------------------------------------
+
+/** development/test: codes are returned in API responses and SMS may be absent. */
+export function otpDevMode(): boolean {
+  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+}
+
+export const SMS_UNAVAILABLE_RESPONSE = {
+  success: false,
+  error: '簡訊服務暫時無法使用，請稍後再試或洽櫃台協助',
+  code: 'SMS_UNAVAILABLE',
+} as const;
+
+export type PhoneOtpDelivery =
+  | { ok: true; delivered: boolean }
+  | { ok: false; reason: 'SMS_NOT_CONFIGURED' | 'SMS_SEND_FAILED' };
+
+/**
+ * Send `code` to `phone` by SMS (Mitake; the branch's account when it has one).
+ * The code is never written to the application log. Without SMS credentials
+ * this fails, except in development/test, where the caller returns the code in
+ * its response instead (`delivered: false`).
+ */
+export async function deliverPhoneOtp(options: {
+  phone: string;
+  code: string;
+  memberId?: string;
+  branchId?: string;
+}): Promise<PhoneOtpDelivery> {
+  const { phone, code, memberId, branchId } = options;
+
+  if (!(await smsService.isSmsAvailableForBranch(branchId))) {
+    return otpDevMode() ? { ok: true, delivered: false } : { ok: false, reason: 'SMS_NOT_CONFIGURED' };
+  }
+
+  const result = await smsService.sendSms({
+    phoneNumber: phone,
+    type: 'otp',
+    data: { code },
+    memberId,
+    branchId,
+    referenceType: 'otp',
+  });
+  return result.success ? { ok: true, delivered: true } : { ok: false, reason: 'SMS_SEND_FAILED' };
+}
+
+/** otp_send_logs error text for a failed delivery (never contains the code). */
+export function phoneOtpLogError(delivery: PhoneOtpDelivery): string | null {
+  if (delivery.ok) return delivery.delivered ? null : 'SMS 未設定（開發模式，未發送）';
+  return delivery.reason === 'SMS_NOT_CONFIGURED' ? 'SMS 未設定' : 'SMS 發送失敗';
 }
