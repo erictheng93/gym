@@ -3,7 +3,8 @@
  */
 
 import { z } from 'zod'
-import { VALIDATION } from '~/constants'
+import { VALIDATION, PAGES } from '~/constants'
+import type { Plan, PlanInput } from '~/composables/usePlans'
 
 // 方案類型枚舉
 export const PlanTypeEnum = z.enum(['TIME_BASED', 'COUNT_BASED'])
@@ -19,6 +20,13 @@ export const planBaseSchema = z.object({
     .string({ error: VALIDATION.REQUIRED })
     .min(2, VALIDATION.NAME_MIN)
     .max(50, VALIDATION.NAME_MAX),
+
+  // 後端必填（varchar 20）
+  code: z
+    .string({ error: PAGES.PLANS.ERROR_CODE_REQUIRED })
+    .trim()
+    .min(1, PAGES.PLANS.ERROR_CODE_REQUIRED)
+    .max(20, PAGES.PLANS.ERROR_CODE_MAX),
 
   plan_type: PlanTypeEnum.optional(),
 
@@ -137,3 +145,42 @@ export type UpdatePlanInput = z.infer<typeof updatePlanSchema>
 export type PlanFilter = z.infer<typeof planFilterSchema>
 export type PlanType = z.infer<typeof PlanTypeEnum>
 export type PlanStatus = z.infer<typeof PlanStatusEnum>
+
+// =============================================================================
+// Form <-> API mapping. The form keeps snake_case keys and an active/archived status;
+// the API takes camelCase with an isActive flag.
+// =============================================================================
+
+/**
+ * Body for POST/PATCH /api/membership-plans. Only the count that applies to the plan type
+ * is sent (the backend fields are optional, not nullable).
+ */
+export const planFormToInput = (form: PlanBase): PlanInput => {
+  const planType = form.plan_type ?? 'TIME_BASED'
+  return {
+    name: form.name.trim(),
+    code: form.code.trim(),
+    planType,
+    price: Number(form.price),
+    ...(planType === 'TIME_BASED' && form.duration_months ? { durationMonths: form.duration_months } : {}),
+    ...(planType === 'COUNT_BASED' && form.class_counts ? { classCounts: form.class_counts } : {}),
+    description: form.description?.trim() || '',
+    allowTransfer: form.allow_transfer,
+    allowPause: form.allow_pause,
+    isActive: form.status !== 'archived'
+  }
+}
+
+/** Edit-form values from a plan as GET /api/membership-plans/:id returns it */
+export const planToForm = (plan: Plan): PlanBase => ({
+  name: plan.name,
+  code: plan.code || '',
+  plan_type: plan.planType,
+  price: plan.price,
+  duration_months: plan.durationMonths || 1,
+  class_counts: plan.classCounts || 10,
+  allow_transfer: plan.allowTransfer,
+  allow_pause: plan.allowPause,
+  description: plan.description || '',
+  status: plan.isActive ? 'active' : 'archived'
+})

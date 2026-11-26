@@ -26,9 +26,9 @@ const statsConfig = computed(() => {
   let timeBasedCount = 0
   let countBasedCount = 0
   for (const p of plans.value) {
-    if (p.status === 'active') activeCount++
-    if (p.plan_type === 'TIME_BASED') timeBasedCount++
-    else if (p.plan_type === 'COUNT_BASED') countBasedCount++
+    if (p.isActive) activeCount++
+    if (p.planType === 'TIME_BASED') timeBasedCount++
+    else if (p.planType === 'COUNT_BASED') countBasedCount++
   }
   return [
     { label: PAGES.PLANS.ENABLED_PLANS, value: activeCount, icon: 'check' as const, variant: 'success' as const },
@@ -40,8 +40,8 @@ const statsConfig = computed(() => {
 // Filtered plans
 const filteredPlans = computed(() => {
   return plans.value.filter(plan => {
-    const matchStatus = statusFilter.value === 'all' || plan.status === statusFilter.value
-    const matchType = typeFilter.value === 'all' || plan.plan_type === typeFilter.value
+    const matchStatus = statusFilter.value === 'all' || (statusFilter.value === 'active') === plan.isActive
+    const matchType = typeFilter.value === 'all' || plan.planType === typeFilter.value
     return matchStatus && matchType
   })
 })
@@ -60,12 +60,11 @@ const confirmDelete = (planId: string) => {
 const handleDelete = async () => {
   if (!planToDelete.value) return
   try {
-    await deletePlan(planToDelete.value)
-    useToast().success(MESSAGES.SUCCESS.PLAN_DELETED)
-    await fetchPlans({ status: '' })
-  } catch (error) {
-    console.error('Failed to delete plan:', error)
-    useToast().error(MESSAGES.ERRORS.PLAN_DELETE_FAILED)
+    // deletePlan shows the backend's reason itself when it fails
+    if (await deletePlan(planToDelete.value)) {
+      useToast().success(MESSAGES.SUCCESS.PLAN_DELETED)
+      await fetchPlans({}, true)
+    }
   } finally {
     showDeleteConfirm.value = false
     planToDelete.value = null
@@ -74,7 +73,7 @@ const handleDelete = async () => {
 
 // Initial load
 onMounted(() => {
-  fetchPlans({ status: '' })
+  fetchPlans({}, true)
 })
 </script>
 
@@ -168,15 +167,15 @@ onMounted(() => {
         v-for="plan in filteredPlans"
         :key="plan.id"
         class="plan-card card"
-        :class="{ archived: plan.status === 'archived' }"
+        :class="{ archived: !plan.isActive }"
       >
         <div class="plan-header">
           <AppBadge
-            :label="planTypeLabel(plan.plan_type)"
-            :variant="plan.plan_type === 'TIME_BASED' ? 'info' : 'warning'"
+            :label="planTypeLabel(plan.planType)"
+            :variant="plan.planType === 'TIME_BASED' ? 'info' : 'warning'"
           />
           <AppBadge
-            v-if="plan.status === 'archived'"
+            v-if="!plan.isActive"
             :label="PAGES.PLANS.ARCHIVED"
             variant="default"
           />
@@ -186,31 +185,31 @@ onMounted(() => {
         <p class="plan-price">{{ formatCurrency(plan.price) }}</p>
 
         <div class="plan-details">
-          <div v-if="plan.plan_type === 'TIME_BASED'" class="detail-item">
+          <div v-if="plan.planType === 'TIME_BASED'" class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
             </svg>
-            <span>{{ plan.duration_months }} {{ PAGES.PLANS.MONTHS }}</span>
+            <span>{{ plan.durationMonths }} {{ PAGES.PLANS.MONTHS }}</span>
           </div>
           <div v-else class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
             </svg>
-            <span>{{ plan.class_counts }} {{ PAGES.PLANS.CLASSES }}</span>
+            <span>{{ plan.classCounts }} {{ PAGES.PLANS.CLASSES }}</span>
           </div>
 
           <div class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
-            <span>{{ plan.allow_transfer ? LABELS.TRANSFERABLE : LABELS.NON_TRANSFERABLE }}</span>
+            <span>{{ plan.allowTransfer ? LABELS.TRANSFERABLE : LABELS.NON_TRANSFERABLE }}</span>
           </div>
 
           <div class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" />
             </svg>
-            <span>{{ plan.allow_pause ? LABELS.PAUSABLE : LABELS.NON_PAUSABLE }}</span>
+            <span>{{ plan.allowPause ? LABELS.PAUSABLE : LABELS.NON_PAUSABLE }}</span>
           </div>
         </div>
 

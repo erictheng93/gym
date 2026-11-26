@@ -168,6 +168,23 @@ describe('Members API', () => {
       expect(data.data.phone).toBe(updates.phone);
     });
 
+    it('stores and clears height', async () => {
+      const set = await authRequest(`/api/members/${TEST_MEMBER_ID}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ height: 172.5 }),
+      });
+      expect(set.status).toBe(200);
+      expect((await set.json()).data.height).toBe(172.5);
+
+      const cleared = await authRequest(`/api/members/${TEST_MEMBER_ID}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ height: null }),
+      });
+      expect((await cleared.json()).data.height).toBeNull();
+    });
+
     it('should update member branch (transfer)', async () => {
       // Transfer member to same branch (valid branchId for tenant)
       const response = await authRequest(`/api/members/${TEST_MEMBER_ID}`, {

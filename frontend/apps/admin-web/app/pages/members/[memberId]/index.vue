@@ -62,17 +62,13 @@ const loadMember = async () => {
   isLoading.value = true
   loadError.value = false
   try {
+    // getMember / fetchContracts show the backend's reason themselves
     member.value = await getMember(memberId.value)
     if (!member.value) {
       loadError.value = true
-      useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
       return
     }
-    await fetchContracts({ memberId: memberId.value })
-  } catch (error) {
-    console.error('Failed to load member:', error)
-    loadError.value = true
-    useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
+    await fetchContracts({ memberId: memberId.value }, true)
   } finally {
     isLoading.value = false
   }
@@ -106,12 +102,11 @@ const handleDelete = async () => {
   if (!member.value) return
   isDeleting.value = true
   try {
-    await deleteMember(member.value.id)
-    useToast().success(MESSAGES.SUCCESS.MEMBER_DELETED)
-    router.push('/members')
-  } catch (error) {
-    console.error('Failed to delete member:', error)
-    useToast().error(MESSAGES.ERRORS.MEMBER_DELETE_FAILED)
+    // deleteMember shows the backend's reason itself when it fails
+    if (await deleteMember(member.value.id)) {
+      useToast().success(MESSAGES.SUCCESS.MEMBER_DELETED)
+      router.push('/members')
+    }
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false

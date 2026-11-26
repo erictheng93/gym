@@ -16,7 +16,7 @@ const planTypeOptions = [
  * 使用 Zod schema 驗證和 @gym-nexus/ui 表單組件
  */
 import { MESSAGES, PAGES, STATUS } from '~/constants'
-import { createPlanSchema, type CreatePlanInput } from '~/schemas/plan.schema'
+import { createPlanSchema, planFormToInput, type CreatePlanInput } from '~/schemas/plan.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
 
@@ -30,6 +30,7 @@ const { createPlan } = usePlans()
 // Form state with Zod validation
 const initialData: CreatePlanInput = {
   name: '',
+  code: '',
   plan_type: 'TIME_BASED',
   price: 0,
   duration_months: 1,
@@ -59,19 +60,8 @@ const handleSubmit = async () => {
 
   await submit(
     async () => {
-      const planData = {
-        name: form.name.trim(),
-        plan_type: form.plan_type,
-        price: form.price,
-        duration_months: form.plan_type === 'TIME_BASED' ? form.duration_months : null,
-        class_counts: form.plan_type === 'COUNT_BASED' ? form.class_counts : null,
-        allow_transfer: form.allow_transfer,
-        allow_pause: form.allow_pause,
-        description: form.description?.trim() || null,
-        status: form.status
-      }
-
-      const result = await createPlan(planData)
+      const result = await createPlan(planFormToInput(form))
+      // createPlan already showed the backend's reason
       if (!result) {
         throw new Error(MESSAGES.ERRORS.PLAN_CREATE_FAILED)
       }
@@ -79,7 +69,7 @@ const handleSubmit = async () => {
     },
     {
       successMessage: MESSAGES.SUCCESS.PLAN_CREATED,
-      errorMessage: MESSAGES.ERRORS.PLAN_CREATE_FAILED,
+      showErrorToast: false,
       onSuccess: async () => { await router.push('/plans') },
       onError: () => setError('submit', PAGES.PLANS.ERROR_CREATE_FAILED)
     }
@@ -139,6 +129,19 @@ const formatPrice = (value: number) => {
               :placeholder="PAGES.PLANS.PLAN_NAME_PLACEHOLDER"
             />
             <span v-if="errors.name" class="error-text">{{ errors.name }}</span>
+          </div>
+
+          <div class="input-group required">
+            <label class="input-label">{{ PAGES.PLANS.PLAN_CODE }}</label>
+            <input
+              v-model="form.code"
+              type="text"
+              class="input"
+              :class="{ 'input-error': errors.code }"
+              :placeholder="PAGES.PLANS.PLAN_CODE_PLACEHOLDER"
+              maxlength="20"
+            />
+            <span v-if="errors.code" class="error-text">{{ errors.code }}</span>
           </div>
 
           <div class="input-group required">

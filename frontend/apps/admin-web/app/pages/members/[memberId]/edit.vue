@@ -16,7 +16,7 @@ const statusOptions = [
 <script setup lang="ts">
 import { validateUUIDParam } from '~/utils/validation'
 import { MESSAGES } from '~/constants'
-import { updateMemberSchema, type UpdateMemberInput } from '~/schemas/member.schema'
+import { updateMemberSchema, memberFormToInput, memberToForm, type UpdateMemberInput } from '~/schemas/member.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
 
@@ -72,32 +72,10 @@ const branchOptions = computed(() =>
 const loadMember = async () => {
   isLoading.value = true
   try {
-    const member = await getMember(memberId.value) as Record<string, unknown> | null
-    if (!member) {
-      useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
-      return
-    }
-    // Map backend camelCase to form snake_case
-    // Use null for empty optional fields to pass Zod validation
-    const branchId = member.branchId || member.branch_id
-    const emergencyPhone = member.emergencyPhone || member.emergency_phone
-
-    setFormData({
-      full_name: (member.fullName || member.full_name || '') as string,
-      phone: (member.phone || '') as string,
-      email: (member.email || '') as string,
-      gender: (member.gender || null) as 'M' | 'F' | 'O' | null,
-      birthday: (member.birthday || '') as string,
-      height: (member.height || null) as number | null,
-      branch_id: (branchId || null) as string | null,
-      emergency_contact: (member.emergencyContact || member.emergency_contact || '') as string,
-      emergency_phone: (emergencyPhone || null) as string | null,
-      tags: (member.tags || []) as string[],
-      member_status: (member.status || member.member_status || 'ACTIVE') as 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BANNED'
-    })
-  } catch (error) {
-    console.error('Failed to load member:', error)
-    useToast().error(MESSAGES.ERRORS.MEMBER_LOAD_FAILED)
+    const member = await getMember(memberId.value)
+    // getMember already showed the backend's reason
+    if (!member) return
+    setFormData(memberToForm(member))
   } finally {
     isLoading.value = false
   }
@@ -115,27 +93,12 @@ const handleSubmit = async () => {
 
   await submit(
     async () => {
-      // Map form snake_case to backend camelCase
-      // Use undefined instead of null for optional fields to avoid Zod validation errors
-      const memberData: Record<string, unknown> = {
-        fullName: form.full_name,
-        phone: form.phone || undefined,
-        email: form.email || undefined,
-        gender: form.gender || undefined,
-        birthday: form.birthday || undefined,
-        height: form.height || undefined,
-        emergencyContact: form.emergency_contact || undefined,
-        emergencyPhone: form.emergency_phone || undefined,
-        tags: form.tags || [],
-        status: form.member_status
-      }
-
-      // Only include branchId if it has a value (backend rejects null)
-      if (form.branch_id) {
-        memberData.branchId = form.branch_id
-      }
+      const { branchId, ...rest } = memberFormToInput(form)
+      // branchId is a required uuid on the backend; omit it rather than send ''
+      const memberData = branchId ? { ...rest, branchId } : rest
 
       const result = await updateMember(memberId.value, memberData)
+      // updateMember already showed the backend's reason
       if (!result) {
         throw new Error(MESSAGES.ERRORS.MEMBER_UPDATE_FAILED)
       }
@@ -143,7 +106,7 @@ const handleSubmit = async () => {
     },
     {
       successMessage: MESSAGES.SUCCESS.MEMBER_UPDATED,
-      errorMessage: MESSAGES.ERRORS.MEMBER_UPDATE_FAILED,
+      showErrorToast: false,
       onSuccess: async () => { await router.push(`/members/${memberId.value}`) },
       onError: (error) => setError('submit', error.message)
     }

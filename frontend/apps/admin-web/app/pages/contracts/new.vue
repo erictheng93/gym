@@ -46,10 +46,10 @@ const selectedPlan = computed(() => plans.value.find(p => p.id === form.plan_id)
 
 // 計算結束日期
 const calculatedEndDate = computed(() => {
-  if (!form.start_date || !selectedPlan.value?.duration_months) return ''
+  if (!form.start_date || !selectedPlan.value?.durationMonths) return ''
 
   const start = new Date(form.start_date)
-  start.setMonth(start.getMonth() + selectedPlan.value.duration_months)
+  start.setMonth(start.getMonth() + selectedPlan.value.durationMonths)
   return start.toISOString().slice(0, 10)
 })
 
@@ -64,7 +64,7 @@ onMounted(async () => {
   isLoading.value = true
   await Promise.all([
     fetchMembers({ limit: 100 }),
-    fetchPlans(),
+    fetchPlans({ activeOnly: true }),
     fetchBranches()
   ])
 
@@ -229,7 +229,7 @@ const handleSubmit = async () => {
               <select v-model="form.member_id" class="input" :class="{ 'input-error': errors.member_id }">
                 <option value="">{{ PAGES.CONTRACTS.SELECT_MEMBER_PLACEHOLDER }}</option>
                 <option v-for="member in members" :key="member.id" :value="member.id">
-                  {{ member.full_name }} ({{ member.member_code }})
+                  {{ member.fullName }} ({{ member.memberCode }})
                 </option>
               </select>
               <span v-if="errors.member_id" class="error-text">{{ errors.member_id }}</span>
@@ -274,28 +274,28 @@ const handleSubmit = async () => {
             <div class="preview-header">
               <h4>{{ selectedPlan.name }}</h4>
               <span class="plan-type-badge">
-                {{ selectedPlan.plan_type === 'TIME_BASED' ? LABELS.CONTRACT_TYPE.TIME_BASED : LABELS.CONTRACT_TYPE.COUNT_BASED }}
+                {{ selectedPlan.planType === 'TIME_BASED' ? LABELS.CONTRACT_TYPE.TIME_BASED : LABELS.CONTRACT_TYPE.COUNT_BASED }}
               </span>
             </div>
             <div class="preview-details">
-              <div v-if="selectedPlan.duration_months" class="preview-item">
+              <div v-if="selectedPlan.durationMonths" class="preview-item">
                 <span class="preview-label">{{ PAGES.CONTRACTS.DURATION_LABEL }}</span>
-                <span class="preview-value">{{ selectedPlan.duration_months }} {{ PAGES.CONTRACTS.MONTHS }}</span>
+                <span class="preview-value">{{ selectedPlan.durationMonths }} {{ PAGES.CONTRACTS.MONTHS }}</span>
               </div>
-              <div v-if="selectedPlan.class_counts" class="preview-item">
+              <div v-if="selectedPlan.classCounts" class="preview-item">
                 <span class="preview-label">{{ PAGES.CONTRACTS.CLASS_COUNTS }}</span>
-                <span class="preview-value">{{ selectedPlan.class_counts }} {{ PAGES.CONTRACTS.TIMES }}</span>
+                <span class="preview-value">{{ selectedPlan.classCounts }} {{ PAGES.CONTRACTS.TIMES }}</span>
               </div>
               <div class="preview-item">
                 <span class="preview-label">{{ PAGES.CONTRACTS.ALLOW_PAUSE }}</span>
-                <span class="preview-value" :class="selectedPlan.allow_pause ? 'text-success' : 'text-error'">
-                  {{ selectedPlan.allow_pause ? LABELS.YES : LABELS.NO }}
+                <span class="preview-value" :class="selectedPlan.allowPause ? 'text-success' : 'text-error'">
+                  {{ selectedPlan.allowPause ? LABELS.YES : LABELS.NO }}
                 </span>
               </div>
               <div class="preview-item">
                 <span class="preview-label">{{ PAGES.CONTRACTS.ALLOW_TRANSFER }}</span>
-                <span class="preview-value" :class="selectedPlan.allow_transfer ? 'text-success' : 'text-error'">
-                  {{ selectedPlan.allow_transfer ? LABELS.YES : LABELS.NO }}
+                <span class="preview-value" :class="selectedPlan.allowTransfer ? 'text-success' : 'text-error'">
+                  {{ selectedPlan.allowTransfer ? LABELS.YES : LABELS.NO }}
                 </span>
               </div>
             </div>
@@ -318,11 +318,11 @@ const handleSubmit = async () => {
               <h4>{{ PAGES.CONTRACTS.MEMBER_INFO }}</h4>
               <div class="summary-row">
                 <span class="summary-label">{{ PAGES.CONTRACTS.MEMBER_NAME }}</span>
-                <span class="summary-value">{{ selectedMember?.full_name }}</span>
+                <span class="summary-value">{{ selectedMember?.fullName }}</span>
               </div>
               <div class="summary-row">
                 <span class="summary-label">{{ PAGES.CONTRACTS.MEMBER_CODE }}</span>
-                <span class="summary-value">{{ selectedMember?.member_code }}</span>
+                <span class="summary-value">{{ selectedMember?.memberCode }}</span>
               </div>
             </div>
 
@@ -400,8 +400,8 @@ const handleSubmit = async () => {
               <ul>
                 <li>本合約自 {{ formatDate(form.start_date) }} 起生效，至 {{ formatDate(calculatedEndDate) }} 止。</li>
                 <li>合約金額為 NT$ {{ formatNumber(form.total_amount) }}。</li>
-                <li v-if="selectedPlan?.allow_pause">{{ PAGES.CONTRACTS.PAUSE_HINT }}</li>
-                <li v-if="selectedPlan?.allow_transfer">本方案允許轉讓給其他會員。</li>
+                <li v-if="selectedPlan?.allowPause">{{ PAGES.CONTRACTS.PAUSE_HINT }}</li>
+                <li v-if="selectedPlan?.allowTransfer">本方案允許轉讓給其他會員。</li>
                 <li>{{ PAGES.CONTRACTS.SIGN_LEGAL_NOTE }}</li>
               </ul>
             </div>
