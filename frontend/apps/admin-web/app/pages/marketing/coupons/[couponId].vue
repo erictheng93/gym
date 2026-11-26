@@ -5,14 +5,6 @@ const COUPON_DATE_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
   day: 'numeric'
 })
 
-const COUPON_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-})
-
 const COUPON_CURRENCY_FORMATTER = new Intl.NumberFormat('zh-TW', {
   style: 'currency',
   currency: 'TWD',
@@ -21,16 +13,12 @@ const COUPON_CURRENCY_FORMATTER = new Intl.NumberFormat('zh-TW', {
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
-  return COUPON_DATE_FORMATTER.format(new Date(dateStr))
+  // date-only strings (YYYY-MM-DD) are shown as that calendar day, not shifted by the timezone
+  return COUPON_DATE_FORMATTER.format(new Date(`${dateStr.slice(0, 10)}T00:00:00`))
 }
 
-const formatDateTime = (dateStr: string | null) => {
-  if (!dateStr) return '—'
-  return COUPON_DATE_TIME_FORMATTER.format(new Date(dateStr))
-}
-
-const formatCurrency = (amount: number) => {
-  return COUPON_CURRENCY_FORMATTER.format(amount)
+const formatCurrency = (amount: number | string) => {
+  return COUPON_CURRENCY_FORMATTER.format(Number(amount))
 }
 </script>
 
@@ -53,16 +41,16 @@ const { confirm } = useConfirm()
 
 const {
   getCoupon,
-  updateCoupon,
+  setCouponActive,
   deleteCoupon,
-  getCouponUsages,
+  getCouponState,
   getDiscountTypeLabel,
   getStatusLabel,
   getStatusVariant
 } = useCoupons()
+const { plans, fetchPlans } = usePlans()
 
 const coupon = ref<Awaited<ReturnType<typeof getCoupon>> | null>(null)
-const usages = ref<Awaited<ReturnType<typeof getCouponUsages>>>({ data: [], total: 0 })
 const isLoading = ref(true)
 
 const couponId = computed(() => route.params.couponId as string)
@@ -70,54 +58,54 @@ const couponId = computed(() => route.params.couponId as string)
 const loadCoupon = async () => {
   isLoading.value = true
   try {
-    coupon.value = await getCoupon(couponId.value)
-    usages.value = await getCouponUsages(couponId.value)
-  } catch (error) {
-    console.error('Failed to load coupon:', error)
-    toast.error('載入優惠券資料失敗')
+    // getCoupon shows the backend's error itself and resolves null on failure
+    coupon.value = await getCoupon(couponId.value, true)
   } finally {
     isLoading.value = false
   }
 }
 
-onMounted(loadCoupon)
+onMounted(async () => {
+  await Promise.all([loadCoupon(), fetchPlans()])
+})
+
+const couponState = computed(() => coupon.value ? getCouponState(coupon.value) : null)
 
 // Format discount
 const formatDiscount = computed(() => {
   if (!coupon.value) return ''
-  if (coupon.value.discount_type === 'PERCENTAGE') {
-    return `${coupon.value.discount_value}% 折扣`
+  if (coupon.value.discountType === 'PERCENTAGE') {
+    return `${Number(coupon.value.discountValue)}% 折扣`
   }
-  return `折 ${formatCurrency(coupon.value.discount_value)}`
+  return `折 ${formatCurrency(coupon.value.discountValue)}`
 })
 
-// Toggle status
-const handleToggleStatus = async () => {
+const planName = (planId: string) => plans.value.find(plan => plan.id === planId)?.name || planId
+
+// Enable / disable (PATCH isActive)
+const handleToggleActive = async () => {
   if (!coupon.value) return
 
-  const newStatus = coupon.value.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-  const actionText = newStatus === 'ACTIVE' ? '啟用' : '停用'
+  const enable = coupon.value.isActive === false
+  const actionText = enable ? '啟用' : '停用'
 
   const confirmed = await confirm({
     title: `${actionText}優惠券`,
     message: `確定要${actionText}此優惠券嗎？`,
     confirmText: `確定${actionText}`,
-    confirmVariant: newStatus === 'ACTIVE' ? 'primary' : 'danger'
+    confirmVariant: enable ? 'primary' : 'danger'
   })
 
   if (!confirmed) return
 
-  try {
-    await updateCoupon(couponId.value, { status: newStatus })
-    toast.success(`優惠券已${actionText}`)
-    await loadCoupon()
-  } catch (error) {
-    console.error('Failed to update status:', error)
-    toast.error(`${actionText}失敗`)
-  }
+  // setCouponActive shows the backend's error itself and returns null on failure
+  const result = await setCouponActive(couponId.value, enable)
+  if (!result) return
+  toast.success(`優惠券已${actionText}`)
+  await loadCoupon()
 }
 
-// Delete
+// Permanent delete (admin only)
 const handleDelete = async () => {
   const confirmed = await confirm({
     title: '刪除優惠券',
@@ -128,20 +116,18 @@ const handleDelete = async () => {
 
   if (!confirmed) return
 
-  try {
-    await deleteCoupon(couponId.value)
-    toast.success('優惠券已刪除')
-    router.push('/marketing/coupons')
-  } catch (error) {
-    console.error('Failed to delete coupon:', error)
-    toast.error('刪除失敗')
-  }
+  const deleted = await deleteCoupon(couponId.value)
+  if (!deleted) return
+  toast.success('優惠券已刪除')
+  await router.push('/marketing/coupons')
 }
+
+const totalUsage = computed(() => coupon.value?.stats?.totalUsage ?? 0)
 
 // Usage percentage
 const usagePercentage = computed(() => {
-  if (!coupon.value?.usage_limit) return null
-  return Math.min((coupon.value.used_count / coupon.value.usage_limit) * 100, 100)
+  if (!coupon.value?.usageLimit) return null
+  return Math.min((totalUsage.value / coupon.value.usageLimit) * 100, 100)
 })
 </script>
 
@@ -165,10 +151,10 @@ const usagePercentage = computed(() => {
         <div class="header-actions">
           <button
             class="btn"
-            :class="coupon.status === 'ACTIVE' ? 'btn-secondary' : 'btn-primary'"
-            @click="handleToggleStatus"
+            :class="coupon.isActive === false ? 'btn-primary' : 'btn-secondary'"
+            @click="handleToggleActive"
           >
-            {{ coupon.status === 'ACTIVE' ? '停用' : '啟用' }}
+            {{ coupon.isActive === false ? '啟用' : '停用' }}
           </button>
           <button class="btn btn-ghost btn-danger" @click="handleDelete">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -195,8 +181,9 @@ const usagePercentage = computed(() => {
         </div>
         <div class="coupon-meta">
           <AppBadge
-            :label="getStatusLabel(coupon.status)"
-            :variant="getStatusVariant(coupon.status)"
+            v-if="couponState"
+            :label="getStatusLabel(couponState)"
+            :variant="getStatusVariant(couponState)"
             size="lg"
           />
           <span class="meta-item">
@@ -204,7 +191,7 @@ const usagePercentage = computed(() => {
               <path d="M8 2v4" /><path d="M16 2v4" />
               <rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
             </svg>
-            {{ formatDate(coupon.start_date) }} ~ {{ formatDate(coupon.end_date) }}
+            {{ formatDate(coupon.validFrom) }} ~ {{ formatDate(coupon.validUntil) }}
           </span>
         </div>
       </section>
@@ -221,13 +208,14 @@ const usagePercentage = computed(() => {
           </h3>
           <div class="usage-stats">
             <div class="usage-main">
-              <span class="usage-count">{{ coupon.used_count || 0 }}</span>
-              <span class="usage-limit">/ {{ coupon.usage_limit || '∞' }}</span>
+              <span class="usage-count">{{ totalUsage }}</span>
+              <span class="usage-limit">/ {{ coupon.usageLimit || '∞' }}</span>
             </div>
             <div v-if="usagePercentage !== null" class="usage-bar-large">
               <div class="usage-fill" :style="{ width: `${usagePercentage}%` }"></div>
             </div>
             <span class="usage-label">已使用次數</span>
+            <span class="usage-label">累計折抵 {{ formatCurrency(coupon.stats?.totalDiscount ?? 0) }}</span>
           </div>
         </section>
 
@@ -245,19 +233,19 @@ const usagePercentage = computed(() => {
           <div class="info-grid">
             <div class="info-item">
               <label>折扣類型</label>
-              <span>{{ getDiscountTypeLabel(coupon.discount_type) }}</span>
+              <span>{{ getDiscountTypeLabel(coupon.discountType) }}</span>
             </div>
             <div class="info-item">
               <label>折扣值</label>
-              <span>{{ coupon.discount_type === 'PERCENTAGE' ? `${coupon.discount_value}%` : formatCurrency(coupon.discount_value) }}</span>
+              <span>{{ coupon.discountType === 'PERCENTAGE' ? `${Number(coupon.discountValue)}%` : formatCurrency(coupon.discountValue) }}</span>
             </div>
             <div class="info-item">
               <label>最低消費</label>
-              <span>{{ coupon.min_purchase > 0 ? formatCurrency(coupon.min_purchase) : '無門檻' }}</span>
+              <span>{{ Number(coupon.minPurchase) > 0 ? formatCurrency(coupon.minPurchase!) : '無門檻' }}</span>
             </div>
-            <div v-if="coupon.max_discount" class="info-item">
+            <div v-if="Number(coupon.maxDiscount) > 0" class="info-item">
               <label>折扣上限</label>
-              <span>{{ formatCurrency(coupon.max_discount) }}</span>
+              <span>{{ formatCurrency(coupon.maxDiscount!) }}</span>
             </div>
           </div>
         </section>
@@ -273,62 +261,37 @@ const usagePercentage = computed(() => {
           <div class="info-grid">
             <div class="info-item">
               <label>總使用上限</label>
-              <span>{{ coupon.usage_limit || '無限制' }}</span>
+              <span>{{ coupon.usageLimit || '無限制' }}</span>
             </div>
             <div class="info-item">
               <label>每人使用上限</label>
-              <span>{{ coupon.usage_per_member }} 次</span>
+              <span>{{ coupon.usageLimitPerMember ? `${coupon.usageLimitPerMember} 次` : '無限制' }}</span>
+            </div>
+            <div class="info-item">
+              <label>適用分店</label>
+              <span>{{ coupon.branch?.name || '全部分店' }}</span>
             </div>
           </div>
-          <div v-if="coupon.applicable_plans && coupon.applicable_plans.length > 0" class="applicable-plans">
+          <div v-if="coupon.applicablePlans && coupon.applicablePlans.length > 0" class="applicable-plans">
             <label>適用方案</label>
             <div class="plans-tags">
-              <span v-for="planId in coupon.applicable_plans" :key="planId" class="plan-tag">
-                {{ planId }}
+              <span v-for="planId in coupon.applicablePlans" :key="planId" class="plan-tag">
+                {{ planName(planId) }}
               </span>
             </div>
           </div>
         </section>
       </div>
-
-      <!-- Usage History -->
-      <section class="usage-history">
-        <h2 class="section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          使用紀錄
-        </h2>
-
-        <div v-if="usages.data.length > 0" class="usage-list">
-          <div
-            v-for="usage in usages.data"
-            :key="usage.id"
-            class="usage-item"
-          >
-            <div class="usage-member">
-              <AppAvatar :name="usage.member_name || '?'" size="sm" variant="blue" />
-              <span>{{ usage.member_name }}</span>
-            </div>
-            <div class="usage-contract">
-              {{ usage.contract_no || '—' }}
-            </div>
-            <div class="usage-amount">
-              折抵 {{ formatCurrency(usage.discount_amount || 0) }}
-            </div>
-            <div class="usage-time">
-              {{ formatDateTime(usage.used_at) }}
-            </div>
-          </div>
-        </div>
-        <EmptyState
-          v-else
-          title="尚無使用紀錄"
-          icon="clock"
-        />
-      </section>
     </template>
+
+    <EmptyState
+      v-else
+      title="找不到優惠券"
+      description="此優惠券不存在或已被刪除"
+      icon="alert-circle"
+      action-label="返回列表"
+      action-to="/marketing/coupons"
+    />
   </div>
 </template>
 
@@ -590,71 +553,6 @@ const usagePercentage = computed(() => {
   font-size: 13px;
 }
 
-/* Usage History */
-.usage-history {
-  animation: fadeUp 0.6s var(--ease-out) 0.3s backwards;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: var(--space-xl);
-}
-
-.section-title svg {
-  color: var(--color-accent);
-}
-
-.usage-list {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
-
-.usage-item {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--color-divider);
-  transition: background var(--duration-fast);
-}
-
-.usage-item:last-child {
-  border-bottom: none;
-}
-
-.usage-item:hover {
-  background: var(--color-bg-secondary);
-}
-
-.usage-member {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-weight: 500;
-}
-
-.usage-contract {
-  color: var(--color-text-secondary);
-}
-
-.usage-amount {
-  color: var(--color-success);
-  font-weight: 500;
-}
-
-.usage-time {
-  color: var(--color-text-tertiary);
-  font-size: 13px;
-  text-align: right;
-}
-
-/* Responsive */
 @media (max-width: 1024px) {
   .content-grid {
     grid-template-columns: 1fr;
@@ -671,11 +569,6 @@ const usagePercentage = computed(() => {
     width: 80%;
     height: 1px;
     margin: var(--space-lg) 0;
-  }
-
-  .usage-item {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-sm);
   }
 
   .info-grid {

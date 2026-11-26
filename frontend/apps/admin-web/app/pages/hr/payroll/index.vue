@@ -12,7 +12,8 @@ const statusOptions = [
  * 薪資管理頁面
  */
 import { MESSAGES, PAGINATION } from '~/constants'
-import { usePayroll } from '~/composables/hr'
+import { usePayroll, useHrAccess } from '~/composables/hr'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -26,12 +27,13 @@ const {
   totalCount,
   isLoading,
   fetchSalaryRecords,
-  approveSalary,
+  batchApproveSalary,
   getStatusLabel,
   getStatusVariant,
   formatCurrency
 } = usePayroll()
 const { branches, fetchBranches } = useBranches()
+const { canViewHr, canManagePayroll } = useHrAccess()
 
 // Filter state
 const selectedPeriod = ref(getCurrentPeriod())
@@ -63,6 +65,7 @@ const periodOptions = computed(() => {
 
 // Load records
 const loadRecords = async () => {
+  if (!canViewHr.value) return
   await fetchSalaryRecords({
     page: currentPage.value,
     limit: pageSize,
@@ -81,6 +84,7 @@ watch([selectedPeriod, selectedBranch, selectedStatus], () => {
 watch(currentPage, loadRecords)
 
 onMounted(async () => {
+  if (!canViewHr.value) return
   await Promise.all([loadRecords(), fetchBranches()])
 })
 
@@ -108,14 +112,19 @@ const handleBatchApprove = async () => {
   if (!confirmed) return
 
   try {
-    const count = selectedIds.value.length
-    await Promise.all(selectedIds.value.map(id => approveSalary(id)))
-    toast.success(`已核准 ${count} 筆薪資紀錄`)
+    const requested = selectedIds.value.length
+    const { approved_count } = await batchApproveSalary(selectedIds.value)
+    if (approved_count === 0) {
+      toast.warning('沒有可核准的薪資紀錄（僅「待審核」可核准）')
+    } else if (approved_count < requested) {
+      toast.warning(`已核准 ${approved_count} 筆，其餘 ${requested - approved_count} 筆不是待審核狀態`)
+    } else {
+      toast.success(`已核准 ${approved_count} 筆薪資紀錄`)
+    }
     selectedIds.value = []
     await loadRecords()
   } catch (error) {
-    console.error('Failed to batch approve:', error)
-    toast.error('批量核准失敗')
+    toast.error(apiErrorMessage(error, '批量核准失敗'))
   }
 }
 
@@ -152,7 +161,7 @@ const columns = [
       description="管理員工薪資計算、核准與發放"
     >
       <template #actions>
-        <NuxtLink to="/hr/payroll/generate" class="btn btn-primary">
+        <NuxtLink v-if="canManagePayroll" to="/hr/payroll/generate" class="btn btn-primary">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
@@ -178,142 +187,151 @@ const columns = [
       </template>
     </PageHeader>
 
-    <!-- Summary Stats -->
-    <section class="summary-stats">
-      <div class="stat-card">
-        <div class="stat-icon warning">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">待審核</span>
-          <span class="stat-value">{{ summaryStats.pending }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon success">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">已核准</span>
-          <span class="stat-value">{{ summaryStats.approved }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon primary">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">已發放</span>
-          <span class="stat-value">{{ summaryStats.paid }}</span>
-        </div>
-      </div>
-      <div class="stat-card highlight">
-        <div class="stat-icon accent">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">本期總額</span>
-          <span class="stat-value amount">{{ formatCurrency(summaryStats.totalAmount) }}</span>
-        </div>
-      </div>
-    </section>
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="薪資資料僅限管理員與店長檢視"
+      icon="alert-circle"
+    />
 
-    <!-- Filters -->
-    <FilterBar>
-      <template #filters>
-        <select v-model="selectedPeriod" class="input filter-select">
-          <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-        <select v-model="selectedBranch" class="input filter-select">
-          <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
-          <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-            {{ branch.name }}
-          </option>
-        </select>
-        <select v-model="selectedStatus" class="input filter-select">
-          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-      </template>
-      <template #actions>
-        <button
-          v-if="selectedIds.length > 0"
-          class="btn btn-primary"
-          @click="handleBatchApprove"
-        >
-          批量核准 ({{ selectedIds.length }})
-        </button>
-      </template>
-    </FilterBar>
-
-    <!-- Stats -->
-    <StatsBar :count="totalCount" label="筆薪資紀錄" />
-
-    <!-- Data Table -->
-    <DataTable
-      v-model:selected="selectedIds"
-      :data="salaryRecords"
-      :columns="columns"
-      :loading="isLoading"
-      :loading-message="MESSAGES.ACTIONS.LOADING"
-      empty-title="暫無薪資紀錄"
-      empty-description="點擊「產生薪資」按鈕開始計算本月薪資"
-      empty-icon="dollar-sign"
-      row-clickable
-      selectable
-      @row-click="handleRowClick"
-    >
-      <!-- Employee Cell -->
-      <template #employee="{ row }">
-        <div class="employee-cell">
-          <AppAvatar :name="row.employee?.full_name || '?'" size="md" variant="blue" />
-          <div class="employee-info">
-            <span class="employee-name">{{ row.employee?.full_name }}</span>
-            <span class="employee-code text-caption text-tertiary">{{ row.employee?.employee_code }}</span>
+    <template v-else>
+      <!-- Summary Stats -->
+      <section class="summary-stats">
+        <div class="stat-card">
+          <div class="stat-icon warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">待審核</span>
+            <span class="stat-value">{{ summaryStats.pending }}</span>
           </div>
         </div>
-      </template>
+        <div class="stat-card">
+          <div class="stat-icon success">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">已核准</span>
+            <span class="stat-value">{{ summaryStats.approved }}</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">已發放</span>
+            <span class="stat-value">{{ summaryStats.paid }}</span>
+          </div>
+        </div>
+        <div class="stat-card highlight">
+          <div class="stat-icon accent">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">本期總額</span>
+            <span class="stat-value amount">{{ formatCurrency(summaryStats.totalAmount) }}</span>
+          </div>
+        </div>
+      </section>
 
-      <!-- Base Salary Cell -->
-      <template #base="{ row }">
-        <span class="salary-amount">{{ formatCurrency(row.base_salary || 0) }}</span>
-      </template>
+      <!-- Filters -->
+      <FilterBar>
+        <template #filters>
+          <select v-model="selectedPeriod" class="input filter-select">
+            <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <select v-model="selectedBranch" class="input filter-select">
+            <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
+            <option v-for="branch in branches" :key="branch.id" :value="branch.id">
+              {{ branch.name }}
+            </option>
+          </select>
+          <select v-model="selectedStatus" class="input filter-select">
+            <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </template>
+        <template #actions>
+          <button
+            v-if="canManagePayroll && selectedIds.length > 0"
+            class="btn btn-primary"
+            @click="handleBatchApprove"
+          >
+            批量核准 ({{ selectedIds.length }})
+          </button>
+        </template>
+      </FilterBar>
 
-      <!-- Net Salary Cell -->
-      <template #net="{ row }">
-        <span class="salary-amount highlight">{{ formatCurrency(row.net_salary || 0) }}</span>
-      </template>
+      <!-- Stats -->
+      <StatsBar :count="totalCount" label="筆薪資紀錄" />
 
-      <!-- Status Cell -->
-      <template #status="{ row }">
-        <AppBadge
-          :label="getStatusLabel(row.status)"
-          :variant="getStatusVariant(row.status)"
-        />
-      </template>
+      <!-- Data Table -->
+      <DataTable
+        v-model:selected="selectedIds"
+        :data="salaryRecords"
+        :columns="columns"
+        :loading="isLoading"
+        :loading-message="MESSAGES.ACTIONS.LOADING"
+        empty-title="暫無薪資紀錄"
+        empty-description="點擊「產生薪資」按鈕開始計算本月薪資"
+        empty-icon="dollar-sign"
+        row-clickable
+        :selectable="canManagePayroll"
+        @row-click="handleRowClick"
+      >
+        <!-- Employee Cell -->
+        <template #employee="{ row }">
+          <div class="employee-cell">
+            <AppAvatar :name="row.employee?.full_name || '?'" size="md" variant="blue" />
+            <div class="employee-info">
+              <span class="employee-name">{{ row.employee?.full_name }}</span>
+              <span class="employee-code text-caption text-tertiary">{{ row.employee?.employee_code }}</span>
+            </div>
+          </div>
+        </template>
 
-      <!-- Pagination -->
-      <template #footer>
-        <DataPagination
-          v-model="currentPage"
-          :total-pages="totalPages"
-          :prev-label="MESSAGES.ACTIONS.PREV_PAGE"
-          :next-label="MESSAGES.ACTIONS.NEXT_PAGE"
-        />
-      </template>
-    </DataTable>
+        <!-- Base Salary Cell -->
+        <template #base="{ row }">
+          <span class="salary-amount">{{ formatCurrency(row.base_salary || 0) }}</span>
+        </template>
+
+        <!-- Net Salary Cell -->
+        <template #net="{ row }">
+          <span class="salary-amount highlight">{{ formatCurrency(row.net_salary || 0) }}</span>
+        </template>
+
+        <!-- Status Cell -->
+        <template #status="{ row }">
+          <AppBadge
+            :label="getStatusLabel(row.status)"
+            :variant="getStatusVariant(row.status)"
+          />
+        </template>
+
+        <!-- Pagination -->
+        <template #footer>
+          <DataPagination
+            v-model="currentPage"
+            :total-pages="totalPages"
+            :prev-label="MESSAGES.ACTIONS.PREV_PAGE"
+            :next-label="MESSAGES.ACTIONS.NEXT_PAGE"
+          />
+        </template>
+      </DataTable>
+    </template>
   </PageContainer>
 </template>
 

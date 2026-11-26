@@ -36,13 +36,14 @@ const statusOptions = [
  * 績效考核列表頁面
  */
 import { MESSAGES, PAGINATION } from '~/constants'
-import { usePerformance } from '~/composables/hr'
+import { usePerformance, useHrAccess } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const { currentEmployee } = useAuth()
+const { canViewHr } = useHrAccess()
 
 const {
   reviews,
@@ -65,6 +66,7 @@ const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
 
 // Load reviews
 const loadReviews = async () => {
+  if (!canViewHr.value) return
   const filters: Record<string, unknown> = {
     page: currentPage.value,
     limit: pageSize,
@@ -74,9 +76,12 @@ const loadReviews = async () => {
 
   if (activeTab.value === 'pending') {
     filters.status = 'SUBMITTED'
-    filters.reviewer_id = currentEmployee.value?.id
   } else if (activeTab.value === 'mine') {
-    filters.employee_id = currentEmployee.value?.id
+    // no linked employee record: an undefined filter would list everybody's reviews
+    if (!currentEmployee.value?.id) {
+      return
+    }
+    filters.employee_id = currentEmployee.value.id
   }
 
   await fetchReviews(filters)
@@ -126,110 +131,120 @@ const handleRowClick = (review: typeof reviews.value[0]) => {
       </template>
     </PageHeader>
 
-    <!-- Tabs -->
-    <div class="tabs-container">
-      <div class="tabs">
-        <button
-          :class="['tab', { active: activeTab === 'all' }]"
-          @click="activeTab = 'all'"
-        >
-          全部考核
-        </button>
-        <button
-          :class="['tab', { active: activeTab === 'pending' }]"
-          @click="activeTab = 'pending'"
-        >
-          待我審核
-        </button>
-        <button
-          :class="['tab', { active: activeTab === 'mine' }]"
-          @click="activeTab = 'mine'"
-        >
-          我的考核
-        </button>
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="績效考核僅限管理員與店長檢視"
+      icon="alert-circle"
+    />
+
+    <template v-else>
+      <!-- Tabs -->
+      <div class="tabs-container">
+        <div class="tabs">
+          <button
+            :class="['tab', { active: activeTab === 'all' }]"
+            @click="activeTab = 'all'"
+          >
+            全部考核
+          </button>
+          <button
+            :class="['tab', { active: activeTab === 'pending' }]"
+            @click="activeTab = 'pending'"
+          >
+            待審核
+          </button>
+          <button
+            v-if="currentEmployee?.id"
+            :class="['tab', { active: activeTab === 'mine' }]"
+            @click="activeTab = 'mine'"
+          >
+            我的考核
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- Filters -->
-    <FilterBar>
-      <template #filters>
-        <select v-model="selectedType" class="input filter-select">
-          <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-        <select v-if="activeTab === 'all'" v-model="selectedStatus" class="input filter-select">
-          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-      </template>
-    </FilterBar>
+      <!-- Filters -->
+      <FilterBar>
+        <template #filters>
+          <select v-model="selectedType" class="input filter-select">
+            <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <select v-if="activeTab === 'all'" v-model="selectedStatus" class="input filter-select">
+            <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </template>
+      </FilterBar>
 
-    <!-- Stats -->
-    <StatsBar :count="totalCount" label="筆考核紀錄" />
+      <!-- Stats -->
+      <StatsBar :count="totalCount" label="筆考核紀錄" />
 
-    <!-- Data Table -->
-    <DataTable
-      :data="reviews"
-      :columns="columns"
-      :loading="isLoading"
-      :loading-message="MESSAGES.ACTIONS.LOADING"
-      empty-title="暫無考核紀錄"
-      empty-description="點擊上方按鈕新增第一筆考核"
-      empty-icon="clipboard"
-      empty-action-label="新增考核"
-      empty-action-to="/hr/performance/new"
-      row-clickable
-      @row-click="handleRowClick"
-    >
-      <!-- Employee Cell -->
-      <template #employee="{ row }">
-        <div class="employee-cell">
-          <AppAvatar :name="row.employee?.full_name || '?'" size="md" variant="blue" />
-          <div class="employee-info">
-            <span class="employee-name">{{ row.employee?.full_name }}</span>
-            <span class="employee-code text-caption text-tertiary">{{ row.employee?.employee_code }}</span>
+      <!-- Data Table -->
+      <DataTable
+        :data="reviews"
+        :columns="columns"
+        :loading="isLoading"
+        :loading-message="MESSAGES.ACTIONS.LOADING"
+        empty-title="暫無考核紀錄"
+        empty-description="點擊上方按鈕新增第一筆考核"
+        empty-icon="clipboard"
+        empty-action-label="新增考核"
+        empty-action-to="/hr/performance/new"
+        row-clickable
+        @row-click="handleRowClick"
+      >
+        <!-- Employee Cell -->
+        <template #employee="{ row }">
+          <div class="employee-cell">
+            <AppAvatar :name="row.employee?.full_name || '?'" size="md" variant="blue" />
+            <div class="employee-info">
+              <span class="employee-name">{{ row.employee?.full_name }}</span>
+              <span class="employee-code text-caption text-tertiary">{{ row.employee?.employee_code }}</span>
+            </div>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- Type Cell -->
-      <template #type="{ row }">
-        <span class="type-badge" :class="`type-${row.review_type.toLowerCase()}`">
-          {{ getReviewTypeLabel(row.review_type) }}
-        </span>
-      </template>
-
-      <!-- Score Cell -->
-      <template #score="{ row }">
-        <div v-if="row.score != null" class="score-display">
-          <span class="score-value" :class="{ good: row.score >= 80, warning: row.score >= 60 && row.score < 80, poor: row.score < 60 }">
-            {{ row.score }}
+        <!-- Type Cell -->
+        <template #type="{ row }">
+          <span class="type-badge" :class="`type-${(row.review_type || '').toLowerCase()}`">
+            {{ getReviewTypeLabel(row.review_type) }}
           </span>
-          <span class="score-max">/ 100</span>
-        </div>
-        <span v-else class="text-tertiary">—</span>
-      </template>
+        </template>
 
-      <!-- Status Cell -->
-      <template #status="{ row }">
-        <AppBadge
-          :label="getStatusLabel(row.status)"
-          :variant="getStatusVariant(row.status)"
-        />
-      </template>
+        <!-- Score Cell -->
+        <template #score="{ row }">
+          <div v-if="row.score != null" class="score-display">
+            <span class="score-value" :class="{ good: row.score >= 80, warning: row.score >= 60 && row.score < 80, poor: row.score < 60 }">
+              {{ row.score }}
+            </span>
+            <span class="score-max">/ 100</span>
+          </div>
+          <span v-else class="text-tertiary">—</span>
+        </template>
 
-      <!-- Pagination -->
-      <template #footer>
-        <DataPagination
-          v-model="currentPage"
-          :total-pages="totalPages"
-          :prev-label="MESSAGES.ACTIONS.PREV_PAGE"
-          :next-label="MESSAGES.ACTIONS.NEXT_PAGE"
-        />
-      </template>
-    </DataTable>
+        <!-- Status Cell -->
+        <template #status="{ row }">
+          <AppBadge
+            :label="getStatusLabel(row.status)"
+            :variant="getStatusVariant(row.status)"
+          />
+        </template>
+
+        <!-- Pagination -->
+        <template #footer>
+          <DataPagination
+            v-model="currentPage"
+            :total-pages="totalPages"
+            :prev-label="MESSAGES.ACTIONS.PREV_PAGE"
+            :next-label="MESSAGES.ACTIONS.NEXT_PAGE"
+          />
+        </template>
+      </DataTable>
+    </template>
   </PageContainer>
 </template>
 

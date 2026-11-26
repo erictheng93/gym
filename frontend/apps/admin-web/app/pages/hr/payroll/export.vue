@@ -1,7 +1,7 @@
 <script lang="ts">
 const formatOptions = [
   { value: 'csv', label: 'CSV (Excel 相容)' },
-  { value: 'pdf', label: 'PDF 報表' }
+  { value: 'xlsx', label: 'Excel (.xlsx)' }
 ]
 </script>
 
@@ -9,21 +9,23 @@ const formatOptions = [
 /**
  * 薪資匯出頁面
  */
-import { usePayroll } from '~/composables/hr'
+import { usePayroll, useHrAccess } from '~/composables/hr'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const toast = useToast()
-const { exportPayroll, isLoading } = usePayroll()
+const { exportPayroll } = usePayroll()
+const { canViewHr } = useHrAccess()
+const isExporting = ref(false)
 const { branches, fetchBranches } = useBranches()
 
 const exportForm = ref({
   period: getCurrentPeriod(),
   branch_id: '',
-  format: 'csv',
-  include_details: true
+  format: 'csv' as 'csv' | 'xlsx'
 })
 
 // Get current period
@@ -49,19 +51,19 @@ onMounted(fetchBranches)
 
 // Handle export
 const handleExport = async () => {
+  isExporting.value = true
   try {
     const blob = await exportPayroll({
       period: exportForm.value.period,
       branch_id: exportForm.value.branch_id || undefined,
-      format: exportForm.value.format,
-      include_details: exportForm.value.include_details
+      format: exportForm.value.format
     })
 
     // Create download link
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    const ext = exportForm.value.format === 'pdf' ? 'pdf' : 'csv'
+    const ext = exportForm.value.format
     link.download = `payroll_${exportForm.value.period}.${ext}`
     document.body.appendChild(link)
     link.click()
@@ -70,8 +72,9 @@ const handleExport = async () => {
 
     toast.success('匯出成功')
   } catch (error) {
-    console.error('Export failed:', error)
-    toast.error('匯出失敗')
+    toast.error(apiErrorMessage(error, '匯出失敗'))
+  } finally {
+    isExporting.value = false
   }
 }
 </script>
@@ -84,7 +87,16 @@ const handleExport = async () => {
       back-to="/hr/payroll"
     />
 
-    <div class="export-container">
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="薪資資料僅限管理員與店長檢視"
+      icon="alert-circle"
+      action-label="返回列表"
+      action-to="/hr/payroll"
+    />
+
+    <div v-else class="export-container">
       <div class="export-card">
         <h2 class="card-title">匯出設定</h2>
 
@@ -114,16 +126,10 @@ const handleExport = async () => {
           :options="formatOptions"
         />
 
-        <FormCheckbox
-          v-model="exportForm.include_details"
-          label="包含詳細明細"
-          description="勾選後將包含加班、獎金、扣款等詳細資訊"
-        />
-
         <div class="export-actions">
           <button
             class="btn btn-primary btn-lg"
-            :disabled="isLoading"
+            :disabled="isExporting"
             @click="handleExport"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -131,7 +137,7 @@ const handleExport = async () => {
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" x2="12" y1="15" y2="3" />
             </svg>
-            {{ isLoading ? '匯出中...' : '匯出報表' }}
+            {{ isExporting ? '匯出中...' : '匯出報表' }}
           </button>
         </div>
       </div>
@@ -145,12 +151,12 @@ const handleExport = async () => {
             可直接用 Excel 開啟，適合進一步處理或匯入其他系統
           </li>
           <li>
-            <strong>PDF 格式：</strong>
-            標準報表格式，適合列印存檔或簽核
+            <strong>Excel 格式：</strong>
+            標準試算表，適合列印存檔或簽核
           </li>
           <li>
-            <strong>詳細明細：</strong>
-            包含加班時數、加班費、業績獎金、扣款項目等
+            <strong>報表內容：</strong>
+            包含底薪、加班時數、加班費、業績獎金、扣款項目與實發金額
           </li>
         </ul>
       </div>

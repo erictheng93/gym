@@ -3,6 +3,8 @@
  */
 
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
+import { useFetch } from '~/composables/core/useFetch'
+import { apiErrorMessage } from '~/utils/api-error'
 
 export interface PerformanceReview {
   id: string
@@ -25,7 +27,7 @@ export interface PerformanceReview {
   score: number | null
   comments: string | null
   improvement_plan: string | null
-  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED'
+  status: 'DRAFT' | 'SUBMITTED' | 'REVIEWED' | 'APPROVED'
   reviewed_at: string | null
   date_created: string
 }
@@ -69,13 +71,75 @@ export interface TeamDashboard {
   }>
 }
 
+/** The raw row the review write routes return (camelCase, decimals as strings) */
+export interface ReviewRecord {
+  id: string
+  employeeId: string
+  reviewerId: string | null
+  reviewPeriod: string
+  reviewType: string | null
+  status: PerformanceReview['status'] | null
+  overallScore: string | null
+  reviewerComments: string | null
+  improvementPlan: string | null
+  approvedBy: string | null
+  approvedAt: string | null
+  submittedAt: string | null
+  reviewedAt: string | null
+  kpiData: KPIItem[] | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+/** The raw row POST /kpi-templates returns */
+export interface KpiTemplateRecord {
+  id: string
+  name: string
+  description: string | null
+  jobTitleId: string | null
+  reviewType: string
+  kpis: KPIItem[]
+  isDefault: boolean | null
+  isActive: boolean | null
+  createdBy: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+/** Body of PATCH /performance/reviews/:id */
+export interface UpdateReviewInput {
+  kpi_data?: KPIItem[]
+  score?: number | null
+  comments?: string
+  improvement_plan?: string
+  reviewer_id?: string
+}
+
+interface ListResponse<T> {
+  success: boolean
+  data: T[]
+  meta?: { total: number }
+}
+
+const toScore = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  return Number.isNaN(n) ? null : n
+}
+
+/** The API sends the decimal score as a string ("85.50") */
+const normalizeReview = (review: PerformanceReview): PerformanceReview => ({
+  ...review,
+  score: toScore(review.score)
+})
+
 const inFlightReviewsMap = new Map<string, Promise<void>>()
 const inFlightSingleReviewMap = new Map<string, Promise<void>>()
 let inFlightKPITemplatesPromise: Promise<void> | null = null
 const inFlightTeamDashboardMap = new Map<string, Promise<TeamDashboard | null>>()
 
 export const usePerformance = () => {
-  const config = useRuntimeConfig()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
 
   // State
@@ -84,8 +148,6 @@ export const usePerformance = () => {
   const kpiTemplates = useState<KPITemplate[]>('kpi_templates', () => [])
   const isLoading = useState('performance_loading', () => false)
   const totalCount = useState('performance_total', () => 0)
-
-  const apiUrl = config.public.apiUrl
 
   /**
    * Fetch reviews list
@@ -108,27 +170,16 @@ export const usePerformance = () => {
       const { page = 1, limit = 20, ...filters } = options || {}
 
       try {
-        const params = new URLSearchParams()
-        Object.entries(filters).forEach(([key, value]) => {
-          if (value) params.append(key, value)
-        })
-        params.append('limit', limit.toString())
-        params.append('offset', ((page - 1) * limit).toString())
+        const response = await apiFetch<PerformanceReview[]>('/performance/reviews', {
+          params: { ...filters, limit, offset: (page - 1) * limit }
+        }) as unknown as ListResponse<PerformanceReview>
 
-        const response = await $fetch<{
-          success: boolean
-          data: PerformanceReview[]
-          meta: { total: number }
-        }>(`${apiUrl}/performance/reviews?${params}`)
-
-        if (response.success) {
-          reviews.value = response.data
-          totalCount.value = response.meta.total
-        }
+        reviews.value = (response.data || []).map(normalizeReview)
+        totalCount.value = Number(response.meta?.total ?? reviews.value.length)
       } catch (error) {
         handleError(error, {
           context: 'usePerformance.fetchReviews',
-          customMessage: '取得績效考核列表失敗'
+          customMessage: apiErrorMessage(error, '取得績效考核列表失敗')
         })
         reviews.value = []
         totalCount.value = 0
@@ -152,16 +203,12 @@ export const usePerformance = () => {
     const promise = (async () => {
       isLoading.value = true
       try {
-        const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-          `${apiUrl}/performance/reviews/${id}`
-        )
-        if (response.success) {
-          currentReview.value = response.data
-        }
+        const response = await apiFetch<PerformanceReview>(`/performance/reviews/${id}`)
+        currentReview.value = response.data ? normalizeReview(response.data) : null
       } catch (error) {
         handleError(error, {
           context: 'usePerformance.fetchReview',
-          customMessage: '取得績效考核詳情失敗'
+          customMessage: apiErrorMessage(error, '取得績效考核詳情失敗')
         })
         currentReview.value = null
       } finally {
@@ -175,7 +222,7 @@ export const usePerformance = () => {
   }
 
   /**
-   * Create review
+   * Create review. Throws the backend error on failure.
    */
   const createReview = async (data: {
     employee_id: string
@@ -184,82 +231,54 @@ export const usePerformance = () => {
     template_id?: string
     score?: number | null
     comments?: string
-  }): Promise<PerformanceReview> => {
-    const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiUrl}/performance/reviews`,
-      {
-        method: 'POST',
-        body: data
-      }
-    )
-    if (!response.success) {
-      throw new Error('建立績效考核失敗')
-    }
+  }): Promise<ReviewRecord> => {
+    const response = await apiFetch<ReviewRecord>('/performance/reviews', {
+      method: 'POST',
+      body: data
+    })
+    if (!response.data) throw new Error('建立績效考核失敗')
     return response.data
   }
 
   /**
-   * Update review
+   * Update review. Throws the backend error on failure.
    */
-  const updateReview = async (
-    id: string,
-    data: Partial<PerformanceReview>
-  ): Promise<PerformanceReview> => {
-    const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiUrl}/performance/reviews/${id}`,
-      {
-        method: 'PATCH',
-        body: data
-      }
-    )
-    if (!response.success) {
-      throw new Error('更新績效考核失敗')
-    }
+  const updateReview = async (id: string, data: UpdateReviewInput): Promise<ReviewRecord> => {
+    const response = await apiFetch<ReviewRecord>(`/performance/reviews/${id}`, {
+      method: 'PATCH',
+      body: data
+    })
+    if (!response.data) throw new Error('更新績效考核失敗')
     return response.data
   }
 
   /**
-   * Submit review for approval
+   * Submit review for approval (DRAFT only). Throws the backend error on failure.
    */
-  const submitReview = async (id: string): Promise<PerformanceReview> => {
-    const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiUrl}/performance/reviews/${id}/submit`,
-      { method: 'POST' }
-    )
-    if (!response.success) {
-      throw new Error('提交績效考核失敗')
-    }
+  const submitReview = async (id: string): Promise<ReviewRecord> => {
+    const response = await apiFetch<ReviewRecord>(`/performance/reviews/${id}/submit`, { method: 'POST' })
+    if (!response.data) throw new Error('提交績效考核失敗')
     return response.data
   }
 
   /**
-   * Approve review
+   * Approve review (admin, SUBMITTED only). Throws the backend error on failure.
    */
-  const approveReview = async (id: string): Promise<PerformanceReview> => {
-    const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiUrl}/performance/reviews/${id}/approve`,
-      { method: 'POST' }
-    )
-    if (!response.success) {
-      throw new Error('核准績效考核失敗')
-    }
+  const approveReview = async (id: string): Promise<ReviewRecord> => {
+    const response = await apiFetch<ReviewRecord>(`/performance/reviews/${id}/approve`, { method: 'POST' })
+    if (!response.data) throw new Error('核准績效考核失敗')
     return response.data
   }
 
   /**
-   * Reject review
+   * Reject review back to DRAFT (admin, SUBMITTED only). Throws the backend error on failure.
    */
-  const rejectReview = async (id: string, reason: string): Promise<PerformanceReview> => {
-    const response = await $fetch<{ success: boolean; data: PerformanceReview }>(
-      `${apiUrl}/performance/reviews/${id}/reject`,
-      {
-        method: 'POST',
-        body: { reason }
-      }
-    )
-    if (!response.success) {
-      throw new Error('退回績效考核失敗')
-    }
+  const rejectReview = async (id: string, reason: string): Promise<ReviewRecord> => {
+    const response = await apiFetch<ReviewRecord>(`/performance/reviews/${id}/reject`, {
+      method: 'POST',
+      body: { reason }
+    })
+    if (!response.data) throw new Error('退回績效考核失敗')
     return response.data
   }
 
@@ -271,16 +290,12 @@ export const usePerformance = () => {
 
     inFlightKPITemplatesPromise = (async () => {
       try {
-        const response = await $fetch<{ success: boolean; data: KPITemplate[] }>(
-          `${apiUrl}/performance/kpi-templates`
-        )
-        if (response.success) {
-          kpiTemplates.value = response.data
-        }
+        const response = await apiFetch<KPITemplate[]>('/performance/kpi-templates')
+        kpiTemplates.value = response.data || []
       } catch (error) {
         handleError(error, {
           context: 'usePerformance.fetchKPITemplates',
-          customMessage: '取得 KPI 範本失敗'
+          customMessage: apiErrorMessage(error, '取得 KPI 範本失敗')
         })
         kpiTemplates.value = []
       } finally {
@@ -292,44 +307,33 @@ export const usePerformance = () => {
   }
 
   /**
-   * Create KPI template
+   * Create KPI template. Throws the backend error on failure.
    */
   const createKPITemplate = async (data: {
     name: string
     description?: string
     kpis: KPIItem[]
-  }): Promise<KPITemplate> => {
-    const response = await $fetch<{ success: boolean; data: KPITemplate }>(
-      `${apiUrl}/performance/kpi-templates`,
-      {
-        method: 'POST',
-        body: data
-      }
-    )
-    if (!response.success) {
-      throw new Error('建立 KPI 範本失敗')
-    }
+  }): Promise<KpiTemplateRecord> => {
+    const response = await apiFetch<KpiTemplateRecord>('/performance/kpi-templates', {
+      method: 'POST',
+      body: data
+    })
+    if (!response.data) throw new Error('建立 KPI 範本失敗')
     return response.data
   }
 
   /**
-   * Delete KPI template
+   * Delete KPI template (admin; only the tenant's own templates, shared ones answer 404).
+   * Throws the backend error on failure.
    */
   const deleteKPITemplate = async (id: string): Promise<void> => {
-    const response = await $fetch<{ success: boolean }>(
-      `${apiUrl}/performance/kpi-templates/${id}`,
-      { method: 'DELETE' }
-    )
-    if (!response.success) {
-      throw new Error('刪除 KPI 範本失敗')
-    }
+    await apiFetch(`/performance/kpi-templates/${id}`, { method: 'DELETE' })
   }
 
   /**
-   * Fetch team dashboard
+   * Fetch team dashboard. The backend filters by period only (no branch filter).
    */
   const fetchTeamDashboard = async (options?: {
-    branch_id?: string
     period?: string
   }): Promise<TeamDashboard | null> => {
     const key = JSON.stringify(options || {})
@@ -338,18 +342,14 @@ export const usePerformance = () => {
 
     const promise = (async () => {
       try {
-        const params = new URLSearchParams()
-        if (options?.branch_id) params.append('branch_id', options.branch_id)
-        if (options?.period) params.append('period', options.period)
-
-        const response = await $fetch<{ success: boolean; data: TeamDashboard }>(
-          `${apiUrl}/performance/team-dashboard?${params}`
-        )
-        return response.success ? response.data : null
+        const response = await apiFetch<TeamDashboard>('/performance/team-dashboard', {
+          params: { period: options?.period }
+        })
+        return response.data ?? null
       } catch (error) {
         handleError(error, {
           context: 'usePerformance.fetchTeamDashboard',
-          customMessage: '取得團隊儀表板失敗'
+          customMessage: apiErrorMessage(error, '取得團隊儀表板失敗')
         })
         return null
       } finally {
@@ -375,6 +375,7 @@ export const usePerformance = () => {
     const labels: Record<PerformanceReview['status'], string> = {
       DRAFT: '草稿',
       SUBMITTED: '待審核',
+      REVIEWED: '已審閱',
       APPROVED: '已核准'
     }
     return labels[status] || status
@@ -384,6 +385,7 @@ export const usePerformance = () => {
     const variants: Record<PerformanceReview['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
       DRAFT: 'default',
       SUBMITTED: 'warning',
+      REVIEWED: 'info',
       APPROVED: 'success'
     }
     return variants[status] || 'default'

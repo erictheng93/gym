@@ -1,86 +1,49 @@
-<script lang="ts">
-const periodOptions = [
-  { value: '7d', label: '最近 7 天' },
-  { value: '30d', label: '最近 30 天' },
-  { value: '90d', label: '最近 90 天' },
-  { value: 'all', label: '全部' }
-]
-
-const sourceColors: Record<string, string> = {
-  FB_AD: '#4267b2',
-  IG_AD: '#e1306c',
-  GOOGLE_AD: '#db4437',
-  WEBSITE: '#007aff',
-  WALK_IN: '#34c759',
-  REFERRAL: '#af52de'
-}
-</script>
-
 <script setup lang="ts">
 /**
  * 潛在客戶數據分析頁面
  *
- * 顯示來源分析、轉換率、漏斗圖
+ * 資料來源：GET /api/leads/stats/summary（總數、各階段數量、轉換率）
  */
+import { MESSAGES } from '~/constants'
+import { LEAD_STATUSES } from '~/composables/useLeads'
+
 definePageMeta({
   middleware: 'auth'
 })
 
-type LeadStatus = 'NEW' | 'CONTACTED' | 'TRIAL_BOOKED' | 'VISITED' | 'CONVERTED' | 'LOST'
-type LeadSource = 'FB_AD' | 'IG_AD' | 'GOOGLE_AD' | 'WEBSITE' | 'WALK_IN' | 'REFERRAL'
+const { fetchStats, getStatusLabel } = useLeads()
+const { branches, fetchBranches } = useBranches()
 
-const { fetchAnalytics, getSourceLabel, getStatusLabel } = useLeads()
-
-const analytics = ref<Awaited<ReturnType<typeof fetchAnalytics>> | null>(null)
+const stats = ref<Awaited<ReturnType<typeof fetchStats>> | null>(null)
 const isLoading = ref(true)
-const selectedPeriod = ref('30d')
+const selectedBranch = ref('')
 
-const loadAnalytics = async () => {
+const loadStats = async () => {
   isLoading.value = true
   try {
-    analytics.value = await fetchAnalytics({
-      period: selectedPeriod.value
-    })
-  } catch (error) {
-    console.error('Failed to load analytics:', error)
-    useToast().error('載入分析資料失敗')
+    stats.value = await fetchStats({ branchId: selectedBranch.value || undefined }, true)
   } finally {
     isLoading.value = false
   }
 }
 
-onMounted(loadAnalytics)
-
-watch(selectedPeriod, loadAnalytics)
-
-// Calculate conversion rate
-const conversionRate = computed(() => {
-  if (!analytics.value) return 0
-  const total = analytics.value.total_leads || 0
-  const converted = analytics.value.converted_leads || 0
-  return total > 0 ? ((converted / total) * 100).toFixed(1) : 0
+onMounted(async () => {
+  await Promise.all([loadStats(), fetchBranches()])
 })
 
-// Get max count for bar chart scaling
-const maxSourceCount = computed(() => {
-  if (!analytics.value?.by_source) return 1
-  return Math.max(...analytics.value.by_source.map(s => s.count ?? s.total ?? 1), 1)
-})
+watch(selectedBranch, loadStats)
 
-// Status funnel data
+const convertedCount = computed(() => stats.value?.byStatus.CONVERTED ?? 0)
+const lostCount = computed(() => stats.value?.byStatus.LOST ?? 0)
+
+// Pipeline: every backend stage, in order
 const funnelData = computed(() => {
-  if (!analytics.value?.by_status) return []
-  const statusOrder: LeadStatus[] = ['NEW', 'CONTACTED', 'TRIAL_BOOKED', 'VISITED', 'CONVERTED']
-  return statusOrder
-    .map(status => {
-      const item = analytics.value!.by_status.find(s => s.status === status)
-      return {
-        status,
-        label: getStatusLabel(status),
-        count: item?.count || 0
-      }
-    })
-    .filter(item => item.count > 0 || item.status === 'CONVERTED')
+  const byStatus = stats.value?.byStatus ?? {}
+  return LEAD_STATUSES.map(status => ({
+    status,
+    label: getStatusLabel(status),
+    count: byStatus[status] ?? 0
+  }))
 })
 
 const maxFunnelCount = computed(() => {
@@ -100,12 +63,13 @@ const maxFunnelCount = computed(() => {
           潛在客戶
         </NuxtLink>
         <h1 class="text-headline">數據分析</h1>
-        <p class="text-body text-secondary">分析潛在客戶來源與轉換效果</p>
+        <p class="text-body text-secondary">潛在客戶各階段分佈與轉換率</p>
       </div>
       <div class="header-actions">
-        <select v-model="selectedPeriod" class="input period-select">
-          <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
+        <select v-model="selectedBranch" class="input period-select">
+          <option value="">{{ MESSAGES.COMMON.ALL_BRANCHES }}</option>
+          <option v-for="branch in branches" :key="branch.id" :value="branch.id">
+            {{ branch.name }}
           </option>
         </select>
       </div>
@@ -114,7 +78,7 @@ const maxFunnelCount = computed(() => {
     <!-- Loading State -->
     <LoadingState v-if="isLoading" />
 
-    <template v-else-if="analytics">
+    <template v-else-if="stats">
       <!-- Summary Stats -->
       <section class="stats-section">
         <div class="stat-card">
@@ -128,7 +92,7 @@ const maxFunnelCount = computed(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">總潛在客戶</span>
-            <span class="stat-value">{{ analytics.total_leads || 0 }}</span>
+            <span class="stat-value">{{ stats.total }}</span>
           </div>
         </div>
 
@@ -140,7 +104,7 @@ const maxFunnelCount = computed(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">已轉換</span>
-            <span class="stat-value">{{ analytics.converted_leads || 0 }}</span>
+            <span class="stat-value">{{ convertedCount }}</span>
           </div>
         </div>
 
@@ -152,7 +116,7 @@ const maxFunnelCount = computed(() => {
           </div>
           <div class="stat-content">
             <span class="stat-label">轉換率</span>
-            <span class="stat-value">{{ conversionRate }}%</span>
+            <span class="stat-value">{{ stats.conversionRate }}%</span>
           </div>
         </div>
 
@@ -160,64 +124,28 @@ const maxFunnelCount = computed(() => {
           <div class="stat-icon" style="background: rgba(255, 149, 0, 0.1); color: #ff9500;">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
+              <line x1="15" x2="9" y1="9" y2="15" />
+              <line x1="9" x2="15" y1="9" y2="15" />
             </svg>
           </div>
           <div class="stat-content">
-            <span class="stat-label">平均轉換天數</span>
-            <span class="stat-value">{{ analytics.avg_conversion_days?.toFixed(1) || '—' }}</span>
+            <span class="stat-label">已流失</span>
+            <span class="stat-value">{{ lostCount }}</span>
           </div>
         </div>
       </section>
 
       <!-- Charts Grid -->
       <div class="charts-grid">
-        <!-- Source Distribution -->
-        <section class="chart-card card">
-          <h3 class="card-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-              <path d="M22 12A10 10 0 0 0 12 2v10z" />
-            </svg>
-            來源分佈
-          </h3>
-          <div v-if="analytics.by_source && analytics.by_source.length > 0" class="source-chart">
-            <div
-              v-for="source in analytics.by_source"
-              :key="source.source"
-              class="source-bar-item"
-            >
-              <div class="source-label">
-                <span
-                  class="source-dot"
-                  :style="{ background: sourceColors[source.source] || '#8e8e93' }"
-                ></span>
-                <span>{{ getSourceLabel(source.source as LeadSource) }}</span>
-              </div>
-              <div class="source-bar">
-                <div
-                  class="source-bar-fill"
-                  :style="{
-                    width: `${((source.count ?? source.total ?? 0) / maxSourceCount) * 100}%`,
-                    background: sourceColors[source.source] || '#8e8e93'
-                  }"
-                ></div>
-              </div>
-              <span class="source-count">{{ source.count ?? source.total ?? 0 }}</span>
-            </div>
-          </div>
-          <EmptyState v-else title="暫無資料" icon="chart" />
-        </section>
-
-        <!-- Conversion Funnel -->
-        <section class="chart-card card">
+        <!-- Pipeline Funnel -->
+        <section class="chart-card card full-width">
           <h3 class="card-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
             </svg>
-            轉換漏斗
+            各階段分佈
           </h3>
-          <div v-if="funnelData.length > 0" class="funnel-chart">
+          <div v-if="stats.total > 0" class="funnel-chart">
             <div
               v-for="(item, index) in funnelData"
               :key="item.status"
@@ -230,10 +158,7 @@ const maxFunnelCount = computed(() => {
               <div class="funnel-bar-container">
                 <div
                   class="funnel-bar"
-                  :style="{
-                    width: `${(item.count / maxFunnelCount) * 100}%`,
-                    opacity: 1 - (index * 0.15)
-                  }"
+                  :style="{ width: `${(item.count / maxFunnelCount) * 100}%` }"
                 ></div>
               </div>
               <span class="funnel-count">{{ item.count }}</span>
@@ -241,51 +166,9 @@ const maxFunnelCount = computed(() => {
           </div>
           <EmptyState v-else title="暫無資料" icon="chart" />
         </section>
-
-        <!-- Source Conversion Rate -->
-        <section class="chart-card card full-width">
-          <h3 class="card-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3v18h18" />
-              <path d="m19 9-5 5-4-4-3 3" />
-            </svg>
-            各來源轉換率
-          </h3>
-          <div v-if="analytics.source_conversion && analytics.source_conversion.length > 0" class="conversion-table">
-            <div class="table-header">
-              <div class="table-cell">來源</div>
-              <div class="table-cell">總數</div>
-              <div class="table-cell">已轉換</div>
-              <div class="table-cell">轉換率</div>
-              <div class="table-cell">平均天數</div>
-            </div>
-            <div
-              v-for="item in analytics.source_conversion"
-              :key="item.source"
-              class="table-row"
-            >
-              <div class="table-cell">
-                <span
-                  class="source-badge"
-                  :style="{ background: `${sourceColors[item.source] || '#8e8e93'}20`, color: sourceColors[item.source] || '#8e8e93' }"
-                >
-                  {{ getSourceLabel(item.source as LeadSource) }}
-                </span>
-              </div>
-              <div class="table-cell">{{ item.total }}</div>
-              <div class="table-cell">{{ item.converted }}</div>
-              <div class="table-cell">
-                <span class="conversion-rate" :class="{ good: item.conversion_rate >= 20 }">
-                  {{ item.conversion_rate?.toFixed(1) || 0 }}%
-                </span>
-              </div>
-              <div class="table-cell">{{ (item as any).avg_days?.toFixed(1) || '—' }} 天</div>
-            </div>
-          </div>
-          <EmptyState v-else title="暫無資料" icon="chart" />
-        </section>
       </div>
     </template>
+    <EmptyState v-else title="無法載入統計資料" icon="chart" />
   </PageContainer>
 </template>
 

@@ -2,7 +2,8 @@
 /**
  * KPI 範本管理頁面
  */
-import { usePerformance } from '~/composables/hr'
+import { usePerformance, useHrAccess } from '~/composables/hr'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -10,6 +11,7 @@ definePageMeta({
 
 const { confirm } = useConfirm()
 const toast = useToast()
+const { canViewHr, canManagePayroll } = useHrAccess()
 
 const {
   kpiTemplates,
@@ -28,7 +30,9 @@ const newTemplate = ref({
   ]
 })
 
-onMounted(fetchKPITemplates)
+onMounted(() => {
+  if (canViewHr.value) fetchKPITemplates()
+})
 
 // Add KPI item
 const addKPI = () => {
@@ -77,8 +81,7 @@ const handleCreate = async () => {
     resetForm()
     await fetchKPITemplates()
   } catch (error) {
-    console.error('Failed to create template:', error)
-    toast.error('建立失敗')
+    toast.error(apiErrorMessage(error, '建立失敗'))
   }
 }
 
@@ -107,8 +110,7 @@ const handleDelete = async (templateId: string) => {
     toast.success('範本已刪除')
     await fetchKPITemplates()
   } catch (error) {
-    console.error('Failed to delete template:', error)
-    toast.error('刪除失敗')
+    toast.error(apiErrorMessage(error, '刪除失敗'))
   }
 }
 </script>
@@ -130,13 +132,20 @@ const handleDelete = async (templateId: string) => {
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" />
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="績效考核僅限管理員與店長檢視"
+      icon="alert-circle"
+    />
+
+    <LoadingState v-else-if="isLoading" />
 
     <div v-else-if="kpiTemplates.length" class="templates-grid">
       <div v-for="template in kpiTemplates" :key="template.id" class="template-card">
         <div class="template-header">
           <h3 class="template-name">{{ template.name }}</h3>
-          <button class="btn-icon delete" @click="handleDelete(template.id)">
+          <button v-if="canManagePayroll" class="btn-icon delete" @click="handleDelete(template.id)">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
               <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />

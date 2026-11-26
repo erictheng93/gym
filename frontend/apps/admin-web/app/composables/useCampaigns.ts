@@ -1,119 +1,105 @@
 /**
  * useCampaigns - 行銷活動管理 composable
+ *
+ * Wire format of backend/src/routes/campaigns.ts: camelCase rows, decimals (budget,
+ * discountValue) as strings, the list answers with `pagination`. The backend has no
+ * lifecycle `status` to write: whether a campaign runs is `isActive` plus its date range.
  */
 
+import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
+import { apiErrorMessage } from '~/utils/api-error'
 
-export interface Campaign {
+export const CAMPAIGN_TYPES = ['PROMOTION', 'REFERRAL', 'SEASONAL', 'MEMBERSHIP', 'EVENT', 'OTHER'] as const
+export type CampaignType = typeof CAMPAIGN_TYPES[number]
+
+export type CampaignDiscountType = 'PERCENTAGE' | 'FIXED' | 'FREE_TRIAL' | 'GIFT'
+
+/** Display state derived from isActive + date range (the backend `status` column is never written) */
+export type CampaignState = 'INACTIVE' | 'SCHEDULED' | 'ACTIVE' | 'ENDED'
+
+export interface ApiCampaign {
   id: string
+  tenantId: string
+  branchId: string | null
   name: string
-  type: 'PROMOTION' | 'EVENT' | 'CHECKIN' | 'REFERRAL'
   description: string | null
-  start_date: string
-  end_date: string
-  target_audience: Record<string, unknown> | null
-  budget: number | null
-  actual_cost: number | null
-  status: 'DRAFT' | 'ACTIVE' | 'ENDED' | 'CANCELLED'
-  metrics: CampaignMetrics | null
-  created_by: string | null
-  created_at: string
-  // Computed
-  computed_status?: string
-  is_running?: boolean
-  created_by_name?: string
-  coupons?: Array<{
-    id: string
-    code: string
-    name: string
-    discount_type: string
-    discount_value: number
-    used_count: number
-  }>
-  associated_coupons?: Array<{
-    id: string
-    code: string
-    name: string
-    discount_type: string
-    discount_value: number
-    used_count: number
-  }>
-  assets?: Array<{
-    id: string
-    name: string
-    type: string
-    file_id: string | null
-  }>
+  campaignType: CampaignType | null
+  /** YYYY-MM-DD */
+  startDate: string
+  endDate: string
+  targetAudience: string | null
+  budget: string | null
+  discountType: CampaignDiscountType | null
+  discountValue: string | null
+  isActive: boolean | null
+  terms: string | null
+  createdById: string | null
+  status: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  branch?: { id: string | null; name: string | null } | null
+  createdBy?: { id: string | null; fullName: string | null } | null
 }
 
-export interface CampaignMetrics {
-  impressions: number
-  clicks: number
-  conversions: number
-  revenue: number
-  total_revenue?: number // Alias for revenue
-  leads_generated?: number
-  contracts_created?: number
-  revenue_generated?: number
-  coupon_usages?: number
-  roi?: string | null
-  conversion_rate?: string | null
-  updated_at?: string
-}
-
-export interface ROIReport {
-  id: string
+/** Body of POST /api/campaigns (createCampaignSchema) */
+export interface CreateCampaignInput {
   name: string
-  type: string
-  status: string
-  period: {
-    start: string
-    end: string
-  }
-  budget: number | null
-  actual_cost: number
-  revenue: number
-  profit: number
-  roi: number | null
-  conversions: number
+  description?: string
+  campaignType?: CampaignType
+  startDate: string
+  endDate: string
+  targetAudience?: string
+  budget?: number | string
+  discountType?: CampaignDiscountType
+  discountValue?: number | string
+  branchId?: string
+  isActive?: boolean
+  terms?: string
 }
 
-export interface ROISummary {
-  total_campaigns: number
-  total_budget: number
-  total_cost: number
-  total_revenue: number
-  total_profit: number
-  total_conversions: number
-  average_roi: string | null
-  best_performing: ROIReport | null
-  worst_performing: ROIReport | null
+/** Body of PATCH /api/campaigns/:id (updateCampaignSchema); every field optional */
+export type UpdateCampaignInput = Partial<CreateCampaignInput>
+
+interface CampaignListResponse {
+  success: boolean
+  data: ApiCampaign[]
+  pagination?: { total: number; page: number; limit: number; totalPages: number }
 }
 
 const inFlightCampaignsMap = new Map<string, Promise<void>>()
-const inFlightSingleCampaignMap = new Map<string, Promise<Campaign | null>>()
-const inFlightROIReportMap = new Map<string, Promise<{ summary: ROISummary; data: ROIReport[] } | null>>()
+const inFlightSingleCampaignMap = new Map<string, Promise<ApiCampaign | null>>()
+
+/** Same day boundary the backend uses for activeOnly (UTC date) */
+const todayIso = () => new Date().toISOString().slice(0, 10)
+
+export const getCampaignState = (
+  campaign: Pick<ApiCampaign, 'isActive' | 'startDate' | 'endDate'>,
+  today: string = todayIso()
+): CampaignState => {
+  if (campaign.isActive === false) return 'INACTIVE'
+  if (today < campaign.startDate) return 'SCHEDULED'
+  if (today > campaign.endDate) return 'ENDED'
+  return 'ACTIVE'
+}
 
 export const useCampaigns = () => {
-  const config = useRuntimeConfig()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
 
   // State
-  const campaigns = useState<Campaign[]>('campaigns', () => [])
-  const currentCampaign = useState<Campaign | null>('current_campaign', () => null)
-  const campaignMetrics = useState<CampaignMetrics | null>('campaign_metrics', () => null)
+  const campaigns = useState<ApiCampaign[]>('campaigns', () => [])
+  const currentCampaign = useState<ApiCampaign | null>('current_campaign', () => null)
   const isLoading = useState('campaigns_loading', () => false)
   const totalCount = useState('campaigns_total', () => 0)
 
-  const apiUrl = config.public.apiUrl
-
   /**
-   * Fetch campaigns
+   * Fetch campaigns. The backend filters by campaignType, branchId and activeOnly only.
    */
   const fetchCampaigns = async (options?: {
-    type?: string
-    status?: string
-    search?: string
+    campaignType?: string
+    activeOnly?: boolean
+    branchId?: string
     page?: number
     limit?: number
   }, force = false) => {
@@ -124,30 +110,25 @@ export const useCampaigns = () => {
 
     const promise = (async () => {
       isLoading.value = true
-      const { type, status, search, page = 1, limit = 20 } = options || {}
+      const { campaignType, activeOnly, branchId, page = 1, limit = 20 } = options || {}
 
       try {
-        const params = new URLSearchParams()
-        if (type) params.append('type', type)
-        if (status) params.append('status', status)
-        if (search) params.append('search', search)
-        params.append('limit', limit.toString())
-        params.append('offset', ((page - 1) * limit).toString())
+        const response = await apiFetch<ApiCampaign[]>('/campaigns', {
+          params: {
+            campaignType,
+            activeOnly: activeOnly ? true : undefined,
+            branchId,
+            page,
+            limit
+          }
+        }) as unknown as CampaignListResponse
 
-        const response = await $fetch<{
-          success: boolean
-          data: Campaign[]
-          meta: { total: number }
-        }>(`${apiUrl}/campaigns?${params}`)
-
-        if (response.success) {
-          campaigns.value = response.data
-          totalCount.value = response.meta.total
-        }
+        campaigns.value = response.data || []
+        totalCount.value = Number(response.pagination?.total ?? campaigns.value.length)
       } catch (error) {
         handleError(error, {
           context: 'useCampaigns.fetchCampaigns',
-          customMessage: '取得活動列表失敗'
+          customMessage: apiErrorMessage(error, '取得活動列表失敗')
         })
         campaigns.value = []
         totalCount.value = 0
@@ -164,21 +145,19 @@ export const useCampaigns = () => {
   /**
    * Get single campaign
    */
-  const getCampaign = async (id: string, force = false): Promise<Campaign | null> => {
+  const getCampaign = async (id: string, force = false): Promise<ApiCampaign | null> => {
     if (!force && inFlightSingleCampaignMap.has(id)) {
       return inFlightSingleCampaignMap.get(id)!
     }
 
     const promise = (async () => {
       try {
-        const response = await $fetch<{ success: boolean; data: Campaign }>(
-          `${apiUrl}/campaigns/${id}`
-        )
-        return response.success ? response.data : null
+        const { data } = await apiFetch<ApiCampaign>(`/campaigns/${id}`)
+        return data ?? null
       } catch (error) {
         handleError(error, {
           context: 'useCampaigns.getCampaign',
-          customMessage: '取得活動詳情失敗'
+          customMessage: apiErrorMessage(error, '取得活動詳情失敗')
         })
         return null
       } finally {
@@ -196,289 +175,94 @@ export const useCampaigns = () => {
   const fetchCampaign = async (id: string): Promise<void> => {
     isLoading.value = true
     try {
-      const campaign = await getCampaign(id)
-      currentCampaign.value = campaign
+      currentCampaign.value = await getCampaign(id, true)
     } finally {
       isLoading.value = false
     }
   }
 
-  /**
-   * Create campaign
-   */
-  const createCampaign = async (data: Partial<Campaign>): Promise<Campaign | null> => {
+  /** Returns null on failure, after showing the backend's reason; never throws. */
+  const createCampaign = async (input: CreateCampaignInput): Promise<ApiCampaign | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Campaign }>(`${apiUrl}/campaigns`, {
-        method: 'POST',
-        body: data
-      })
-      return response.success ? response.data : null
+      const { data } = await apiFetch<ApiCampaign>('/campaigns', { method: 'POST', body: input })
+      if (!data) throw new Error('建立活動失敗')
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useCampaigns.createCampaign',
-        customMessage: '建立活動失敗'
+        customMessage: apiErrorMessage(error, '建立活動失敗')
       })
       return null
     }
   }
 
-  /**
-   * Update campaign
-   */
-  const updateCampaign = async (id: string, data: Partial<Campaign>): Promise<Campaign | null> => {
+  /** Returns null on failure, after showing the backend's reason; never throws. */
+  const updateCampaign = async (id: string, input: UpdateCampaignInput): Promise<ApiCampaign | null> => {
     try {
-      const response = await $fetch<{ success: boolean; data: Campaign }>(
-        `${apiUrl}/campaigns/${id}`,
-        {
-          method: 'PATCH',
-          body: data
-        }
-      )
-      return response.success ? response.data : null
+      const { data } = await apiFetch<ApiCampaign>(`/campaigns/${id}`, { method: 'PATCH', body: input })
+      if (!data) throw new Error('更新活動失敗')
+      return data
     } catch (error) {
       handleError(error, {
         context: 'useCampaigns.updateCampaign',
-        customMessage: '更新活動失敗'
+        customMessage: apiErrorMessage(error, '更新活動失敗')
       })
       return null
     }
   }
 
-  /**
-   * Cancel campaign
-   */
-  const cancelCampaign = async (id: string): Promise<boolean> => {
+  /** Permanent delete (admin only on the backend). Returns false on failure, after showing why. */
+  const deleteCampaign = async (id: string): Promise<boolean> => {
     try {
-      const response = await $fetch<{ success: boolean }>(`${apiUrl}/campaigns/${id}`, {
-        method: 'DELETE'
-      })
-      return response.success
+      await apiFetch(`/campaigns/${id}`, { method: 'DELETE' })
+      return true
     } catch (error) {
       handleError(error, {
-        context: 'useCampaigns.cancelCampaign',
-        customMessage: '取消活動失敗'
+        context: 'useCampaigns.deleteCampaign',
+        customMessage: apiErrorMessage(error, '刪除活動失敗')
       })
       return false
     }
   }
 
-  /**
-   * Delete campaign (alias for cancelCampaign)
-   */
-  const deleteCampaign = cancelCampaign
-
-  /**
-   * Get campaign metrics
-   */
-  const getCampaignMetrics = async (id: string): Promise<CampaignMetrics | null> => {
-    try {
-      const response = await $fetch<{
-        success: boolean
-        data: {
-          campaign_id: string
-          campaign_name: string
-          period: { start_date: string; end_date: string }
-          budget: number | null
-          actual_cost: number | null
-          metrics: CampaignMetrics
-        }
-      }>(`${apiUrl}/campaigns/${id}/metrics`)
-      return response.success ? response.data.metrics : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.getCampaignMetrics',
-        customMessage: '取得活動指標失敗'
-      })
-      return null
-    }
-  }
-
-  /**
-   * Fetch campaign metrics and store in state
-   */
-  const fetchCampaignMetrics = async (id: string): Promise<void> => {
-    try {
-      const metrics = await getCampaignMetrics(id)
-      campaignMetrics.value = metrics
-    } catch {
-      campaignMetrics.value = null
-    }
-  }
-
-  /**
-   * Update campaign metrics
-   */
-  const updateCampaignMetrics = async (
-    id: string,
-    metrics: Partial<CampaignMetrics> & { actual_cost?: number }
-  ): Promise<Campaign | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: Campaign }>(
-        `${apiUrl}/campaigns/${id}/update-metrics`,
-        {
-          method: 'POST',
-          body: metrics
-        }
-      )
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.updateCampaignMetrics',
-        customMessage: '更新活動指標失敗'
-      })
-      return null
-    }
-  }
-
-  /**
-   * Add asset to campaign
-   */
-  const addAsset = async (
-    campaignId: string,
-    asset: {
-      name: string
-      type: string
-      category?: string
-      file_id?: string
-      content?: string
-      created_by?: string
-    }
-  ): Promise<unknown | null> => {
-    try {
-      const response = await $fetch<{ success: boolean; data: unknown }>(
-        `${apiUrl}/campaigns/${campaignId}/assets`,
-        {
-          method: 'POST',
-          body: asset
-        }
-      )
-      return response.success ? response.data : null
-    } catch (error) {
-      handleError(error, {
-        context: 'useCampaigns.addAsset',
-        customMessage: '新增素材失敗'
-      })
-      return null
-    }
-  }
-
-  /**
-   * Get ROI report
-   */
-  const getROIReport = async (options?: {
-    startDate?: string
-    endDate?: string
-    type?: string
-  }, force = false): Promise<{ summary: ROISummary; data: ROIReport[] } | null> => {
-    const key = JSON.stringify(options || {})
-    if (!force && inFlightROIReportMap.has(key)) {
-      return inFlightROIReportMap.get(key)!
-    }
-
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        if (options?.startDate) params.append('start_date', options.startDate)
-        if (options?.endDate) params.append('end_date', options.endDate)
-        if (options?.type) params.append('type', options.type)
-
-        const response = await $fetch<{
-          success: boolean
-          period: { start_date: string; end_date: string }
-          summary: ROISummary
-          data: ROIReport[]
-        }>(`${apiUrl}/campaigns/roi-report?${params}`)
-
-        return response.success ? { summary: response.summary, data: response.data } : null
-      } catch (error) {
-        handleError(error, {
-          context: 'useCampaigns.getROIReport',
-          customMessage: '取得 ROI 報表失敗'
-        })
-        return null
-      } finally {
-        inFlightROIReportMap.delete(key)
-      }
-    })()
-
-    inFlightROIReportMap.set(key, promise)
-    return promise
-  }
-
-  /**
-   * Fetch ROI report (alias for getROIReport)
-   */
-  const fetchROIReport = getROIReport
-
   // Helpers
-  const getTypeLabel = (type: Campaign['type']): string => {
-    const labels: Record<Campaign['type'], string> = {
+  const getTypeLabel = (type: CampaignType | string | null | undefined): string => {
+    const labels: Record<CampaignType, string> = {
       PROMOTION: '促銷活動',
+      REFERRAL: '推薦活動',
+      SEASONAL: '季節活動',
+      MEMBERSHIP: '會籍活動',
       EVENT: '線下活動',
-      CHECKIN: '打卡活動',
-      REFERRAL: '轉介紹'
+      OTHER: '其他'
     }
-    return labels[type] || type
+    if (!type) return '—'
+    return labels[type as CampaignType] || type
   }
 
-  const getTypeColor = (type: Campaign['type']): string => {
-    const colors: Record<Campaign['type'], string> = {
-      PROMOTION: 'bg-purple-100 text-purple-800',
-      EVENT: 'bg-blue-100 text-blue-800',
-      CHECKIN: 'bg-green-100 text-green-800',
-      REFERRAL: 'bg-orange-100 text-orange-800'
-    }
-    return colors[type] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusLabel = (status: Campaign['status']): string => {
-    const labels: Record<Campaign['status'], string> = {
-      DRAFT: '草稿',
+  const getStatusLabel = (state: CampaignState): string => {
+    const labels: Record<CampaignState, string> = {
+      INACTIVE: '已停用',
+      SCHEDULED: '已排程',
       ACTIVE: '進行中',
-      ENDED: '已結束',
-      CANCELLED: '已取消'
+      ENDED: '已結束'
     }
-    return labels[status] || status
+    return labels[state] || state
   }
 
-  const getStatusColor = (status: Campaign['status']): string => {
-    const colors: Record<Campaign['status'], string> = {
-      DRAFT: 'bg-gray-100 text-gray-800',
-      ACTIVE: 'bg-green-100 text-green-800',
-      ENDED: 'bg-blue-100 text-blue-800',
-      CANCELLED: 'bg-red-100 text-red-800'
-    }
-    return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusVariant = (status: Campaign['status']): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
-    const variants: Record<Campaign['status'], 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
-      DRAFT: 'default',
+  const getStatusVariant = (state: CampaignState): 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent' => {
+    const variants: Record<CampaignState, 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'> = {
+      INACTIVE: 'default',
+      SCHEDULED: 'warning',
       ACTIVE: 'success',
-      ENDED: 'info',
-      CANCELLED: 'error'
+      ENDED: 'info'
     }
-    return variants[status] || 'default'
-  }
-
-  const formatROI = (roi: number | null): string => {
-    if (roi === null) return '-'
-    return `${roi >= 0 ? '+' : ''}${roi}%`
-  }
-
-  const getROIColor = (roi: number | null): string => {
-    if (roi === null) return 'text-gray-500'
-    if (roi >= 100) return 'text-emerald-600'
-    if (roi >= 50) return 'text-green-600'
-    if (roi >= 0) return 'text-yellow-600'
-    return 'text-red-600'
+    return variants[state] || 'default'
   }
 
   return {
     // State
     campaigns,
     currentCampaign,
-    campaignMetrics,
     isLoading,
     totalCount,
     // Actions
@@ -487,22 +271,12 @@ export const useCampaigns = () => {
     getCampaign,
     createCampaign,
     updateCampaign,
-    cancelCampaign,
     deleteCampaign,
-    getCampaignMetrics,
-    fetchCampaignMetrics,
-    updateCampaignMetrics,
-    addAsset,
-    getROIReport,
-    fetchROIReport,
     // Helpers
+    getCampaignState,
     getTypeLabel,
-    getTypeColor,
     getStatusLabel,
-    getStatusColor,
-    getStatusVariant,
-    formatROI,
-    getROIColor
+    getStatusVariant
   }
 }
 

@@ -6,16 +6,22 @@ import { MESSAGES } from '~/constants'
 import { generatePayrollSchema, type GeneratePayrollInput } from '~/schemas/payroll.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 import { useFormSubmit } from '~/composables/useFormSubmit'
-import { usePayroll } from '~/composables/hr'
+import { usePayroll, useHrAccess } from '~/composables/hr'
+import type { ApiEmployee } from '~/composables/useEmployees'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const router = useRouter()
+const toast = useToast()
 const { generatePayroll } = usePayroll()
 const { branches, fetchBranches } = useBranches()
-const { employees, fetchEmployees } = useEmployees()
+const { fetchAllEmployees } = useEmployees()
+const { canManagePayroll } = useHrAccess()
+
+// GET /api/employees (active, unpaginated) answers in camelCase
+const employees = ref<ApiEmployee[]>([])
 
 // Get current period
 function getCurrentPeriod() {
@@ -47,13 +53,15 @@ const selectedEmployeeIds = ref<string[]>([])
 // Filter employees by branch
 const filteredEmployees = computed(() => {
   if (selectionMode.value === 'branch' && form.branch_id) {
-    return employees.value.filter(e => e.branch_id === form.branch_id)
+    return employees.value.filter(e => e.branchId === form.branch_id)
   }
   return employees.value
 })
 
 onMounted(async () => {
-  await Promise.all([fetchBranches(), fetchEmployees()])
+  if (!canManagePayroll.value) return
+  const [, all] = await Promise.all([fetchBranches(), fetchAllEmployees()])
+  employees.value = all as unknown as ApiEmployee[]
 })
 
 // Generate period options
@@ -75,6 +83,16 @@ const handleSubmit = async () => {
 
   if (!validate()) return
 
+  // The backend generates for everybody when no scope is sent, so an empty scope must not pass
+  if (selectionMode.value === 'branch' && !form.branch_id) {
+    setError('branch_id', '請選擇分店')
+    return
+  }
+  if (selectionMode.value === 'selected' && selectedEmployeeIds.value.length === 0) {
+    setError('submit', '請至少選擇一位員工')
+    return
+  }
+
   await submit(
     async () => {
       const payload: GeneratePayrollInput = {
@@ -87,16 +105,18 @@ const handleSubmit = async () => {
         payload.employee_ids = selectedEmployeeIds.value
       }
 
-      const result = await generatePayroll(payload)
-      if (!result) {
-        throw new Error('產生薪資失敗')
-      }
-      return result
+      return await generatePayroll(payload)
     },
     {
-      successMessage: '已成功產生薪資紀錄',
-      errorMessage: '產生薪資失敗',
-      onSuccess: async () => { await router.push('/hr/payroll') },
+      showSuccessToast: false,
+      onSuccess: async (result) => {
+        if (result.generated === 0) {
+          toast.warning(`沒有新增薪資紀錄（${result.skipped} 筆本期已存在，或沒有符合條件的在職員工）`)
+        } else {
+          toast.success(`已產生 ${result.generated} 筆薪資紀錄` + (result.skipped ? `，略過 ${result.skipped} 筆已存在` : ''))
+        }
+        await router.push('/hr/payroll')
+      },
       onError: (error) => setError('submit', error.message)
     }
   )
@@ -145,7 +165,16 @@ const toggleAll = () => {
     </div>
 
     <!-- Form -->
-    <form class="form-container" @submit.prevent="handleSubmit">
+    <EmptyState
+      v-if="!canManagePayroll"
+      title="無權限"
+      description="僅管理員可產生薪資"
+      icon="alert-circle"
+      action-label="返回列表"
+      action-to="/hr/payroll"
+    />
+
+    <form v-else class="form-container" @submit.prevent="handleSubmit">
       <!-- Period Selection -->
       <section class="form-section glass-card">
         <h2 class="section-title">
@@ -210,6 +239,7 @@ const toggleAll = () => {
             label="選擇分店"
             :options="branches.map(b => ({ value: b.id, label: b.name }))"
             placeholder="請選擇分店"
+            :error="errors.branch_id"
           />
         </div>
 
@@ -233,10 +263,10 @@ const toggleAll = () => {
                 :checked="selectedEmployeeIds.includes(employee.id)"
                 @change="toggleEmployee(employee.id)"
               />
-              <AppAvatar :name="employee.full_name" size="sm" variant="blue" />
+              <AppAvatar :name="employee.fullName" size="sm" variant="blue" />
               <div class="employee-info">
-                <span class="employee-name">{{ employee.full_name }}</span>
-                <span class="employee-code">{{ employee.employee_code }}</span>
+                <span class="employee-name">{{ employee.fullName }}</span>
+                <span class="employee-code">{{ employee.employeeCode }}</span>
               </div>
             </label>
           </div>
@@ -252,7 +282,7 @@ const toggleAll = () => {
         </svg>
         <div class="info-content">
           <strong>薪資計算說明</strong>
-          <p>系統將根據以下資料自動計算：底薪、出勤紀錄、加班時數、請假扣款、業績獎金等。</p>
+          <p>系統會依員工底薪建立本期薪資紀錄（本期已存在的紀錄會略過）；加班、獎金與扣款請在薪資明細頁調整。</p>
         </div>
       </div>
 

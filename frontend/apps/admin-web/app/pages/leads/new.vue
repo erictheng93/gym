@@ -1,11 +1,12 @@
 <script lang="ts">
 const sourceOptions = [
-  { value: 'FB_AD', label: 'Facebook 廣告' },
-  { value: 'IG_AD', label: 'Instagram 廣告' },
-  { value: 'GOOGLE_AD', label: 'Google 廣告' },
-  { value: 'WEBSITE', label: '網站' },
-  { value: 'WALK_IN', label: '現場' },
-  { value: 'REFERRAL', label: '推薦' }
+  { value: 'WALK_IN', label: '現場來訪' },
+  { value: 'REFERRAL', label: '轉介紹' },
+  { value: 'WEBSITE', label: '官網' },
+  { value: 'SOCIAL_MEDIA', label: '社群媒體' },
+  { value: 'EVENT', label: '活動' },
+  { value: 'AD', label: '廣告' },
+  { value: 'OTHER', label: '其他' }
 ]
 </script>
 
@@ -31,15 +32,13 @@ const { employees, fetchEmployees } = useEmployees()
 
 // Form state with Zod validation
 const initialData: CreateLeadInput = {
-  name: '',
+  fullName: '',
   phone: '',
   email: '',
-  source: 'WEBSITE',
-  branch_id: '',
-  assigned_to: null,
-  utm_source: '',
-  utm_medium: '',
-  utm_campaign: '',
+  source: 'WALK_IN',
+  sourceDetail: '',
+  branchId: '',
+  assignedToId: null,
   notes: ''
 }
 
@@ -59,15 +58,15 @@ const branchOptions = computed(() =>
 )
 
 const employeeOptions = computed(() =>
-  employees.value.map(e => ({ value: e.id, label: e.full_name }))
+  employees.value.map(e => ({ value: e.id, label: e.fullName }))
 )
 
 // Initial load
 onMounted(async () => {
   await Promise.all([fetchBranches(), fetchEmployees()])
   const firstBranch = branches.value[0]
-  if (firstBranch && !form.branch_id) {
-    form.branch_id = firstBranch.id
+  if (firstBranch && !form.branchId) {
+    form.branchId = firstBranch.id
   }
 })
 
@@ -79,18 +78,19 @@ const handleSubmit = async () => {
 
   await submit(
     async () => {
-      const leadData = {
-        ...form,
-        email: form.email || null,
-        assigned_to: form.assigned_to || null,
-        utm_source: form.utm_source || null,
-        utm_medium: form.utm_medium || null,
-        utm_campaign: form.utm_campaign || null,
-        notes: form.notes || null
-      }
-
-      const result = await createLead(leadData)
+      // The backend schema rejects null for optional fields: omit the empty ones instead
+      const result = await createLead({
+        fullName: form.fullName.trim(),
+        phone: form.phone,
+        email: form.email || undefined,
+        source: form.source,
+        sourceDetail: form.sourceDetail || undefined,
+        branchId: form.branchId,
+        assignedToId: form.assignedToId || undefined,
+        notes: form.notes || undefined
+      })
       if (!result) {
+        // createLead already showed the backend's reason; fail the submit so no success toast is shown
         throw new Error('建立潛在客戶失敗')
       }
       return result
@@ -98,6 +98,7 @@ const handleSubmit = async () => {
     {
       successMessage: '已成功建立潛在客戶',
       errorMessage: '建立潛在客戶失敗',
+      showErrorToast: false,
       onSuccess: async () => { await router.push('/leads') },
       onError: (error) => setError('submit', error.message)
     }
@@ -144,11 +145,11 @@ const handleSubmit = async () => {
 
         <div class="form-grid">
           <FormInput
-            v-model="form.name"
+            v-model="form.fullName"
             label="姓名"
             placeholder="請輸入姓名"
             :required="true"
-            :error="errors.name"
+            :error="errors.fullName"
           />
 
           <FormInput
@@ -176,16 +177,16 @@ const handleSubmit = async () => {
           />
 
           <FormSelect
-            v-model="form.branch_id"
+            v-model="form.branchId"
             label="分店"
             :options="branchOptions"
             placeholder="請選擇分店"
             :required="true"
-            :error="errors.branch_id"
+            :error="errors.branchId"
           />
 
           <FormSelect
-            v-model="form.assigned_to"
+            v-model="form.assignedToId"
             label="負責人"
             :options="employeeOptions"
             placeholder="選擇負責人（可選）"
@@ -194,36 +195,22 @@ const handleSubmit = async () => {
         </div>
       </section>
 
-      <!-- UTM Section -->
+      <!-- Source Detail -->
       <section class="form-section glass-card">
         <h2 class="section-title">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 3v18h18" />
             <path d="m19 9-5 5-4-4-3 3" />
           </svg>
-          UTM 追蹤參數
+          來源說明
         </h2>
 
-        <div class="form-grid">
-          <FormInput
-            v-model="form.utm_source"
-            label="utm_source"
-            placeholder="例：facebook"
-          />
-
-          <FormInput
-            v-model="form.utm_medium"
-            label="utm_medium"
-            placeholder="例：cpc"
-          />
-
-          <FormInput
-            v-model="form.utm_campaign"
-            label="utm_campaign"
-            placeholder="例：summer_promo_2024"
-            class="full-width"
-          />
-        </div>
+        <FormInput
+          v-model="form.sourceDetail"
+          label="來源說明"
+          placeholder="例：朋友介紹、Facebook 夏季活動"
+          :error="errors.sourceDetail"
+        />
       </section>
 
       <!-- Notes Section -->

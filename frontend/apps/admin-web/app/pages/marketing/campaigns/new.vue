@@ -1,9 +1,11 @@
 <script lang="ts">
 const typeOptions = [
   { value: 'PROMOTION', label: '促銷活動' },
-  { value: 'SEASONAL', label: '季節活動' },
   { value: 'REFERRAL', label: '推薦活動' },
-  { value: 'RETENTION', label: '留存活動' }
+  { value: 'SEASONAL', label: '季節活動' },
+  { value: 'MEMBERSHIP', label: '會籍活動' },
+  { value: 'EVENT', label: '線下活動' },
+  { value: 'OTHER', label: '其他' }
 ]
 
 const segmentOptions = [
@@ -20,7 +22,7 @@ const segmentOptions = [
  * 新增行銷活動頁面
  */
 import { MESSAGES } from '~/constants'
-import { campaignSchema } from '~/schemas/campaign.schema'
+import { campaignSchema, type CampaignFormInput } from '~/schemas/campaign.schema'
 import { useZodFormValidation } from '~/composables/core/useZodFormValidation'
 
 definePageMeta({
@@ -29,60 +31,64 @@ definePageMeta({
 
 const toast = useToast()
 const router = useRouter()
-const { createCampaign, isLoading } = useCampaigns()
-const { coupons, fetchCoupons } = useCoupons()
+const { createCampaign } = useCampaigns()
 const { branches, fetchBranches } = useBranches()
+
+const initialData: CampaignFormInput = {
+  name: '',
+  description: '',
+  campaignType: 'PROMOTION',
+  startDate: '',
+  endDate: '',
+  budget: null
+}
 
 const {
   formData,
   errors,
   validateField,
   validate
-} = useZodFormValidation(campaignSchema, {
-  name: '',
-  description: '',
-  type: 'PROMOTION' as const,
-  start_date: '',
-  end_date: '',
-  budget: null
+} = useZodFormValidation(campaignSchema, initialData)
+
+// Fields outside the validation schema
+const additionalData = ref({
+  isActive: true,
+  targetAudience: '',
+  branchId: ''
 })
 
-// Additional form fields not in schema
-const additionalData = ref({
-  status: 'DRAFT' as 'DRAFT' | 'ACTIVE' | 'ENDED' | 'CANCELLED',
-  target_segment: '',
-  associated_coupons: [] as string[],
-  target_branches: [] as string[]
-})
+const isSubmitting = ref(false)
 
 onMounted(async () => {
-  await Promise.all([fetchCoupons({ limit: 100 }), fetchBranches()])
+  await fetchBranches()
 })
 
 const handleSubmit = async () => {
+  if (isSubmitting.value) return
   if (!validate()) {
     toast.error(MESSAGES.COMMON.VALIDATION_ERROR)
     return
   }
 
+  isSubmitting.value = true
   try {
-    // Cast is needed because Campaign type expects associated_coupons as objects,
-    // but API accepts string IDs for creation
+    // createCampaign shows the backend's error itself and returns null on failure
     const result = await createCampaign({
-      ...formData,
-      status: additionalData.value.status,
-      target_segment: additionalData.value.target_segment,
-      target_branches: additionalData.value.target_branches,
-      budget: formData.budget ? Number(formData.budget) : null
-    } as Parameters<typeof createCampaign>[0])
-    if (!result) {
-      throw new Error('建立活動失敗')
-    }
+      name: formData.name,
+      campaignType: formData.campaignType,
+      startDate: formData.startDate,
+      endDate: formData.endDate,
+      description: formData.description || undefined,
+      budget: formData.budget ? Number(formData.budget) : undefined,
+      targetAudience: additionalData.value.targetAudience || undefined,
+      branchId: additionalData.value.branchId || undefined,
+      isActive: additionalData.value.isActive
+    })
+    if (!result) return
     toast.success('活動建立成功')
-    navigateTo(`/marketing/campaigns/${result.id}`)
-  } catch (error) {
-    console.error('Failed to create campaign:', error)
-    toast.error('建立活動失敗')
+    await navigateTo(`/marketing/campaigns/${result.id}`)
+  } finally {
+    isSubmitting.value = false
   }
 }
 </script>
@@ -114,34 +120,34 @@ const handleSubmit = async () => {
           placeholder="活動詳細說明..."
           :rows="3"
           :error="errors.description"
-          @update:model-value="formData.description = $event ?? null"
+          @update:model-value="formData.description = $event ?? undefined"
           @blur="validateField('description')"
         />
 
         <FormSelect
-          v-model="formData.type"
+          v-model="formData.campaignType"
           label="活動類型"
           :options="typeOptions"
           required
-          :error="errors.type"
-          @blur="validateField('type')"
+          :error="errors.campaignType"
+          @blur="validateField('campaignType')"
         />
 
         <div class="form-row">
           <FormDatePicker
-            v-model="formData.start_date"
+            v-model="formData.startDate"
             label="開始日期"
             required
-            :error="errors.start_date"
-            @blur="validateField('start_date')"
+            :error="errors.startDate"
+            @blur="validateField('startDate')"
           />
 
           <FormDatePicker
-            v-model="formData.end_date"
+            v-model="formData.endDate"
             label="結束日期"
             required
-            :error="errors.end_date"
-            @blur="validateField('end_date')"
+            :error="errors.endDate"
+            @blur="validateField('endDate')"
           />
         </div>
 
@@ -161,52 +167,33 @@ const handleSubmit = async () => {
         <h2 class="form-section-title">目標設定</h2>
 
         <FormSelect
-          v-model="additionalData.target_segment"
+          v-model="additionalData.targetAudience"
           label="目標會員分群"
           :options="segmentOptions"
         />
 
         <div class="form-field">
           <label class="form-label">適用分店</label>
-          <div class="checkbox-group">
-            <label v-for="branch in branches" :key="branch.id" class="checkbox-item">
-              <input
-                v-model="additionalData.target_branches"
-                type="checkbox"
-                :value="branch.id"
-              />
-              <span>{{ branch.name }}</span>
-            </label>
-          </div>
-          <p class="form-hint">不選則適用全部分店</p>
+          <select v-model="additionalData.branchId" class="input">
+            <option value="">全部分店</option>
+            <option v-for="branch in branches" :key="branch.id" :value="branch.id">
+              {{ branch.name }}
+            </option>
+          </select>
         </div>
-      </div>
 
-      <div class="form-card">
-        <h2 class="form-section-title">關聯優惠券</h2>
-
-        <div class="form-field">
-          <label class="form-label">選擇優惠券</label>
-          <div class="checkbox-group">
-            <label v-for="coupon in coupons" :key="coupon.id" class="checkbox-item">
-              <input
-                v-model="additionalData.associated_coupons"
-                type="checkbox"
-                :value="coupon.id"
-              />
-              <span>{{ coupon.name }} ({{ coupon.code }})</span>
-            </label>
-          </div>
-          <p v-if="coupons.length === 0" class="form-hint">暫無可用優惠券</p>
-        </div>
+        <label class="checkbox-item">
+          <input v-model="additionalData.isActive" type="checkbox" />
+          <span>建立後立即啟用</span>
+        </label>
       </div>
 
       <div class="form-actions">
         <button type="button" class="btn btn-secondary" @click="router.back()">
           取消
         </button>
-        <button type="submit" class="btn btn-primary" :disabled="isLoading">
-          {{ isLoading ? '建立中...' : '建立活動' }}
+        <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+          {{ isSubmitting ? '建立中...' : '建立活動' }}
         </button>
       </div>
     </form>
@@ -259,12 +246,6 @@ const handleSubmit = async () => {
 .form-hint {
   font-size: 12px;
   color: var(--color-text-tertiary);
-}
-
-.checkbox-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md);
 }
 
 .checkbox-item {

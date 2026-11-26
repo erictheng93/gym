@@ -17,7 +17,8 @@ const formatDate = (dateStr: string | null) => {
 /**
  * 績效考核詳情頁面
  */
-import { usePerformance } from '~/composables/hr'
+import { usePerformance, useHrAccess } from '~/composables/hr'
+import { apiErrorMessage } from '~/utils/api-error'
 
 definePageMeta({
   middleware: 'auth'
@@ -26,7 +27,7 @@ definePageMeta({
 const route = useRoute()
 const toast = useToast()
 const { confirm } = useConfirm()
-const { currentEmployee } = useAuth()
+const { canViewHr, canManagePayroll: canApproveReviews } = useHrAccess()
 
 const reviewId = computed(() => route.params.reviewId as string)
 
@@ -51,8 +52,7 @@ const editForm = ref({
 })
 
 // Load data
-onMounted(async () => {
-  await fetchReview(reviewId.value)
+const syncEditForm = () => {
   if (currentReview.value) {
     editForm.value = {
       score: currentReview.value.score,
@@ -60,28 +60,33 @@ onMounted(async () => {
       improvement_plan: currentReview.value.improvement_plan || ''
     }
   }
+}
+
+onMounted(async () => {
+  if (!canViewHr.value) return
+  await fetchReview(reviewId.value)
+  syncEditForm()
 })
 
-// Check if current user is reviewer
-const isReviewer = computed(() => {
-  return currentReview.value?.reviewer_id === currentEmployee.value?.id
-})
-
-// Check if can approve
-const canApprove = computed(() => {
-  return currentReview.value?.status === 'SUBMITTED' && isReviewer.value
-})
+// Reviews never get a reviewer assigned, and the backend lets any HR reader (manager and up)
+// edit / submit a DRAFT; approving and rejecting a SUBMITTED review is admin only.
+const canEditDraft = computed(() => canViewHr.value && currentReview.value?.status === 'DRAFT')
+const canApprove = computed(() => canApproveReviews.value && currentReview.value?.status === 'SUBMITTED')
 
 // Save edits
 const saveEdits = async () => {
   try {
-    await updateReview(reviewId.value, editForm.value)
+    await updateReview(reviewId.value, {
+      score: editForm.value.score !== null && String(editForm.value.score) !== '' ? Number(editForm.value.score) : null,
+      comments: editForm.value.comments,
+      improvement_plan: editForm.value.improvement_plan
+    })
     toast.success('考核更新成功')
     isEditing.value = false
     await fetchReview(reviewId.value)
+    syncEditForm()
   } catch (error) {
-    console.error('Failed to update review:', error)
-    toast.error('更新失敗')
+    toast.error(apiErrorMessage(error, '更新失敗'))
   }
 }
 
@@ -101,8 +106,7 @@ const handleSubmit = async () => {
     toast.success('考核已提交')
     await fetchReview(reviewId.value)
   } catch (error) {
-    console.error('Failed to submit review:', error)
-    toast.error('提交失敗')
+    toast.error(apiErrorMessage(error, '提交失敗'))
   }
 }
 
@@ -122,8 +126,7 @@ const handleApprove = async () => {
     toast.success('考核已核准')
     await fetchReview(reviewId.value)
   } catch (error) {
-    console.error('Failed to approve review:', error)
-    toast.error('核准失敗')
+    toast.error(apiErrorMessage(error, '核准失敗'))
   }
 }
 
@@ -144,8 +147,7 @@ const handleReject = async () => {
     rejectReason.value = ''
     await fetchReview(reviewId.value)
   } catch (error) {
-    console.error('Failed to reject review:', error)
-    toast.error('退回失敗')
+    toast.error(apiErrorMessage(error, '退回失敗'))
   }
 }
 
@@ -166,7 +168,7 @@ const getScoreClass = (score: number | null) => {
       back-to="/hr/performance"
     >
       <template #actions>
-        <template v-if="currentReview?.status === 'DRAFT' && isReviewer">
+        <template v-if="canEditDraft">
           <button class="btn btn-secondary" @click="isEditing = !isEditing">
             {{ isEditing ? '取消編輯' : '編輯' }}
           </button>
@@ -185,7 +187,14 @@ const getScoreClass = (score: number | null) => {
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" />
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="績效考核僅限管理員與店長檢視"
+      icon="alert-circle"
+    />
+
+    <LoadingState v-else-if="isLoading" />
 
     <template v-else-if="currentReview">
       <div class="review-grid">

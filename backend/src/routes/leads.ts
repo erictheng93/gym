@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, leads, branches, employees, members } from '../db/index.js';
-import { eq, and, sql, desc, ilike, or, inArray } from 'drizzle-orm';
+import { eq, and, sql, desc, ilike, or, inArray, isNull } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -33,6 +33,8 @@ const createLeadSchema = leadFieldsSchema.extend({
 // Default-free: in zod v4 .partial() still applies .default()s, which would
 // reset the pipeline status to NEW on every PATCH that does not send it.
 const updateLeadSchema = leadFieldsSchema.partial();
+
+class AlreadyConvertedError extends Error {}
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
 
@@ -340,7 +342,9 @@ app.post('/:id/convert', async (c) => {
     return c.json({ success: false, error: '潛在客戶不存在' }, 404);
   }
 
-  if (lead.leadStatus === 'CONVERTED') {
+  // The pipeline stage lives in `status`, the field the create/update/list/stats handlers
+  // read and write; the legacy `lead_status` column is only kept in sync below.
+  if (lead.status === 'CONVERTED' || lead.convertedMemberId) {
     return c.json({ success: false, error: '此潛在客戶已轉換' }, 400);
   }
 
@@ -348,35 +352,50 @@ app.post('/:id/convert', async (c) => {
   const memberCode = `M${String(lastNum + 1).padStart(6, '0')}`;
 
   // Ensure phone is provided for member creation
-  if (!lead.phone) {
+  const phone = lead.phone;
+  if (!phone) {
     return c.json({ success: false, error: '需要電話號碼才能轉換為會員' }, 400);
   }
 
-  // Create member from lead
-  const [newMember] = await db.insert(members).values({
-    fullName: lead.fullName,
-    phone: lead.phone,
-    email: lead.email,
-    memberCode,
-    branchId: lead.branchId,
-    tenantId,
-    status: 'ACTIVE',
-    notes: lead.source ? `來源: ${lead.source}` : undefined,
-    joinDate: new Date().toISOString().slice(0, 10),
-  }).returning(NEW_MEMBER_RETURNING);
+  const now = new Date();
+  // The member insert and the lead update commit together. The update only matches a lead
+  // that is still unconverted, so a concurrent second convert rolls back its member.
+  const newMember = await db.transaction(async (tx) => {
+    const [member] = await tx.insert(members).values({
+      fullName: lead.fullName,
+      phone,
+      email: lead.email,
+      memberCode,
+      branchId: lead.branchId,
+      tenantId,
+      status: 'ACTIVE',
+      notes: lead.source ? `來源: ${lead.source}` : undefined,
+      joinDate: now.toISOString().slice(0, 10),
+    }).returning(NEW_MEMBER_RETURNING);
 
-  // Update lead status
-  await db.update(leads).set({
-    leadStatus: 'CONVERTED',
-    convertedMemberId: newMember.id,
-    convertedAt: new Date(),
-    updatedAt: new Date(),
-  }).where(eq(leads.id, id));
+    const [converted] = await tx.update(leads).set({
+      status: 'CONVERTED',
+      leadStatus: 'CONVERTED',
+      convertedMemberId: member.id,
+      convertedAt: now,
+      updatedAt: now,
+    }).where(and(eq(leads.id, id), isNull(leads.convertedMemberId))).returning(LEAD_DELETE_RETURNING);
+
+    if (!converted) throw new AlreadyConvertedError();
+    return member;
+  }).catch((error: unknown) => {
+    if (error instanceof AlreadyConvertedError) return null;
+    throw error;
+  });
+
+  if (!newMember) {
+    return c.json({ success: false, error: '此潛在客戶已轉換' }, 400);
+  }
 
   return c.json({
     success: true,
     data: {
-      lead: { ...lead, leadStatus: 'CONVERTED', convertedMemberId: newMember.id },
+      lead: { ...lead, status: 'CONVERTED', leadStatus: 'CONVERTED', convertedMemberId: newMember.id, convertedAt: now },
       member: newMember,
     },
     message: '潛在客戶已成功轉換為會員',

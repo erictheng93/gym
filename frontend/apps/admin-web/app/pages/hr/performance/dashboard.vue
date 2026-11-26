@@ -2,16 +2,15 @@
 /**
  * 團隊績效儀表板
  */
-import { usePerformance } from '~/composables/hr'
+import { usePerformance, useHrAccess } from '~/composables/hr'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const { fetchTeamDashboard, isLoading } = usePerformance()
-const { branches, fetchBranches } = useBranches()
+const { canViewHr } = useHrAccess()
 
-const selectedBranch = ref('')
 const selectedPeriod = ref(getCurrentPeriod())
 const dashboardData = ref<any>(null)
 
@@ -34,18 +33,15 @@ const periodOptions = computed(() => {
   return options
 })
 
+// The backend aggregates the whole tenant per period (it has no branch filter)
 const loadDashboard = async () => {
-  dashboardData.value = await fetchTeamDashboard({
-    branch_id: selectedBranch.value || undefined,
-    period: selectedPeriod.value
-  })
+  if (!canViewHr.value) return
+  dashboardData.value = await fetchTeamDashboard({ period: selectedPeriod.value })
 }
 
-watch([selectedBranch, selectedPeriod], loadDashboard)
+watch(selectedPeriod, loadDashboard)
 
-onMounted(async () => {
-  await Promise.all([fetchBranches(), loadDashboard()])
-})
+onMounted(loadDashboard)
 
 // Get score class
 const getScoreClass = (score: number | null) => {
@@ -64,144 +60,147 @@ const getScoreClass = (score: number | null) => {
       back-to="/hr/performance"
     />
 
-    <!-- Filters -->
-    <div class="filter-bar">
-      <select v-model="selectedBranch" class="input filter-select">
-        <option value="">全部分店</option>
-        <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-          {{ branch.name }}
-        </option>
-      </select>
-      <select v-model="selectedPeriod" class="input filter-select">
-        <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
-    </div>
+    <EmptyState
+      v-if="!canViewHr"
+      title="無權限"
+      description="績效考核僅限管理員與店長檢視"
+      icon="alert-circle"
+    />
 
-    <LoadingState v-if="isLoading" />
+    <template v-else>
+      <!-- Filters -->
+      <div class="filter-bar">
+        <select v-model="selectedPeriod" class="input filter-select">
+          <option v-for="opt in periodOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+      </div>
 
-    <template v-else-if="dashboardData">
-      <!-- Summary Stats -->
-      <section class="summary-stats">
-        <div class="stat-card">
-          <div class="stat-icon reviews">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-              <polyline points="14 2 14 8 20 8" />
-              <path d="m9 15 2 2 4-4" />
-            </svg>
-          </div>
-          <div class="stat-content">
-            <span class="stat-label">考核總數</span>
-            <span class="stat-value">{{ dashboardData.total_reviews || 0 }}</span>
-          </div>
-        </div>
+      <LoadingState v-if="isLoading" />
 
-        <div class="stat-card">
-          <div class="stat-icon pending">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </div>
-          <div class="stat-content">
-            <span class="stat-label">待審核</span>
-            <span class="stat-value">{{ dashboardData.pending_reviews || 0 }}</span>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon completed">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-          <div class="stat-content">
-            <span class="stat-label">已完成</span>
-            <span class="stat-value">{{ dashboardData.completed_reviews || 0 }}</span>
-          </div>
-        </div>
-
-        <div class="stat-card highlight">
-          <div class="stat-icon average">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
-          </div>
-          <div class="stat-content">
-            <span class="stat-label">平均分數</span>
-            <span class="stat-value" :class="getScoreClass(dashboardData.average_score)">
-              {{ dashboardData.average_score?.toFixed(1) || '—' }}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Score Distribution -->
-      <div class="charts-grid">
-        <div class="chart-card">
-          <h3 class="card-title">分數分布</h3>
-          <div class="distribution-bars">
-            <div class="bar-item">
-              <div class="bar-label">
-                <span class="label-text">優秀 (80-100)</span>
-                <span class="label-count">{{ dashboardData.score_distribution?.excellent || 0 }}</span>
-              </div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill excellent"
-                  :style="{ width: `${(dashboardData.score_distribution?.excellent || 0) / (dashboardData.total_reviews || 1) * 100}%` }"
-                />
-              </div>
+      <template v-else-if="dashboardData">
+        <!-- Summary Stats -->
+        <section class="summary-stats">
+          <div class="stat-card">
+            <div class="stat-icon reviews">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                <polyline points="14 2 14 8 20 8" />
+                <path d="m9 15 2 2 4-4" />
+              </svg>
             </div>
-            <div class="bar-item">
-              <div class="bar-label">
-                <span class="label-text">合格 (60-79)</span>
-                <span class="label-count">{{ dashboardData.score_distribution?.good || 0 }}</span>
-              </div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill good"
-                  :style="{ width: `${(dashboardData.score_distribution?.good || 0) / (dashboardData.total_reviews || 1) * 100}%` }"
-                />
-              </div>
-            </div>
-            <div class="bar-item">
-              <div class="bar-label">
-                <span class="label-text">待改進 (&lt;60)</span>
-                <span class="label-count">{{ dashboardData.score_distribution?.poor || 0 }}</span>
-              </div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill poor"
-                  :style="{ width: `${(dashboardData.score_distribution?.poor || 0) / (dashboardData.total_reviews || 1) * 100}%` }"
-                />
-              </div>
+            <div class="stat-content">
+              <span class="stat-label">考核總數</span>
+              <span class="stat-value">{{ dashboardData.total_reviews || 0 }}</span>
             </div>
           </div>
-        </div>
 
-        <!-- Top Performers -->
-        <div class="chart-card">
-          <h3 class="card-title">表現最佳員工</h3>
-          <div v-if="dashboardData.top_performers?.length" class="ranking-list">
-            <div
-              v-for="(performer, index) in dashboardData.top_performers"
-              :key="performer.id"
-              class="ranking-item"
-            >
-              <span class="rank-number" :class="`rank-${Number(index) + 1}`">{{ Number(index) + 1 }}</span>
-              <AppAvatar :name="performer.full_name || '?'" size="sm" variant="blue" />
-              <span class="performer-name">{{ performer.full_name }}</span>
-              <span class="performer-score" :class="getScoreClass(performer.score)">
-                {{ performer.score }}
+          <div class="stat-card">
+            <div class="stat-icon pending">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+            <div class="stat-content">
+              <span class="stat-label">待審核</span>
+              <span class="stat-value">{{ dashboardData.pending_reviews || 0 }}</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon completed">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <div class="stat-content">
+              <span class="stat-label">已完成</span>
+              <span class="stat-value">{{ dashboardData.completed_reviews || 0 }}</span>
+            </div>
+          </div>
+
+          <div class="stat-card highlight">
+            <div class="stat-icon average">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+              </svg>
+            </div>
+            <div class="stat-content">
+              <span class="stat-label">平均分數</span>
+              <span class="stat-value" :class="getScoreClass(dashboardData.average_score)">
+                {{ dashboardData.average_score?.toFixed(1) || '—' }}
               </span>
             </div>
           </div>
-          <p v-else class="empty-text">暫無數據</p>
+        </section>
+
+        <!-- Score Distribution -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3 class="card-title">分數分布</h3>
+            <div class="distribution-bars">
+              <div class="bar-item">
+                <div class="bar-label">
+                  <span class="label-text">優秀 (80-100)</span>
+                  <span class="label-count">{{ dashboardData.score_distribution?.excellent || 0 }}</span>
+                </div>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill excellent"
+                    :style="{ width: `${(dashboardData.score_distribution?.excellent || 0) / (dashboardData.total_reviews || 1) * 100}%` }"
+                  />
+                </div>
+              </div>
+              <div class="bar-item">
+                <div class="bar-label">
+                  <span class="label-text">合格 (60-79)</span>
+                  <span class="label-count">{{ dashboardData.score_distribution?.good || 0 }}</span>
+                </div>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill good"
+                    :style="{ width: `${(dashboardData.score_distribution?.good || 0) / (dashboardData.total_reviews || 1) * 100}%` }"
+                  />
+                </div>
+              </div>
+              <div class="bar-item">
+                <div class="bar-label">
+                  <span class="label-text">待改進 (&lt;60)</span>
+                  <span class="label-count">{{ dashboardData.score_distribution?.poor || 0 }}</span>
+                </div>
+                <div class="bar-track">
+                  <div
+                    class="bar-fill poor"
+                    :style="{ width: `${(dashboardData.score_distribution?.poor || 0) / (dashboardData.total_reviews || 1) * 100}%` }"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top Performers -->
+          <div class="chart-card">
+            <h3 class="card-title">表現最佳員工</h3>
+            <div v-if="dashboardData.top_performers?.length" class="ranking-list">
+              <div
+                v-for="(performer, index) in dashboardData.top_performers"
+                :key="performer.id"
+                class="ranking-item"
+              >
+                <span class="rank-number" :class="`rank-${Number(index) + 1}`">{{ Number(index) + 1 }}</span>
+                <AppAvatar :name="performer.full_name || '?'" size="sm" variant="blue" />
+                <span class="performer-name">{{ performer.full_name }}</span>
+                <span class="performer-score" :class="getScoreClass(performer.score)">
+                  {{ performer.score }}
+                </span>
+              </div>
+            </div>
+            <p v-else class="empty-text">暫無數據</p>
+          </div>
         </div>
-      </div>
+      </template>
     </template>
   </PageContainer>
 </template>
