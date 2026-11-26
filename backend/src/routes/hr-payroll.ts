@@ -3,15 +3,34 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, salaryRecords, promotionRecords, employees, jobTitles, branches } from '../db/index.js';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
-import { authMiddleware, requireAuth } from '../middleware/index.js';
-import type { AuthVariables } from '../middleware/index.js';
+import { authMiddleware, requireAuth, requireTenant } from '../middleware/index.js';
+import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../services/export.js';
+import { getTenantBranchIds } from '../utils/tenant-cache.js';
 
 // =============================================================================
 // HR PAYROLL ROUTES
 // =============================================================================
+// Every payroll row is scoped to the caller's tenant through its branch
+// (getTenantBranchIds). inArray(col, []) renders as false, so a tenant without
+// branches matches nothing.
 
-const app = new Hono<{ Variables: AuthVariables }>();
+const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
+
+// Monthly salary -> hourly rate (Taiwan Labor Standards Act: 30 days x 8 hours)
+const MONTHLY_WORK_HOURS = 240;
+const OVERTIME_MULTIPLIER = 1.33;
+
+function hourlyRateFor(baseSalary: number): number {
+  return Math.round((baseSalary / MONTHLY_WORK_HOURS) * 100) / 100;
+}
+
+const EMPLOYEE_ID_SELECT = { id: employees.id };
+const JOB_TITLE_ID_SELECT = { id: jobTitles.id };
+
+function tenantEmployeeIds(branchIds: string[]) {
+  return db.select(EMPLOYEE_ID_SELECT).from(employees).where(inArray(employees.branchId, branchIds));
+}
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
 
@@ -146,7 +165,7 @@ const EMPLOYEE_PROMOTION_SELECT = {
   branchId: employees.branchId,
 };
 
-app.use('*', authMiddleware, requireAuth);
+app.use('*', authMiddleware, requireAuth, requireTenant);
 
 // -----------------------------------------------------------------------------
 // GET /api/payroll/salary-records - List Salary Records
@@ -154,8 +173,9 @@ app.use('*', authMiddleware, requireAuth);
 
 app.get('/salary-records', async (c) => {
   const { employee_id, period, status, branch_id, limit = '20', offset = '0' } = c.req.query();
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
-  const conditions = [];
+  const conditions = [inArray(salaryRecords.branchId, branchIds)];
   if (employee_id) conditions.push(eq(salaryRecords.employeeId, employee_id));
   if (period) conditions.push(eq(salaryRecords.period, period));
   if (status) conditions.push(eq(salaryRecords.status, status as 'PENDING' | 'APPROVED' | 'PAID'));
@@ -168,14 +188,14 @@ app.get('/salary-records', async (c) => {
       .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
       .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
       .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(desc(salaryRecords.period), desc(salaryRecords.createdAt))
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
       .select(COUNT_SELECT)
       .from(salaryRecords)
-      .where(conditions.length > 0 ? and(...conditions) : undefined),
+      .where(and(...conditions)),
   ]);
 
   const formattedRecords = records.map(r => ({
@@ -220,13 +240,14 @@ app.get('/salary-records', async (c) => {
 
 app.get('/salary-records/:id', async (c) => {
   const id = c.req.param('id');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
   const [record] = await db
     .select(SALARY_RECORD_BY_ID_SELECT)
     .from(salaryRecords)
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
-    .where(eq(salaryRecords.id, id))
+    .where(and(eq(salaryRecords.id, id), inArray(salaryRecords.branchId, branchIds)))
     .limit(1);
 
   if (!record) {
@@ -276,18 +297,36 @@ const generateSchema = z.object({
 
 app.post('/generate', zValidator('json', generateSchema), async (c) => {
   const { period, branch_id, employee_ids } = c.req.valid('json');
+  const tenantId = c.get('tenantId')!;
+  const branchIds = await getTenantBranchIds(tenantId);
 
-  // Get employees to generate records for
-  const conditions = [eq(employees.status, 'ACTIVE')];
+  if (branch_id && !branchIds.includes(branch_id)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
+  }
+
+  // Get employees to generate records for: never outside the caller's tenant
+  const conditions = [eq(employees.status, 'ACTIVE'), inArray(employees.branchId, branchIds)];
   if (branch_id) conditions.push(eq(employees.branchId, branch_id));
   if (employee_ids && employee_ids.length > 0) {
-    conditions.push(inArray(employees.id, employee_ids));
+    const requestedIds = [...new Set(employee_ids)];
+    const owned = await db
+      .select(EMPLOYEE_ID_SELECT)
+      .from(employees)
+      .where(and(inArray(employees.id, requestedIds), inArray(employees.branchId, branchIds)));
+    if (owned.length !== requestedIds.length) {
+      return c.json({ success: false, error: '無效的員工' }, 400);
+    }
+    conditions.push(inArray(employees.id, requestedIds));
   }
 
   const employeeList = await db
     .select(EMPLOYEE_GENERATE_SELECT)
     .from(employees)
     .where(and(...conditions));
+
+  if (employeeList.length === 0) {
+    return c.json({ success: true, data: { generated: 0, skipped: 0 } });
+  }
 
   // Check for existing records
   const existingRecords = await db
@@ -312,13 +351,16 @@ app.post('/generate', zValidator('json', generateSchema), async (c) => {
         branchId: emp.branchId,
         period,
         baseSalary: baseSalary.toString(),
+        hourlyRate: hourlyRateFor(baseSalary).toString(),
         netSalary: baseSalary.toString(), // Will be recalculated
         status: 'PENDING' as const,
+        tenantId,
       };
     });
 
   if (newRecords.length > 0) {
-    await db.insert(salaryRecords).values(newRecords);
+    // A concurrent generate for the same period must not fail on the (employee, period) unique index
+    await db.insert(salaryRecords).values(newRecords).onConflictDoNothing();
   }
 
   return c.json({
@@ -345,12 +387,14 @@ const updateSchema = z.object({
 app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => {
   const id = c.req.param('id');
   const updates = c.req.valid('json');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
+  const scoped = and(eq(salaryRecords.id, id), inArray(salaryRecords.branchId, branchIds));
 
   // Get current record
   const [record] = await db
     .select(SALARY_RECORD_UPDATE_SELECT)
     .from(salaryRecords)
-    .where(eq(salaryRecords.id, id))
+    .where(scoped)
     .limit(1);
 
   if (!record) {
@@ -363,8 +407,10 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 
   // Calculate new net salary
   const baseSalary = parseFloat(record.baseSalary);
-  const overtimePay = (updates.overtime_hours || parseFloat(record.overtimeHours || '0')) *
-                      (parseFloat(record.hourlyRate || '0') * 1.33);
+  const overtimeHours = updates.overtime_hours ?? parseFloat(record.overtimeHours || '0');
+  // Records generated before hourlyRate was stored fall back to the derived rate
+  const hourlyRate = record.hourlyRate !== null ? parseFloat(record.hourlyRate) : hourlyRateFor(baseSalary);
+  const overtimePay = Math.round(overtimeHours * hourlyRate * OVERTIME_MULTIPLIER * 100) / 100;
   const commission = updates.commission ?? parseFloat(record.commission || '0');
   const bonus = updates.bonus ?? parseFloat(record.bonus || '0');
   const deductions = updates.deductions ?? parseFloat(record.deductions || '0');
@@ -373,7 +419,8 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
   await db
     .update(salaryRecords)
     .set({
-      overtimeHours: updates.overtime_hours?.toString(),
+      overtimeHours: overtimeHours.toString(),
+      hourlyRate: hourlyRate.toString(),
       overtimePay: overtimePay.toString(),
       commission: commission.toString(),
       bonus: bonus.toString(),
@@ -382,7 +429,7 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
       notes: updates.notes,
       updatedAt: new Date(),
     })
-    .where(eq(salaryRecords.id, id));
+    .where(scoped);
 
   return c.json({ success: true, message: '薪資記錄已更新' });
 });
@@ -394,6 +441,7 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 app.post('/salary-records/:id/approve', async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
   // Fast-path atomic update if in PENDING status
   const [approved] = await db
@@ -407,7 +455,8 @@ app.post('/salary-records/:id/approve', async (c) => {
     .where(
       and(
         eq(salaryRecords.id, id),
-        eq(salaryRecords.status, 'PENDING')
+        eq(salaryRecords.status, 'PENDING'),
+        inArray(salaryRecords.branchId, branchIds)
       )
     )
     .returning(SALARY_RECORD_ID_SELECT);
@@ -420,7 +469,7 @@ app.post('/salary-records/:id/approve', async (c) => {
   const [record] = await db
     .select(SALARY_RECORD_ID_SELECT)
     .from(salaryRecords)
-    .where(eq(salaryRecords.id, id))
+    .where(and(eq(salaryRecords.id, id), inArray(salaryRecords.branchId, branchIds)))
     .limit(1);
 
   if (!record) {
@@ -441,8 +490,9 @@ const batchApproveSchema = z.object({
 app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => {
   const { ids } = c.req.valid('json');
   const user = c.get('user');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
-  await db
+  const approved = await db
     .update(salaryRecords)
     .set({
       status: 'APPROVED',
@@ -453,13 +503,15 @@ app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => 
     .where(
       and(
         inArray(salaryRecords.id, ids),
-        eq(salaryRecords.status, 'PENDING')
+        eq(salaryRecords.status, 'PENDING'),
+        inArray(salaryRecords.branchId, branchIds)
       )
-    );
+    )
+    .returning(SALARY_RECORD_ID_SELECT);
 
   return c.json({
     success: true,
-    data: { approved_count: ids.length },
+    data: { approved_count: approved.length },
   });
 });
 
@@ -469,6 +521,7 @@ app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => 
 
 app.post('/salary-records/:id/pay', async (c) => {
   const id = c.req.param('id');
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
   // Fast-path atomic update if in APPROVED status
   const [paid] = await db
@@ -481,7 +534,8 @@ app.post('/salary-records/:id/pay', async (c) => {
     .where(
       and(
         eq(salaryRecords.id, id),
-        eq(salaryRecords.status, 'APPROVED')
+        eq(salaryRecords.status, 'APPROVED'),
+        inArray(salaryRecords.branchId, branchIds)
       )
     )
     .returning(SALARY_RECORD_ID_SELECT);
@@ -494,7 +548,7 @@ app.post('/salary-records/:id/pay', async (c) => {
   const [record] = await db
     .select(SALARY_RECORD_ID_SELECT)
     .from(salaryRecords)
-    .where(eq(salaryRecords.id, id))
+    .where(and(eq(salaryRecords.id, id), inArray(salaryRecords.branchId, branchIds)))
     .limit(1);
 
   if (!record) {
@@ -510,8 +564,9 @@ app.post('/salary-records/:id/pay', async (c) => {
 
 app.get('/export', async (c) => {
   const { period, branch_id, status, format = 'csv' } = c.req.query();
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
-  const conditions = [];
+  const conditions = [inArray(salaryRecords.branchId, branchIds)];
   if (period) conditions.push(eq(salaryRecords.period, period));
   if (status) conditions.push(eq(salaryRecords.status, status as 'PENDING' | 'APPROVED' | 'PAID'));
   if (branch_id) conditions.push(eq(salaryRecords.branchId, branch_id));
@@ -522,7 +577,7 @@ app.get('/export', async (c) => {
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
     .leftJoin(jobTitles, eq(employees.jobTitleId, jobTitles.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(salaryRecords.period), desc(salaryRecords.createdAt));
 
   // Transform data for export
@@ -576,8 +631,9 @@ app.get('/export', async (c) => {
 
 app.get('/promotions', async (c) => {
   const { employee_id, type, limit = '20', offset = '0' } = c.req.query();
+  const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
-  const conditions = [];
+  const conditions = [inArray(promotionRecords.employeeId, tenantEmployeeIds(branchIds))];
   if (employee_id) conditions.push(eq(promotionRecords.employeeId, employee_id));
   if (type) conditions.push(eq(promotionRecords.type, type as 'PROMOTION' | 'TRANSFER' | 'DEMOTION'));
 
@@ -586,14 +642,14 @@ app.get('/promotions', async (c) => {
       .select(PROMOTION_RECORD_LIST_SELECT)
       .from(promotionRecords)
       .innerJoin(employees, eq(promotionRecords.employeeId, employees.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(desc(promotionRecords.effectiveDate))
       .limit(parseInt(limit))
       .offset(parseInt(offset)),
     db
       .select(COUNT_SELECT)
       .from(promotionRecords)
-      .where(conditions.length > 0 ? and(...conditions) : undefined),
+      .where(and(...conditions)),
   ]);
 
   return c.json({
@@ -637,16 +693,33 @@ const promotionSchema = z.object({
 app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
   const data = c.req.valid('json');
   const user = c.get('user');
+  const tenantId = c.get('tenantId')!;
+  const branchIds = await getTenantBranchIds(tenantId);
 
   // Get current employee data
   const [employee] = await db
     .select(EMPLOYEE_PROMOTION_SELECT)
     .from(employees)
-    .where(eq(employees.id, data.employee_id))
+    .where(and(eq(employees.id, data.employee_id), inArray(employees.branchId, branchIds)))
     .limit(1);
 
   if (!employee) {
     return c.json({ success: false, error: '找不到員工' }, 404);
+  }
+
+  if (data.to_branch_id && !branchIds.includes(data.to_branch_id)) {
+    return c.json({ success: false, error: '無效的分店' }, 400);
+  }
+
+  if (data.to_job_title_id) {
+    const [jobTitle] = await db
+      .select(JOB_TITLE_ID_SELECT)
+      .from(jobTitles)
+      .where(and(eq(jobTitles.id, data.to_job_title_id), eq(jobTitles.tenantId, tenantId)))
+      .limit(1);
+    if (!jobTitle) {
+      return c.json({ success: false, error: '無效的職稱' }, 400);
+    }
   }
 
   // Create promotion record
@@ -663,6 +736,7 @@ app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
       newBaseSalary: data.new_base_salary?.toString(),
       reason: data.reason,
       createdBy: user?.employeeId,
+      tenantId,
     })
     .returning(PROMOTION_RECORD_RETURNING);
 

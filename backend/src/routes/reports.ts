@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { db, members, contracts, payments, branches, checkIns, classSessions, employees, jobTitles, bookings, classReviews, coachMemberAssignments, coachNotes, lessonPlans, classes } from '../db/index.js';
 import { eq, and, sql, gte, lte, count, inArray, avg, or, isNotNull } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranches, getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -17,6 +18,24 @@ import {
 } from '../services/export.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const isIsoDate = (value: string) => ISO_DATE.test(value) && !Number.isNaN(Date.parse(value));
+const INVALID_DATE_ERROR = '日期格式必須為 YYYY-MM-DD';
+
+/**
+ * Half-open [startDate, endDate + 1 day) on the payment timestamp, so the whole
+ * end day is included (same as paymentDateRange in payments.ts). Comparing the
+ * timestamp to new Date(endDate) cut the range at the end day's midnight.
+ * Returns null for a malformed date.
+ */
+function paymentDayRange(startDate: string, endDate: string): SQL[] | null {
+  if (!isIsoDate(startDate) || !isIsoDate(endDate)) return null;
+  return [
+    sql`${payments.paymentDate} >= ${startDate}::date`,
+    sql`${payments.paymentDate} < ${endDate}::date + 1`,
+  ];
+}
 
 const REPORT_EXPIRING_CONTRACT_SELECT = {
   id: contracts.id,
@@ -200,6 +219,10 @@ app.get('/revenue', async (c) => {
     return d.toISOString().slice(0, 10);
   })();
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().slice(0, 10);
+  const dayRange = paymentDayRange(startDate, endDate);
+  if (!dayRange) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -213,8 +236,7 @@ app.get('/revenue', async (c) => {
 
   const conditions = [
     branchCondition,
-    gte(payments.paymentDate, new Date(startDate)),
-    lte(payments.paymentDate, new Date(endDate)),
+    ...dayRange,
     eq(payments.type, 'INCOME'),
     eq(payments.status, 'COMPLETED'),
   ];
@@ -431,6 +453,10 @@ app.get('/revenue/export', async (c) => {
   })();
   const endDate = c.req.query('endDate') || c.req.query('end_date') || new Date().toISOString().slice(0, 10);
   const format = c.req.query('format') || 'csv';
+  const dayRange = paymentDayRange(startDate, endDate);
+  if (!dayRange) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
 
   const tenantBranches = await getTenantBranches(tenantId);
   const branchIds = tenantBranches.map(b => b.id);
@@ -451,8 +477,7 @@ app.get('/revenue/export', async (c) => {
 
   const conditions = [
     branchCondition,
-    gte(payments.paymentDate, new Date(startDate)),
-    lte(payments.paymentDate, new Date(endDate)),
+    ...dayRange,
     eq(payments.type, 'INCOME'),
     eq(payments.status, 'COMPLETED'),
   ];

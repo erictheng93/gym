@@ -526,6 +526,39 @@ describe('Reports API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
     });
+
+    // Payments stored at Taiwan noon (as payments.ts does for back-dated rows):
+    // the whole end day must count, and the day after must not.
+    it('includes payments made during the end day and excludes the next day', async () => {
+      const common = { paymentMethod: 'CASH' as const, contractId: TEST_CONTRACT_ID, memberId: TEST_MEMBER_ID, branchId: TEST_BRANCH_ID, tenantId: TEST_TENANT_ID, type: 'INCOME' as const };
+      await db.insert(payments).values([
+        { ...common, amount: '100', paymentDate: new Date('2025-03-01T12:00:00+08:00') },
+        { ...common, amount: '250', paymentDate: new Date('2025-03-10T12:00:00+08:00') },
+        { ...common, amount: '999', paymentDate: new Date('2025-03-11T12:00:00+08:00') },
+      ]);
+
+      try {
+        const response = await authRequest('/api/reports/revenue?startDate=2025-03-01&endDate=2025-03-10', { method: 'GET', token });
+        expect(response.status).toBe(200);
+        const data = await response.json();
+        expect(data.data.total).toBe(350);
+
+        // A single-day window (the dashboard "today" card) is not empty
+        const oneDay = await authRequest('/api/reports/revenue?startDate=2025-03-10&endDate=2025-03-10', { method: 'GET', token });
+        expect((await oneDay.json()).data.total).toBe(250);
+
+        const exportRes = await authRequest('/api/reports/revenue/export?startDate=2025-03-10&endDate=2025-03-10', { method: 'GET', token });
+        expect(exportRes.status).toBe(200);
+        expect(await exportRes.text()).toContain('250');
+      } finally {
+        await db.delete(payments).where(eq(payments.branchId, TEST_BRANCH_ID));
+      }
+    });
+
+    it('rejects a malformed date with 400', async () => {
+      const response = await authRequest('/api/reports/revenue?startDate=yesterday&endDate=2025-03-10', { method: 'GET', token });
+      expect(response.status).toBe(400);
+    });
   });
 
   describe('GET /api/reports/member-growth', () => {

@@ -12,7 +12,7 @@ const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
-const createCampaignSchema = z.object({
+const campaignFieldsSchema = z.object({
   name: z.string().min(1, '活動名稱必填'),
   description: z.string().optional(),
   campaignType: z.enum(['PROMOTION', 'REFERRAL', 'SEASONAL', 'MEMBERSHIP', 'EVENT', 'OTHER']).optional(),
@@ -23,11 +23,17 @@ const createCampaignSchema = z.object({
   discountType: z.enum(['PERCENTAGE', 'FIXED', 'FREE_TRIAL', 'GIFT']).optional(),
   discountValue: z.string().or(z.number()).optional(),
   branchId: z.string().uuid().optional(),
-  isActive: z.boolean().optional().default(true),
+  isActive: z.boolean(),
   terms: z.string().optional(),
 });
 
-const updateCampaignSchema = createCampaignSchema.partial();
+const createCampaignSchema = campaignFieldsSchema.extend({
+  isActive: campaignFieldsSchema.shape.isActive.optional().default(true),
+});
+
+// Default-free: in zod v4 .partial() still applies .default()s, which would
+// reset isActive on every PATCH that does not send it.
+const updateCampaignSchema = campaignFieldsSchema.partial();
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
 

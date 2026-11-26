@@ -12,21 +12,31 @@ const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
-const createClassSchema = z.object({
+const classFieldsSchema = z.object({
   name: z.string().min(1, '請輸入課程名稱'),
   description: z.string().optional().nullable(),
-  durationMinutes: z.coerce.number().min(15).max(240).default(60),
-  maxCapacity: z.coerce.number().min(1).max(100).default(20),
+  durationMinutes: z.coerce.number().min(15).max(240),
+  maxCapacity: z.coerce.number().min(1).max(100),
   instructorId: z.string().uuid().optional().nullable(),
   branchId: z.string().uuid(),
   category: z.enum(['YOGA', 'CARDIO', 'STRENGTH', 'DANCE', 'SPINNING', 'PILATES', 'BOXING', 'SWIMMING', 'OTHER']).optional(),
-  difficultyLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']).default('BEGINNER'),
+  difficultyLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']),
   imageUrl: z.string().url().optional().nullable(),
-  requiresCount: z.boolean().default(true),
-  countDeduction: z.coerce.number().min(1).default(1),
+  requiresCount: z.boolean(),
+  countDeduction: z.coerce.number().min(1),
 });
 
-const updateClassSchema = createClassSchema.partial();
+const createClassSchema = classFieldsSchema.extend({
+  durationMinutes: classFieldsSchema.shape.durationMinutes.default(60),
+  maxCapacity: classFieldsSchema.shape.maxCapacity.default(20),
+  difficultyLevel: classFieldsSchema.shape.difficultyLevel.default('BEGINNER'),
+  requiresCount: classFieldsSchema.shape.requiresCount.default(true),
+  countDeduction: classFieldsSchema.shape.countDeduction.default(1),
+});
+
+// Default-free: in zod v4 .partial() still applies .default()s, which would
+// reset duration/capacity/difficulty/count settings on every PATCH.
+const updateClassSchema = classFieldsSchema.partial();
 
 const createScheduleSchema = z.object({
   classId: z.string().uuid(),

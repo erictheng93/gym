@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, coupons, couponUsages, branches, campaigns } from '../db/index.js';
+import { db, coupons, couponUsages, branches, campaigns, contracts } from '../db/index.js';
 import { eq, and, sql, desc, gte, lte } from 'drizzle-orm';
 import { requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
@@ -11,7 +11,7 @@ const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
-const createCouponSchema = z.object({
+const couponFieldsSchema = z.object({
   code: z.string().min(1, '優惠碼必填').max(20),
   name: z.string().min(1, '名稱必填'),
   description: z.string().optional(),
@@ -22,14 +22,58 @@ const createCouponSchema = z.object({
   validFrom: z.string(),
   validUntil: z.string(),
   usageLimit: z.number().int().optional(),
-  usageLimitPerMember: z.number().int().optional().default(1),
+  usageLimitPerMember: z.number().int(),
   campaignId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
-  isActive: z.boolean().optional().default(true),
+  isActive: z.boolean(),
   applicablePlans: z.array(z.string().uuid()).optional(),
 });
 
-const updateCouponSchema = createCouponSchema.partial().omit({ code: true });
+const createCouponSchema = couponFieldsSchema.extend({
+  usageLimitPerMember: couponFieldsSchema.shape.usageLimitPerMember.optional().default(1),
+  isActive: couponFieldsSchema.shape.isActive.optional().default(true),
+});
+
+// Built from the default-free field schema: in zod v4 .partial() still applies
+// .default()s, so a PATCH would otherwise reset every unsent defaulted field.
+const updateCouponSchema = couponFieldsSchema.partial().omit({ code: true });
+
+const validateCouponSchema = z.preprocess(
+  // The admin-web composable sends `amount`; accept it as an alias
+  (body) => {
+    if (body && typeof body === 'object' && !('purchaseAmount' in body) && 'amount' in body) {
+      return { ...body, purchaseAmount: (body as { amount: unknown }).amount };
+    }
+    return body;
+  },
+  z.object({
+    code: z.string().min(1, '優惠碼必填'),
+    memberId: z.string().uuid().optional(),
+    purchaseAmount: z.coerce.number().finite().nonnegative(),
+  }),
+);
+
+const useCouponSchema = z.object({
+  memberId: z.string().uuid(),
+  contractId: z.string().uuid(),
+});
+
+type CouponDiscountFields = {
+  discountType: string;
+  discountValue: string;
+  maxDiscount: string | null;
+};
+
+/** Server-side discount for an amount: percentage capped by maxDiscount, never above the amount. */
+export function computeCouponDiscount(coupon: CouponDiscountFields, amount: number): number {
+  let discount = coupon.discountType === 'PERCENTAGE'
+    ? amount * (Number(coupon.discountValue) / 100)
+    : Number(coupon.discountValue);
+  if (coupon.maxDiscount !== null && discount > Number(coupon.maxDiscount)) {
+    discount = Number(coupon.maxDiscount);
+  }
+  return Math.max(0, Math.min(Math.round(discount), amount));
+}
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
 
@@ -90,6 +134,13 @@ const COUPON_DELETE_RETURNING = { id: coupons.id };
 
 const COUPON_ID_SELECT = { id: coupons.id };
 
+const CONTRACT_FOR_COUPON_SELECT = {
+  memberId: contracts.memberId,
+  planId: contracts.planId,
+  branchId: contracts.branchId,
+  totalAmount: contracts.totalAmount,
+};
+
 // List coupons
 app.get('/', async (c) => {
   const tenantId = c.get('tenantId')!;
@@ -148,9 +199,9 @@ app.get('/', async (c) => {
 });
 
 // Validate coupon code
-app.post('/validate', async (c) => {
+app.post('/validate', zValidator('json', validateCouponSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
-  const { code, memberId, purchaseAmount } = await c.req.json();
+  const { code, memberId, purchaseAmount } = c.req.valid('json');
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -214,23 +265,14 @@ app.post('/validate', async (c) => {
     }
   }
 
-  // Calculate discount
-  let discountAmount = 0;
-  if (coupon.discountType === 'PERCENTAGE') {
-    discountAmount = purchaseAmount * (Number(coupon.discountValue) / 100);
-    if (coupon.maxDiscount && discountAmount > Number(coupon.maxDiscount)) {
-      discountAmount = Number(coupon.maxDiscount);
-    }
-  } else {
-    discountAmount = Number(coupon.discountValue);
-  }
+  const discountAmount = computeCouponDiscount(coupon, purchaseAmount);
 
   return c.json({
     success: true,
     data: {
       coupon,
-      discountAmount: Math.round(discountAmount),
-      finalAmount: Math.max(0, purchaseAmount - discountAmount),
+      discountAmount,
+      finalAmount: purchaseAmount - discountAmount,
     },
   });
 });
@@ -282,32 +324,104 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createCouponSc
 });
 
 // Record coupon usage
-app.post('/:id/use', async (c) => {
+// The discount is computed here from the coupon and the contract amount; any
+// client-sent discountAmount is ignored (stripped by the schema).
+app.post('/:id/use', zValidator('json', useCouponSchema), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
-  const { memberId, contractId, discountAmount } = await c.req.json();
+  const { memberId, contractId } = c.req.valid('json');
 
-  const [coupon] = await db
-    .select(COUPON_ID_SELECT)
-    .from(coupons)
-    .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
-    .limit(1);
+  type UseResult =
+    | { ok: true; usage: typeof couponUsages.$inferSelect; originalAmount: number }
+    | { ok: false; status: 400 | 404 | 409; error: string };
 
-  if (!coupon) {
-    return c.json({ success: false, error: '優惠碼不存在' }, 404);
+  const result = await db.transaction(async (tx): Promise<UseResult> => {
+    // Row lock serialises concurrent redemptions of the same coupon, so the
+    // usage-limit counts below cannot be raced past.
+    const [coupon] = await tx
+      .select(COUPON_SELECT)
+      .from(coupons)
+      .where(and(eq(coupons.id, id), eq(coupons.tenantId, tenantId)))
+      .limit(1)
+      .for('update');
+
+    if (!coupon) {
+      return { ok: false, status: 404, error: '優惠碼不存在' };
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (!coupon.isActive || coupon.validFrom > today || coupon.validUntil < today) {
+      return { ok: false, status: 400, error: '無效的優惠碼或已過期' };
+    }
+
+    const [contract] = await tx
+      .select(CONTRACT_FOR_COUPON_SELECT)
+      .from(contracts)
+      .where(and(eq(contracts.id, contractId), eq(contracts.tenantId, tenantId)))
+      .limit(1);
+
+    // Another tenant's contract, or one that is not this member's, looks the same as a missing one
+    if (!contract || contract.memberId !== memberId) {
+      return { ok: false, status: 404, error: '合約不存在' };
+    }
+
+    if (coupon.branchId && contract.branchId !== coupon.branchId) {
+      return { ok: false, status: 400, error: '此優惠碼不適用於該分店' };
+    }
+
+    const applicablePlans = Array.isArray(coupon.applicablePlans) ? coupon.applicablePlans as string[] : [];
+    if (applicablePlans.length > 0 && !applicablePlans.includes(contract.planId)) {
+      return { ok: false, status: 400, error: '此優惠碼不適用於該方案' };
+    }
+
+    const amount = Number(contract.totalAmount);
+    if (coupon.minPurchase !== null && amount < Number(coupon.minPurchase)) {
+      return { ok: false, status: 400, error: `消費金額需滿 ${coupon.minPurchase} 元` };
+    }
+
+    const [[total], [perMember], [perContract]] = await Promise.all([
+      tx.select(COUNT_SELECT).from(couponUsages).where(eq(couponUsages.couponId, id)),
+      tx.select(COUNT_SELECT).from(couponUsages)
+        .where(and(eq(couponUsages.couponId, id), eq(couponUsages.memberId, memberId))),
+      tx.select(COUNT_SELECT).from(couponUsages)
+        .where(and(eq(couponUsages.couponId, id), eq(couponUsages.contractId, contractId))),
+    ]);
+
+    if (Number(perContract?.count || 0) > 0) {
+      return { ok: false, status: 409, error: '此合約已使用過此優惠碼' };
+    }
+    if (coupon.usageLimit !== null && Number(total?.count || 0) >= coupon.usageLimit) {
+      return { ok: false, status: 400, error: '優惠碼已達使用上限' };
+    }
+    if (coupon.usageLimitPerMember !== null && Number(perMember?.count || 0) >= coupon.usageLimitPerMember) {
+      return { ok: false, status: 400, error: '該會員已達此優惠碼使用次數上限' };
+    }
+
+    const discountAmount = computeCouponDiscount(coupon, amount);
+
+    const [usage] = await tx.insert(couponUsages).values({
+      couponId: id,
+      memberId,
+      contractId,
+      discountAmount: String(discountAmount),
+      usedAt: new Date(),
+    }).returning(COUPON_USAGE_RETURNING);
+
+    return { ok: true, usage, originalAmount: amount };
+  });
+
+  if (!result.ok) {
+    return c.json({ success: false, error: result.error }, result.status);
   }
 
-  const [usage] = await db.insert(couponUsages).values({
-    couponId: id,
-    memberId,
-    contractId,
-    discountAmount: String(discountAmount),
-    usedAt: new Date(),
-  }).returning(COUPON_USAGE_RETURNING);
-
+  const discountAmount = Number(result.usage.discountAmount);
   return c.json({
     success: true,
-    data: usage,
+    data: {
+      ...result.usage,
+      originalAmount: result.originalAmount,
+      finalAmount: result.originalAmount - discountAmount,
+    },
   });
 });
 

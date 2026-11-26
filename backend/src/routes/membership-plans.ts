@@ -12,7 +12,7 @@ const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
-const createPlanSchema = z.object({
+const planFieldsSchema = z.object({
   name: z.string().min(1, '方案名稱必填'),
   code: z.string().min(1, '方案代碼必填').max(20),
   planType: z.enum(['TIME_BASED', 'COUNT_BASED']),
@@ -20,13 +20,21 @@ const createPlanSchema = z.object({
   classCounts: z.number().int().min(1).optional(),
   price: z.string().or(z.number()),
   description: z.string().optional(),
-  allowTransfer: z.boolean().optional().default(false),
-  allowPause: z.boolean().optional().default(false),
-  isActive: z.boolean().optional().default(true),
+  allowTransfer: z.boolean(),
+  allowPause: z.boolean(),
+  isActive: z.boolean(),
   branchId: z.string().uuid().optional(),
 });
 
-const updatePlanSchema = createPlanSchema.partial();
+const createPlanSchema = planFieldsSchema.extend({
+  allowTransfer: planFieldsSchema.shape.allowTransfer.optional().default(false),
+  allowPause: planFieldsSchema.shape.allowPause.optional().default(false),
+  isActive: planFieldsSchema.shape.isActive.optional().default(true),
+});
+
+// Default-free: in zod v4 .partial() still applies .default()s, which would
+// reset allowTransfer/allowPause and re-activate retired plans on every PATCH.
+const updatePlanSchema = planFieldsSchema.partial();
 
 const MEMBERSHIP_PLAN_SELECT = {
   id: membershipPlans.id,

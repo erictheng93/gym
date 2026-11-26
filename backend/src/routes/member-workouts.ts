@@ -65,15 +65,21 @@ const exerciseSchema = z.object({
   notes: z.string().optional(),
 });
 
-const createWorkoutSchema = z.object({
+const workoutFieldsSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式: YYYY-MM-DD'),
   duration: z.number().min(1).max(600).optional(),
   calories: z.number().min(0).optional(),
   notes: z.string().max(1000).optional(),
-  exercises: z.array(exerciseSchema).default([]),
+  exercises: z.array(exerciseSchema),
 });
 
-const updateWorkoutSchema = createWorkoutSchema.partial();
+const createWorkoutSchema = workoutFieldsSchema.extend({
+  exercises: workoutFieldsSchema.shape.exercises.default([]),
+});
+
+// Default-free: in zod v4 .partial() still applies .default()s, which would
+// wipe the exercises on every PATCH that does not send them.
+const updateWorkoutSchema = workoutFieldsSchema.partial();
 
 const listQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -238,6 +244,10 @@ app.put(
     const memberInfo = c.get('member')!;
     const workoutId = c.req.param('id');
     const updates = c.req.valid('json');
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ success: false, error: '沒有要更新的欄位' }, 400);
+    }
 
     // Atomic update with ownership check in a single round trip
     const [workout] = await db

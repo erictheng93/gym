@@ -12,7 +12,7 @@ const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
-const createLeadSchema = z.object({
+const leadFieldsSchema = z.object({
   fullName: z.string().min(1, '姓名必填'),
   phone: z.string().optional(),
   email: z.string().email().optional(),
@@ -20,13 +20,19 @@ const createLeadSchema = z.object({
   sourceDetail: z.string().optional(),
   branchId: z.string().uuid(),
   assignedToId: z.string().uuid().optional(),
-  status: z.enum(['NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL', 'NEGOTIATION', 'CONVERTED', 'LOST']).optional().default('NEW'),
+  status: z.enum(['NEW', 'CONTACTED', 'QUALIFIED', 'TRIAL', 'NEGOTIATION', 'CONVERTED', 'LOST']),
   notes: z.string().optional(),
   interests: z.array(z.string()).optional(),
   expectedBudget: z.string().or(z.number()).optional(),
 });
 
-const updateLeadSchema = createLeadSchema.partial();
+const createLeadSchema = leadFieldsSchema.extend({
+  status: leadFieldsSchema.shape.status.optional().default('NEW'),
+});
+
+// Default-free: in zod v4 .partial() still applies .default()s, which would
+// reset the pipeline status to NEW on every PATCH that does not send it.
+const updateLeadSchema = leadFieldsSchema.partial();
 
 const COUNT_SELECT = { count: sql<number>`count(*)` };
 
