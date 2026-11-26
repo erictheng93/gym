@@ -49,6 +49,12 @@ API_BASE_URL=http://localhost:8056
 DATABASE_URL=postgresql://postgres:postgres@localhost:15432/gym_nexus
 ```
 
+### Proxy / client address
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TRUST_PROXY` | In production | unset (no proxy trusted) | Number of reverse proxies in front of the API that append to `X-Forwarded-For`; `true` = 1. Rate limits key on the client address taken from it. Production (Cloudflare Tunnel) uses `1`. See [deployment-runbook.md](./deployment-runbook.md#client-address-behind-the-proxy-trust_proxy). |
+
 ### Authentication
 
 | Variable | Required | Default | Description |

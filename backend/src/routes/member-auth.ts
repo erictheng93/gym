@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { hash, verify } from '@node-rs/argon2';
 import { db, members, branches, memberCredentials } from '../db/index.js';
 import { eq, and, gt, or, sql } from 'drizzle-orm';
-import { rateLimiter, limitMax, memberAuthMiddleware, requireMember } from '../middleware/index.js';
+import { rateLimiter, limitMax, memberAuthMiddleware, requireMember, getClientIp } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import crypto from 'crypto';
 import { memberJwtService, getRecoveryTokenHash } from '../services/member-jwt.js';
@@ -79,22 +79,14 @@ const MEMBER_FORGOT_PW_SELECT = {
 const loginRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: limitMax(10),
-  keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-               c.req.header('x-real-ip') || 'unknown';
-    return `member:login:${ip}`;
-  },
+  keyGenerator: (c) => `member:login:${getClientIp(c)}`,
   message: '登入嘗試過多，請 15 分鐘後再試',
 });
 
 const passwordResetRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: limitMax(3),
-  keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-               c.req.header('x-real-ip') || 'unknown';
-    return `member:reset:${ip}`;
-  },
+  keyGenerator: (c) => `member:reset:${getClientIp(c)}`,
   message: '密碼重設請求過多，請稍後再試',
 });
 

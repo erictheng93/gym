@@ -70,6 +70,9 @@ COACH_JWT_SECRET=<64-char-random-string>
 # CORS (Required - your production domains)
 CORS_ORIGIN=https://admin.gym-nexus.com,https://member.gym-nexus.com,https://coach.gym-nexus.com
 
+# Reverse proxies that append to X-Forwarded-For (Required behind Cloudflare Tunnel: 1)
+TRUST_PROXY=1
+
 # Email (Amazon SES recommended)
 EMAIL_TRANSPORT=smtp
 EMAIL_FROM=Gym Nexus <noreply@gym-nexus.com>
@@ -103,6 +106,35 @@ R2_PUBLIC_URL=https://files.gym-nexus.com
 STRIPE_SECRET_KEY=sk_live_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 ```
+
+### Client address behind the proxy (`TRUST_PROXY`)
+
+Rate limits keyed by client address (staff and coach login, and every limiter
+without its own key) count requests per address. The API reads that address as
+follows:
+
+- `TRUST_PROXY` unset / `false` / `0`: the TCP peer of the connection.
+  `X-Forwarded-For` and `X-Real-IP` are ignored, since any client can send them.
+- `TRUST_PROXY=<n>` (`true` = 1): the *n*-th `X-Forwarded-For` entry from the
+  right, i.e. the address the outermost trusted proxy appended. Entries to its
+  left come from the client and are never used.
+
+Production runs Cloudflare edge → cloudflared (`tunnel` service) → API. The edge
+appends the visitor's address and cloudflared forwards it, so `TRUST_PROXY=1`
+(set in `docker-compose.prod.yml`). Add one per extra proxy that appends to the
+header (e.g. Traefik in front of the API in Dokploy: `2`).
+
+Required with it:
+
+- The API port must only be reachable through those proxies. Otherwise a client
+  connecting directly writes its own right-most entry.
+  `docker-compose.prod.yml` publishes 8056 on `127.0.0.1` only.
+- Without `TRUST_PROXY` behind the tunnel every visitor shares cloudflared's
+  address, so 5 failed staff logins in 15 minutes lock out everyone.
+
+Check after deploying: `docker compose logs api` shows no `429` on normal logins,
+and six wrong passwords from one machine get `429` while another machine can
+still log in.
 
 ### Generate Secrets
 

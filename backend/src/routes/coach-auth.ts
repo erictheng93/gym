@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { verify, hash } from '@node-rs/argon2';
 import { db, employees, branches, users, jobTitles } from '../db/index.js';
 import { eq, or } from 'drizzle-orm';
-import { rateLimiter, limitMax, coachAuthMiddleware, requireCoach } from '../middleware/index.js';
+import { rateLimiter, limitMax, coachAuthMiddleware, requireCoach, getClientIp } from '../middleware/index.js';
 import type { CoachVariables } from '../middleware/index.js';
 import { coachJwtService } from '../services/coach-jwt.js';
 
@@ -34,11 +34,7 @@ const ARGON2_OPTIONS = {
 const loginRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: limitMax(10),
-  keyGenerator: (c) => {
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-               c.req.header('x-real-ip') || 'unknown';
-    return `coach:login:${ip}`;
-  },
+  keyGenerator: (c) => `coach:login:${getClientIp(c)}`,
   message: '登入嘗試過多，請 15 分鐘後再試',
 });
 

@@ -181,31 +181,4 @@ export const requestId = createMiddleware(async (c, next) => {
   await next();
 });
 
-/**
- * IP Address Extraction
- *
- * Gets the real client IP considering proxies
- */
-export function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
-  // Check common proxy headers in order of preference
-  const xForwardedFor = c.req.header('x-forwarded-for');
-  if (xForwardedFor) {
-    // Take the first IP in the chain (original client)
-    return xForwardedFor.split(',')[0].trim();
-  }
-
-  const xRealIp = c.req.header('x-real-ip');
-  if (xRealIp) {
-    return xRealIp;
-  }
-
-  const cfConnectingIp = c.req.header('cf-connecting-ip');
-  if (cfConnectingIp) {
-    return cfConnectingIp;
-  }
-
-  // Fallback - this might not be available in all environments
-  return 'unknown';
-}
-
 export default csrfProtection;

@@ -256,7 +256,7 @@ onUnmounted(() => {
 
     <!-- KPI Grid -->
     <section class="kpi-section">
-      <LazyKpiGrid
+      <LazyDashboardKpiGrid
         :kpis="kpis"
         :loading="isLoading"
         :show-live="showLiveUpdates"
@@ -270,7 +270,7 @@ onUnmounted(() => {
         <div class="chart-card">
           <Suspense>
             <template #default>
-              <LazyRevenueChart
+              <LazyDashboardRevenueChart
                 :kpis="kpis"
                 chart-type="bar"
                 :loading="isLoading"
@@ -288,7 +288,7 @@ onUnmounted(() => {
         <div class="chart-card">
           <Suspense>
             <template #default>
-              <LazyCheckinHeatmap
+              <LazyDashboardCheckinHeatmap
                 :data="heatmapData"
                 :loading="isLoading"
               />
@@ -305,7 +305,7 @@ onUnmounted(() => {
 
     <!-- Branch Comparison (HQ Only) - Lazy loaded -->
     <section v-if="isHeadquarter && !selectedBranch" class="comparison-section">
-      <LazyBranchComparison
+      <LazyDashboardBranchComparison
         :kpis="kpis"
         :targets="revenueTargets"
         :loading="isLoading"
@@ -317,7 +317,7 @@ onUnmounted(() => {
       <div class="bottom-grid">
         <!-- Contract Alerts -->
         <div class="bottom-card">
-          <LazyContractAlerts
+          <LazyDashboardContractAlerts
             :alerts="contractAlerts"
             :loading="isLoading"
             :limit="8"
@@ -328,7 +328,7 @@ onUnmounted(() => {
 
         <!-- Live Feed -->
         <div class="bottom-card">
-          <LazyLiveFeed
+          <LazyDashboardLiveFeed
             :metrics="liveMetrics"
             :loading="isLoading && showLiveUpdates"
           />
