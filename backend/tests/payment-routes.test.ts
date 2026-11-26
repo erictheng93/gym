@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 
 // =============================================================================
 // Constants
@@ -32,7 +32,7 @@ vi.mock('../src/middleware/index.js', () => ({
 
 let dbResults: any[] = [];
 
-const chainFns: Record<string, ReturnType<typeof vi.fn>> = {};
+const chainFns: Record<string, Mock<(...args: any[]) => any>> = {};
 const CHAIN_METHODS = [
   'select', 'from', 'where', 'limit', 'offset',
   'leftJoin', 'orderBy',

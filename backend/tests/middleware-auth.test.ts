@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
-import { memberAuthMiddleware, requireMember, getMemberFromToken } from '../src/middleware/member-auth.js';
-import { coachAuthMiddleware, requireCoach, getCoachFromToken } from '../src/middleware/coach-auth.js';
-import { tenantMiddleware, requireTenant } from '../src/middleware/tenant-context.js';
+import { memberAuthMiddleware, requireMember, getMemberFromToken, type MemberVariables } from '../src/middleware/member-auth.js';
+import { coachAuthMiddleware, requireCoach, getCoachFromToken, type CoachVariables } from '../src/middleware/coach-auth.js';
+import { tenantMiddleware, requireTenant, type TenantVariables } from '../src/middleware/tenant-context.js';
+import type { AuthVariables } from '../src/middleware/auth.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { generateCoachTokens } from '../src/services/coach-jwt.js';
 
@@ -20,7 +21,7 @@ describe('Member Auth Middleware', () => {
 
   describe('memberAuthMiddleware', () => {
     it('should set member to null when no token provided', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: MemberVariables }>();
       app.use('*', memberAuthMiddleware);
       app.get('/test', (c) => c.json({ member: c.get('member') }));
 
@@ -33,7 +34,7 @@ describe('Member Auth Middleware', () => {
 
     it('should set member info when valid token is provided', async () => {
       const tokens = generateMemberTokens(mockMember);
-      const app = new Hono();
+      const app = new Hono<{ Variables: MemberVariables }>();
       app.use('*', memberAuthMiddleware);
       app.get('/test', (c) => c.json({ member: c.get('member') }));
 
@@ -51,7 +52,7 @@ describe('Member Auth Middleware', () => {
     });
 
     it('should set member to null when invalid token is provided', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: MemberVariables }>();
       app.use('*', memberAuthMiddleware);
       app.get('/test', (c) => c.json({ member: c.get('member') }));
 
@@ -67,7 +68,7 @@ describe('Member Auth Middleware', () => {
 
   describe('requireMember', () => {
     it('should return 401 when no member is set', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: MemberVariables }>();
       app.use('*', memberAuthMiddleware);
       app.use('*', requireMember);
       app.get('/test', (c) => c.json({ ok: true }));
@@ -82,7 +83,7 @@ describe('Member Auth Middleware', () => {
 
     it('should pass through when member is authenticated', async () => {
       const tokens = generateMemberTokens(mockMember);
-      const app = new Hono();
+      const app = new Hono<{ Variables: MemberVariables }>();
       app.use('*', memberAuthMiddleware);
       app.use('*', requireMember);
       app.get('/test', (c) => c.json({ ok: true }));
@@ -97,7 +98,7 @@ describe('Member Auth Middleware', () => {
     });
 
     it('should return 401 with invalid token', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: MemberVariables }>();
       app.use('*', memberAuthMiddleware);
       app.use('*', requireMember);
       app.get('/test', (c) => c.json({ ok: true }));
@@ -143,7 +144,7 @@ describe('Coach Auth Middleware', () => {
 
   describe('coachAuthMiddleware', () => {
     it('should set coach to null when no token provided', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: CoachVariables }>();
       app.use('*', coachAuthMiddleware);
       app.get('/test', (c) => c.json({ coach: c.get('coach') }));
 
@@ -156,7 +157,7 @@ describe('Coach Auth Middleware', () => {
 
     it('should set coach info when valid token is provided', async () => {
       const tokens = generateCoachTokens(mockCoach);
-      const app = new Hono();
+      const app = new Hono<{ Variables: CoachVariables }>();
       app.use('*', coachAuthMiddleware);
       app.get('/test', (c) => c.json({ coach: c.get('coach') }));
 
@@ -173,7 +174,7 @@ describe('Coach Auth Middleware', () => {
     });
 
     it('should set coach to null when invalid token is provided', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: CoachVariables }>();
       app.use('*', coachAuthMiddleware);
       app.get('/test', (c) => c.json({ coach: c.get('coach') }));
 
@@ -189,7 +190,7 @@ describe('Coach Auth Middleware', () => {
 
   describe('requireCoach', () => {
     it('should return 401 when no coach is set', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: CoachVariables }>();
       app.use('*', coachAuthMiddleware);
       app.use('*', requireCoach);
       app.get('/test', (c) => c.json({ ok: true }));
@@ -203,7 +204,7 @@ describe('Coach Auth Middleware', () => {
 
     it('should pass through when coach is authenticated', async () => {
       const tokens = generateCoachTokens(mockCoach);
-      const app = new Hono();
+      const app = new Hono<{ Variables: CoachVariables }>();
       app.use('*', coachAuthMiddleware);
       app.use('*', requireCoach);
       app.get('/test', (c) => c.json({ ok: true }));
@@ -242,7 +243,7 @@ describe('Coach Auth Middleware', () => {
 describe('Tenant Context Middleware', () => {
   describe('tenantMiddleware', () => {
     it('should set tenantId from user context', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       // Simulate user being set by auth middleware
       app.use('*', async (c, next) => {
         c.set('user', { tenantId: 'tenant-001', role: 'admin', isActive: true } as any);
@@ -262,7 +263,7 @@ describe('Tenant Context Middleware', () => {
     });
 
     it('should set tenantId to null when no user', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       app.use('*', async (c, next) => {
         c.set('user', null);
         return next();
@@ -276,7 +277,7 @@ describe('Tenant Context Middleware', () => {
     });
 
     it('should extract branchId from X-Branch-Id header', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       app.use('*', async (c, next) => {
         c.set('user', { tenantId: 'tenant-001' } as any);
         return next();
@@ -292,7 +293,7 @@ describe('Tenant Context Middleware', () => {
     });
 
     it('should extract branchId from branch_id query param', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       app.use('*', async (c, next) => {
         c.set('user', { tenantId: 'tenant-001' } as any);
         return next();
@@ -306,7 +307,7 @@ describe('Tenant Context Middleware', () => {
     });
 
     it('should prefer X-Branch-Id header over query param', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       app.use('*', async (c, next) => {
         c.set('user', { tenantId: 'tenant-001' } as any);
         return next();
@@ -324,7 +325,7 @@ describe('Tenant Context Middleware', () => {
 
   describe('requireTenant', () => {
     it('should return 400 when tenantId is null', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       app.use('*', async (c, next) => {
         c.set('user', null);
         c.set('tenantId', null);
@@ -341,7 +342,7 @@ describe('Tenant Context Middleware', () => {
     });
 
     it('should pass through when tenantId is set', async () => {
-      const app = new Hono();
+      const app = new Hono<{ Variables: TenantVariables & AuthVariables }>();
       app.use('*', async (c, next) => {
         c.set('tenantId', 'tenant-001');
         return next();

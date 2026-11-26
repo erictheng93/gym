@@ -6,7 +6,6 @@ import {
   getAuthToken,
   TEST_BRANCH_ID,
   TEST_CLASS_ID,
-  TEST_SESSION_ID,
   TEST_EMPLOYEE_ID,
 } from './helpers.js';
 

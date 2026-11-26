@@ -5,7 +5,6 @@ import {
   authRequest,
   getAuthToken,
   TEST_PLAN_ID,
-  TEST_COUNT_PLAN_ID,
   TEST_BRANCH_ID,
 } from './helpers.js';
 

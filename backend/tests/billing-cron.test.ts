@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 
 // =============================================================================
 // Mock DB — chainable query builder with sequential result queue
@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 let dbResults: any[] = [];
 
-const chainFns: Record<string, ReturnType<typeof vi.fn>> = {};
+const chainFns: Record<string, Mock<(...args: any[]) => any>> = {};
 const CHAIN_METHODS = [
   'select', 'from', 'where', 'limit', 'offset',
   'leftJoin', 'orderBy',

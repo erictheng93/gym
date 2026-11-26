@@ -356,9 +356,8 @@ describe('Coach Auth API', () => {
         expect((await login({ email: TEST_COACH_EMAIL, password: TEST_COACH_PASSWORD })).status).toBe(401);
       } finally {
         // Restore the original password for the other tests, whatever happened above
-        const restoreToken = await login({ email: TEST_COACH_EMAIL, password: newPassword })
-          .then(r => r.json())
-          .then(d => d.access_token as string | undefined);
+        const restoreRes = await login({ email: TEST_COACH_EMAIL, password: newPassword });
+        const restoreToken = (await restoreRes.json()).access_token as string | undefined;
         if (restoreToken) {
           await postJson(
             '/api/coach/auth/change-password',

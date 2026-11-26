@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { hash, verify } from '@node-rs/argon2';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import app from '../src/app.js';
-import { db, users, employees, sessions, tenants, branches, jobTitles } from '../src/db/index.js';
+import { db, users, employees, sessions } from '../src/db/index.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -14,7 +14,6 @@ import {
   TEST_BRANCH_ID,
   TEST_USER_ID,
   TEST_USER_EMAIL,
-  TEST_USER_PASSWORD,
   TEST_EMPLOYEE_ID,
   TEST_JOB_TITLE_ID,
   TEST_STAFF_USER_ID,
@@ -1069,7 +1068,7 @@ describe('Users API', () => {
       const [row] = await db.select().from(users).where(eq(users.id, otherUserId));
       expect(row.role).toBe('staff');
       expect(row.isActive).toBe(true);
-      expect(await verify(row.passwordHash, 'OtherPass123!')).toBe(true);
+      expect(await verify(row.passwordHash!, 'OtherPass123!')).toBe(true);
     });
 
     it('should not link an employee of another tenant when creating a user', async () => {
