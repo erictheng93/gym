@@ -5,6 +5,7 @@
  */
 import { useFetch } from '~/composables/core/useFetch'
 import type { ApiMember } from '~/composables/useMembers'
+import { NO_VALID_CONTRACT } from '~/composables/useClassBookings'
 import type { ApiClassSession } from '~/composables/useClasses'
 
 const props = defineProps<{ session: ApiClassSession; className: string }>()
@@ -19,7 +20,7 @@ interface MemberContract {
 }
 
 const { apiFetch } = useFetch()
-const { bookSession } = useClassBookings()
+const { bookSession, canOverrideBooking } = useClassBookings()
 const toast = useToast()
 
 const query = ref('')
@@ -29,6 +30,13 @@ const contracts = ref<MemberContract[]>([])
 const contractId = ref('')
 const searching = ref(false)
 const submitting = ref(false)
+// Manager+ exception path, offered only after the backend refused for lack of a valid contract
+const needsOverride = ref(false)
+const overrideReason = ref('')
+const reasonValid = computed(() => {
+  const length = overrideReason.value.trim().length
+  return length >= 2 && length <= 200
+})
 
 const search = async () => {
   const term = query.value.trim()
@@ -47,6 +55,8 @@ const search = async () => {
 const selectMember = async (member: ApiMember) => {
   selected.value = member
   contractId.value = ''
+  needsOverride.value = false
+  overrideReason.value = ''
   try {
     const response = await apiFetch<MemberContract[]>(`/members/${member.id}/contracts`)
     contracts.value = (response.data ?? []).filter(c => c.status === 'ACTIVE')
@@ -57,16 +67,23 @@ const selectMember = async (member: ApiMember) => {
   }
 }
 
-const submit = async () => {
+const submit = async (override = false) => {
   if (!selected.value) return
+  if (override && !reasonValid.value) return
   submitting.value = true
   try {
     const result = await bookSession({
       sessionId: props.session.id,
       memberId: selected.value.id,
-      contractId: contractId.value || null
+      ...(override
+        ? { override: { reason: overrideReason.value.trim() } }
+        : { contractId: contractId.value || null })
     })
     if (!result.ok) {
+      if (!override && result.code === NO_VALID_CONTRACT && canOverrideBooking.value) {
+        needsOverride.value = true
+        return
+      }
       toast.error(result.error)
       return
     }
@@ -107,15 +124,30 @@ const submit = async () => {
       <label class="contract-label">
         扣堂合約
         <select v-model="contractId" class="input">
-          <option value="">不指定（不扣堂）</option>
+          <option value="">自動選擇有效合約</option>
           <option v-for="c in contracts" :key="c.id" :value="c.id">
             {{ c.contractNo }} · {{ c.plan?.name ?? '—' }}{{ c.remainingCounts !== null ? `（剩 ${c.remainingCounts} 堂）` : '' }}
           </option>
         </select>
       </label>
-      <button type="button" class="btn btn-primary btn-small" :disabled="submitting" @click="submit">
+      <button v-if="!needsOverride" type="button" class="btn btn-primary btn-small" :disabled="submitting" @click="submit(false)">
         確認預約
       </button>
+
+      <div v-if="needsOverride" class="override-box" data-testid="booking-override">
+        <p class="override-title">此會員沒有有效合約</p>
+        <p class="override-hint">主管可建立「例外預約（體驗/補課）」：不綁定合約、到課時不扣堂，原因與核准人會留下紀錄。</p>
+        <label class="contract-label">
+          例外原因（必填）
+          <input v-model="overrideReason" type="text" class="input" maxlength="200" placeholder="例如：體驗課、補課" />
+        </label>
+        <div class="override-actions">
+          <button type="button" class="btn btn-primary btn-small" :disabled="submitting || !reasonValid" @click="submit(true)">
+            例外預約（體驗/補課）
+          </button>
+          <button type="button" class="btn btn-ghost btn-small" @click="needsOverride = false">取消</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -199,6 +231,30 @@ const submit = async () => {
   gap: var(--space-xs);
   font-size: 13px;
   color: var(--color-text-secondary);
+}
+
+.override-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-lg);
+}
+
+.override-title {
+  font-weight: 600;
+  color: var(--color-warning, #ff9500);
+}
+
+.override-hint {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.override-actions {
+  display: flex;
+  gap: var(--space-sm);
 }
 
 .link-btn {

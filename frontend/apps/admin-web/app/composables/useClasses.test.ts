@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mockFetchInstance, mockHandleError } from '@test/setup'
+import { mockFetchInstance, mockHandleError, mockAuthUser } from '@test/setup'
 import { useClasses, filterClasses, getCategoryLabel, type ApiClass } from './useClasses'
 import { useClassBookings } from './useClassBookings'
 
@@ -163,6 +163,34 @@ describe('useClassBookings', () => {
 
     expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/bookings', { method: 'POST', body: { sessionId: 's1', memberId: 'm1', contractId: 'ct1' } })
     expect(result).toEqual({ ok: true, data: { message: '已加入候補名單，目前排序第 1 位' } })
+  })
+
+  it('bookSession surfaces the error code so the UI can offer the manager override', async () => {
+    mockFetchInstance.apiFetch.mockRejectedValue(Object.assign(new Error('沒有有效合約，無法預約課程'), { status: 400, code: 'NO_VALID_CONTRACT' }))
+
+    const result = await useClassBookings().bookSession({ sessionId: 's1', memberId: 'm1' })
+
+    expect(result).toEqual({ ok: false, error: '沒有有效合約，無法預約課程', code: 'NO_VALID_CONTRACT' })
+  })
+
+  it('bookSession sends the override reason as { override: { reason } }', async () => {
+    mockFetchInstance.apiFetch.mockResolvedValue({ success: true, data: { id: 'bk3' }, message: '預約成功！' })
+
+    const result = await useClassBookings().bookSession({ sessionId: 's1', memberId: 'm1', override: { reason: '體驗課' } })
+
+    expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/bookings', { method: 'POST', body: { sessionId: 's1', memberId: 'm1', override: { reason: '體驗課' } } })
+    expect(result.ok).toBe(true)
+  })
+
+  it.each([
+    ['super_admin', true],
+    ['admin', true],
+    ['manager', true],
+    ['staff', false],
+    ['coach', false]
+  ])('canOverrideBooking for %s = %s', (role, expected) => {
+    mockAuthUser.value = { id: 'u1', role } as unknown as typeof mockAuthUser.value
+    expect(useClassBookings().canOverrideBooking.value).toBe(expected)
   })
 
   it('getBookingStats counts each status via meta.total', async () => {
