@@ -1,5 +1,6 @@
 <script lang="ts">
-import { PAGES, LABELS } from '~/constants'
+import { PAGES, LABELS, STATUS } from '~/constants'
+import type { Payment, PaymentRecordStatus } from '~/types/schema'
 
 const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
   year: 'numeric',
@@ -7,11 +8,13 @@ const paymentDateFormatter = new Intl.DateTimeFormat('zh-TW', {
   day: 'numeric'
 })
 
-const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
-  CASH: LABELS.PAYMENT_METHOD.CASH,
-  CREDIT_CARD: LABELS.PAYMENT_METHOD.CREDIT_CARD,
-  LINE_PAY: LABELS.PAYMENT_METHOD.LINE_PAY,
-  TRANSFER: LABELS.PAYMENT_METHOD.BANK_TRANSFER
+const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = LABELS.PAYMENT_METHOD
+
+/** Record status → label + design-system status color (orange / green / red) */
+const PAYMENT_RECORD_STATUS_BADGE: Record<PaymentRecordStatus, { label: string; variant: 'warning' | 'success' | 'error' }> = {
+  PENDING: { label: STATUS.PAYMENT_RECORD.PENDING, variant: 'warning' },
+  COMPLETED: { label: STATUS.PAYMENT_RECORD.COMPLETED, variant: 'success' },
+  FAILED: { label: STATUS.PAYMENT_RECORD.FAILED, variant: 'error' }
 }
 
 const typeOptions = [
@@ -19,44 +22,75 @@ const typeOptions = [
   { value: 'INCOME', label: LABELS.PAYMENT_TYPE.INCOME },
   { value: 'REFUND', label: LABELS.PAYMENT_TYPE.REFUND }
 ]
+
+const statusOptions = [
+  { value: '', label: PAGES.PAYMENTS.ALL_STATUSES },
+  { value: 'COMPLETED', label: STATUS.PAYMENT_RECORD.COMPLETED },
+  { value: 'PENDING', label: STATUS.PAYMENT_RECORD.PENDING },
+  { value: 'FAILED', label: STATUS.PAYMENT_RECORD.FAILED }
+]
+
+/** YYYY-MM-DD of the viewer's local calendar day (toISOString() would give the UTC day) */
+const localIsoDate = (date: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** Amount column: only a COMPLETED payment is shown as money in (+) or out (-) */
+const amountClass = (row: Payment) => {
+  if (row.status !== 'COMPLETED') return 'amount-muted'
+  return row.type === 'INCOME' ? 'amount-income' : 'amount-refund'
+}
 </script>
 
 <script setup lang="ts">
 /**
  * 收款管理頁面
  *
- * 使用 @gym-nexus/ui 組件庫重構
+ * 列表、統計與匯出對應 backend/src/routes/payments.ts 的實際回應格式。
+ * 統計只計入已完成 (COMPLETED) 的收款，待付款／失敗的金流不算收入。
  */
+import type { PaymentType } from '~/types/schema'
 import { MESSAGES, PAGINATION, TIMING } from '~/constants'
+import { EMPTY_PAYMENT_SUMMARY, type PaymentSummary } from '~/composables/usePayments'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const { payments, totalCount, isLoading, fetchPayments, getPaymentStats } = usePayments()
+const { payments, totalCount, isLoading, fetchPayments, getPaymentStats, exportPayments } = usePayments()
 const { branches, fetchBranches } = useBranches()
 
 const search = ref('')
 const selectedBranch = ref('')
-const selectedType = ref('')
+const selectedType = ref<'' | PaymentType>('')
+const selectedStatus = ref<'' | PaymentRecordStatus>('')
 const startDate = ref('')
 const endDate = ref('')
 const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
+const isExporting = ref(false)
 
-const stats = ref({ income: { count: 0, amount: 0 }, refund: { count: 0, amount: 0 }, netAmount: 0 })
+const stats = ref<PaymentSummary>({ ...EMPTY_PAYMENT_SUMMARY })
 
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
+
+const branchNameById = computed(() => {
+  const map: Record<string, string> = {}
+  for (const branch of branches.value) map[branch.id] = branch.name
+  return map
+})
 
 const loadPayments = async () => {
   await fetchPayments({
     page: currentPage.value,
     limit: pageSize,
     branchId: selectedBranch.value || undefined,
-    paymentType: selectedType.value || undefined,
+    type: selectedType.value || undefined,
+    status: selectedStatus.value || undefined,
     startDate: startDate.value || undefined,
     endDate: endDate.value || undefined,
-    search: search.value || undefined
+    search: search.value.trim() || undefined
   })
 }
 
@@ -78,9 +112,15 @@ const loadStats = async () => {
   )
 }
 
-watch([selectedBranch, selectedType, startDate, endDate], () => {
+watch([selectedBranch, startDate, endDate], () => {
   currentPage.value = 1
   Promise.all([loadPayments(), loadStats()])
+})
+
+// type / status narrow the list only; the summary always compares completed income with refunds
+watch([selectedType, selectedStatus], () => {
+  currentPage.value = 1
+  loadPayments()
 })
 
 watch(currentPage, () => {
@@ -95,6 +135,19 @@ onBeforeUnmount(() => {
   clearTimeout(searchTimeout)
 })
 
+const handleExport = async () => {
+  isExporting.value = true
+  try {
+    await exportPayments({
+      branchId: selectedBranch.value || undefined,
+      startDate: startDate.value || undefined,
+      endDate: endDate.value || undefined
+    })
+  } finally {
+    isExporting.value = false
+  }
+}
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '—'
   const date = new Date(dateStr)
@@ -107,10 +160,13 @@ const getPaymentMethodLabel = (method: string | null) => {
   return PAYMENT_METHOD_LABEL_MAP[method] || method
 }
 
+const getStatusBadge = (status: PaymentRecordStatus) =>
+  PAYMENT_RECORD_STATUS_BADGE[status] || { label: status, variant: 'default' as const }
+
 // 設定日期快捷選項
 const setDateRange = (range: string) => {
   const today = new Date()
-  const todayStr = today.toISOString().slice(0, 10)!
+  const todayStr = localIsoDate(today)
 
   switch (range) {
     case 'today':
@@ -118,14 +174,14 @@ const setDateRange = (range: string) => {
       endDate.value = todayStr
       break
     case 'week': {
-      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-      startDate.value = weekAgo.toISOString().slice(0, 10)!
+      const weekAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7)
+      startDate.value = localIsoDate(weekAgo)
       endDate.value = todayStr
       break
     }
     case 'month': {
-      const monthAgo = new Date(today.getFullYear(), today.getMonth(), 1)
-      startDate.value = monthAgo.toISOString().slice(0, 10)!
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+      startDate.value = localIsoDate(monthStart)
       endDate.value = todayStr
       break
     }
@@ -138,14 +194,14 @@ const setDateRange = (range: string) => {
 
 // Table columns config
 const columns = [
-  { key: 'payment_date', label: PAGES.PAYMENTS.DATE },
-  { key: 'payment_type', label: PAGES.PAYMENTS.TYPE },
+  { key: 'paymentDate', label: PAGES.PAYMENTS.DATE },
+  { key: 'type', label: PAGES.PAYMENTS.TYPE },
+  { key: 'status', label: PAGES.PAYMENTS.STATUS },
   { key: 'member', label: PAGES.PAYMENTS.MEMBER },
   { key: 'contract', label: PAGES.PAYMENTS.CONTRACT_NO },
-  { key: 'payment_method', label: PAGES.PAYMENTS.PAYMENT_METHOD },
+  { key: 'paymentMethod', label: PAGES.PAYMENTS.PAYMENT_METHOD },
   { key: 'branch', label: PAGES.PAYMENTS.BRANCH },
-  { key: 'amount', label: PAGES.PAYMENTS.AMOUNT },
-  { key: 'actions', label: '', width: '60px' }
+  { key: 'amount', label: PAGES.PAYMENTS.AMOUNT }
 ]
 </script>
 
@@ -169,8 +225,8 @@ const columns = [
           </svg>
         </div>
         <div class="stat-content">
-          <span class="stat-number">{{ formatCurrency(stats.income.amount) }}</span>
-          <span class="stat-label">{{ PAGES.PAYMENTS.TOTAL_PAYMENT }} ({{ stats.income.count }} {{ PAGES.PAYMENTS.ENTRIES }})</span>
+          <span class="stat-number" data-testid="stat-income">{{ formatCurrency(stats.totalIncome) }}</span>
+          <span class="stat-label">{{ PAGES.PAYMENTS.TOTAL_PAYMENT }}</span>
         </div>
       </div>
 
@@ -182,8 +238,8 @@ const columns = [
           </svg>
         </div>
         <div class="stat-content">
-          <span class="stat-number">{{ formatCurrency(stats.refund.amount) }}</span>
-          <span class="stat-label">{{ PAGES.PAYMENTS.TOTAL_REFUND }} ({{ stats.refund.count }} {{ PAGES.PAYMENTS.ENTRIES }})</span>
+          <span class="stat-number" data-testid="stat-refund">{{ formatCurrency(stats.totalRefund) }}</span>
+          <span class="stat-label">{{ PAGES.PAYMENTS.TOTAL_REFUND }}</span>
         </div>
       </div>
 
@@ -195,10 +251,10 @@ const columns = [
           </svg>
         </div>
         <div class="stat-content">
-          <span class="stat-number" :class="{ negative: stats.netAmount < 0 }">
-            {{ formatCurrency(stats.netAmount) }}
+          <span class="stat-number" data-testid="stat-net" :class="{ negative: stats.netIncome < 0 }">
+            {{ formatCurrency(stats.netIncome) }}
           </span>
-          <span class="stat-label">{{ PAGES.PAYMENTS.NET_PAYMENT }}</span>
+          <span class="stat-label">{{ PAGES.PAYMENTS.NET_PAYMENT }} ({{ PAGES.PAYMENTS.COMPLETED_ENTRIES }} {{ stats.paymentCount }} {{ PAGES.PAYMENTS.ENTRIES }})</span>
         </div>
       </div>
     </div>
@@ -238,12 +294,32 @@ const columns = [
           </option>
         </select>
 
-        <select v-model="selectedType" class="input filter-select">
+        <select v-model="selectedType" class="input filter-select" data-testid="filter-type">
           <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
             {{ opt.label }}
           </option>
         </select>
+
+        <select v-model="selectedStatus" class="input filter-select" data-testid="filter-status">
+          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+
+        <button
+          type="button"
+          class="export-btn"
+          data-testid="export-payments"
+          :disabled="isExporting"
+          @click="handleExport"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
+          </svg>
+          {{ PAGES.PAYMENTS.EXPORT }}
+        </button>
       </div>
+      <p class="stats-hint text-caption text-tertiary">{{ PAGES.PAYMENTS.STATS_COMPLETED_ONLY }}</p>
     </div>
 
     <!-- Stats Bar -->
@@ -265,55 +341,54 @@ const columns = [
 
     <!-- Payments Table -->
     <DataTable v-else :columns="columns" :data="payments" row-key="id">
-      <template #cell-payment_date="{ row }">
-        <span class="date-cell">{{ formatDate(row.payment_date) }}</span>
+      <template #cell-paymentDate="{ row }">
+        <span class="date-cell">{{ formatDate(row.paymentDate) }}</span>
       </template>
 
-      <template #cell-payment_type="{ row }">
+      <template #cell-type="{ row }">
         <AppBadge
-          :label="row.payment_type === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND"
-          :variant="row.payment_type === 'INCOME' ? 'success' : 'warning'"
+          :label="row.type === 'INCOME' ? LABELS.PAYMENT_TYPE.INCOME : LABELS.PAYMENT_TYPE.REFUND"
+          :variant="row.type === 'INCOME' ? 'success' : 'warning'"
+        />
+      </template>
+
+      <template #cell-status="{ row }">
+        <AppBadge
+          :label="getStatusBadge(row.status).label"
+          :variant="getStatusBadge(row.status).variant"
+          data-testid="payment-status"
         />
       </template>
 
       <template #cell-member="{ row }">
         <div class="member-cell">
-          <AppAvatar :name="row.member?.full_name || '?'" size="sm" />
+          <AppAvatar :name="row.member?.fullName || '?'" size="sm" />
           <div class="member-info">
-            <span class="member-name">{{ row.member?.full_name || '—' }}</span>
-            <span class="member-code text-caption text-tertiary">{{ row.member?.member_code }}</span>
+            <span class="member-name">{{ row.member?.fullName || '—' }}</span>
+            <span class="member-code text-caption text-tertiary">{{ row.member?.memberCode }}</span>
           </div>
         </div>
       </template>
 
       <template #cell-contract="{ row }">
-        <code v-if="row.contract?.contract_no" class="contract-code">{{ row.contract.contract_no }}</code>
+        <NuxtLink v-if="row.contract?.contractNo" :to="`/contracts/${row.contract.id}`" class="contract-code">
+          {{ row.contract.contractNo }}
+        </NuxtLink>
         <span v-else class="text-tertiary">—</span>
       </template>
 
-      <template #cell-payment_method="{ row }">
-        <span>{{ getPaymentMethodLabel(row.payment_method) }}</span>
+      <template #cell-paymentMethod="{ row }">
+        <span>{{ getPaymentMethodLabel(row.paymentMethod) }}</span>
       </template>
 
       <template #cell-branch="{ row }">
-        <span>{{ row.branch?.name || '—' }}</span>
+        <span>{{ branchNameById[row.branchId] || '—' }}</span>
       </template>
 
       <template #cell-amount="{ row }">
-        <span class="amount" :class="row.payment_type === 'INCOME' ? 'amount-income' : 'amount-refund'">
-          {{ row.payment_type === 'REFUND' ? '-' : '' }}{{ formatCurrency(row.amount) }}
+        <span class="amount" :class="amountClass(row)" data-testid="payment-amount">
+          {{ row.status === 'COMPLETED' && row.type === 'REFUND' ? '-' : '' }}{{ formatCurrency(row.amount) }}
         </span>
-      </template>
-
-      <template #cell-actions="{ row }">
-        <div class="actions-cell">
-          <NuxtLink :to="`/payments/${row.id}`" class="action-btn" title="查看詳情">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </NuxtLink>
-        </div>
       </template>
     </DataTable>
 
@@ -492,6 +567,7 @@ const columns = [
 
 /* Contract Code */
 .contract-code {
+  text-decoration: none;
   font-family: var(--font-mono);
   font-size: 12px;
   padding: 2px 8px;
@@ -515,26 +591,40 @@ const columns = [
   color: var(--color-warning);
 }
 
-/* Actions Cell */
-.actions-cell {
-  display: flex;
-  gap: var(--space-xs);
+/* Open (PENDING) or failed (FAILED) gateway checkouts are not money received */
+.amount-muted {
+  color: var(--color-text-tertiary);
 }
 
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  display: flex;
+/* Export */
+.export-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.action-btn:hover {
+  gap: var(--space-xs);
+  margin-left: auto;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-full);
   background: var(--color-accent-light);
   color: var(--color-accent);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+}
+
+.export-btn:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: white;
+}
+
+.export-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.stats-hint {
+  margin: 0;
 }
 
 /* Responsive */

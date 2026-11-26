@@ -96,6 +96,8 @@ vi.mock('../src/db/index.js', () => ({
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: any, b: any) => ({ _op: 'eq', a, b })),
   and: vi.fn((...args: any[]) => ({ _op: 'and', args })),
+  or: vi.fn((...args: any[]) => ({ _op: 'or', args })),
+  ilike: vi.fn((col: any, pattern: any) => ({ _op: 'ilike', col, pattern })),
   sql: vi.fn((...args: any[]) => args),
   desc: vi.fn((col: any) => ({ _op: 'desc', col })),
   sum: vi.fn((col: any) => ({ _op: 'sum', col })),
@@ -142,6 +144,10 @@ describe('Payment Routes', () => {
   // ---------------------------------------------------------------------------
 
   describe('GET /', () => {
+    // conditions of the payments list query (the first and() passed to where)
+    const listWhereArgs = () =>
+      chainFns.where.mock.calls.map((call) => call[0]).find((arg) => arg?._op === 'and')?.args;
+
     it('沒有分店時應該返回空陣列', async () => {
       dbResults.push([]); // tenant branches → empty
 
@@ -200,6 +206,38 @@ describe('Payment Routes', () => {
       expect(json.meta.page).toBe(3);
       expect(json.meta.limit).toBe(10);
       expect(json.meta.totalPages).toBe(10);
+    });
+
+    it('應該支援 type、status 與 search 篩選（admin-web 收款頁的篩選列）', async () => {
+      dbResults.push([{ id: BRANCH_ID }]);
+      dbResults.push([{ count: 0 }]);
+      dbResults.push([]);
+
+      const res = await app.request('/?type=REFUND&status=PENDING&search=C001', { method: 'GET' });
+
+      expect(res.status).toBe(200);
+      const whereArgs = listWhereArgs();
+      expect(whereArgs).toEqual(expect.arrayContaining([
+        { _op: 'eq', a: 'type', b: 'REFUND' },
+        { _op: 'eq', a: 'payments.status', b: 'PENDING' },
+        expect.objectContaining({ _op: 'or' }),
+      ]));
+    });
+
+    it('未知的 type / status 值會被忽略', async () => {
+      dbResults.push([{ id: BRANCH_ID }]);
+      dbResults.push([{ count: 0 }]);
+      dbResults.push([]);
+
+      await app.request('/?type=BOGUS&status=BOGUS', { method: 'GET' });
+
+      const whereArgs = listWhereArgs();
+      expect(whereArgs).toHaveLength(1); // branch condition only
+    });
+
+    it('日期格式錯誤應該返回 400', async () => {
+      const res = await app.request('/?startDate=2024-13-45', { method: 'GET' });
+      expect(res.status).toBe(400);
     });
 
     it('limit 應該上限為 100', async () => {
@@ -267,6 +305,11 @@ describe('Payment Routes', () => {
 
       expect(res.status).toBe(200);
       expect((await res.json() as any).data.totalIncome).toBe(10000);
+    });
+
+    it('日期格式錯誤應該返回 400 而不是 500', async () => {
+      const res = await app.request('/summary?endDate=not-a-date', { method: 'GET' });
+      expect(res.status).toBe(400);
     });
 
     it('應該支援 branchId 篩選', async () => {
@@ -356,6 +399,34 @@ describe('Payment Routes', () => {
       expect(res.status).toBe(201);
       expect(json.success).toBe(true);
       expect(json.data.id).toBe(PAYMENT_ID);
+    });
+
+    it('paymentDate 為未來日期應該返回 400', async () => {
+      const future = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+      const res = await postPayment({ ...validBody, paymentDate: future });
+      expect(res.status).toBe(400);
+    });
+
+    it('paymentDate 格式錯誤應該返回 400', async () => {
+      const res = await postPayment({ ...validBody, paymentDate: '2024/01/05' });
+      expect(res.status).toBe(400);
+    });
+
+    it('補登過去的 paymentDate 會存成當天中午（台灣時間）', async () => {
+      dbResults.push([{ id: BRANCH_ID, tenantId: TEST_TENANT_ID }]);
+      dbResults.push([{ id: MEMBER_ID }]);
+      dbResults.push([{ id: CONTRACT_ID, totalAmount: '10000' }]);
+      dbResults.push([{ id: PAYMENT_ID }]);
+      dbResults.push([{ totalAmount: '10000' }]);
+      dbResults.push([{ total: '5000' }]);
+      dbResults.push(undefined);
+
+      const res = await postPayment({ ...validBody, paymentDate: '2024-01-05' });
+
+      expect(res.status).toBe(201);
+      expect(chainFns.values).toHaveBeenCalledWith(expect.objectContaining({
+        paymentDate: new Date('2024-01-05T04:00:00.000Z'),
+      }));
     });
 
     it('無效的分店應該返回 400', async () => {

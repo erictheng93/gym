@@ -511,22 +511,31 @@ export interface Booking {
   contract?: Contract
 }
 
-// 收付款
-export interface Payment extends BaseFields {
-  contract_id: string | null
-  member_id: string | null
+// 收付款 — mirrors the staff API (backend/src/routes/payments.ts), camelCase
+export type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER' | 'LINE_PAY' | 'OTHER'
+export type PaymentType = 'INCOME' | 'REFUND'
+/** Only COMPLETED payments are money actually received (PENDING/FAILED are gateway checkouts) */
+export type PaymentRecordStatus = 'PENDING' | 'COMPLETED' | 'FAILED'
+
+export interface Payment {
+  id: string
+  contractId: string
+  memberId: string
+  branchId: string
+  /** Normalized from the API's decimal string */
   amount: number
-  payment_method: 'CASH' | 'CREDIT_CARD' | 'LINE_PAY' | 'TRANSFER' | null
-  payment_date: string | null
-  payment_type: 'INCOME' | 'REFUND'
-  branch_id: string | null
-  received_by: string | null
+  paymentMethod: PaymentMethod
+  paymentDate: string
+  type: PaymentType
+  status: PaymentRecordStatus
+  receiptNo: string | null
   notes: string | null
-  // Relations
-  contract?: Contract
-  member?: Member
-  branch?: Branch
-  receiver?: Employee
+  createdBy: string | null
+  createdAt: string
+  tenantId: string
+  // Joined by GET /api/payments and GET /api/payments/:id
+  member?: { id: string; fullName: string; memberCode: string; phone?: string | null; email?: string | null } | null
+  contract?: { id: string; contractNo: string; status?: string; totalAmount?: string | null } | null
 }
 
 // Database Schema
