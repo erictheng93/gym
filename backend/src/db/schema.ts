@@ -211,7 +211,7 @@ export const members = pgTable('members', {
   height: real('height'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
-  tenantId: uuid('tenant_id'),
+  tenantId: uuid('tenant_id').notNull(),
 }, (table) => [
   index('idx_members_branch').on(table.branchId),
   index('idx_members_status').on(table.status),
@@ -241,7 +241,7 @@ export const contracts = pgTable('contracts', {
   createdBy: uuid('created_by').references(() => employees.id),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
-  tenantId: uuid('tenant_id'),
+  tenantId: uuid('tenant_id').notNull(),
 }, (table) => [
   index('idx_contracts_member').on(table.memberId),
   index('idx_contracts_branch').on(table.branchId),
@@ -283,7 +283,7 @@ export const payments = pgTable('payments', {
   notes: varchar('notes', { length: 255 }),
   createdBy: uuid('created_by').references(() => employees.id),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  tenantId: uuid('tenant_id'),
+  tenantId: uuid('tenant_id').notNull(),
 }, (table) => [
   index('idx_payments_contract').on(table.contractId),
   index('idx_payments_branch').on(table.branchId),

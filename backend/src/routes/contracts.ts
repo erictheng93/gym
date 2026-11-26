@@ -353,12 +353,12 @@ app.post('/', zValidator('json', createContractSchema), async (c) => {
     db
       .select(MEMBER_ID_SELECT)
       .from(members)
-      .where(eq(members.id, data.memberId))
+      .where(and(eq(members.id, data.memberId), eq(members.tenantId, tenantId)))
       .limit(1),
     db
       .select(PLAN_CONTRACT_SELECT)
       .from(membershipPlans)
-      .where(eq(membershipPlans.id, data.planId))
+      .where(and(eq(membershipPlans.id, data.planId), eq(membershipPlans.tenantId, tenantId)))
       .limit(1),
     db
       .select(COUNT_SELECT)

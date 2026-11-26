@@ -43,15 +43,14 @@ export function toCents(value: number | string | null | undefined): number {
 export async function recalculateContractPayment(
   tx: DbTransaction,
   contractId: string,
-  tenantId: string | null,
+  tenantId: string,
 ): Promise<ContractPaymentSummary | null> {
-  const contractConditions: SQL[] = [eq(contracts.id, contractId)];
-  const paymentConditions: SQL[] = [eq(payments.contractId, contractId), eq(payments.type, 'INCOME')];
-  if (tenantId) {
-    contractConditions.push(eq(contracts.tenantId, tenantId));
-    paymentConditions.push(eq(payments.tenantId, tenantId));
-  }
-  const contractCondition = and(...contractConditions);
+  const contractCondition = and(eq(contracts.id, contractId), eq(contracts.tenantId, tenantId));
+  const paymentConditions: SQL[] = [
+    eq(payments.contractId, contractId),
+    eq(payments.type, 'INCOME'),
+    eq(payments.tenantId, tenantId),
+  ];
 
   const [contract] = await tx
     .select(CONTRACT_TOTAL_AMOUNT_SELECT)

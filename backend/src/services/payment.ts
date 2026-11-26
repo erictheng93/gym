@@ -211,6 +211,13 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
   }
 
   try {
+    // payments.tenant_id is NOT NULL; a row without it would be invisible to
+    // every tenant-scoped query, so refuse rather than insert an orphan
+    const tenantId = await getTenantIdForBranch(branchId);
+    if (!tenantId) {
+      return { success: false, error: 'Branch tenant could not be resolved' };
+    }
+
     // Create payment record first
     const [paymentRecord] = await db.insert(payments).values({
       contractId,
@@ -221,7 +228,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
       paymentDate: new Date(),
       type: 'INCOME',
       notes: description || `Payment via ${gateway}`,
-      tenantId: await getTenantIdForBranch(branchId),
+      tenantId,
     }).returning(PAYMENT_ID_SELECT);
 
     // Process payment based on gateway
