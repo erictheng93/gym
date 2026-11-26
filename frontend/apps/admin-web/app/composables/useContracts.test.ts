@@ -259,6 +259,31 @@ describe('useContracts', () => {
     })
   })
 
+  describe('pauseContract', () => {
+    it('應該呼叫後端暫停端點（由後端驗證日期並延長到期日）', async () => {
+      const paused = { id: 'contract-1', contract_status: 'PAUSED' }
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: paused })
+
+      const { pauseContract } = useContracts()
+      const body = { startDate: '2026-12-01', endDate: '2026-12-08', reason: '出國' }
+      const result = await pauseContract('contract-1', body)
+
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/contracts/contract-1/pause', { method: 'POST', body })
+      expect(mockFetchInstance.updateItem).not.toHaveBeenCalled()
+      expect(result).toEqual(paused)
+    })
+
+    it('後端拒絕（例如日期不合法）時應該返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('暫停結束日必須晚於開始日'))
+
+      const { pauseContract } = useContracts()
+      const result = await pauseContract('contract-1', { startDate: '2026-12-08', endDate: '2026-12-01' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
+    })
+  })
+
   describe('getContractStats', () => {
     it('應該成功取得合約統計資料', async () => {
       mockFetchInstance.readItems

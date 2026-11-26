@@ -49,7 +49,7 @@ definePageMeta({
 const route = useRoute()
 const router = useRouter()
 const { readItems, createItem } = useFetch()
-const { getContract, updateContract, activateContract } = useContracts()
+const { getContract, updateContract, activateContract, pauseContract } = useContracts()
 const { confirm } = useConfirm()
 const { fetchPayments, payments } = usePayments()
 const { currentEmployee, fetchCurrentEmployee } = useAuth()
@@ -226,45 +226,27 @@ const getLogTypeLabel = (type: string) => {
   return LOG_TYPE_LABEL_MAP[type] || type
 }
 
-// 暫停合約
+// 暫停合約（日期驗證、天數計算與延長到期日都由後端處理）
+const isPauseRangeValid = computed(() =>
+  !!pauseForm.startDate && !!pauseForm.endDate && pauseForm.endDate > pauseForm.startDate
+)
+
 const handlePause = async () => {
-  if (!contract.value || !pauseForm.startDate || !pauseForm.endDate) return
+  if (!contract.value || !isPauseRangeValid.value) return
 
   isProcessing.value = true
   try {
-    // 計算暫停天數
-    const start = new Date(pauseForm.startDate)
-    const end = new Date(pauseForm.endDate)
-    const daysAffected = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
-
-    // 建立異動紀錄（包含完整資訊：經辦員工、執行分店）
-    await createItem<ContractLog>('contract_logs', {
-      contract_id: contract.value.id,
-      log_type: 'PAUSE',
-      start_date: pauseForm.startDate,
-      end_date: pauseForm.endDate,
-      days_affected: daysAffected,
-      reason: pauseForm.reason,
-      created_by_employee: currentEmployee.value?.id || null,
-      branch_id: currentEmployee.value?.branch_id || contract.value.branch_id || null
+    // 失敗時 pauseContract 已顯示錯誤提示
+    const paused = await pauseContract(contract.value.id, {
+      startDate: pauseForm.startDate,
+      endDate: pauseForm.endDate,
+      reason: pauseForm.reason || undefined
     })
-
-    // 計算新的結束日期
-    const originalEnd = new Date(contract.value.end_date!)
-    const newEndDate = new Date(originalEnd.getTime() + daysAffected * 24 * 60 * 60 * 1000)
-
-    // 更新合約狀態
-    await updateContract(contract.value.id, {
-      contract_status: 'PAUSED',
-      end_date: newEndDate.toISOString().slice(0, 10)
-    })
-
-    showPauseModal.value = false
-    useToast().success(MESSAGES.SUCCESS.CONTRACT_PAUSED)
-    await loadContract()
-  } catch (error) {
-    console.error('Failed to pause contract:', error)
-    useToast().error(MESSAGES.ERRORS.CONTRACT_PAUSE_FAILED)
+    if (paused) {
+      showPauseModal.value = false
+      useToast().success(MESSAGES.SUCCESS.CONTRACT_PAUSED)
+      await loadContract()
+    }
   } finally {
     isProcessing.value = false
   }
@@ -880,7 +862,7 @@ const openRenewModal = () => {
             </div>
             <div class="input-group">
               <label class="input-label">{{ PAGES.CONTRACTS.PAUSE_END }}</label>
-              <input v-model="pauseForm.endDate" type="date" class="input" />
+              <input v-model="pauseForm.endDate" type="date" class="input" :min="pauseForm.startDate" />
             </div>
             <div class="input-group">
               <label class="input-label">{{ MESSAGES.FORM.REASON }}</label>
@@ -890,7 +872,7 @@ const openRenewModal = () => {
 
           <div class="modal-actions">
             <button class="btn btn-secondary" @click="showPauseModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
-            <button class="btn btn-warning" :disabled="isProcessing || !pauseForm.endDate" @click="handlePause">
+            <button class="btn btn-warning" :disabled="isProcessing || !isPauseRangeValid" @click="handlePause">
               {{ isProcessing ? MESSAGES.ACTIONS.PROCESSING : PAGES.CONTRACTS.CONFIRM_PAUSE }}
             </button>
           </div>
