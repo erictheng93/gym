@@ -153,6 +153,7 @@ app.get('/overview', async (c) => {
         and(
           buildBranchFilter(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
+          eq(payments.status, 'COMPLETED'),
           gte(payments.paymentDate, lastMonthStartDate)
         )
       ),
@@ -222,6 +223,7 @@ app.get('/revenue-trend', async (c) => {
         and(
           buildBranchFilter(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
+          eq(payments.status, 'COMPLETED'),
           gte(payments.paymentDate, sql`current_date - interval '12 months'`)
         )
       )
@@ -251,6 +253,7 @@ app.get('/revenue-trend', async (c) => {
       and(
         buildBranchFilter(payments.branchId, branchIds),
         eq(payments.type, 'INCOME'),
+        eq(payments.status, 'COMPLETED'),
         gte(payments.paymentDate, sql`current_date - interval '30 days'`)
       )
     )

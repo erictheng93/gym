@@ -4,7 +4,7 @@
  */
 
 import { db, contracts, payments } from '../db/index.js';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { calculatePaymentStatus } from './utils.js';
 
 type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
@@ -61,7 +61,7 @@ export async function updateContractPaymentStatus(contractId: string): Promise<v
     const contractPayments = await db
       .select(PAYMENT_AMOUNT_TYPE_SELECT)
       .from(payments)
-      .where(eq(payments.contractId, contractId));
+      .where(and(eq(payments.contractId, contractId), eq(payments.status, 'COMPLETED')));
 
     // Calculate total paid amount (subtract refunds)
     let paidAmount = 0;
@@ -142,7 +142,7 @@ export async function getContractPaymentSummary(contractId: string): Promise<{
   const contractPayments = await db
     .select(PAYMENT_AMOUNT_ONLY_SELECT)
     .from(payments)
-    .where(eq(payments.contractId, contractId));
+    .where(and(eq(payments.contractId, contractId), eq(payments.status, 'COMPLETED')));
 
   let paidAmount = 0;
   let refundedAmount = 0;

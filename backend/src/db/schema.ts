@@ -32,6 +32,10 @@ export const CONTRACT_STATUS = ['DRAFT', 'ACTIVE', 'PAUSED', 'EXPIRED', 'CANCELL
 export const PAYMENT_STATUS = ['UNPAID', 'PARTIAL', 'PAID', 'REFUNDED'] as const;
 export const PAYMENT_METHOD = ['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'LINE_PAY', 'OTHER'] as const;
 export const PAYMENT_TYPE = ['INCOME', 'REFUND'] as const;
+// payments.status: gateway checkout rows start PENDING and become COMPLETED when the
+// gateway confirms (webhook) or FAILED when the checkout expires / cannot be created.
+// Staff-entered payments and refunds are COMPLETED. Only COMPLETED rows count as paid.
+export const PAYMENT_RECORD_STATUS = ['PENDING', 'COMPLETED', 'FAILED'] as const;
 export const LEAVE_TYPE = ['ANNUAL', 'SICK', 'PERSONAL', 'MATERNITY', 'BEREAVEMENT', 'OTHER'] as const;
 export const LEAVE_STATUS = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
 export const LOG_TYPE = ['PAUSE', 'RESUME', 'EXTEND', 'TRANSFER', 'CANCEL', 'CLASS_USED', 'RENEWAL'] as const;
@@ -279,6 +283,7 @@ export const payments = pgTable('payments', {
   paymentMethod: varchar('payment_method', { length: 20 }).notNull().$type<typeof PAYMENT_METHOD[number]>(),
   paymentDate: timestamp('payment_date', { withTimezone: true }).defaultNow().notNull(),
   type: varchar('type', { length: 20 }).notNull().default('INCOME').$type<typeof PAYMENT_TYPE[number]>(),
+  status: varchar('status', { length: 20 }).notNull().default('COMPLETED').$type<typeof PAYMENT_RECORD_STATUS[number]>(),
   receiptNo: varchar('receipt_no', { length: 100 }), // gateway transaction id (Stripe cs_… ids are ~66 chars); idempotency marker
   notes: varchar('notes', { length: 255 }),
   createdBy: uuid('created_by').references(() => employees.id),

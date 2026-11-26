@@ -21,6 +21,7 @@ const PAYMENT_RETURNING = {
   paymentMethod: payments.paymentMethod,
   paymentDate: payments.paymentDate,
   type: payments.type,
+  status: payments.status,
   receiptNo: payments.receiptNo,
   notes: payments.notes,
   createdBy: payments.createdBy,
@@ -217,6 +218,9 @@ app.get('/summary', async (c) => {
     conditions.push(sql`${payments.paymentDate} <= ${endDate}`);
   }
 
+  // Revenue: only payments that were actually received (not open/failed gateway checkouts)
+  conditions.push(eq(payments.status, 'COMPLETED'));
+
   const whereCondition = and(...conditions);
 
   const [summaryResult] = await db
@@ -275,6 +279,9 @@ app.get('/export', async (c) => {
   if (endDate) {
     conditions.push(lte(payments.paymentDate, new Date(endDate)));
   }
+
+  // Export is a record of money received: leave out open/failed gateway checkouts
+  conditions.push(eq(payments.status, 'COMPLETED'));
 
   const result = await db
     .select(PAYMENT_EXPORT_SELECT)
@@ -405,6 +412,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
       paymentMethod: data.paymentMethod,
       paymentDate: new Date(),
       type: data.paymentType,
+      status: 'COMPLETED', // staff record money already received
       notes: data.notes,
       createdBy: user.employeeId,
       tenantId,

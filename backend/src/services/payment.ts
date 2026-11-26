@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db, payments } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getTenantIdForBranch } from '../utils/tenant-cache.js';
 
 const PAYMENT_ID_SELECT = {
@@ -227,6 +227,8 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
       paymentMethod: gatewayToPaymentMethod(gateway),
       paymentDate: new Date(),
       type: 'INCOME',
+      // Gateway checkouts are unpaid until the gateway confirms them (payment-webhooks.ts)
+      status: gateway === 'manual' ? 'COMPLETED' : 'PENDING',
       notes: description || `Payment via ${gateway}`,
       tenantId,
     }).returning(PAYMENT_ID_SELECT);
@@ -253,6 +255,14 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
       }
     }
 
+    if (!result.success && gateway !== 'manual') {
+      // The checkout could not be created, so it can never be paid
+      await db
+        .update(payments)
+        .set({ status: 'FAILED' })
+        .where(and(eq(payments.id, paymentRecord.id), eq(payments.status, 'PENDING')));
+    }
+
     result.paymentId = paymentRecord.id;
     return result;
 
@@ -265,6 +275,7 @@ export async function createPayment(options: CreatePaymentOptions): Promise<Paym
 const PAYMENT_STATUS_SELECT = {
   id: payments.id,
   type: payments.type,
+  status: payments.status,
 };
 
 const PAYMENT_REFUND_SELECT = {
@@ -277,6 +288,7 @@ const PAYMENT_REFUND_SELECT = {
   branchId: payments.branchId,
   tenantId: payments.tenantId,
   receiptNo: payments.receiptNo,
+  status: payments.status,
 };
 
 type PaymentRefundInfo = {
@@ -289,6 +301,7 @@ type PaymentRefundInfo = {
   branchId: string;
   tenantId: string | null;
   receiptNo: string | null;
+  status: string;
 };
 
 /**
@@ -307,7 +320,10 @@ export async function getPaymentStatus(paymentId: string): Promise<PaymentResult
     }
 
     // Determine status based on type field
-    const status: PaymentStatus = payment.type === 'REFUND' ? 'refunded' : 'completed';
+    let status: PaymentStatus = 'completed';
+    if (payment.type === 'REFUND') status = 'refunded';
+    else if (payment.status === 'PENDING') status = 'pending';
+    else if (payment.status === 'FAILED') status = 'failed';
 
     return {
       success: true,
@@ -339,6 +355,10 @@ export async function processRefund(options: RefundOptions): Promise<RefundResul
 
     if (payment.type === 'REFUND') {
       return { success: false, error: 'Payment is already refunded' };
+    }
+
+    if (payment.status !== 'COMPLETED') {
+      return { success: false, error: 'Only completed payments can be refunded' };
     }
 
     const refundAmount = amount || parseFloat(payment.amount);

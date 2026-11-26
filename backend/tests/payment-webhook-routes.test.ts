@@ -84,6 +84,7 @@ vi.mock('../src/db/index.js', () => ({
     paymentDate: 'paymentDate',
     type: 'type',
     receiptNo: 'receiptNo',
+    status: 'status',
     notes: 'notes',
     contractId: 'contractId',
     tenantId: 'tenantId',
@@ -110,7 +111,7 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 // handlePaymentSuccess query results
-const PAYMENT_ROW = { amount: '5000', contractId: 'contract-1', tenantId: 'tenant-1', receiptNo: null };
+const PAYMENT_ROW = { amount: '5000', contractId: 'contract-1', tenantId: 'tenant-1', receiptNo: null, status: 'PENDING' };
 const CONTRACT_ROW = { totalAmount: '5000' };
 
 // =============================================================================
@@ -200,7 +201,7 @@ describe('Payment Webhook Routes', () => {
       // 3 updates: payment record + contract paid total + contract activation
       expect(mockUpdate).toHaveBeenCalledTimes(3);
       expect(mockUpdateSet).toHaveBeenCalledWith(
-        expect.objectContaining({ receiptNo: 'cs_123' }),
+        expect.objectContaining({ receiptNo: 'cs_123', status: 'COMPLETED' }),
       );
     });
 
@@ -248,8 +249,11 @@ describe('Payment Webhook Routes', () => {
       expect(mockUpdate).not.toHaveBeenCalled();
     });
 
-    it('checkout.session.expired 應該只記錄不處理', async () => {
+    it('checkout.session.expired 應該只把仍為 PENDING 的付款標記為 FAILED', async () => {
       mockVerifyStripe.mockReturnValue(true);
+      const mockExpiredWhere = vi.fn().mockResolvedValue(undefined);
+      const mockExpiredSet = vi.fn(() => ({ where: mockExpiredWhere }));
+      mockDbUpdate.mockReturnValueOnce({ set: mockExpiredSet });
 
       const event = {
         type: 'checkout.session.expired',
@@ -265,6 +269,12 @@ describe('Payment Webhook Routes', () => {
       });
 
       expect(res.status).toBe(200);
+      expect(mockExpiredSet).toHaveBeenCalledWith({ status: 'FAILED' });
+      // only an open checkout changes: a completed payment is never failed by a late expiry
+      expect(mockExpiredWhere).toHaveBeenCalledWith({
+        _op: 'and',
+        args: [{ _op: 'eq', a: 'id', b: 'payment-1' }, { _op: 'eq', a: 'status', b: 'PENDING' }],
+      });
       expect(mockUpdate).not.toHaveBeenCalled();
     });
 
@@ -1037,7 +1047,10 @@ describe('Payment Webhook Routes', () => {
     type Row = Record<string, unknown>;
 
     function installStatefulDb(opts: { totalAmount?: string; otherPaid?: number; failContractUpdate?: boolean } = {}) {
-      const committed: Row = { receiptNo: null, paidAmount: '0', paymentStatus: 'UNPAID', status: 'DRAFT' };
+      // `status` is the contract status; the payment row's status is kept as paymentRowStatus
+      const committed: Row = {
+        receiptNo: null, paymentRowStatus: 'PENDING', paidAmount: '0', paymentStatus: 'UNPAID', status: 'DRAFT',
+      };
       const paymentWrites: Row[] = [];
       let lock: Promise<unknown> = Promise.resolve();
 
@@ -1050,7 +1063,7 @@ describe('Payment Webhook Routes', () => {
                 where: () => ({
                   limit: () => ({
                     for: async () => (table === payments
-                      ? [{ ...PAYMENT_ROW, receiptNo: working.receiptNo }]
+                      ? [{ ...PAYMENT_ROW, receiptNo: working.receiptNo, status: working.paymentRowStatus }]
                       : [{ totalAmount: opts.totalAmount ?? '5000' }]),
                   }),
                   // paid total: this payment row (it exists since checkout) + other payments
@@ -1064,7 +1077,11 @@ describe('Payment Webhook Routes', () => {
                 where: async () => {
                   if (table === payments) {
                     paymentWrites.push(values);
-                  } else if (opts.failContractUpdate) {
+                    const { status, ...rest } = values;
+                    Object.assign(working, rest, status === undefined ? {} : { paymentRowStatus: status });
+                    return;
+                  }
+                  if (opts.failContractUpdate) {
                     throw new Error('contract update failed');
                   }
                   Object.assign(working, values);
@@ -1125,8 +1142,22 @@ describe('Payment Webhook Routes', () => {
       expect(second.status).toBe(200);
       expect(paymentWrites).toHaveLength(1);
       expect(committed).toMatchObject({
-        receiptNo: 'cs_dup', paidAmount: '5000.00', paymentStatus: 'PAID', status: 'ACTIVE',
+        receiptNo: 'cs_dup', paymentRowStatus: 'COMPLETED', paidAmount: '5000.00', paymentStatus: 'PAID', status: 'ACTIVE',
       });
+    });
+
+    it('已是 COMPLETED 的付款（無 transactionId）不會被 webhook 再計算一次', async () => {
+      const { committed, paymentWrites } = installStatefulDb();
+      committed.paymentRowStatus = 'COMPLETED';
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const res = await stripeCompleted('cs_late');
+
+      expect(res.status).toBe(200);
+      expect(paymentWrites).toHaveLength(0);
+      expect(committed).toMatchObject({ receiptNo: null, paidAmount: '0', status: 'DRAFT' });
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
     });
 
     it('同時送達的重複 webhook 只產生一次效果', async () => {

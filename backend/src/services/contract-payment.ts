@@ -34,8 +34,8 @@ export function toCents(value: number | string | null | undefined): number {
  * (SELECT ... FOR UPDATE) so concurrent payments on the same contract are
  * serialized and the stored total cannot be overwritten by a stale sum.
  *
- * Paid total = sum of the contract's INCOME payment rows (tenant-scoped when a
- * tenant is known). Every payment row is counted exactly once: rows are never
+ * Paid total = sum of the contract's COMPLETED INCOME payment rows
+ * (tenant-scoped). Every payment row is counted exactly once: rows are never
  * added on top of the sum by the caller.
  *
  * Returns null when the contract does not exist (in this tenant).
@@ -49,6 +49,8 @@ export async function recalculateContractPayment(
   const paymentConditions: SQL[] = [
     eq(payments.contractId, contractId),
     eq(payments.type, 'INCOME'),
+    // Open (PENDING) or FAILED gateway checkouts were never paid
+    eq(payments.status, 'COMPLETED'),
     eq(payments.tenantId, tenantId),
   ];
 

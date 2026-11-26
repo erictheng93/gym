@@ -216,6 +216,7 @@ app.get('/revenue', async (c) => {
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.type, 'INCOME'),
+    eq(payments.status, 'COMPLETED'),
   ];
 
   const [byBranch, byDay] = await Promise.all([
@@ -453,6 +454,7 @@ app.get('/revenue/export', async (c) => {
     gte(payments.paymentDate, new Date(startDate)),
     lte(payments.paymentDate, new Date(endDate)),
     eq(payments.type, 'INCOME'),
+    eq(payments.status, 'COMPLETED'),
   ];
 
   const byDay = await db
@@ -816,6 +818,7 @@ app.get('/branch-performance', async (c) => {
     .where(and(
       buildBranchFilter(payments.branchId, branchIds),
       eq(payments.type, 'INCOME'),
+      eq(payments.status, 'COMPLETED'),
       gte(payments.paymentDate, currentStart),
       lte(payments.paymentDate, currentEnd)
     ))
@@ -857,6 +860,7 @@ app.get('/branch-performance', async (c) => {
         .where(and(
           buildBranchFilter(payments.branchId, branchIds),
           eq(payments.type, 'INCOME'),
+          eq(payments.status, 'COMPLETED'),
           gte(payments.paymentDate, previousStart),
           lte(payments.paymentDate, previousEnd)
         ))
@@ -1098,6 +1102,7 @@ app.get('/branch-performance/export', async (c) => {
     .where(and(
       buildBranchFilter(payments.branchId, branchIds),
       eq(payments.type, 'INCOME'),
+      eq(payments.status, 'COMPLETED'),
       gte(payments.paymentDate, currentStart),
       lte(payments.paymentDate, currentEnd)
     ))
@@ -1123,6 +1128,7 @@ app.get('/branch-performance/export', async (c) => {
     .where(and(
       buildBranchFilter(payments.branchId, branchIds),
       eq(payments.type, 'INCOME'),
+      eq(payments.status, 'COMPLETED'),
       gte(payments.paymentDate, previousStart),
       lte(payments.paymentDate, previousEnd)
     ))

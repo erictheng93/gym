@@ -51,6 +51,15 @@ function stripeCompletedRequest(paymentId: string, sessionId: string, amount: nu
   });
 }
 
+function stripeEvent(type: string, paymentId: string) {
+  const body = JSON.stringify({ type, data: { object: { id: `cs_${type}`, metadata: { payment_id: paymentId } } } });
+  return webhookRoutes.fetch(new Request('http://localhost/stripe', {
+    method: 'POST',
+    headers: { 'stripe-signature': signStripe(body), 'Content-Type': 'application/json' },
+    body,
+  }));
+}
+
 // Sent to the webhook router itself; the full-app path is covered at the bottom.
 function stripeCompleted(paymentId: string, sessionId: string, amount: number) {
   return webhookRoutes.fetch(stripeCompletedRequest(paymentId, sessionId, amount));
@@ -77,7 +86,7 @@ async function createContract(totalAmount: string, status: 'DRAFT' | 'PAUSED' = 
   return id;
 }
 
-/** A gateway checkout row, as createPayment() inserts it (receiptNo = NULL until paid) */
+/** A gateway checkout row, as createPayment() inserts it (PENDING, receiptNo = NULL until paid) */
 async function createCheckoutPayment(contractId: string, amount: string) {
   const [row] = await db.insert(payments).values({
     contractId,
@@ -87,6 +96,7 @@ async function createCheckoutPayment(contractId: string, amount: string) {
     amount,
     paymentMethod: 'CREDIT_CARD',
     type: 'INCOME',
+    status: 'PENDING',
     notes: 'Payment via stripe',
   }).returning({ id: payments.id });
   return row.id;
@@ -167,7 +177,7 @@ describe('Payments (real DB)', () => {
     const res = await stripeCompleted(paymentId, 'cs_full', 5000);
 
     expect(res.status).toBe(200);
-    expect((await getPayment(paymentId)).receiptNo).toBe('cs_full');
+    expect(await getPayment(paymentId)).toMatchObject({ receiptNo: 'cs_full', status: 'COMPLETED' });
     expect(await getContract(contractId)).toMatchObject({
       status: 'ACTIVE',
       paymentStatus: 'PAID',
@@ -189,7 +199,7 @@ describe('Payments (real DB)', () => {
     const otherCharge = await stripeCompleted(paymentId, 'cs_other', 5000);
 
     expect([...responses, replay, otherCharge].map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
-    expect((await getPayment(paymentId)).receiptNo).toBe('cs_dup');
+    expect(await getPayment(paymentId)).toMatchObject({ receiptNo: 'cs_dup', status: 'COMPLETED' });
     const paymentRows = await db.select().from(payments).where(eq(payments.contractId, contractId));
     expect(paymentRows).toHaveLength(1);
     expect(await getContract(contractId)).toMatchObject({ status: 'ACTIVE', paidAmount: '5000.00' });
@@ -212,7 +222,7 @@ describe('Payments (real DB)', () => {
     const res = await stripeCompleted(paymentId, 'cs_under', 4999.99);
 
     expect(res.status).toBe(200);
-    expect((await getPayment(paymentId)).receiptNo).toBeNull();
+    expect(await getPayment(paymentId)).toMatchObject({ receiptNo: null, status: 'PENDING' });
     expect(await getContract(contractId)).toMatchObject({
       status: 'DRAFT',
       paymentStatus: 'UNPAID',
@@ -234,20 +244,9 @@ describe('Payments (real DB)', () => {
     });
   });
 
-  // BUG: recalculateContractPayment (src/services/contract-payment.ts) sums every
-  // INCOME row of the contract, including gateway checkout rows that were never
-  // paid (createPayment inserts them with receiptNo = NULL, and abandoned/expired
-  // checkouts are never removed). An abandoned 5000 checkout plus a paid 3000
-  // deposit is stored as paidAmount 8000 / PAID instead of 3000 / PARTIAL.
-  // Needs a schema decision: payments has no completion status. receiptNo NULL
-  // also describes every staff (cash/POS) payment, and createdBy is NULL for
-  // staff users without an employee record, so neither column can tell a
-  // pending checkout from a completed payment. Fix by adding a status /
-  // completed_at column (set by the webhook) or by not inserting the row until
-  // the gateway confirms.
-  it.skip('webhook: an abandoned (unpaid) checkout row is not counted as paid', async () => {
+  it('webhook: an abandoned (unpaid) checkout row is not counted as paid', async () => {
     const contractId = await createContract('10000.00');
-    await createCheckoutPayment(contractId, '5000.00'); // abandoned, never paid
+    const abandonedId = await createCheckoutPayment(contractId, '5000.00'); // abandoned, never paid
     const paymentId = await createCheckoutPayment(contractId, '3000.00');
 
     await stripeCompleted(paymentId, 'cs_after_abandoned', 3000);
@@ -256,6 +255,62 @@ describe('Payments (real DB)', () => {
       paymentStatus: 'PARTIAL',
       paidAmount: '3000.00',
     });
+    expect((await getPayment(abandonedId)).status).toBe('PENDING');
+    expect((await getPayment(paymentId)).status).toBe('COMPLETED');
+  });
+
+  it('POST /api/payments: an open (PENDING) checkout is not counted in the contract total', async () => {
+    const contractId = await createContract('5000.00');
+    await createCheckoutPayment(contractId, '5000.00'); // checkout opened, never paid
+
+    expect((await staffPayment(contractId, 2000)).status).toBe(201);
+
+    expect(await getContract(contractId)).toMatchObject({ paidAmount: '2000.00', paymentStatus: 'PARTIAL' });
+    const rows = await db.select().from(payments).where(eq(payments.contractId, contractId));
+    expect(rows.map((r) => r.status).sort()).toEqual(['COMPLETED', 'PENDING']);
+  });
+
+  it('webhook: an open checkout becomes counted once the gateway completes it', async () => {
+    const contractId = await createContract('5000.00');
+    const paymentId = await createCheckoutPayment(contractId, '5000.00');
+    expect((await staffPayment(contractId, 0)).status).toBe(201); // recalculates totals
+
+    expect(await getContract(contractId)).toMatchObject({ paidAmount: '0.00', paymentStatus: 'UNPAID' });
+
+    await stripeCompleted(paymentId, 'cs_later', 5000);
+
+    expect(await getContract(contractId)).toMatchObject({ paidAmount: '5000.00', paymentStatus: 'PAID' });
+  });
+
+  it('webhook: an expired Stripe checkout is marked FAILED and never counted', async () => {
+    const contractId = await createContract('5000.00');
+    const expiredId = await createCheckoutPayment(contractId, '5000.00');
+    const paidId = await createCheckoutPayment(contractId, '1000.00');
+    await stripeCompleted(paidId, 'cs_paid_before_expiry', 1000);
+
+    const res = await stripeEvent('checkout.session.expired', expiredId);
+    // expiry of an already completed payment must not undo it
+    const lateExpiry = await stripeEvent('checkout.session.expired', paidId);
+
+    expect([res.status, lateExpiry.status]).toEqual([200, 200]);
+    expect((await getPayment(expiredId)).status).toBe('FAILED');
+    expect((await getPayment(paidId)).status).toBe('COMPLETED');
+    expect(await getContract(contractId)).toMatchObject({ paidAmount: '1000.00', paymentStatus: 'PARTIAL' });
+  });
+
+  it('GET /api/payments/summary counts only completed payments', async () => {
+    const summary = async () => {
+      const res = await authRequest(`/api/payments/summary?branchId=${TEST_BRANCH_ID}`, { token });
+      return (await res.json()).data.totalIncome as number;
+    };
+    const contractId = await createContract('9000.00');
+    const before = await summary();
+
+    const paymentId = await createCheckoutPayment(contractId, '4000.00');
+    expect(await summary()).toBe(before);
+
+    await stripeCompleted(paymentId, 'cs_summary', 4000);
+    expect(await summary()).toBe(before + 4000);
   });
 
   // Webhooks are mounted ahead of the staff-auth payments router (src/app.ts)
