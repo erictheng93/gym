@@ -66,6 +66,8 @@ const faqItems = [
 </script>
 
 <script setup lang="ts">
+import { supportCategoryToIssueType } from '../../schemas/issue.schema'
+
 /**
  * 客服支援頁面
  * 提供聯絡方式、常見問題、問題回報功能
@@ -74,11 +76,9 @@ definePageMeta({
   middleware: 'auth'
 })
 
-const config = useRuntimeConfig()
-const apiUrl = config.public.apiBaseUrl
-const { member, getAuthHeader } = useMemberAuth()
 const toast = useToast()
-const { handleError } = useApiError()
+const { member } = useMemberAuth()
+const { createIssue } = useIssues()
 
 // 目前顯示的 Tab
 type Tab = 'contact' | 'faq' | 'report'
@@ -143,24 +143,17 @@ const submitReport = async () => {
   isSubmitting.value = true
 
   try {
-    // 提交到後端（假設有 support_tickets 表）
-    await $fetch(`${apiUrl}/api/member/support-tickets`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: {
-        member_id: member.value?.id,
-        category: reportForm.category,
-        subject: reportForm.subject.trim(),
-        description: reportForm.description.trim(),
-        status: 'pending',
-        // 可以加入更多資訊如裝置、App 版本等
-        metadata: {
-          member_code: member.value?.member_code,
-          user_agent: navigator.userAgent,
-          timestamp: new Date().toISOString(),
-        },
-      },
+    // 問題回報沿用「問題回報」(issues) 系統，與 /profile/issues 共用同一份資料
+    const result = await createIssue({
+      type: supportCategoryToIssueType(reportForm.category),
+      title: reportForm.subject.trim(),
+      content: reportForm.description.trim(),
     })
+
+    if (!result.success) {
+      toast.error(result.message || '提交失敗，請稍後再試')
+      return
+    }
 
     submitSuccess.value = true
     toast.success('問題已提交，我們會盡快處理')
@@ -179,8 +172,8 @@ const submitReport = async () => {
       submitSuccess.value = false
       submitSuccessTimer = null
     }, 5000)
-  } catch (error) {
-    handleError(error, { fallbackMessage: '提交失敗，請稍後再試' })
+  } catch {
+    toast.error('提交失敗，請稍後再試')
   } finally {
     isSubmitting.value = false
   }

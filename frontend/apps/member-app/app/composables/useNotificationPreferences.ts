@@ -317,14 +317,11 @@ export const useNotificationPreferences = () => {
   }
 
   /**
-   * Send test notification (development only)
+   * Send a test push notification to the member's own subscribed devices
    */
-  const sendTestNotification = async (
-    channel?: 'line' | 'push' | 'email' | 'sms',
-    type = 'test'
-  ): Promise<{
+  const sendTestNotification = async (): Promise<{
     success: boolean
-    channel?: string
+    sent?: number
     error?: string
   }> => {
     if (!isAuthenticated.value) {
@@ -334,18 +331,14 @@ export const useNotificationPreferences = () => {
     try {
       const response = await $fetch<{
         success: boolean
-        channel?: string
+        data?: { sent: number }
         error?: string
-      }>(`${apiUrl}/api/member/notifications/test`, {
+      }>(`${apiUrl}/api/member/push/test`, {
         method: 'POST',
-        headers: {
-          ...getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: { channel, type },
+        headers: getAuthHeader(),
       })
 
-      return response
+      return { success: response.success, sent: response.data?.sent, error: response.error }
     } catch (err) {
       return {
         success: false,

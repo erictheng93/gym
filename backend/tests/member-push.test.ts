@@ -20,6 +20,7 @@ import {
 //   DELETE /api/member/push/unsubscribe
 //   GET    /api/member/push/subscriptions
 //   PATCH  /api/member/push/preferences
+//   POST   /api/member/push/test
 // =============================================================================
 
 const MEMBER_TOKEN_HEADER = 'X-Member-Token';
@@ -209,6 +210,45 @@ describe('Member Push Routes', () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/member/push/test
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/member/push/test', () => {
+    it('requires member authentication', async () => {
+      const res = await app.request('/api/member/push/test', { method: 'POST' });
+      expect(res.status).toBe(401);
+    });
+
+    it('sends a test push only to the calling member and reports the count', async () => {
+      const spy = vi.spyOn(pushService, 'sendToMember').mockResolvedValue(2);
+      try {
+        const res = await memberRequest('/api/member/push/test', { method: 'POST' });
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.success).toBe(true);
+        expect(data.data.sent).toBe(2);
+        expect(spy).toHaveBeenCalledWith(TEST_MEMBER_ID, expect.objectContaining({ title: '測試通知' }));
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('is rate limited per member', async () => {
+      const spy = vi.spyOn(pushService, 'sendToMember').mockResolvedValue(0);
+      try {
+        let limited = 0;
+        for (let i = 0; i < 105; i++) {
+          const res = await memberRequest('/api/member/push/test', { method: 'POST' });
+          if (res.status === 429) limited++;
+        }
+        expect(limited).toBeGreaterThan(0);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 });

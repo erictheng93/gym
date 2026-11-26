@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, pushSubscriptions } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
-import { memberAuthMiddleware, requireMember } from '../middleware/index.js';
+import { memberAuthMiddleware, requireMember, rateLimiter, limitMax, getClientIp } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import { pushService } from '../services/push.js';
 
@@ -237,11 +237,18 @@ app.patch(
 );
 
 // -----------------------------------------------------------------------------
-// POST /api/member/push/test - Send test notification (dev only)
+// POST /api/member/push/test - Send a test push to the calling member's own devices
 // -----------------------------------------------------------------------------
 
-if (process.env.NODE_ENV === 'development') {
-  app.post('/test', async (c) => {
+app.post(
+  '/test',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: limitMax(3),
+    keyGenerator: (c) => `push:test:${c.get('member')?.id ?? 'unknown'}:${getClientIp(c)}`,
+    message: '測試通知發送過於頻繁，請稍後再試',
+  }),
+  async (c) => {
     const memberInfo = c.get('member')!;
 
     const sent = await pushService.sendToMember(memberInfo.id, {
@@ -257,8 +264,9 @@ if (process.env.NODE_ENV === 'development') {
     return c.json({
       success: true,
       message: `已發送 ${sent} 則測試通知`,
+      data: { sent },
     });
-  });
-}
+  }
+);
 
 export default app;
