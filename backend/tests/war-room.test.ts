@@ -23,6 +23,8 @@ const X = id();
 const X1 = id();
 const ADMIN = id();
 const COACH = id();
+const STAFF = id();
+const MANAGER = id();
 const PLAN_TIME = id();
 const PLAN_COUNT = id();
 const PLAN_X = id();
@@ -41,7 +43,7 @@ const PASSWORD = 'WarRoomPass123!';
 
 const tenantIds = [W, X];
 const branchIds = [W1, W2, X1];
-const userIds = [ADMIN, COACH];
+const userIds = [ADMIN, COACH, STAFF, MANAGER];
 const memberIds = [M1, M2, M3, MX];
 
 async function login(email: string) {
@@ -57,6 +59,8 @@ async function login(email: string) {
 
 let adminToken: string;
 let coachToken: string;
+let staffToken: string;
+let managerToken: string;
 
 const get = (path: string, token = adminToken) =>
   app.request(path, { headers: { Authorization: `Bearer ${token}` } });
@@ -80,6 +84,8 @@ beforeAll(async () => {
   await db.insert(users).values([
     { id: ADMIN, email: `wr-admin-${suffix}@test.test`, passwordHash, role: 'admin', tenantId: W, isActive: true, emailVerified: true },
     { id: COACH, email: `wr-coach-${suffix}@test.test`, passwordHash, role: 'coach', tenantId: W, isActive: true, emailVerified: true },
+    { id: STAFF, email: `wr-staff-${suffix}@test.test`, passwordHash, role: 'staff', tenantId: W, isActive: true, emailVerified: true },
+    { id: MANAGER, email: `wr-manager-${suffix}@test.test`, passwordHash, role: 'manager', tenantId: W, isActive: true, emailVerified: true },
   ]);
   await db.insert(membershipPlans).values([
     { id: PLAN_TIME, name: '月費方案', code: `T${suffix}`, planType: 'TIME_BASED', durationMonths: 1, price: '1000', tenantId: W },
@@ -126,6 +132,8 @@ beforeAll(async () => {
 
   adminToken = await login(`wr-admin-${suffix}@test.test`);
   coachToken = await login(`wr-coach-${suffix}@test.test`);
+  staffToken = await login(`wr-staff-${suffix}@test.test`);
+  managerToken = await login(`wr-manager-${suffix}@test.test`);
 });
 
 afterAll(async () => {
@@ -157,8 +165,20 @@ describe('access', () => {
     expect((await app.request(path)).status).toBe(401);
   });
 
-  it.each(ENDPOINTS)('%s is open to any staff role of the tenant, like /api/dashboard', async (path) => {
-    expect((await get(path, coachToken)).status).toBe(200);
+  it.each(ENDPOINTS)('%s is closed to coach and staff', async (path) => {
+    expect((await get(path, coachToken)).status).toBe(403);
+    expect((await get(path, staffToken)).status).toBe(403);
+  });
+
+  it.each(ENDPOINTS)('%s is open to manager and admin', async (path) => {
+    expect((await get(path, managerToken)).status).toBe(200);
+    expect((await get(path, adminToken)).status).toBe(200);
+  });
+
+  it('a manager sees every branch of the tenant (managers are not branch-scoped elsewhere)', async () => {
+    const k = await getJson('/api/admin/dashboard/kpis?period=today', managerToken);
+    expect(k.revenue.today).toBe(1500);
+    expect(k.revenue.by_branch).toHaveLength(2);
   });
 });
 

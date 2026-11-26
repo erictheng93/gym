@@ -9,7 +9,11 @@
  * contracts, alert totals are counted before the list limit, active_rate is a
  * percentage, and the export returns data instead of an empty placeholder.
  *
- * Access matches /api/dashboard: any signed-in staff user of the tenant. Every
+ * Access: super_admin, admin and manager of the tenant (WAR_ROOM_ROLES); coach
+ * and staff get 403. /api/dashboard and /api/reports have no role gate to copy,
+ * and these figures (tenant-wide revenue, member phone numbers in alerts and
+ * exports) are management data. Managers are not limited to a branch anywhere
+ * else in the API, so they see all of the tenant's branches here too. Every
  * query is limited to the tenant's branches; an unknown or foreign branch_id
  * yields empty figures.
  */
@@ -18,7 +22,7 @@ import type { Context } from 'hono';
 import { and, count, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { AnyColumn, SQL } from 'drizzle-orm';
 import { db, members, contracts, payments, checkIns, branches, membershipPlans, bookings, classSessions } from '../db/index.js';
-import { requireAuth, requireTenant } from '../middleware/index.js';
+import { requireAuth, requireRole, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranches } from '../utils/tenant-cache.js';
 import type { TenantBranchInfo } from '../utils/tenant-cache.js';
@@ -41,6 +45,9 @@ import type { PeriodType, ReportWindow } from '../utils/report-dates.js';
 
 type Env = { Variables: AuthVariables & TenantVariables };
 type Ctx = Context<Env>;
+
+export const WAR_ROOM_ROLES = ['super_admin', 'admin', 'manager'] as const;
+const requireWarRoomRole = requireRole(...WAR_ROOM_ROLES);
 
 // -----------------------------------------------------------------------------
 // Shared helpers
@@ -361,6 +368,7 @@ async function computeKpis(branchList: TenantBranchInfo[], periodType: PeriodTyp
 export const adminDashboardRoutes = new Hono<Env>();
 adminDashboardRoutes.use('*', requireAuth);
 adminDashboardRoutes.use('*', requireTenant);
+adminDashboardRoutes.use('*', requireWarRoomRole);
 
 adminDashboardRoutes.get('/kpis', async (c) => {
   const period = (c.req.query('period') || 'today') as PeriodType;
@@ -643,6 +651,7 @@ adminDashboardRoutes.get('/export', async (c) => {
 export const adminAnalyticsRoutes = new Hono<Env>();
 adminAnalyticsRoutes.use('*', requireAuth);
 adminAnalyticsRoutes.use('*', requireTenant);
+adminAnalyticsRoutes.use('*', requireWarRoomRole);
 
 /** Current membership snapshot (the `days` window does not apply to who is a member now). */
 async function memberDemographics(branchList: TenantBranchInfo[], today: string) {
@@ -785,6 +794,7 @@ adminAnalyticsRoutes.get('/checkin-heatmap', async (c) => {
 export const adminReportsRoutes = new Hono<Env>();
 adminReportsRoutes.use('*', requireAuth);
 adminReportsRoutes.use('*', requireTenant);
+adminReportsRoutes.use('*', requireWarRoomRole);
 
 adminReportsRoutes.get('/member-growth', async (c) => {
   const range = daysWindow(c);
