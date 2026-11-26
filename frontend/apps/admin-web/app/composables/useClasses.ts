@@ -1,217 +1,235 @@
 /**
  * 課程管理 Composable
- * 管理課程定義的 CRUD 操作
+ *
+ * Mirrors the staff classes API (backend/src/routes/classes.ts), camelCase:
+ * - GET    /api/classes?branchId=      full list (no paging/search), instructor + branch joined
+ * - GET    /api/classes/:id            class + weekly `schedules`
+ * - POST   /api/classes                create
+ * - PATCH  /api/classes/:id            partial update (no defaults are re-applied)
+ * - GET    /api/classes/:id/sessions   sessions in [startDate, endDate]
+ * - POST   /api/classes/schedules      add a weekly time slot
+ *
+ * There is no DELETE and no active/inactive toggle on the backend, so neither is offered.
  */
 
-import type { Class } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 
-const inFlightClassesMap = new Map<string, Promise<void>>()
-const inFlightSingleClassMap = new Map<string, Promise<Class | null>>()
-const inFlightClassStatsMap = new Map<string, Promise<{ total: number; active: number }>>()
+export const CLASS_CATEGORIES = ['YOGA', 'CARDIO', 'STRENGTH', 'DANCE', 'SPINNING', 'PILATES', 'BOXING', 'SWIMMING', 'OTHER'] as const
+export type ClassCategoryCode = typeof CLASS_CATEGORIES[number]
+export type DifficultyLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
+export type SessionStatus = 'SCHEDULED' | 'CANCELLED' | 'COMPLETED'
+
+export const CLASS_CATEGORY_LABELS: Record<ClassCategoryCode, string> = {
+  YOGA: '瑜珈',
+  CARDIO: '有氧',
+  STRENGTH: '重訓',
+  DANCE: '舞蹈',
+  SPINNING: '飛輪',
+  PILATES: '皮拉提斯',
+  BOXING: '拳擊',
+  SWIMMING: '游泳',
+  OTHER: '其他'
+}
+
+export const getCategoryLabel = (category: string | null | undefined) =>
+  category ? (CLASS_CATEGORY_LABELS[category as ClassCategoryCode] ?? category) : '—'
+
+/** A class as GET /api/classes returns it */
+export interface ApiClass {
+  id: string
+  status: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  name: string
+  description: string | null
+  durationMinutes: number
+  maxCapacity: number
+  instructorId: string | null
+  branchId: string
+  category: ClassCategoryCode | null
+  difficultyLevel: DifficultyLevel | null
+  imageUrl: string | null
+  isActive: boolean | null
+  requiresCount: boolean | null
+  countDeduction: number | null
+  /** Left-joined: every field is null when the class has no instructor */
+  instructor: { id: string | null; fullName: string | null } | null
+  branch: { id: string | null; name: string | null } | null
+}
+
+/** A weekly time slot (GET /api/classes/:id → schedules[]) */
+export interface ClassScheduleSlot {
+  id: string
+  /** 0 = Sunday … 6 = Saturday */
+  dayOfWeek: number
+  /** HH:MM:SS */
+  startTime: string
+  endTime: string
+  room: string | null
+  maxCapacity: number | null
+  isRecurring: boolean | null
+  status: string | null
+}
+
+export interface ApiClassDetail extends ApiClass {
+  schedules: ClassScheduleSlot[]
+}
+
+/** GET /api/classes/:id/sessions item */
+export interface ApiClassSession {
+  id: string
+  classId: string
+  branchId: string
+  scheduleId: string | null
+  instructorId: string | null
+  sessionDate: string
+  startTime: string
+  endTime: string
+  room: string | null
+  maxCapacity: number
+  currentCount: number | null
+  waitlistCount: number | null
+  sessionStatus: SessionStatus | null
+  cancelledReason: string | null
+  instructor: { id: string | null; fullName: string | null } | null
+}
+
+/** Body of POST /api/classes / PATCH /api/classes/:id; names match the backend zod schema */
+export interface ClassInput {
+  name: string
+  branchId: string
+  description?: string | null
+  durationMinutes: number
+  maxCapacity: number
+  instructorId?: string | null
+  category?: ClassCategoryCode
+  difficultyLevel: DifficultyLevel
+  imageUrl?: string | null
+  requiresCount: boolean
+  countDeduction: number
+}
+
+/** Body of POST /api/classes/schedules */
+export interface ClassScheduleInput {
+  classId: string
+  branchId: string
+  instructorId?: string | null
+  dayOfWeek: number
+  /** HH:MM */
+  startTime: string
+  endTime: string
+  room?: string | null
+  maxCapacity?: number | null
+  validFrom?: string | null
+  validUntil?: string | null
+}
+
+export interface ClassListFilters {
+  branchId?: string
+  /** Client-side: the backend list has no search */
+  search?: string
+  category?: ClassCategoryCode | ''
+  difficulty?: DifficultyLevel | ''
+}
+
+/** Backend error text when it is a readable message, otherwise the fallback */
+const errorMessage = (error: unknown, fallback: string) => {
+  const message = error instanceof Error ? error.message : ''
+  return message && !message.startsWith('[object') && !message.startsWith('HTTP ') ? message : fallback
+}
+
+/** Apply the filters the backend list does not support */
+export const filterClasses = (rows: ApiClass[], filters: ClassListFilters = {}) => {
+  const term = filters.search?.trim().toLowerCase()
+  return rows.filter(row =>
+    (!filters.category || row.category === filters.category) &&
+    (!filters.difficulty || row.difficultyLevel === filters.difficulty) &&
+    (!term || row.name.toLowerCase().includes(term) || (row.description ?? '').toLowerCase().includes(term))
+  )
+}
+
+export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string }
 
 export const useClasses = () => {
-  const { readItems, readItem, createItem, updateItem, deleteItem } = useFetch()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
 
-  const classes = useState<Class[]>('classes', () => [])
+  const allClasses = useState<ApiClass[]>('classes_all', () => [])
   const isLoading = useState('classes_loading', () => false)
-  const totalCount = useState('classes_total', () => 0)
 
-  /**
-   * 獲取課程列表
-   */
-  const fetchClasses = async (options?: {
-    page?: number
-    limit?: number
-    search?: string
-    branchId?: string
-    categoryId?: string
-    isActive?: boolean
-    difficulty?: string
-  }, force = false) => {
-    const key = JSON.stringify(options || {})
-    if (!force && inFlightClassesMap.has(key)) {
-      return inFlightClassesMap.get(key)
-    }
-
-    const promise = (async () => {
-      isLoading.value = true
-      const { page = 1, limit = 20, search, branchId, categoryId, isActive, difficulty } = options || {}
-
-      try {
-        const filter: Record<string, unknown> = {}
-
-        if (branchId) filter.branch_id = branchId
-        if (categoryId) filter.category_id = categoryId
-        if (typeof isActive === 'boolean') filter.is_active = isActive
-        if (difficulty) filter.difficulty_level = difficulty
-
-        const { data, total } = await readItems<Class>('classes', {
-          page,
-          limit,
-          search,
-          filter,
-          sort: 'date_created',
-          sortOrder: 'desc'
-        })
-
-        classes.value = data
-        totalCount.value = total
-      } catch (error) {
-        handleError(error, {
-          context: 'useClasses.fetchClasses',
-          customMessage: '載入課程資料失敗'
-        })
-      } finally {
-        isLoading.value = false
-        inFlightClassesMap.delete(key)
-      }
-    })()
-
-    inFlightClassesMap.set(key, promise)
-    return promise
-  }
-
-  /**
-   * 獲取單一課程詳情
-   */
-  const getClass = async (id: string, force = false): Promise<Class | null> => {
-    if (!force && inFlightSingleClassMap.has(id)) {
-      return inFlightSingleClassMap.get(id)!
-    }
-
-    const promise = (async () => {
-      try {
-        const data = await readItem<Class>('classes', id)
-        return data
-      } catch (error) {
-        handleError(error, {
-          context: 'useClasses.getClass',
-          customMessage: '載入課程資料失敗'
-        })
-        return null
-      } finally {
-        inFlightSingleClassMap.delete(id)
-      }
-    })()
-
-    inFlightSingleClassMap.set(id, promise)
-    return promise
-  }
-
-  /**
-   * 新增課程
-   */
-  const createClassItem = async (classData: Partial<Class>): Promise<Class | null> => {
+  /** Load the tenant's classes (optionally one branch) */
+  const fetchClasses = async (branchId?: string) => {
+    isLoading.value = true
     try {
-      const data = await createItem<Class>('classes', classData)
-      return data
+      const response = await apiFetch<ApiClass[]>('/classes', { params: { branchId } })
+      allClasses.value = response.data ?? []
     } catch (error) {
-      handleError(error, {
-        context: 'useClasses.createClass',
-        customMessage: '建立課程失敗'
-      })
+      handleError(error, { context: 'useClasses.fetchClasses', customMessage: '載入課程資料失敗' })
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /** Class with its weekly schedule; null (after showing an error) when it cannot be loaded */
+  const getClass = async (id: string): Promise<ApiClassDetail | null> => {
+    try {
+      const response = await apiFetch<ApiClassDetail>(`/classes/${id}`)
+      return response.data ?? null
+    } catch (error) {
+      handleError(error, { context: 'useClasses.getClass', customMessage: '載入課程資料失敗' })
       return null
     }
   }
 
-  /**
-   * 更新課程
-   */
-  const updateClassItem = async (id: string, classData: Partial<Class>): Promise<Class | null> => {
+  const createClass = async (input: ClassInput): Promise<ActionResult<ApiClass>> => {
     try {
-      const data = await updateItem<Class>('classes', id, classData)
-      return data
+      const response = await apiFetch<ApiClass>('/classes', { method: 'POST', body: input })
+      if (!response.data) return { ok: false, error: '建立課程失敗' }
+      return { ok: true, data: response.data }
     } catch (error) {
-      handleError(error, {
-        context: 'useClasses.updateClass',
-        customMessage: '更新課程失敗'
-      })
-      return null
+      return { ok: false, error: errorMessage(error, '建立課程失敗') }
     }
   }
 
-  /**
-   * 刪除課程
-   */
-  const deleteClassItem = async (id: string): Promise<boolean> => {
+  const updateClass = async (id: string, input: Partial<ClassInput>): Promise<ActionResult<ApiClass>> => {
     try {
-      const success = await deleteItem('classes', id)
-      return success
+      const response = await apiFetch<ApiClass>(`/classes/${id}`, { method: 'PATCH', body: input })
+      if (!response.data) return { ok: false, error: '更新課程失敗' }
+      return { ok: true, data: response.data }
     } catch (error) {
-      handleError(error, {
-        context: 'useClasses.deleteClass',
-        customMessage: '刪除課程失敗'
-      })
-      return false
+      return { ok: false, error: errorMessage(error, '更新課程失敗') }
     }
   }
 
-  /**
-   * 切換課程啟用狀態
-   */
-  const toggleClassActive = async (id: string, isActive: boolean): Promise<boolean> => {
+  /** Sessions of one class between two YYYY-MM-DD dates (backend default: today + 14 days) */
+  const fetchSessions = async (classId: string, startDate?: string, endDate?: string): Promise<ApiClassSession[]> => {
     try {
-      const result = await updateItem<Class>('classes', id, { is_active: isActive })
-      return result !== null
+      const response = await apiFetch<ApiClassSession[]>(`/classes/${classId}/sessions`, { params: { startDate, endDate } })
+      return response.data ?? []
     } catch (error) {
-      handleError(error, {
-        context: 'useClasses.toggleClassActive',
-        customMessage: isActive ? '啟用課程失敗' : '停用課程失敗'
-      })
-      return false
+      handleError(error, { context: 'useClasses.fetchSessions', customMessage: '載入課程場次失敗' })
+      return []
     }
   }
 
-  /**
-   * 獲取課程統計
-   */
-  const getClassStats = async (branchId?: string) => {
-    const key = branchId || ''
-    const existing = inFlightClassStatsMap.get(key)
-    if (existing) return existing
-
-    const promise = (async () => {
-      try {
-        const filter: Record<string, unknown> = {}
-        if (branchId) filter.branch_id = branchId
-
-        const [totalResult, activeResult] = await Promise.all([
-          readItems<Class>('classes', { filter, limit: 1 }),
-          readItems<Class>('classes', { filter: { ...filter, is_active: true }, limit: 1 })
-        ])
-
-        return {
-          total: totalResult.total,
-          active: activeResult.total
-        }
-      } catch (error) {
-        handleError(error, {
-          context: 'useClasses.getClassStats',
-          showToast: false
-        })
-        return { total: 0, active: 0 }
-      } finally {
-        inFlightClassStatsMap.delete(key)
-      }
-    })()
-
-    inFlightClassStatsMap.set(key, promise)
-    return promise
+  const createSchedule = async (input: ClassScheduleInput): Promise<ActionResult> => {
+    try {
+      await apiFetch('/classes/schedules', { method: 'POST', body: input })
+      return { ok: true, data: undefined }
+    } catch (error) {
+      return { ok: false, error: errorMessage(error, '新增排程失敗') }
+    }
   }
 
   return {
-    classes,
+    allClasses,
     isLoading,
-    totalCount,
     fetchClasses,
     getClass,
-    createClass: createClassItem,
-    updateClass: updateClassItem,
-    deleteClass: deleteClassItem,
-    toggleClassActive,
-    getClassStats
+    createClass,
+    updateClass,
+    fetchSessions,
+    createSchedule
   }
 }

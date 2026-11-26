@@ -12,8 +12,6 @@ definePageMeta({
 
 // Check if user has admin/manager role
 const { user } = useAuth()
-const config = useRuntimeConfig()
-const apiBaseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
 const hasAccess = computed(() => {
   const role = user.value?.role
   return role === 'admin' || role === 'manager'
@@ -27,16 +25,7 @@ const {
   isQuotaNearLimit
 } = useTenant()
 
-// API 使用統計
-const apiStats = ref({
-  totalRequests: 0,
-  rateLimitHits: 0,
-  avgResponseTime: 0,
-  topEndpoints: [] as Array<{ path: string; count: number }>
-})
-
 const isLoading = ref(true)
-const statsTimeRange = ref<'24h' | '7d' | '30d'>('24h')
 
 // 載入所有數據
 onMounted(async () => {
@@ -44,8 +33,7 @@ onMounted(async () => {
   try {
     await Promise.all([
       fetchTenantInfo(),
-      fetchTenantQuota(),
-      fetchApiStats()
+      fetchTenantQuota()
     ])
   } catch (error) {
     console.error('[Analytics] Error loading data:', error)
@@ -54,54 +42,11 @@ onMounted(async () => {
   }
 })
 
-// 獲取 API 使用統計
-const fetchApiStats = async () => {
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/gym/analytics/api-stats?timeRange=${statsTimeRange.value}`, {
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
-    }).then(r => r.json())
-    if (response.success && response.data) {
-      apiStats.value = {
-        totalRequests: response.data.totalRequests || 0,
-        rateLimitHits: response.data.rateLimitHits || 0,
-        avgResponseTime: response.data.avgResponseTime || 0,
-        topEndpoints: (response.data.topEndpoints || []).map((ep: any) => ({
-          path: `${ep.method} ${ep.path}`,
-          count: ep.count
-        }))
-      }
-    }
-  } catch (error) {
-    console.error('[Analytics] Failed to fetch API stats:', error)
-    // 使用模擬數據作為後備
-    apiStats.value = {
-      totalRequests: 0,
-      rateLimitHits: 0,
-      avgResponseTime: 0,
-      topEndpoints: []
-    }
-  }
-}
-
-// 切換時間範圍
-const changeTimeRange = async (range: '24h' | '7d' | '30d') => {
-  statsTimeRange.value = range
-  await fetchApiStats()
-}
-
-// 計算速率限制命中率
-const rateLimitHitRate = computed(() => {
-  if (apiStats.value.totalRequests === 0) return 0
-  return ((apiStats.value.rateLimitHits / apiStats.value.totalRequests) * 100).toFixed(2)
-})
-
 // 格式化數字
 const formatNumber = (num: number) => {
   return analyticsNumberFormatter.format(num)
 }
 </script>
-
 <template>
   <div class="analytics-page">
     <!-- Access Denied -->
@@ -139,92 +84,14 @@ const formatNumber = (num: number) => {
           <TenantQuotaCard />
         </div>
 
-        <!-- 第二行：API 使用統計 -->
+        <!-- 第二行：API 使用統計 (no backend endpoint yet; never show placeholder zeros as data) -->
         <div class="api-stats-section">
           <div class="section-header">
             <h2 class="section-title">API 使用統計</h2>
-            <div class="time-range-selector">
-              <button
-                :class="{ active: statsTimeRange === '24h' }"
-                @click="changeTimeRange('24h')"
-              >
-                24 小時
-              </button>
-              <button
-                :class="{ active: statsTimeRange === '7d' }"
-                @click="changeTimeRange('7d')"
-              >
-                7 天
-              </button>
-              <button
-                :class="{ active: statsTimeRange === '30d' }"
-                @click="changeTimeRange('30d')"
-              >
-                30 天
-              </button>
-            </div>
           </div>
-
-          <!-- 統計卡片 -->
-          <div class="stats-grid">
-            <!-- 總請求數 -->
-            <div class="stat-card">
-              <div class="stat-icon requests">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-              </div>
-              <div class="stat-content">
-                <p class="stat-label">總請求數</p>
-                <p class="stat-value">{{ formatNumber(apiStats.totalRequests) }}</p>
-              </div>
-            </div>
-
-            <!-- 速率限制命中次數 -->
-            <div class="stat-card">
-              <div class="stat-icon rate-limit">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                  <path d="M12 9v4" />
-                  <path d="M12 17h.01" />
-                </svg>
-              </div>
-              <div class="stat-content">
-                <p class="stat-label">速率限制觸發</p>
-                <p class="stat-value">{{ formatNumber(apiStats.rateLimitHits) }}</p>
-                <p class="stat-meta">{{ rateLimitHitRate }}%</p>
-              </div>
-            </div>
-
-            <!-- 平均響應時間 -->
-            <div class="stat-card">
-              <div class="stat-icon response-time">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-              </div>
-              <div class="stat-content">
-                <p class="stat-label">平均響應時間</p>
-                <p class="stat-value">{{ apiStats.avgResponseTime }} <span class="unit">ms</span></p>
-              </div>
-            </div>
-          </div>
-
-          <!-- 熱門端點 -->
-          <div class="top-endpoints">
-            <h3 class="subsection-title">熱門 API 端點</h3>
-            <div class="endpoint-list">
-              <div
-                v-for="(endpoint, index) in apiStats.topEndpoints"
-                :key="endpoint.path"
-                class="endpoint-item"
-              >
-                <div class="endpoint-rank">{{ index + 1 }}</div>
-                <div class="endpoint-path">{{ endpoint.path }}</div>
-                <div class="endpoint-count">{{ formatNumber(endpoint.count) }} 次</div>
-              </div>
-            </div>
+          <div class="not-available">
+            <span class="not-available-badge">尚未開放</span>
+            <p>API 請求量、速率限制與回應時間統計尚未提供</p>
           </div>
         </div>
 
@@ -446,153 +313,30 @@ const formatNumber = (num: number) => {
   margin-bottom: var(--space-lg);
 }
 
-.time-range-selector {
-  display: flex;
-  gap: var(--space-xs);
-  background: var(--color-bg-tertiary);
-  padding: 4px;
-  border-radius: var(--radius-md);
-}
-
-.time-range-selector button {
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s var(--ease-out);
-}
-
-.time-range-selector button.active {
-  background: var(--color-bg-primary);
-  color: var(--color-accent);
-}
-
-/* 統計卡片網格 */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--space-md);
-  margin-bottom: var(--space-xl);
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  background: var(--color-bg-secondary);
-  border: 0.5px solid var(--color-divider);
-  border-radius: var(--radius-md);
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-}
-
-.stat-icon.requests {
-  background: rgba(0, 122, 255, 0.1);
-  color: #007aff;
-}
-
-.stat-icon.rate-limit {
-  background: rgba(255, 149, 0, 0.1);
-  color: #ff9500;
-}
-
-.stat-icon.response-time {
-  background: rgba(52, 199, 89, 0.1);
-  color: #34c759;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-label {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.stat-value {
-  margin: 4px 0 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-value .unit {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-tertiary);
-}
-
-.stat-meta {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-}
-
-/* 熱門端點 */
-.top-endpoints {
-  margin-top: var(--space-lg);
-}
-
-.endpoint-list {
+/* Not available yet (no backend endpoint) */
+.not-available {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.endpoint-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md);
-  background: var(--color-bg-secondary);
-  border: 0.5px solid var(--color-divider);
-  border-radius: var(--radius-md);
-}
-
-.endpoint-rank {
-  width: 28px;
-  height: 28px;
-  display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-tertiary);
+  gap: var(--space-sm);
+  min-height: 160px;
+  text-align: center;
+}
+
+.not-available-badge {
+  padding: 4px 12px;
   border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
   font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
-
-.endpoint-path {
-  flex: 1;
-  font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-primary);
-  font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
 }
 
-.endpoint-count {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
+.not-available p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-tertiary);
 }
 
 /* 配額警告區塊 */

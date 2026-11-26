@@ -30,11 +30,26 @@ const INVALID_DATE_ERROR = '日期格式必須為 YYYY-MM-DD';
  * Returns null for a malformed date.
  */
 function paymentDayRange(startDate: string, endDate: string): SQL[] | null {
+  return dayRange(payments.paymentDate, startDate, endDate);
+}
+
+/** Same half-open whole-day window on any timestamp column; null for a malformed date. */
+function dayRange(column: any, startDate: string, endDate: string): SQL[] | null {
   if (!isIsoDate(startDate) || !isIsoDate(endDate)) return null;
   return [
-    sql`${payments.paymentDate} >= ${startDate}::date`,
-    sql`${payments.paymentDate} < ${endDate}::date + 1`,
+    sql`${column} >= ${startDate}::date`,
+    sql`${column} < ${endDate}::date + 1`,
   ];
+}
+
+/**
+ * Optional startDate/endDate (YYYY-MM-DD, end day inclusive). Both or neither:
+ * returns undefined when absent, null when malformed or only one is given.
+ */
+function optionalDayRange(column: any, startDate?: string, endDate?: string): SQL[] | null | undefined {
+  if (!startDate && !endDate) return undefined;
+  if (!startDate || !endDate) return null;
+  return dayRange(column, startDate, endDate);
 }
 
 const REPORT_EXPIRING_CONTRACT_SELECT = {
@@ -286,11 +301,20 @@ app.get('/member-growth', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const months = Number(c.req.query('months')) || 6;
+  // Optional window for `newMembers` (members created in it, end day inclusive)
+  const newMembersRange = optionalDayRange(
+    members.createdAt,
+    c.req.query('startDate') || c.req.query('start_date'),
+    c.req.query('endDate') || c.req.query('end_date'),
+  );
+  if (newMembersRange === null) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
   if (branchIds.length === 0 || (branchId && !branchIds.includes(branchId))) {
-    return c.json({ success: true, data: { total: 0, byMonth: [] } });
+    return c.json({ success: true, data: { total: 0, newMembers: 0, byMonth: [] } });
   }
 
   const branchCondition = branchId
@@ -302,7 +326,7 @@ app.get('/member-growth', async (c) => {
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
 
-  const [[totalResult], byMonth] = await Promise.all([
+  const [[totalResult], byMonth, newMembersResult] = await Promise.all([
     db
       .select(REPORT_MEMBER_GROWTH_TOTAL_SELECT)
       .from(members)
@@ -313,12 +337,20 @@ app.get('/member-growth', async (c) => {
       .where(and(...conditions, gte(members.createdAt, startDate)))
       .groupBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`)
       .orderBy(sql`TO_CHAR(${members.createdAt}, 'YYYY-MM')`),
+    newMembersRange
+      ? db
+        .select(REPORT_MEMBER_GROWTH_TOTAL_SELECT)
+        .from(members)
+        .where(and(...conditions, ...newMembersRange))
+      : Promise.resolve([]),
   ]);
 
   return c.json({
     success: true,
     data: {
       total: Number(totalResult?.count || 0),
+      // null when no startDate/endDate window was requested
+      newMembers: newMembersRange ? Number(newMembersResult[0]?.count || 0) : null,
       byMonth: byMonth.map(m => ({
         month: m.month,
         count: Number(m.count),
@@ -378,6 +410,15 @@ app.get('/member-activity', async (c) => {
   const tenantId = c.get('tenantId')!;
   const branchId = c.req.query('branchId') || c.req.query('branch_id');
   const days = Number(c.req.query('days')) || 30;
+  // startDate/endDate (end day inclusive) take precedence over `days`
+  const checkInRange = optionalDayRange(
+    checkIns.checkInTime,
+    c.req.query('startDate') || c.req.query('start_date'),
+    c.req.query('endDate') || c.req.query('end_date'),
+  );
+  if (checkInRange === null) {
+    return c.json({ success: false, error: INVALID_DATE_ERROR }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -394,7 +435,7 @@ app.get('/member-activity', async (c) => {
 
   const conditions = [
     branchCondition,
-    gte(checkIns.checkInTime, startDate),
+    ...(checkInRange ?? [gte(checkIns.checkInTime, startDate)]),
   ];
 
   const [byBranch, byDay] = await Promise.all([

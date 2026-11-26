@@ -20,6 +20,17 @@ export interface FetchOptions {
   params?: Record<string, string | number | boolean | undefined>
 }
 
+/** Thrown by apiFetch for a non-2xx response; `message` is the backend's `error` text */
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 export function useFetch() {
   const config = useRuntimeConfig()
   const baseUrl = config.public?.apiBaseUrl || 'http://localhost:8056'
@@ -59,11 +70,19 @@ export function useFetch() {
     }
 
     const response = await fetch(url, fetchOptions)
-    const json = await response.json()
 
     if (!response.ok) {
-      throw new Error(json.error || `HTTP ${response.status}`)
+      // Error bodies are usually JSON ({ error }), but a proxy or an unmatched route may not be
+      let json: { error?: string } | null = null
+      try {
+        json = await response.json()
+      } catch {
+        // not JSON
+      }
+      throw new ApiError(json?.error || `HTTP ${response.status}`, response.status)
     }
+
+    const json = await response.json()
 
     return json
   }
@@ -102,46 +121,40 @@ export function useFetch() {
     }
   }
 
+  /**
+   * GET one item. Returns null only when the backend answers 404 (or sends no
+   * `data`); every other failure is thrown so callers cannot mistake it for "not found".
+   */
   const readItem = async <T>(collection: string, id: string): Promise<T | null> => {
     try {
       const response = await apiFetch<T>(`/${collection}/${id}`)
-      return response.data || null
-    } catch {
-      return null
+      return response.data ?? null
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null
+      throw error
     }
   }
 
+  /**
+   * POST a new item. Throws on any HTTP/network error (it used to return null,
+   * which pages ignored and toasted success). Resolves to `data`, or null when
+   * the backend acknowledges without a body.
+   */
   const createItem = async <T>(collection: string, data: Partial<T>): Promise<T | null> => {
-    try {
-      const response = await apiFetch<T>(`/${collection}`, {
-        method: 'POST',
-        body: data
-      })
-      return response.data || null
-    } catch {
-      return null
-    }
+    const response = await apiFetch<T>(`/${collection}`, {
+      method: 'POST',
+      body: data
+    })
+    return response.data ?? null
   }
 
+  /** PATCH an item. Throws on failure; resolves to `data` (null when none is sent back). */
   const updateItem = async <T>(collection: string, id: string, data: Partial<T>): Promise<T | null> => {
-    try {
-      const response = await apiFetch<T>(`/${collection}/${id}`, {
-        method: 'PATCH',
-        body: data
-      })
-      return response.data || null
-    } catch {
-      return null
-    }
-  }
-
-  const deleteItem = async (collection: string, id: string): Promise<boolean> => {
-    try {
-      await apiFetch(`/${collection}/${id}`, { method: 'DELETE' })
-      return true
-    } catch {
-      return false
-    }
+    const response = await apiFetch<T>(`/${collection}/${id}`, {
+      method: 'PATCH',
+      body: data
+    })
+    return response.data ?? null
   }
 
   return {
@@ -149,9 +162,9 @@ export function useFetch() {
     readItems,
     readItem,
     createItem,
-    updateItem,
-    deleteItem
+    updateItem
   }
 }
 
 export type FetchClient = ReturnType<typeof useFetch>
+

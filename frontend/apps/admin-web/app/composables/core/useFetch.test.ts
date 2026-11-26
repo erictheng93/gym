@@ -15,7 +15,7 @@ const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 // Import after unmock and stubbing
-import { useFetch } from './useFetch'
+import { useFetch, ApiError } from './useFetch'
 
 describe('useFetch', () => {
   beforeEach(() => {
@@ -310,6 +310,23 @@ describe('useFetch', () => {
     })
   })
 
+  describe('apiFetch - 非 JSON 錯誤回應', () => {
+    it('非 JSON 的錯誤 body 仍拋出帶狀態碼的 ApiError', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: () => Promise.reject(new SyntaxError('Unexpected token <'))
+      })
+
+      const { apiFetch } = useFetch()
+      const error = await apiFetch('/missing').catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(ApiError)
+      expect((error as ApiError).status).toBe(404)
+      expect((error as ApiError).message).toBe('HTTP 404')
+    })
+  })
+
   describe('readItem - 單項讀取', () => {
     it('應該成功讀取單一項目', async () => {
       const mockMember = { id: 'member-1', name: 'John Doe' }
@@ -328,13 +345,28 @@ describe('useFetch', () => {
       )
     })
 
-    it('應該在失敗時返回 null', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Not found'))
+    it('404 時返回 null', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ success: false, error: '不存在' })
+      })
 
       const { readItem } = useFetch()
-      const result = await readItem('members', 'non-existent')
+      expect(await readItem('members', 'non-existent')).toBeNull()
+    })
 
-      expect(result).toBeNull()
+    it('其他錯誤（403 / 500 / 網路）會拋出，而不是偽裝成找不到', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ success: false, error: '權限不足' })
+      })
+      const { readItem } = useFetch()
+      await expect(readItem('members', 'member-1')).rejects.toThrow('權限不足')
+
+      mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      await expect(readItem('members', 'member-1')).rejects.toThrow('Failed to fetch')
     })
 
     it('應該在沒有 data 時返回 null', async () => {
@@ -372,13 +404,15 @@ describe('useFetch', () => {
       )
     })
 
-    it('應該在失敗時返回 null', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Create failed'))
+    it('400 時拋出後端錯誤訊息（不再回傳 null 讓頁面顯示成功）', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ success: false, error: '請輸入姓名' })
+      })
 
       const { createItem } = useFetch()
-      const result = await createItem('members', { name: 'Test' })
-
-      expect(result).toBeNull()
+      await expect(createItem('members', { name: '' })).rejects.toThrow('請輸入姓名')
     })
   })
 
@@ -404,40 +438,16 @@ describe('useFetch', () => {
       )
     })
 
-    it('應該在失敗時返回 null', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Update failed'))
-
-      const { updateItem } = useFetch()
-      const result = await updateItem('members', 'member-1', { name: 'Test' })
-
-      expect(result).toBeNull()
-    })
-  })
-
-  describe('deleteItem - 刪除項目', () => {
-    it('應該成功刪除項目並返回 true', async () => {
+    it('失敗時拋出錯誤', async () => {
       mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true })
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ success: false, error: '會員不存在' })
       })
 
-      const { deleteItem } = useFetch()
-      const result = await deleteItem('members', 'member-1')
-
-      expect(result).toBe(true)
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8056/api/members/member-1',
-        expect.objectContaining({ method: 'DELETE' })
-      )
-    })
-
-    it('應該在失敗時返回 false', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Delete failed'))
-
-      const { deleteItem } = useFetch()
-      const result = await deleteItem('members', 'member-1')
-
-      expect(result).toBe(false)
+      const { updateItem } = useFetch()
+      await expect(updateItem('members', 'member-1', { name: 'Test' })).rejects.toBeInstanceOf(ApiError)
     })
   })
 })
+

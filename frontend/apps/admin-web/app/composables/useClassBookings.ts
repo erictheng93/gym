@@ -1,413 +1,142 @@
 /**
  * 課程預約 Composable
- * 管理會員課程預約
+ *
+ * Mirrors the staff bookings API (backend/src/routes/bookings.ts), camelCase:
+ * - GET  /api/bookings?memberId=&sessionId=&status=&date=&page=&limit=   totals in `meta`
+ * - POST /api/bookings              { sessionId, memberId, contractId? }
+ * - POST /api/bookings/:id/cancel   { reason? } (not within 2 h of the start; promotes the waitlist)
+ * - POST /api/bookings/:id/attend   (session day only; deducts class counts)
+ *
+ * There is no no-show endpoint, so marking NO_SHOW is not offered.
  */
 
-import type { Booking } from '~/types/schema'
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
+import type { ActionResult } from '~/composables/useClasses'
 
-// 預約狀態標籤
-export const BOOKING_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  CONFIRMED: { label: '已確認', color: 'green' },
-  WAITLIST: { label: '候補中', color: 'yellow' },
-  CANCELLED: { label: '已取消', color: 'gray' },
-  ATTENDED: { label: '已出席', color: 'blue' },
-  NO_SHOW: { label: '未出席', color: 'red' }
+export type BookingStatus = 'CONFIRMED' | 'WAITLIST' | 'CANCELLED' | 'ATTENDED' | 'NO_SHOW'
+
+/** A row of GET /api/bookings: the booking with its session, class and member joined */
+export interface ApiBooking {
+  id: string
+  sessionId: string
+  memberId: string
+  contractId: string | null
+  bookingStatus: BookingStatus | null
+  waitlistPosition: number | null
+  bookedAt: string | null
+  cancelledAt: string | null
+  cancelReason: string | null
+  attendedAt: string | null
+  countDeducted: boolean | null
+  session: { id: string; sessionDate: string; startTime: string; endTime: string; sessionStatus: string | null }
+  class: { id: string; name: string; category: string | null }
+  member: { id: string; fullName: string; memberCode: string }
 }
 
-// In-flight request deduplication maps
-const inFlightBookingsMap = new Map<string, Promise<void>>()
-const inFlightSingleBookingMap = new Map<string, Promise<Booking | null>>()
-const inFlightMemberBookingsMap = new Map<string, Promise<Booking[]>>()
-const inFlightSessionBookingsMap = new Map<string, Promise<Booking[]>>()
-const inFlightBookingStatsMap = new Map<string, Promise<{ confirmed: number; waitlist: number; cancelled: number; attended: number; noShow: number }>>()
+export interface BookingListFilters {
+  page?: number
+  limit?: number
+  memberId?: string
+  sessionId?: string
+  status?: BookingStatus | ''
+  /** Session day, YYYY-MM-DD */
+  date?: string
+}
+
+export interface BookingStats {
+  confirmed: number
+  waitlist: number
+  attended: number
+  noShow: number
+  cancelled: number
+}
+
+type ListBody = { data?: ApiBooking[]; meta?: { total?: number } }
+
+const errorMessage = (error: unknown, fallback: string) => {
+  const message = error instanceof Error ? error.message : ''
+  return message && !message.startsWith('[object') && !message.startsWith('HTTP ') ? message : fallback
+}
 
 export const useClassBookings = () => {
-  const { readItems, readItem, updateItem } = useFetch()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
-  const config = useRuntimeConfig()
 
-  const bookings = useState<Booking[]>('class_bookings', () => [])
+  const bookings = useState<ApiBooking[]>('class_bookings', () => [])
   const isLoading = useState('class_bookings_loading', () => false)
   const totalCount = useState('class_bookings_total', () => 0)
 
-  /**
-   * 獲取預約列表（支援請求去重）
-   */
-  const fetchBookings = async (options?: {
-    page?: number
-    limit?: number
-    sessionId?: string
-    memberId?: string
-    bookingStatus?: string
-    startDate?: string
-    endDate?: string
-  }) => {
-    const key = JSON.stringify(options || {})
-    const existing = inFlightBookingsMap.get(key)
-    if (existing) {
-      return existing
-    }
-
-    const requestPromise = (async () => {
-      isLoading.value = true
-      const { page = 1, limit = 20, sessionId, memberId, bookingStatus, startDate, endDate } = options || {}
-
-      try {
-        const filter: Record<string, unknown> = {}
-        if (sessionId) filter.session_id = sessionId
-        if (memberId) filter.member_id = memberId
-        if (bookingStatus) filter.booking_status = bookingStatus
-        if (startDate) filter.start_date = startDate
-        if (endDate) filter.end_date = endDate
-
-        const { data, total } = await readItems<Booking>('bookings', {
-          page,
-          limit,
-          filter,
-          sort: 'booked_at',
-          sortOrder: 'desc'
-        })
-
-        bookings.value = data
-        totalCount.value = total
-      } catch (error) {
-        handleError(error, {
-          context: 'useClassBookings.fetchBookings',
-          customMessage: '載入預約資料失敗'
-        })
-      } finally {
-        isLoading.value = false
-        inFlightBookingsMap.delete(key)
-      }
-    })()
-
-    inFlightBookingsMap.set(key, requestPromise)
-    return requestPromise
-  }
-
-  /**
-   * 獲取單一預約詳情（支援請求去重）
-   */
-  const getBooking = async (id: string): Promise<Booking | null> => {
-    const existing = inFlightSingleBookingMap.get(id)
-    if (existing) {
-      return existing
-    }
-
-    const requestPromise = (async () => {
-      try {
-        const data = await readItem<Booking>('bookings', id)
-        return data
-      } catch (error) {
-        handleError(error, {
-          context: 'useClassBookings.getBooking',
-          customMessage: '載入預約資料失敗'
-        })
-        return null
-      } finally {
-        inFlightSingleBookingMap.delete(id)
-      }
-    })()
-
-    inFlightSingleBookingMap.set(id, requestPromise)
-    return requestPromise
-  }
-
-  /**
-   * 預約課程（使用原子函數）
-   */
-  const bookSession = async (
-    sessionId: string,
-    memberId: string,
-    contractId?: string
-  ): Promise<{ success: boolean; bookingId?: string; status?: string; message: string }> => {
+  const fetchBookings = async (filters: BookingListFilters = {}) => {
+    isLoading.value = true
     try {
-      // 調用後端原子函數 book_class_session
-      const response = await $fetch<{
-        success: boolean
-        booking_id: string | null
-        booking_status: string | null
-        waitlist_position: number | null
-        message: string
-      }>('/api/admin/classes/book', {
-        method: 'POST',
-        body: {
-          session_id: sessionId,
-          member_id: memberId,
-          contract_id: contractId
-        },
-        baseURL: config.public.apiBaseUrl
-      })
-
-      return {
-        success: response.success,
-        bookingId: response.booking_id || undefined,
-        status: response.booking_status || undefined,
-        message: response.message
-      }
+      const { page = 1, limit = 20, memberId, sessionId, status, date } = filters
+      const response = await apiFetch<ApiBooking[]>('/bookings', {
+        params: { page, limit, memberId, sessionId, status: status || undefined, date }
+      }) as ListBody
+      bookings.value = response.data ?? []
+      totalCount.value = response.meta?.total ?? 0
     } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.bookSession',
-        customMessage: '預約課程失敗'
-      })
-      return { success: false, message: '預約課程失敗，請稍後再試' }
+      handleError(error, { context: 'useClassBookings.fetchBookings', customMessage: '載入預約資料失敗' })
+    } finally {
+      isLoading.value = false
     }
   }
 
-  /**
-   * 取消預約（使用原子函數）
-   */
-  const cancelBooking = async (
-    bookingId: string,
-    reason?: string
-  ): Promise<{ success: boolean; promotedMemberId?: string; message: string }> => {
+  /** Per-status counts (same date filter as the list) from the list endpoint's `meta.total` */
+  const getBookingStats = async (date?: string): Promise<BookingStats> => {
+    const count = async (status: BookingStatus) => {
+      const response = await apiFetch<ApiBooking[]>('/bookings', { params: { status, date, limit: 1 } }) as ListBody
+      return response.meta?.total ?? 0
+    }
     try {
-      // 調用後端原子函數 cancel_booking
-      const response = await $fetch<{
-        success: boolean
-        promoted_booking_id: string | null
-        promoted_member_id: string | null
-        message: string
-      }>('/api/admin/classes/cancel-booking', {
-        method: 'POST',
-        body: {
-          booking_id: bookingId,
-          reason
-        },
-        baseURL: config.public.apiBaseUrl
-      })
-
-      return {
-        success: response.success,
-        promotedMemberId: response.promoted_member_id || undefined,
-        message: response.message
-      }
+      const [confirmed, waitlist, attended, noShow, cancelled] = await Promise.all([
+        count('CONFIRMED'), count('WAITLIST'), count('ATTENDED'), count('NO_SHOW'), count('CANCELLED')
+      ])
+      return { confirmed, waitlist, attended, noShow, cancelled }
     } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.cancelBooking',
-        customMessage: '取消預約失敗'
-      })
-      return { success: false, message: '取消預約失敗，請稍後再試' }
+      handleError(error, { context: 'useClassBookings.getBookingStats', showToast: false })
+      return { confirmed: 0, waitlist: 0, attended: 0, noShow: 0, cancelled: 0 }
     }
   }
 
-  /**
-   * 課程簽到（使用原子函數）
-   */
-  const attendClass = async (
-    bookingId: string
-  ): Promise<{ success: boolean; remainingCounts?: number; message: string }> => {
+  /** Book a member into a session; the backend puts them on the waitlist when it is full */
+  const bookSession = async (input: { sessionId: string; memberId: string; contractId?: string | null }): Promise<ActionResult<{ message: string }>> => {
     try {
-      // 調用後端原子函數 attend_class
-      const response = await $fetch<{
-        success: boolean
-        remaining_counts: number | null
-        message: string
-      }>('/api/admin/classes/attend', {
-        method: 'POST',
-        body: { booking_id: bookingId },
-        baseURL: config.public.apiBaseUrl
-      })
-
-      return {
-        success: response.success,
-        remainingCounts: response.remaining_counts ?? undefined,
-        message: response.message
-      }
+      const response = await apiFetch('/bookings', { method: 'POST', body: input }) as { message?: string }
+      return { ok: true, data: { message: response.message ?? '預約成功' } }
     } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.attendClass',
-        customMessage: '簽到失敗'
-      })
-      return { success: false, message: '簽到失敗，請稍後再試' }
+      return { ok: false, error: errorMessage(error, '預約失敗') }
     }
   }
 
-  /**
-   * 標記未出席
-   */
-  const markNoShow = async (bookingId: string): Promise<boolean> => {
+  const cancelBooking = async (bookingId: string, reason?: string): Promise<ActionResult> => {
     try {
-      const result = await updateItem<Booking>('bookings', bookingId, {
-        booking_status: 'NO_SHOW'
-      })
-      return result !== null
+      await apiFetch(`/bookings/${bookingId}/cancel`, { method: 'POST', body: reason ? { reason } : {} })
+      return { ok: true, data: undefined }
     } catch (error) {
-      handleError(error, {
-        context: 'useClassBookings.markNoShow',
-        customMessage: '標記未出席失敗'
-      })
-      return false
+      return { ok: false, error: errorMessage(error, '取消預約失敗') }
     }
   }
 
-  /**
-   * 獲取會員的預約列表
-   */
-  const getMemberBookings = async (
-    memberId: string,
-    options?: { upcoming?: boolean; limit?: number }
-  ): Promise<Booking[]> => {
-    const key = `${memberId}_${JSON.stringify(options || {})}`
-    const existing = inFlightMemberBookingsMap.get(key)
-    if (existing) return existing
-
-    const promise = (async () => {
-      const { upcoming = true, limit = 10 } = options || {}
-
-      try {
-        const filter: Record<string, unknown> = {
-          member_id: memberId,
-          booking_status: 'CONFIRMED,WAITLIST'
-        }
-
-        // 只顯示未來的課程
-        if (upcoming) {
-          filter.upcoming = true
-        }
-
-        const { data } = await readItems<Booking>('bookings', {
-          filter,
-          limit,
-          sort: 'session_date'
-        })
-
-        return data
-      } catch (error) {
-        handleError(error, {
-          context: 'useClassBookings.getMemberBookings',
-          showToast: false
-        })
-        return []
-      } finally {
-        inFlightMemberBookingsMap.delete(key)
-      }
-    })()
-
-    inFlightMemberBookingsMap.set(key, promise)
-    return promise
-  }
-
-  /**
-   * 獲取場次的預約列表
-   */
-  const getSessionBookings = async (sessionId: string): Promise<Booking[]> => {
-    const existing = inFlightSessionBookingsMap.get(sessionId)
-    if (existing) return existing
-
-    const promise = (async () => {
-      try {
-        const { data } = await readItems<Booking>('bookings', {
-          filter: {
-            session_id: sessionId,
-            exclude_cancelled: true
-          },
-          sort: 'booked_at'
-        })
-
-        return data
-      } catch (error) {
-        handleError(error, {
-          context: 'useClassBookings.getSessionBookings',
-          showToast: false
-        })
-        return []
-      } finally {
-        inFlightSessionBookingsMap.delete(sessionId)
-      }
-    })()
-
-    inFlightSessionBookingsMap.set(sessionId, promise)
-    return promise
-  }
-
-  /**
-   * 獲取預約統計
-   */
-  const getBookingStats = async (options?: {
-    sessionId?: string
-    branchId?: string
-    startDate?: string
-    endDate?: string
-  }) => {
-    const key = JSON.stringify(options || {})
-    const existing = inFlightBookingStatsMap.get(key)
-    if (existing) return existing
-
-    const promise = (async () => {
-      const { sessionId, branchId, startDate, endDate } = options || {}
-
-      try {
-        const baseFilter: Record<string, unknown> = {}
-        if (sessionId) baseFilter.session_id = sessionId
-        if (branchId) baseFilter.branch_id = branchId
-        if (startDate) baseFilter.start_date = startDate
-        if (endDate) baseFilter.end_date = endDate
-
-        const [confirmed, waitlist, cancelled, attended, noShow] = await Promise.all([
-          readItems<Booking>('bookings', {
-            filter: { ...baseFilter, booking_status: 'CONFIRMED' },
-            limit: 1
-          }),
-          readItems<Booking>('bookings', {
-            filter: { ...baseFilter, booking_status: 'WAITLIST' },
-            limit: 1
-          }),
-          readItems<Booking>('bookings', {
-            filter: { ...baseFilter, booking_status: 'CANCELLED' },
-            limit: 1
-          }),
-          readItems<Booking>('bookings', {
-            filter: { ...baseFilter, booking_status: 'ATTENDED' },
-            limit: 1
-          }),
-          readItems<Booking>('bookings', {
-            filter: { ...baseFilter, booking_status: 'NO_SHOW' },
-            limit: 1
-          })
-        ])
-
-        return {
-          confirmed: confirmed.total,
-          waitlist: waitlist.total,
-          cancelled: cancelled.total,
-          attended: attended.total,
-          noShow: noShow.total
-        }
-      } catch (error) {
-        handleError(error, {
-          context: 'useClassBookings.getBookingStats',
-          showToast: false
-        })
-        return { confirmed: 0, waitlist: 0, cancelled: 0, attended: 0, noShow: 0 }
-      } finally {
-        inFlightBookingStatsMap.delete(key)
-      }
-    })()
-
-    inFlightBookingStatsMap.set(key, promise)
-    return promise
+  /** Mark attended; `remainingCounts` is the contract's balance after the deduction (null if none) */
+  const attendClass = async (bookingId: string): Promise<ActionResult<{ remainingCounts: number | null }>> => {
+    try {
+      const response = await apiFetch<{ remainingCounts: number | null }>(`/bookings/${bookingId}/attend`, { method: 'POST' })
+      return { ok: true, data: { remainingCounts: response.data?.remainingCounts ?? null } }
+    } catch (error) {
+      return { ok: false, error: errorMessage(error, '簽到失敗') }
+    }
   }
 
   return {
     bookings,
     isLoading,
     totalCount,
-    // CRUD
     fetchBookings,
-    getBooking,
-    // 預約操作
+    getBookingStats,
     bookSession,
     cancelBooking,
-    attendClass,
-    markNoShow,
-    // 查詢
-    getMemberBookings,
-    getSessionBookings,
-    getBookingStats,
-    // 常數
-    BOOKING_STATUS_LABELS
+    attendClass
   }
 }

@@ -1,7 +1,6 @@
 <script lang="ts">
 import { MESSAGES, PAGES } from '~/constants'
 
-// Status options
 const statusOptions = [
   { value: '', label: MESSAGES.COMMON.ALL_STATUS },
   { value: 'CONFIRMED', label: PAGES.CLASS_BOOKINGS.CONFIRMED },
@@ -10,113 +9,69 @@ const statusOptions = [
   { value: 'NO_SHOW', label: PAGES.CLASS_BOOKINGS.NO_SHOW },
   { value: 'CANCELLED', label: PAGES.CLASS_BOOKINGS.CANCELLED }
 ]
+
+const columns = [
+  { key: 'member', label: PAGES.CLASS_BOOKINGS.MEMBER, slot: 'member' },
+  { key: 'session', label: PAGES.CLASS_BOOKINGS.SESSION, slot: 'session' },
+  { key: 'bookedAt', label: PAGES.CLASS_BOOKINGS.BOOKING_TIME, slot: 'bookedAt', hideOnMobile: true },
+  { key: 'bookingStatus', label: '狀態', slot: 'status' }
+]
 </script>
 
 <script setup lang="ts">
 /**
  * 課程預約管理頁面
  *
- * 管理會員課程預約、簽到
+ * GET /api/bookings (status / session date filters, `meta` totals),
+ * POST /api/bookings/:id/cancel, POST /api/bookings/:id/attend.
+ * New bookings are made per session on the class detail page.
  */
-import { PAGINATION, TIMING } from '~/constants'
+import { PAGINATION } from '~/constants'
 import { getBookingStatusBadge, formatDate } from '@gym-nexus/shared'
-import type { Booking } from '~/types/schema'
+import { toLocalDateString } from '~/utils/date'
+import type { ApiBooking, BookingStatus, BookingStats } from '~/composables/useClassBookings'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const {
-  bookings,
-  totalCount,
-  isLoading,
-  fetchBookings,
-  cancelBooking,
-  attendClass,
-  markNoShow,
-  getBookingStats
-} = useClassBookings()
+const { bookings, totalCount, isLoading, fetchBookings, cancelBooking, attendClass, getBookingStats } = useClassBookings()
 const toast = useToast()
 const { confirm } = useConfirm()
 
-// Filter state
-const search = ref('')
-const selectedStatus = ref('')
+const selectedStatus = ref<BookingStatus | ''>('')
 const selectedDate = ref('')
 const currentPage = ref(1)
 const pageSize = PAGINATION.DEFAULT_PAGE_SIZE
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize)))
 
-const totalPages = computed(() => Math.ceil(totalCount.value / pageSize))
+const stats = ref<BookingStats>({ confirmed: 0, waitlist: 0, attended: 0, noShow: 0, cancelled: 0 })
 
-// Stats
-const stats = ref({ confirmed: 0, waitlist: 0, attended: 0, noShow: 0, cancelled: 0 })
+const formatDateLabel = (date: Date) => {
+  const weekday = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()]
+  return `${date.getMonth() + 1}/${date.getDate()} (${weekday})`
+}
 
-// Date options
+// Today and the next 7 days (local dates)
 const dateOptions = computed(() => {
-  const options = [
-    { value: '', label: '全部日期' },
-    { value: getTodayDate(), label: '今日' }
-  ]
-
-  // Add next 7 days
-  for (let i = 1; i <= 7; i++) {
+  const options = [{ value: '', label: '全部日期' }]
+  for (let i = 0; i <= 7; i++) {
     const date = new Date()
     date.setDate(date.getDate() + i)
-    const dateStr = date.toISOString().slice(0, 10)
-    options.push({
-      value: dateStr,
-      label: formatDateLabel(date)
-    })
+    options.push({ value: toLocalDateString(date), label: i === 0 ? '今日' : formatDateLabel(date) })
   }
-
   return options
 })
 
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function formatDateLabel(date: Date) {
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const weekday = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()]
-  return `${month}/${day} (${weekday})`
-}
-
-// Table columns configuration
-const columns = [
-  { key: 'member', label: PAGES.CLASS_BOOKINGS.MEMBER, slot: 'member' },
-  { key: 'session', label: PAGES.CLASS_BOOKINGS.SESSION, slot: 'session' },
-  { key: 'booked_at', label: PAGES.CLASS_BOOKINGS.BOOKING_TIME, slot: 'bookedAt', hideOnMobile: true },
-  { key: 'booking_status', label: '狀態', slot: 'status' }
-]
-
-// Load bookings
 const loadBookings = async () => {
-  await fetchBookings({
-    page: currentPage.value,
-    limit: pageSize,
-    bookingStatus: selectedStatus.value || undefined,
-    startDate: selectedDate.value || undefined,
-    endDate: selectedDate.value || undefined
-  })
-
-  // Load stats
-  const statsResult = await getBookingStats()
+  const date = selectedDate.value || undefined
+  const [, statsResult] = await Promise.all([
+    fetchBookings({ page: currentPage.value, limit: pageSize, status: selectedStatus.value, date }),
+    getBookingStats(date)
+  ])
   stats.value = statsResult
 }
 
-// Debounced search (for future member search)
-let searchTimeout: ReturnType<typeof setTimeout>
-const handleSearch = () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    currentPage.value = 1
-    loadBookings()
-  }, TIMING.DEBOUNCE)
-}
-
-// Watch filters
 watch([selectedStatus, selectedDate], () => {
   currentPage.value = 1
   loadBookings()
@@ -126,83 +81,54 @@ watch(currentPage, () => {
   loadBookings()
 })
 
-// Initial load
-onMounted(async () => {
-  await loadBookings()
+onMounted(() => {
+  loadBookings()
 })
 
-onBeforeUnmount(() => {
-  clearTimeout(searchTimeout)
-})
-
-// Cancel booking handler
-const handleCancelBooking = async (booking: Booking) => {
+const handleCancelBooking = async (booking: ApiBooking) => {
   const confirmed = await confirm({
     title: PAGES.CLASS_BOOKINGS.CANCEL_BOOKING,
-    message: PAGES.CLASS_BOOKINGS.CONFIRM_CANCEL,
+    message: `${PAGES.CLASS_BOOKINGS.CONFIRM_CANCEL}（課程開始前 2 小時內無法取消）`,
     confirmText: '確定取消',
     confirmVariant: 'danger'
   })
-
   if (!confirmed) return
 
   const result = await cancelBooking(booking.id)
-  if (result.success) {
+  if (result.ok) {
     toast.success(PAGES.CLASS_BOOKINGS.CANCEL_SUCCESS)
     await loadBookings()
   } else {
-    toast.error(result.message || PAGES.CLASS_BOOKINGS.CANCEL_FAILED)
+    toast.error(result.error)
   }
 }
 
-// Attend class handler
-const handleAttendClass = async (booking: Booking) => {
+const handleAttendClass = async (booking: ApiBooking) => {
   const confirmed = await confirm({
     title: PAGES.CLASS_BOOKINGS.ATTEND,
     message: PAGES.CLASS_BOOKINGS.CONFIRM_ATTEND,
     confirmText: '確定簽到',
     confirmVariant: 'primary'
   })
-
   if (!confirmed) return
 
   const result = await attendClass(booking.id)
-  if (result.success) {
-    toast.success(PAGES.CLASS_BOOKINGS.ATTEND_SUCCESS)
+  if (result.ok) {
+    const remaining = result.data.remainingCounts
+    toast.success(remaining === null ? PAGES.CLASS_BOOKINGS.ATTEND_SUCCESS : `${PAGES.CLASS_BOOKINGS.ATTEND_SUCCESS}，剩餘 ${remaining} 堂`)
     await loadBookings()
   } else {
-    toast.error(result.message || PAGES.CLASS_BOOKINGS.ATTEND_FAILED)
+    toast.error(result.error)
   }
 }
 
-// Mark no show handler
-const handleMarkNoShow = async (booking: Booking) => {
-  const confirmed = await confirm({
-    title: PAGES.CLASS_BOOKINGS.MARK_NO_SHOW,
-    message: PAGES.CLASS_BOOKINGS.CONFIRM_NO_SHOW,
-    confirmText: '確定標記',
-    confirmVariant: 'warning'
-  })
-
-  if (!confirmed) return
-
-  const success = await markNoShow(booking.id)
-  if (success) {
-    toast.success('已標記為未出席')
-    await loadBookings()
-  }
-}
-
-// View member detail
 const viewMember = (memberId: string | undefined) => {
-  if (!memberId) return
-  navigateTo(`/members/${memberId}`)
+  if (memberId) navigateTo(`/members/${memberId}`)
 }
 </script>
 
 <template>
   <PageContainer>
-    <!-- Header -->
     <PageHeader
       :title="PAGES.CLASS_BOOKINGS.TITLE"
       :description="PAGES.CLASS_BOOKINGS.DESCRIPTION"
@@ -214,15 +140,7 @@ const viewMember = (memberId: string | undefined) => {
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="m12 19-7-7 7-7" /><path d="M19 12H5" />
         </svg>
-        回到課程列表
-      </NuxtLink>
-      <NuxtLink to="/classes/schedule" class="quick-link">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-          <line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" />
-          <line x1="3" x2="21" y1="10" y2="10" />
-        </svg>
-        {{ PAGES.CLASS_SCHEDULE.TITLE }}
+        回到課程列表（於課程詳情新增預約）
       </NuxtLink>
     </div>
 
@@ -248,15 +166,6 @@ const viewMember = (memberId: string | undefined) => {
 
     <!-- Filters -->
     <FilterBar>
-      <template #search>
-        <input
-          v-model="search"
-          type="text"
-          class="input input-search"
-          :placeholder="PAGES.CLASS_BOOKINGS.SEARCH_PLACEHOLDER"
-          @input="handleSearch"
-        />
-      </template>
       <template #filters>
         <select v-model="selectedDate" class="input filter-select">
           <option v-for="opt in dateOptions" :key="opt.value" :value="opt.value">
@@ -271,10 +180,8 @@ const viewMember = (memberId: string | undefined) => {
       </template>
     </FilterBar>
 
-    <!-- Stats Bar -->
     <StatsBar :count="totalCount" :label="MESSAGES.COMMON.MATCHES" />
 
-    <!-- Data Table -->
     <DataTable
       :data="bookings"
       :columns="columns"
@@ -285,52 +192,43 @@ const viewMember = (memberId: string | undefined) => {
       empty-icon="calendar"
       show-actions
     >
-      <!-- Member Cell -->
       <template #member="{ row }">
         <div class="member-cell" @click="viewMember(row.member?.id)">
-          <AppAvatar :name="row.member?.full_name || ''" size="md" variant="blue" />
+          <AppAvatar :name="row.member?.fullName || ''" size="md" variant="blue" />
           <div class="member-info">
-            <span class="member-name">{{ row.member?.full_name }}</span>
-            <code class="member-code">{{ row.member?.member_code }}</code>
+            <span class="member-name">{{ row.member?.fullName }}</span>
+            <code class="member-code">{{ row.member?.memberCode }}</code>
           </div>
         </div>
       </template>
 
-      <!-- Session Cell -->
       <template #session="{ row }">
         <div class="session-cell">
-          <span class="session-name">{{ row.session?.class?.name }}</span>
+          <span class="session-name">{{ row.class?.name }}</span>
           <span class="session-time text-caption text-tertiary">
-            {{ row.session?.session_date }} {{ row.session?.start_time?.substring(0, 5) }}
-          </span>
-          <span v-if="row.session?.branch" class="session-branch text-caption text-tertiary">
-            {{ row.session.branch.name }}
+            {{ row.session?.sessionDate }} {{ row.session?.startTime?.substring(0, 5) }}
           </span>
         </div>
       </template>
 
-      <!-- Booked At Cell -->
       <template #bookedAt="{ row }">
-        <span class="booked-time">{{ formatDate(row.booked_at) }}</span>
-        <span v-if="row.waitlist_position" class="waitlist-position">
-          候補 #{{ row.waitlist_position }}
+        <span class="booked-time">{{ row.bookedAt ? formatDate(row.bookedAt) : '—' }}</span>
+        <span v-if="row.waitlistPosition" class="waitlist-position">
+          候補 #{{ row.waitlistPosition }}
         </span>
       </template>
 
-      <!-- Status Cell -->
       <template #status="{ row }">
         <AppBadge
-          :label="getBookingStatusBadge(row.booking_status).label"
-          :variant="getBookingStatusBadge(row.booking_status).variant"
+          :label="getBookingStatusBadge(row.bookingStatus).label"
+          :variant="getBookingStatusBadge(row.bookingStatus).variant"
         />
       </template>
 
-      <!-- Actions Cell -->
       <template #actions="{ row }">
         <div class="actions-row">
-          <!-- Attend Button (for CONFIRMED) -->
           <button
-            v-if="row.booking_status === 'CONFIRMED'"
+            v-if="row.bookingStatus === 'CONFIRMED'"
             type="button"
             class="action-btn action-btn-success"
             title="簽到"
@@ -342,13 +240,13 @@ const viewMember = (memberId: string | undefined) => {
             </svg>
           </button>
 
-          <!-- Mark No Show Button (for CONFIRMED) -->
+          <!-- No backend endpoint for NO_SHOW yet -->
           <button
-            v-if="row.booking_status === 'CONFIRMED'"
+            v-if="row.bookingStatus === 'CONFIRMED'"
             type="button"
-            class="action-btn action-btn-warning"
-            title="標記未出席"
-            @click="handleMarkNoShow(row)"
+            class="action-btn"
+            title="標記未出席（尚未開放）"
+            disabled
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -357,9 +255,8 @@ const viewMember = (memberId: string | undefined) => {
             </svg>
           </button>
 
-          <!-- Cancel Button (for CONFIRMED or WAITLIST) -->
           <button
-            v-if="row.booking_status === 'CONFIRMED' || row.booking_status === 'WAITLIST'"
+            v-if="row.bookingStatus === 'CONFIRMED' || row.bookingStatus === 'WAITLIST'"
             type="button"
             class="action-btn action-btn-danger"
             title="取消預約"
@@ -370,7 +267,6 @@ const viewMember = (memberId: string | undefined) => {
             </svg>
           </button>
 
-          <!-- View Member -->
           <NuxtLink :to="`/members/${row.member?.id}`" class="action-btn" title="查看會員">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
@@ -380,7 +276,6 @@ const viewMember = (memberId: string | undefined) => {
         </div>
       </template>
 
-      <!-- Pagination -->
       <template #footer>
         <DataPagination
           v-model="currentPage"
@@ -547,9 +442,14 @@ const viewMember = (memberId: string | undefined) => {
   transition: all var(--duration-fast) var(--ease-out);
 }
 
-.action-btn:hover {
+.action-btn:hover:not(:disabled) {
   background: var(--color-accent-light);
   color: var(--color-accent);
+}
+
+.action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .action-btn-success:hover {

@@ -401,7 +401,6 @@ export const MESSAGES = {
     HR: '人資管理',
     REPORTS: '營運報表',
     CLASSES: '課程管理',
-    CLASS_CATEGORIES: '課程類別',
   },
 
   // User
@@ -454,11 +453,12 @@ export const PAGES = {
   DASHBOARD: {
     WELCOME: `歡迎回到 ${APP_NAME} 管理系統`,
     TOTAL_MEMBERS: '會員總數',
-    NEW_THIS_WEEK: '本週新增',
+    NEW_THIS_MONTH: '本月新增',
     ACTIVE_MEMBERS: '有效會員',
     ACTIVE_RATE: '% 活躍率',
     ACTIVE_CONTRACTS: '有效合約',
     PENDING_SIGN: '待簽署',
+    EXPIRING_7_DAYS: '7 天內到期',
     MONTHLY_REVENUE: '本月營收',
     RECENT_MEMBERS: '最新會員',
     RECENT_CONTRACTS: '最新合約',
@@ -914,59 +914,6 @@ export const PAGES = {
     },
   },
 
-  // Class Categories
-  CLASS_CATEGORIES: {
-    TITLE: '課程類別管理',
-    DESCRIPTION: '管理課程類別與子類別設定',
-    ADD_CATEGORY: '新增類別',
-    EDIT_CATEGORY: '編輯類別',
-    NO_CATEGORIES: '尚無課程類別',
-    NO_CATEGORIES_HINT: '建立第一個類別開始管理課程',
-    TOTAL_CATEGORIES: '總類別數',
-    ACTIVE_CATEGORIES: '啟用類別',
-    ROOT_CATEGORIES: '主類別',
-    SUB_CATEGORIES: '子類別',
-    // Form Labels
-    CATEGORY_NAME: '類別名稱',
-    CATEGORY_NAME_PLACEHOLDER: '請輸入類別名稱',
-    CATEGORY_NAME_EN: '英文名稱',
-    CATEGORY_NAME_EN_PLACEHOLDER: '請輸入英文名稱（選填）',
-    CATEGORY_CODE: '類別代碼',
-    CATEGORY_CODE_PLACEHOLDER: '請輸入類別代碼（如 yoga）',
-    PARENT_CATEGORY: '父類別',
-    SELECT_PARENT_PLACEHOLDER: '選擇父類別（留空為主類別）',
-    ICON: '圖示',
-    COLOR: '主題色',
-    DESCRIPTION_LABEL: '類別說明',
-    DESCRIPTION_PLACEHOLDER: '請輸入類別說明（選填）',
-    IS_ACTIVE: '啟用狀態',
-    REQUIRES_EQUIPMENT: '需要器材',
-    EQUIPMENT_LIST: '器材列表',
-    VISIBILITY: '可見性',
-    VISIBILITY_SHARED: '所有分店可見',
-    VISIBILITY_OWNER_ONLY: '僅擁有者分店',
-    OWNER_BRANCH: '擁有者分店',
-    // Table Headers
-    NAME: '名稱',
-    CODE: '代碼',
-    PARENT: '父類別',
-    STATUS: '狀態',
-    ACTIONS: '操作',
-    // Status
-    ENABLED: '啟用',
-    DISABLED: '停用',
-    // Actions
-    VIEW: '查看',
-    EDIT: '編輯',
-    DELETE: '刪除',
-    CONFIRM_DELETE: '確定要刪除此類別嗎？',
-    DELETE_WARNING: '刪除後將無法恢復，相關課程將失去類別關聯',
-    // Validation
-    ERROR_NAME_REQUIRED: '請輸入類別名稱',
-    ERROR_CODE_REQUIRED: '請輸入類別代碼',
-    ERROR_CODE_EXISTS: '此代碼已存在',
-  },
-
   // Classes (課程定義)
   CLASSES: {
     TITLE: '課程管理',
@@ -1236,8 +1183,5 @@ export const API = {
     EMPLOYEES: '/api/employees',
     PLANS: '/api/membership-plans',
     PAYMENTS: '/api/payments',
-    SHIFT_SCHEDULES: '/api/hr/shift-schedules',
-    EMPLOYEE_SHIFTS: '/api/hr/employee-shifts',
-    ATTENDANCES: '/api/hr/attendances',
   },
 } as const

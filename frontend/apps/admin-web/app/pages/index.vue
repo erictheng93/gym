@@ -30,25 +30,19 @@ const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }
 
 <script setup lang="ts">
 import { MESSAGES, PAGES } from '~/constants'
-import { useFetch } from '~/composables/core/useFetch'
+import { useHomeDashboard, EMPTY_HOME_DASHBOARD, type HomeDashboard } from '~/composables/useHomeDashboard'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-const { user } = useAuth()
-const { getRevenueReport } = useReports()
-const { readItems } = useFetch()
+const { user, currentEmployee } = useAuth()
+const { fetchHomeDashboard } = useHomeDashboard()
 
-// Stats
-const stats = ref({
-  members: { total: 0, active: 0, new: 0 },
-  contracts: { active: 0, expiring: 0, draft: 0 },
-  revenue: { today: 0, month: 0 }
-})
-
-const recentMembers = ref<any[]>([])
-const recentContracts = ref<any[]>([])
+const dashboard = ref<HomeDashboard>(EMPTY_HOME_DASHBOARD)
+const stats = computed(() => dashboard.value)
+const recentMembers = computed(() => dashboard.value.recentMembers)
+const recentContracts = computed(() => dashboard.value.recentContracts)
 const isLoading = ref(true)
 
 // Greeting based on time
@@ -60,72 +54,15 @@ const greeting = computed(() => {
 })
 
 const userName = computed(() => {
-  if (user.value?.first_name) return user.value.first_name
+  if (currentEmployee.value?.full_name) return currentEmployee.value.full_name
   return user.value?.email?.split('@')[0] || ''
 })
 
-// Fetch dashboard data
 const fetchDashboardData = async () => {
   isLoading.value = true
   try {
-    // Calculate date ranges
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-
-    const [
-      allMembers,
-      activeMembers,
-      newMembers,
-      activeContracts,
-      draftContracts,
-      members,
-      contracts,
-      monthlyRevenue,
-      todayRevenue
-    ] = await Promise.all([
-      readItems<any>('members', { limit: 1 }),
-      readItems<any>('members', { limit: 1, filter: { status: 'ACTIVE' } }),
-      readItems<any>('members', { limit: 1, filter: { date_created_gte: oneWeekAgo } }),
-      readItems<any>('contracts', { limit: 1, filter: { status: 'ACTIVE' } }),
-      readItems<any>('contracts', { limit: 1, filter: { status: 'DRAFT' } }),
-      readItems<any>('members', { limit: 5, sort: 'dateCreated', sortOrder: 'desc' }),
-      readItems<any>('contracts', { limit: 5, sort: 'dateCreated', sortOrder: 'desc' }),
-      // Fetch monthly revenue from reports API
-      getRevenueReport(
-        startOfMonth.toISOString().slice(0, 10),
-        now.toISOString().slice(0, 10)
-      ).catch(() => ({ summary: { net_revenue: 0 } })),
-      // Fetch today's revenue from reports API
-      getRevenueReport(
-        startOfToday.toISOString().slice(0, 10),
-        now.toISOString().slice(0, 10)
-      ).catch(() => ({ summary: { net_revenue: 0 } }))
-    ])
-
-    stats.value = {
-      members: {
-        total: allMembers.total || 0,
-        active: activeMembers.total || 0,
-        new: newMembers.total || 0
-      },
-      contracts: {
-        active: activeContracts.total || 0,
-        draft: draftContracts.total || 0,
-        expiring: 0
-      },
-      revenue: {
-        today: todayRevenue?.summary?.net_revenue || 0,
-        month: monthlyRevenue?.summary?.net_revenue || 0
-      }
-    }
-
-    recentMembers.value = members.data
-    recentContracts.value = contracts.data
-  } catch (error) {
-    console.error('Failed to fetch dashboard data:', error)
-    useToast().error(MESSAGES.ERRORS.DASHBOARD_LOAD_FAILED)
+    const result = await fetchHomeDashboard()
+    if (result) dashboard.value = result
   } finally {
     isLoading.value = false
   }
@@ -135,8 +72,8 @@ onMounted(() => {
   fetchDashboardData()
 })
 
-const formatDate = (dateStr: string) => {
-  return dashboardDateFormatter.format(new Date(dateStr))
+const formatDate = (dateStr: string | null | undefined) => {
+  return dateStr ? dashboardDateFormatter.format(new Date(dateStr)) : ''
 }
 
 const todayFormatted = computed(() => dashboardHeaderDateFormatter.format(new Date()))
@@ -186,9 +123,9 @@ const getStatusBadge = (status: string) => {
                 <path d="m5 12 7-7 7 7" />
                 <path d="M12 19V5" />
               </svg>
-              +{{ stats.members.new }}
+              +{{ stats.members.newThisMonth }}
             </span>
-            <span class="text-caption text-tertiary">{{ PAGES.DASHBOARD.NEW_THIS_WEEK }}</span>
+            <span class="text-caption text-tertiary">{{ PAGES.DASHBOARD.NEW_THIS_MONTH }}</span>
           </div>
         </div>
 
@@ -226,6 +163,7 @@ const getStatusBadge = (status: string) => {
           <div class="stat-value text-display">{{ stats.contracts.active }}</div>
           <div class="stat-footer">
             <span class="badge">{{ stats.contracts.draft }} {{ PAGES.DASHBOARD.PENDING_SIGN }}</span>
+            <span v-if="stats.contracts.expiringSoon" class="badge badge-warning">{{ stats.contracts.expiringSoon }} {{ PAGES.DASHBOARD.EXPIRING_7_DAYS }}</span>
           </div>
         </div>
 
@@ -239,7 +177,7 @@ const getStatusBadge = (status: string) => {
             </div>
             <span class="stat-label text-subhead text-secondary">{{ PAGES.DASHBOARD.MONTHLY_REVENUE }}</span>
           </div>
-          <div class="stat-value text-display">{{ formatCurrency(stats.revenue.month) }}</div>
+          <div class="stat-value text-display">{{ formatCurrency(stats.revenue.thisMonth) }}</div>
           <div class="stat-footer">
             <span class="text-caption text-tertiary">{{ MESSAGES.TIME.TODAY }}：{{ formatCurrency(stats.revenue.today) }}</span>
           </div>
@@ -270,16 +208,16 @@ const getStatusBadge = (status: string) => {
             </div>
             <ul v-else class="member-list">
               <li v-for="(member, index) in recentMembers" :key="member.id" class="member-item stagger-item" :style="{ animationDelay: `${index * 0.1}s` }">
-                <div class="member-avatar">{{ member.fullName?.[0] || member.full_name?.[0] || '?' }}</div>
+                <div class="member-avatar">{{ member.fullName?.[0] || '?' }}</div>
                 <div class="member-info">
-                  <p class="member-name">{{ member.fullName || member.full_name }}</p>
-                  <p class="member-code text-caption text-tertiary">{{ member.memberCode || member.member_code }}</p>
+                  <p class="member-name">{{ member.fullName }}</p>
+                  <p class="member-code text-caption text-tertiary">{{ member.memberCode }}</p>
                 </div>
                 <div class="member-meta">
-                  <span :class="['badge', getStatusBadge(member.status || member.member_status).class]">
-                    {{ getStatusBadge(member.status || member.member_status).label }}
+                  <span :class="['badge', getStatusBadge(member.status).class]">
+                    {{ getStatusBadge(member.status).label }}
                   </span>
-                  <span class="text-caption text-tertiary">{{ formatDate(member.createdAt || member.date_created) }}</span>
+                  <span class="text-caption text-tertiary">{{ formatDate(member.createdAt) }}</span>
                 </div>
               </li>
             </ul>
@@ -308,14 +246,14 @@ const getStatusBadge = (status: string) => {
                   </svg>
                 </div>
                 <div class="contract-info">
-                  <p class="contract-no">{{ contract.contractNo || contract.contract_no }}</p>
-                  <p class="contract-member text-caption text-tertiary">{{ contract.member?.fullName || contract.member?.full_name || '—' }}</p>
+                  <p class="contract-no">{{ contract.contractNo }}</p>
+                  <p class="contract-member text-caption text-tertiary">{{ contract.member?.fullName || '—' }}</p>
                 </div>
                 <div class="contract-meta">
-                  <span :class="['badge', getStatusBadge(contract.status || contract.contract_status).class]">
-                    {{ getStatusBadge(contract.status || contract.contract_status).label }}
+                  <span :class="['badge', getStatusBadge(contract.status).class]">
+                    {{ getStatusBadge(contract.status).label }}
                   </span>
-                  <span class="contract-amount text-body-emphasis">{{ formatCurrency(contract.totalAmount || contract.total_amount) }}</span>
+                  <span class="contract-amount text-body-emphasis">{{ formatCurrency(contract.totalAmount) }}</span>
                 </div>
               </li>
             </ul>

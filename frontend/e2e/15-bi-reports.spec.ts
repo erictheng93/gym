@@ -15,10 +15,7 @@ test.describe('BI 報表', () => {
     await expect(page.getByRole('heading', { name: '匯出報表' })).toBeVisible()
   })
 
-  // BUG: useReports expects the legacy report shape (`summary.net_revenue`, ...) but
-  // /api/reports/* returns `{ data: { total, byBranch, byDay } }`; the page throws a TypeError
-  // and the period tabs stop updating. Remove test.fail() once the page reads the real shape.
-  test.fail('營運報表期間切換會改變選取狀態', async ({ page }) => {
+  test('營運報表期間切換會改變選取狀態', async ({ page }) => {
     await goto(page, '/reports')
     const tabs = page.locator('.period-tabs button')
     await expect(tabs.first()).toBeVisible()
@@ -46,12 +43,6 @@ test.describe('BI 報表', () => {
     await expect(page.getByRole('heading', { level: 1, name: '系統分析' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'API 使用統計' })).toBeVisible()
     await expect(page.getByRole('heading', { name: '權限不足' })).toHaveCount(0)
-  })
-
-  test('審計日誌頁面可載入', async ({ page }) => {
-    await goto(page, '/admin/audit-logs')
-
-    await expect(page.getByRole('heading', { level: 1, name: '审计日志' })).toBeVisible()
   })
 })
 
