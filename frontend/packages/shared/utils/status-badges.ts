@@ -36,7 +36,9 @@ export const CONTRACT_STATUS: Record<string, StatusConfig> = {
   ACTIVE: { label: '有效', variant: 'success' },
   PAUSED: { label: '暫停', variant: 'warning' },
   EXPIRED: { label: '已過期', variant: 'error' },
-  TERMINATED: { label: '已終止', variant: 'error' }
+  TERMINATED: { label: '已終止', variant: 'error' },
+  CANCELLED: { label: '已終止', variant: 'error' },
+  TRANSFERRED: { label: '已轉讓', variant: 'default' }
 }
 
 export function getContractStatusBadge(status: string | undefined | null): StatusConfig {

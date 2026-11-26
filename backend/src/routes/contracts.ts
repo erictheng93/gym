@@ -1,12 +1,15 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, contracts, contractLogs, members, membershipPlans, payments, CONTRACT_STATUS } from '../db/index.js';
-import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm';
+import { db, contracts, contractLogs, members, membershipPlans, payments, branches, employees, CONTRACT_STATUS, PAYMENT_METHOD } from '../db/index.js';
+import { eq, and, or, desc, asc, sql, inArray, ilike } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
 import { generateExcel, generateCsv, contractsColumns, translateStatus } from '../services/export.js';
+import { recalculateContractPayment, toCents } from '../services/contract-payment.js';
+import type { DbTransaction } from '../services/contract-payment.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -83,6 +86,18 @@ const CONTRACT_DETAIL_JOIN_SELECT = {
     name: membershipPlans.name,
     planType: membershipPlans.planType,
     price: membershipPlans.price,
+    durationMonths: membershipPlans.durationMonths,
+    classCounts: membershipPlans.classCounts,
+    allowPause: membershipPlans.allowPause,
+    allowTransfer: membershipPlans.allowTransfer,
+  },
+  branch: {
+    id: branches.id,
+    name: branches.name,
+  },
+  salesPerson: {
+    id: employees.id,
+    fullName: employees.fullName,
   },
 };
 
@@ -94,7 +109,10 @@ const CONTRACT_LOGS_SELECT = {
   endDate: contractLogs.endDate,
   daysAffected: contractLogs.daysAffected,
   reason: contractLogs.reason,
+  originalMemberId: contractLogs.originalMemberId,
+  targetMemberId: contractLogs.targetMemberId,
   dateCreated: contractLogs.dateCreated,
+  createdByName: employees.fullName,
 };
 
 const CONTRACT_PAYMENTS_SELECT = {
@@ -139,6 +157,8 @@ const CONTRACT_PAUSE_CHECK_SELECT = {
   endDate: contracts.endDate,
 };
 
+const UUID_SCHEMA = z.string().uuid();
+
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
@@ -170,6 +190,16 @@ app.get('/', async (c) => {
   const offset = (page - 1) * limit;
   const status = c.req.query('status');
   const sortOrder = c.req.query('sortOrder') || 'desc';
+  const memberId = c.req.query('memberId');
+  const branchId = c.req.query('branchId');
+  const search = c.req.query('search')?.trim();
+
+  // Malformed ids would make Postgres throw (uuid cast); reject them up front
+  for (const [name, value] of [['memberId', memberId], ['branchId', branchId]] as const) {
+    if (value && !UUID_SCHEMA.safeParse(value).success) {
+      return c.json({ success: false, error: `${name} 格式錯誤` }, 400);
+    }
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -181,22 +211,33 @@ app.get('/', async (c) => {
     ? eq(contracts.branchId, branchIds[0])
     : inArray(contracts.branchId, branchIds);
 
-  // Build where conditions
-  const conditions = [branchCondition];
+  // Build where conditions (every filter narrows within the tenant's branches)
+  const conditions: SQL[] = [branchCondition];
   if (status) {
     // Case-insensitive status comparison using index-friendly uppercase normalization
     // ponytail: upper+lower covers legacy lowercase rows without lower() defeating the index
     conditions.push(inArray(contracts.status, [status.toUpperCase(), status.toLowerCase()] as typeof CONTRACT_STATUS[number][]));
   }
+  if (memberId) conditions.push(eq(contracts.memberId, memberId));
+  if (branchId) conditions.push(eq(contracts.branchId, branchId));
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(or(
+      ilike(contracts.contractNo, pattern),
+      ilike(members.fullName, pattern),
+      ilike(members.memberCode, pattern),
+    )!);
+  }
 
   // Determine sort order
   const orderFn = sortOrder === 'asc' ? asc(contracts.createdAt) : desc(contracts.createdAt);
 
-  // Concurrently execute count and paginated query
+  // Concurrently execute count and paginated query (count joins members so `search` applies)
   const [[countResult], result] = await Promise.all([
     db
       .select(COUNT_SELECT)
       .from(contracts)
+      .leftJoin(members, eq(contracts.memberId, members.id))
       .where(and(...conditions)),
     db
       .select(CONTRACT_LIST_JOIN_SELECT)
@@ -311,12 +352,15 @@ app.get('/:id', async (c) => {
       .from(contracts)
       .leftJoin(members, eq(contracts.memberId, members.id))
       .leftJoin(membershipPlans, eq(contracts.planId, membershipPlans.id))
+      .leftJoin(branches, eq(contracts.branchId, branches.id))
+      .leftJoin(employees, eq(contracts.salesPersonId, employees.id))
       .where(eq(contracts.id, id))
       .limit(1),
     getTenantBranchIds(tenantId),
     db
       .select(CONTRACT_LOGS_SELECT)
       .from(contractLogs)
+      .leftJoin(employees, eq(contractLogs.createdByEmployee, employees.id))
       .where(eq(contractLogs.contractId, id))
       .orderBy(desc(contractLogs.dateCreated)),
     db
@@ -590,27 +634,262 @@ app.post('/:id/resume', async (c) => {
 
   const todayDateStr = new Date().toISOString().slice(0, 10);
 
-  const [, [updatedContract]] = await Promise.all([
-    db.insert(contractLogs).values({
+  // One transaction, and only a PAUSED contract moves: a concurrent second resume
+  // finds no row and cannot write a second RESUME log.
+  const updatedContract = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(contracts)
+      .set({ status: 'ACTIVE', updatedAt: new Date() })
+      .where(and(eq(contracts.id, id), eq(contracts.status, 'PAUSED')))
+      .returning(CONTRACT_RETURNING);
+
+    if (!updated) return null;
+
+    await tx.insert(contractLogs).values({
       contractId: id,
       logType: 'RESUME',
       startDate: todayDateStr,
       endDate: todayDateStr,
       daysAffected: 0,
-      tenantId: tenantId,
-    }),
-    db
-      .update(contracts)
+      createdByEmployee: c.get('user')?.employeeId ?? null,
+      branchId: contract.branchId,
+      tenantId,
+    });
+
+    await tx
+      .update(members)
       .set({ status: 'ACTIVE', updatedAt: new Date() })
-      .where(eq(contracts.id, id))
-      .returning(CONTRACT_RETURNING),
-    db.update(members).set({
-      status: 'ACTIVE',
-      updatedAt: new Date(),
-    }).where(eq(members.id, contract.memberId)),
-  ]);
+      .where(eq(members.id, contract.memberId));
+
+    return updated;
+  });
+
+  if (!updatedContract) {
+    return c.json({ success: false, error: '合約狀態已變更，請重新整理後再試' }, 409);
+  }
 
   return c.json({ success: true, data: updatedContract });
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/contracts/:id/cancel - Terminate a contract, optionally refunding money
+// -----------------------------------------------------------------------------
+// DRAFT / ACTIVE / PAUSED -> CANCELLED. In ONE transaction:
+//   1. lock the contract row (SELECT ... FOR UPDATE) BEFORE inserting the refund -
+//      the same lock order as POST /api/payments. The payment insert's FK check
+//      takes FOR KEY SHARE on the contract; locking only afterwards can deadlock;
+//   2. validate the state, and that the refund does not exceed the money still held
+//      (COMPLETED INCOME minus COMPLETED REFUND);
+//   3. set status CANCELLED and write the CANCEL contract log;
+//   4. if a refund is given, insert it exactly like POST /api/payments does for
+//      paymentType REFUND: `amount` is POSITIVE, `type` = 'REFUND',
+//      `status` = 'COMPLETED' (the money has been paid back);
+//   5. recalculateContractPayment. It sums COMPLETED INCOME only, so a refund does
+//      not lower paidAmount; refunds are reported separately (/payments/summary).
+// Any failure rolls everything back: no refund without the cancellation, and no
+// cancellation log without the status change. The member's own status is not
+// touched (they may hold other contracts).
+
+const CANCELLABLE_STATUSES: ReadonlyArray<typeof CONTRACT_STATUS[number]> = ['DRAFT', 'ACTIVE', 'PAUSED'];
+
+const cancelContractSchema = z.object({
+  reason: z.string().trim().max(200).optional(),
+  refund: z.object({
+    amount: z.coerce.number().positive().max(99_999_999.99),
+    paymentMethod: z.enum(PAYMENT_METHOD),
+  }).optional().nullable(),
+});
+
+const CONTRACT_LOCK_SELECT = {
+  id: contracts.id,
+  branchId: contracts.branchId,
+  memberId: contracts.memberId,
+  status: contracts.status,
+  endDate: contracts.endDate,
+};
+
+const PAYMENT_TYPE_TOTALS_SELECT = {
+  income: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'INCOME' THEN ${payments.amount} ELSE 0 END), 0)`,
+  refund: sql<string>`COALESCE(SUM(CASE WHEN ${payments.type} = 'REFUND' THEN ${payments.amount} ELSE 0 END), 0)`,
+};
+
+const REFUND_PAYMENT_RETURNING = {
+  id: payments.id,
+  contractId: payments.contractId,
+  memberId: payments.memberId,
+  branchId: payments.branchId,
+  amount: payments.amount,
+  paymentMethod: payments.paymentMethod,
+  paymentDate: payments.paymentDate,
+  type: payments.type,
+  status: payments.status,
+  notes: payments.notes,
+  createdAt: payments.createdAt,
+};
+
+type TxFailure = { ok: false; status: 400 | 404; error: string };
+
+/** Locks a tenant's contract row FOR UPDATE; null when it is not this tenant's */
+async function lockContract(tx: DbTransaction, id: string, tenantId: string, branchIds: string[]) {
+  const [contract] = await tx
+    .select(CONTRACT_LOCK_SELECT)
+    .from(contracts)
+    .where(and(eq(contracts.id, id), eq(contracts.tenantId, tenantId)))
+    .limit(1)
+    .for('update');
+  return contract && branchIds.includes(contract.branchId) ? contract : null;
+}
+
+app.post('/:id/cancel', zValidator('json', cancelContractSchema), async (c) => {
+  const id = c.req.param('id');
+  const tenantId = c.get('tenantId')!;
+  const employeeId = c.get('user')?.employeeId ?? null;
+  const data = c.req.valid('json');
+
+  if (!UUID_SCHEMA.safeParse(id).success) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
+
+  const branchIds = await getTenantBranchIds(tenantId);
+  const reason = data.reason || '合約終止';
+  const today = new Date().toISOString().slice(0, 10);
+
+  const outcome = await db.transaction(async (tx) => {
+    const contract = await lockContract(tx, id, tenantId, branchIds);
+    if (!contract) {
+      return { ok: false, status: 404, error: '合約不存在' } satisfies TxFailure;
+    }
+
+    if (!CANCELLABLE_STATUSES.includes(contract.status)) {
+      return { ok: false, status: 400, error: '只有草稿、有效或暫停中的合約可以終止' } satisfies TxFailure;
+    }
+
+    if (data.refund) {
+      const [totals] = await tx
+        .select(PAYMENT_TYPE_TOTALS_SELECT)
+        .from(payments)
+        .where(and(
+          eq(payments.contractId, id),
+          eq(payments.tenantId, tenantId),
+          eq(payments.status, 'COMPLETED'),
+        ));
+      const refundableCents = toCents(totals?.income) - toCents(totals?.refund);
+      if (toCents(data.refund.amount) > refundableCents) {
+        const refundable = (Math.max(refundableCents, 0) / 100).toFixed(2);
+        return { ok: false, status: 400, error: `退款金額不可超過已收金額（可退 NT$ ${refundable}）` } satisfies TxFailure;
+      }
+    }
+
+    const [updated] = await tx
+      .update(contracts)
+      .set({ status: 'CANCELLED', updatedAt: new Date() })
+      .where(eq(contracts.id, id))
+      .returning(CONTRACT_RETURNING);
+
+    await tx.insert(contractLogs).values({
+      contractId: id,
+      logType: 'CANCEL',
+      startDate: today,
+      endDate: today,
+      daysAffected: 0,
+      reason,
+      createdByEmployee: employeeId,
+      branchId: contract.branchId,
+      tenantId,
+    });
+
+    let refund = null;
+    if (data.refund) {
+      [refund] = await tx.insert(payments).values({
+        contractId: id,
+        memberId: contract.memberId,
+        branchId: contract.branchId,
+        amount: data.refund.amount.toFixed(2),
+        paymentMethod: data.refund.paymentMethod,
+        type: 'REFUND',
+        status: 'COMPLETED',
+        notes: `合約終止退款：${reason}`.slice(0, 255),
+        createdBy: employeeId,
+        tenantId,
+      }).returning(REFUND_PAYMENT_RETURNING);
+
+      await recalculateContractPayment(tx, id, tenantId);
+    }
+
+    return { ok: true as const, contract: updated!, refund: refund ?? null };
+  });
+
+  if (!outcome.ok) {
+    return c.json({ success: false, error: outcome.error }, outcome.status);
+  }
+
+  return c.json({ success: true, data: { contract: outcome.contract, refund: outcome.refund } });
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/contracts/:id/extend - Manually extend the end date by N days
+// -----------------------------------------------------------------------------
+// PRD FR-CON-003: 延期 (Extension) = 手動展延, end_date += 指定天數. ACTIVE or
+// PAUSED only; originalEndDate is kept. The EXTEND log records old -> new end date.
+
+const EXTENDABLE_STATUSES: ReadonlyArray<typeof CONTRACT_STATUS[number]> = ['ACTIVE', 'PAUSED'];
+
+const extendContractSchema = z.object({
+  days: z.number().int().min(1).max(3650),
+  reason: z.string().trim().max(200).optional(),
+});
+
+app.post('/:id/extend', zValidator('json', extendContractSchema), async (c) => {
+  const id = c.req.param('id');
+  const tenantId = c.get('tenantId')!;
+  const data = c.req.valid('json');
+
+  if (!UUID_SCHEMA.safeParse(id).success) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
+
+  const branchIds = await getTenantBranchIds(tenantId);
+
+  const outcome = await db.transaction(async (tx) => {
+    const contract = await lockContract(tx, id, tenantId, branchIds);
+    if (!contract) {
+      return { ok: false, status: 404, error: '合約不存在' } satisfies TxFailure;
+    }
+    if (!EXTENDABLE_STATUSES.includes(contract.status)) {
+      return { ok: false, status: 400, error: '只有有效或暫停中的合約可以延期' } satisfies TxFailure;
+    }
+
+    // Date-only strings parse as UTC midnight; stay in UTC so the server TZ can't shift days.
+    const newEnd = new Date(`${contract.endDate}T00:00:00Z`);
+    newEnd.setUTCDate(newEnd.getUTCDate() + data.days);
+    const newEndDate = newEnd.toISOString().slice(0, 10);
+
+    const [updated] = await tx
+      .update(contracts)
+      .set({ endDate: newEndDate, updatedAt: new Date() })
+      .where(eq(contracts.id, id))
+      .returning(CONTRACT_RETURNING);
+
+    await tx.insert(contractLogs).values({
+      contractId: id,
+      logType: 'EXTEND',
+      startDate: contract.endDate,
+      endDate: newEndDate,
+      daysAffected: data.days,
+      reason: data.reason || `延期 ${data.days} 天`,
+      createdByEmployee: c.get('user')?.employeeId ?? null,
+      branchId: contract.branchId,
+      tenantId,
+    });
+
+    return { ok: true as const, contract: updated! };
+  });
+
+  if (!outcome.ok) {
+    return c.json({ success: false, error: outcome.error }, outcome.status);
+  }
+
+  return c.json({ success: true, data: outcome.contract });
 });
 
 export default app;

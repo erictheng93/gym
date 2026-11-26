@@ -13,7 +13,9 @@ const CONTRACT_STATUS_BADGE_MAP: Record<string, { label: string; class: string }
   ACTIVE: { label: STATUS.CONTRACT.ACTIVE, class: 'badge-success' },
   PAUSED: { label: STATUS.CONTRACT.PAUSED, class: 'badge-warning' },
   EXPIRED: { label: STATUS.CONTRACT.EXPIRED, class: 'badge-error' },
-  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' }
+  TERMINATED: { label: STATUS.CONTRACT.TERMINATED, class: 'badge-error' },
+  CANCELLED: { label: STATUS.CONTRACT.CANCELLED, class: 'badge-error' },
+  TRANSFERRED: { label: STATUS.CONTRACT.TRANSFERRED, class: '' }
 }
 
 const GENDER_LABEL_MAP: Record<string, string> = {
@@ -316,8 +318,8 @@ const handleDelete = async () => {
           >
             <div class="contract-header">
               <code class="contract-no">{{ contract.contractNo }}</code>
-              <span :class="['badge', getContractStatusBadge(contract.contractStatus || '').class]">
-                {{ getContractStatusBadge(contract.contractStatus || '').label }}
+              <span :class="['badge', getContractStatusBadge(contract.status).class]">
+                {{ getContractStatusBadge(contract.status).label }}
               </span>
             </div>
             <h4 class="plan-name">{{ contract.plan?.name || '—' }}</h4>

@@ -1,54 +1,223 @@
 import { useFetch } from '~/composables/core/useFetch'
-import type { Contract } from '~/types/schema'
+import type { PaymentMethod } from '~/types/schema'
 import { MESSAGES } from '~/constants'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { useApi, CACHE_KEYS } from '~/composables/core/useApi'
 
+// =============================================================================
+// Wire format of the staff contracts API (backend/src/routes/contracts.ts)
+// =============================================================================
+
+export type ContractStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CANCELLED' | 'TRANSFERRED'
+export type ContractPaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'REFUNDED'
+export type ContractLogType = 'PAUSE' | 'RESUME' | 'EXTEND' | 'TRANSFER' | 'CANCEL' | 'CLASS_USED' | 'RENEWAL'
+
+/** A contract row (CONTRACT_RETURNING): camelCase, decimal columns as strings ("3000.00") */
+export interface ApiContract {
+  id: string
+  contractNo: string
+  memberId: string
+  planId: string
+  branchId: string
+  salesPersonId: string | null
+  status: ContractStatus
+  signDate: string | null
+  startDate: string
+  originalEndDate: string
+  endDate: string
+  remainingCounts: number | null
+  totalAmount: string | number
+  paidAmount: string | number
+  paymentStatus: ContractPaymentStatus
+  digitalSignature: string | null
+  contractPdf?: string | null
+  termsAccepted?: boolean
+  notes: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export interface ContractMember {
+  id: string
+  fullName: string
+  memberCode: string | null
+  phone?: string | null
+  email?: string | null
+}
+
+export interface ContractPlan {
+  id: string
+  name: string
+  planType: 'TIME_BASED' | 'COUNT_BASED'
+  price?: number
+  durationMonths?: number | null
+  classCounts?: number | null
+  allowPause?: boolean
+  allowTransfer?: boolean
+}
+
+/** GET /api/contracts item: the contract nested next to its joined member and plan */
+export interface ApiContractListRow {
+  contract: ApiContract
+  member: ContractMember | null
+  plan: (Omit<ContractPlan, 'price'> & { price?: string | number }) | null
+}
+
+export interface ApiContractLog {
+  id: string
+  contractId: string
+  logType: ContractLogType
+  startDate: string | null
+  endDate: string | null
+  daysAffected: number | null
+  reason: string | null
+  originalMemberId?: string | null
+  targetMemberId?: string | null
+  dateCreated: string | null
+  createdByName?: string | null
+}
+
+/** GET /api/contracts/:id */
+export interface ApiContractDetail extends ApiContractListRow {
+  branch: { id: string; name: string } | null
+  salesPerson: { id: string; fullName: string } | null
+  logs: ApiContractLog[]
+}
+
+/** A contract as the pages use it: flat, amounts as numbers */
+export interface ContractView extends Omit<ApiContract, 'totalAmount' | 'paidAmount'> {
+  totalAmount: number
+  paidAmount: number
+  member: ContractMember | null
+  plan: ContractPlan | null
+}
+
+export interface ContractDetail extends ContractView {
+  branch: { id: string; name: string } | null
+  salesPerson: { id: string; fullName: string } | null
+  logs: ApiContractLog[]
+}
+
+/** Query of GET /api/contracts; names match what the handler reads */
+export interface ContractListFilters {
+  page?: number
+  limit?: number
+  memberId?: string
+  branchId?: string
+  status?: ContractStatus | ''
+  /** contract no., member name or member code */
+  search?: string
+}
+
+/** Body of POST /api/contracts; field names match the backend zod schema exactly */
+export interface CreateContractInput {
+  memberId: string
+  planId: string
+  branchId: string
+  /** YYYY-MM-DD; the backend derives endDate / remainingCounts from the plan */
+  startDate: string
+  totalAmount: number
+  salesPersonId?: string | null
+  notes?: string | null
+}
+
+/** Body of POST /api/contracts/:id/cancel */
+export interface CancelContractInput {
+  reason?: string
+  /** Positive amount actually paid back; recorded as a COMPLETED REFUND payment in the same transaction */
+  refund?: { amount: number; paymentMethod: PaymentMethod } | null
+}
+
+const toNumber = (value: unknown) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value))
+
+const normalizePlan = (plan: ApiContractListRow['plan']): ContractPlan | null => {
+  if (!plan) return null
+  return {
+    ...plan,
+    ...(plan.price !== undefined ? { price: toNumber(plan.price) } : {}),
+    ...(plan.durationMonths !== undefined ? { durationMonths: toNullableNumber(plan.durationMonths) } : {}),
+    ...(plan.classCounts !== undefined ? { classCounts: toNullableNumber(plan.classCounts) } : {})
+  } as ContractPlan
+}
+
+export const normalizeContract = (
+  contract: ApiContract,
+  member: ContractMember | null = null,
+  plan: ApiContractListRow['plan'] = null
+): ContractView => ({
+  ...contract,
+  totalAmount: toNumber(contract.totalAmount),
+  paidAmount: toNumber(contract.paidAmount),
+  member,
+  plan: normalizePlan(plan)
+})
+
+export const normalizeContractRow = (row: ApiContractListRow): ContractView =>
+  normalizeContract(row.contract, row.member ?? null, row.plan ?? null)
+
+export const normalizeContractDetail = (detail: ApiContractDetail): ContractDetail => ({
+  ...normalizeContractRow(detail),
+  branch: detail.branch ?? null,
+  salesPerson: detail.salesPerson ?? null,
+  logs: detail.logs ?? []
+})
+
+/** Backend error text when it is a readable message, otherwise the fallback */
+const errorMessage = (error: unknown, fallback: string) => {
+  const message = error instanceof Error ? error.message : ''
+  return message && !message.startsWith('[object') && !message.startsWith('HTTP ') ? message : fallback
+}
+
+const buildQuery = (params: Record<string, string | number | undefined>) => {
+  const query: Record<string, string | number> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query[key] = value
+  }
+  return query
+}
+
+type ListResponse = { data?: ApiContractListRow[]; pagination?: { total?: number }; meta?: { total?: number } }
+
 const inFlightContractsMap = new Map<string, Promise<void>>()
-const inFlightSingleContractMap = new Map<string, Promise<Contract | null>>()
+const inFlightSingleContractMap = new Map<string, Promise<ContractDetail | null>>()
 const inFlightContractStatsMap = new Map<string, Promise<{ active: number; expired: number; draft: number }>>()
 
 export const useContracts = () => {
-  const { apiFetch, readItems, readItem, createItem, updateItem } = useFetch()
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
   const { invalidateCache } = useApi()
-  const contracts = useState<Contract[]>('contracts', () => [])
+  const contracts = useState<ContractView[]>('contracts', () => [])
   const isLoading = useState('contracts_loading', () => false)
   const totalCount = useState('contracts_total', () => 0)
 
-  const fetchContracts = async (options?: {
-    page?: number
-    limit?: number
-    memberId?: string
-    branchId?: string
-    status?: string
-    search?: string
-  }, force = false) => {
-    const key = JSON.stringify(options || {})
+  const listContracts = async (filters: ContractListFilters) => {
+    const response = await apiFetch<ApiContractListRow[]>('/contracts', {
+      params: buildQuery({ ...filters })
+    }) as unknown as ListResponse
+    return {
+      rows: (response.data || []).map(normalizeContractRow),
+      total: toNumber(response.pagination?.total ?? response.meta?.total)
+    }
+  }
+
+  const fetchContracts = async (filters: ContractListFilters = {}, force = false) => {
+    const key = JSON.stringify(filters)
     if (!force && inFlightContractsMap.has(key)) {
       return inFlightContractsMap.get(key)
     }
 
     const promise = (async () => {
       isLoading.value = true
-      const { page = 1, limit = 20, memberId, branchId, status, search } = options || {}
+      const { page = 1, limit = 20, ...rest } = filters
 
       try {
-        const filter: Record<string, unknown> = {}
-        if (memberId) filter.member_id = memberId
-        if (branchId) filter.branch_id = branchId
-        if (status) filter.contract_status = status
-
-        const { data, total } = await readItems<Contract>('contracts', {
-          page,
-          limit,
-          search,
-          filter,
-          sort: 'date_created',
-          sortOrder: 'desc'
-        })
-
-        contracts.value = data
+        const { rows, total } = await listContracts({ page, limit, ...rest })
+        contracts.value = rows
         totalCount.value = total
       } catch (error) {
         handleError(error, {
@@ -67,19 +236,19 @@ export const useContracts = () => {
     return promise
   }
 
-  const getContract = async (id: string, force = false): Promise<Contract | null> => {
+  const getContract = async (id: string, force = false): Promise<ContractDetail | null> => {
     if (!force && inFlightSingleContractMap.has(id)) {
       return inFlightSingleContractMap.get(id)!
     }
 
     const promise = (async () => {
       try {
-        const data = await readItem<Contract>('contracts', id)
-        return data
+        const { data } = await apiFetch<ApiContractDetail>(`/contracts/${id}`)
+        return data?.contract ? normalizeContractDetail(data) : null
       } catch (error) {
         handleError(error, {
           context: 'useContracts.getContract',
-          customMessage: MESSAGES.ERRORS.CONTRACT_FETCH_FAILED
+          customMessage: errorMessage(error, MESSAGES.ERRORS.CONTRACT_FETCH_FAILED)
         })
         return null
       } finally {
@@ -91,67 +260,69 @@ export const useContracts = () => {
     return promise
   }
 
-  const createContract = async (contract: Partial<Contract>) => {
+  /** POST to a contract action; returns the response data, or null after showing the backend's reason */
+  const runAction = async <T>(
+    path: string,
+    body: unknown,
+    context: string,
+    fallback: string
+  ): Promise<T | null> => {
     try {
-      const data = await createItem<Contract>('contracts', contract)
-      // 失效合約和會員緩存（新合約可能影響會員狀態）
-      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
+      const { data } = await apiFetch<T>(path, { method: 'POST', ...(body !== undefined ? { body } : {}) })
+      if (!data) throw new Error(fallback)
+      // 合約狀態與金額變更會影響會員狀態與付款資料
+      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS, CACHE_KEYS.PAYMENTS])
       return data
     } catch (error) {
-      handleError(error, {
-        context: 'useContracts.createContract',
-        customMessage: MESSAGES.ERRORS.CONTRACT_CREATE_FAILED
-      })
+      handleError(error, { context, customMessage: errorMessage(error, fallback) })
       return null
     }
   }
 
-  const updateContract = async (id: string, contract: Partial<Contract>) => {
-    try {
-      const data = await updateItem<Contract>('contracts', id, contract)
-      // 失效合約和會員緩存（合約狀態變更可能影響會員狀態）
-      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useContracts.updateContract',
-        customMessage: MESSAGES.ERRORS.CONTRACT_UPDATE_FAILED
-      })
-      return null
+  /** Creates a DRAFT contract (activate it after payment). Returns null on failure, after showing why. */
+  const createContract = async (input: CreateContractInput): Promise<ContractView | null> => {
+    const body: CreateContractInput = {
+      memberId: input.memberId,
+      planId: input.planId,
+      branchId: input.branchId,
+      startDate: input.startDate,
+      totalAmount: input.totalAmount,
+      ...(input.salesPersonId ? { salesPersonId: input.salesPersonId } : {}),
+      notes: input.notes || null
     }
+    const data = await runAction<ApiContract>('/contracts', body, 'useContracts.createContract', MESSAGES.ERRORS.CONTRACT_CREATE_FAILED)
+    return data ? normalizeContract(data) : null
   }
 
   // 啟用草稿合約（DRAFT → ACTIVE，後端同時將會員設為 ACTIVE）
-  const activateContract = async (id: string) => {
-    try {
-      const { data } = await apiFetch<Contract>(`/contracts/${id}/activate`, { method: 'POST' })
-      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useContracts.activateContract',
-        customMessage: MESSAGES.ERRORS.CONTRACT_ACTIVATE_FAILED
-      })
-      return null
-    }
-  }
+  const activateContract = (id: string) =>
+    runAction<ApiContract>(`/contracts/${id}/activate`, undefined, 'useContracts.activateContract', MESSAGES.ERRORS.CONTRACT_ACTIVATE_FAILED)
 
   // 暫停合約：由後端驗證日期、計算天數並延長到期日（同一 transaction 寫入異動紀錄）
-  const pauseContract = async (id: string, pause: { startDate: string; endDate: string; reason?: string }) => {
-    try {
-      const { data } = await apiFetch<Contract>(`/contracts/${id}/pause`, { method: 'POST', body: pause })
-      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
-      return data
-    } catch (error) {
-      handleError(error, {
-        context: 'useContracts.pauseContract',
-        customMessage: MESSAGES.ERRORS.CONTRACT_PAUSE_FAILED
-      })
-      return null
-    }
-  }
+  const pauseContract = (id: string, pause: { startDate: string; endDate: string; reason?: string }) =>
+    runAction<ApiContract>(`/contracts/${id}/pause`, pause, 'useContracts.pauseContract', MESSAGES.ERRORS.CONTRACT_PAUSE_FAILED)
 
-  // 統計資料
+  // 恢復合約（PAUSED → ACTIVE，同一 transaction 寫入異動紀錄）
+  const resumeContract = (id: string) =>
+    runAction<ApiContract>(`/contracts/${id}/resume`, undefined, 'useContracts.resumeContract', MESSAGES.ERRORS.CONTRACT_RESUME_FAILED)
+
+  // 延期合約：結束日由後端順延指定天數並寫入異動紀錄
+  const extendContract = (id: string, extend: { days: number; reason?: string }) =>
+    runAction<ApiContract>(`/contracts/${id}/extend`, extend, 'useContracts.extendContract', MESSAGES.ERRORS.CONTRACT_EXTEND_FAILED)
+
+  // 終止合約：狀態改為 CANCELLED、寫入異動紀錄與（選填的）退款，全部在同一 transaction
+  const cancelContract = (id: string, input: CancelContractInput) =>
+    runAction<{ contract: ApiContract; refund: unknown }>(
+      `/contracts/${id}/cancel`,
+      {
+        ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.refund && input.refund.amount > 0 ? { refund: input.refund } : {})
+      },
+      'useContracts.cancelContract',
+      MESSAGES.ERRORS.CONTRACT_TERMINATE_FAILED
+    )
+
+  // 統計資料（每個狀態一次 limit=1 查詢，取 pagination.total）
   const getContractStats = async (branchId?: string, force = false) => {
     const defaultStats = { active: 0, expired: 0, draft: 0 }
     const key = branchId || '__all__'
@@ -162,36 +333,10 @@ export const useContracts = () => {
 
     const promise = (async () => {
       try {
-        // Fetch stats for each status in parallel
-        const [activeResult, expiredResult, draftResult] = await Promise.all([
-          readItems<Contract>('contracts', {
-            limit: 1,
-            filter: {
-              ...(branchId && { branch_id: branchId }),
-              contract_status: 'ACTIVE'
-            }
-          }),
-          readItems<Contract>('contracts', {
-            limit: 1,
-            filter: {
-              ...(branchId && { branch_id: branchId }),
-              contract_status: 'EXPIRED'
-            }
-          }),
-          readItems<Contract>('contracts', {
-            limit: 1,
-            filter: {
-              ...(branchId && { branch_id: branchId }),
-              contract_status: 'DRAFT'
-            }
-          })
-        ])
-
-        return {
-          active: activeResult.total,
-          expired: expiredResult.total,
-          draft: draftResult.total
-        }
+        const [active, expired, draft] = await Promise.all(
+          (['ACTIVE', 'EXPIRED', 'DRAFT'] as const).map(status => listContracts({ status, branchId, limit: 1 }))
+        )
+        return { active: active!.total, expired: expired!.total, draft: draft!.total }
       } catch (error) {
         handleError(error, {
           context: 'useContracts.getContractStats',
@@ -215,9 +360,11 @@ export const useContracts = () => {
     fetchContracts,
     getContract,
     createContract,
-    updateContract,
     activateContract,
     pauseContract,
+    resumeContract,
+    extendContract,
+    cancelContract,
     getContractStats
   }
 }

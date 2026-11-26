@@ -11,18 +11,19 @@ const statusOptions = [
   { value: 'ACTIVE', label: STATUS.CONTRACT.ACTIVE },
   { value: 'PAUSED', label: STATUS.CONTRACT.PAUSED },
   { value: 'EXPIRED', label: STATUS.CONTRACT.EXPIRED },
-  { value: 'TERMINATED', label: STATUS.CONTRACT.TERMINATED }
+  { value: 'CANCELLED', label: STATUS.CONTRACT.CANCELLED },
+  { value: 'TRANSFERRED', label: STATUS.CONTRACT.TRANSFERRED }
 ]
 
 // Table columns configuration
 const columns = [
-  { key: 'contract_no', label: PAGES.CONTRACTS.CONTRACT_NUMBER, slot: 'contractNo' },
-  { key: 'member_id.full_name', label: PAGES.CONTRACTS.MEMBER, slot: 'member' },
-  { key: 'plan_id.name', label: PAGES.CONTRACTS.PLAN },
-  { key: 'start_date', label: PAGES.CONTRACTS.PERIOD, slot: 'period', hideOnMobile: true },
-  { key: 'total_amount', label: PAGES.CONTRACTS.AMOUNT, slot: 'amount', hideOnMobile: true },
-  { key: 'payment_status', label: PAGES.CONTRACTS.PAYMENT_STATUS, slot: 'paymentStatus' },
-  { key: 'contract_status', label: PAGES.CONTRACTS.CONTRACT_STATUS, slot: 'contractStatus' }
+  { key: 'contractNo', label: PAGES.CONTRACTS.CONTRACT_NUMBER, slot: 'contractNo' },
+  { key: 'member.fullName', label: PAGES.CONTRACTS.MEMBER, slot: 'member' },
+  { key: 'plan.name', label: PAGES.CONTRACTS.PLAN },
+  { key: 'startDate', label: PAGES.CONTRACTS.PERIOD, slot: 'period', hideOnMobile: true },
+  { key: 'totalAmount', label: PAGES.CONTRACTS.AMOUNT, slot: 'amount', hideOnMobile: true },
+  { key: 'paymentStatus', label: PAGES.CONTRACTS.PAYMENT_STATUS, slot: 'paymentStatus' },
+  { key: 'status', label: PAGES.CONTRACTS.CONTRACT_STATUS, slot: 'contractStatus' }
 ]
 </script>
 
@@ -31,24 +32,26 @@ const columns = [
  * 合約管理頁面
  *
  * 使用 @gym-nexus/ui 組件庫重構
- * 支援批量選擇和操作
+ * 支援批量選擇與匯出。狀態變更只在合約詳情頁進行（各自有專屬 API 與異動紀錄），
+ * 因此不提供批量改狀態。
  */
 import { TIMING } from '~/constants'
+import { getContractStatusBadge, getPaymentStatusBadge } from '@gym-nexus/shared'
+import type { ContractStatus, ContractView } from '~/composables/useContracts'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 // Data fetching
-const { contracts, isLoading, fetchContracts, getContractStats, updateContract } = useContracts()
+const { contracts, isLoading, fetchContracts, getContractStats } = useContracts()
 const { branches, fetchBranches } = useBranches()
 const toast = useToast()
-const { confirm } = useConfirm()
 
 // Filter state
 const search = ref('')
 const selectedBranch = ref('')
-const selectedStatus = ref('')
+const selectedStatus = ref<ContractStatus | ''>('')
 const stats = ref({ active: 0, expired: 0, draft: 0 })
 
 // Batch selection state
@@ -100,35 +103,8 @@ onBeforeUnmount(() => {
 })
 
 // Row click handler
-const handleRowClick = (contract: typeof contracts.value[0]) => {
+const handleRowClick = (contract: ContractView) => {
   navigateTo(`/contracts/${contract.id}`)
-}
-
-// Batch action handlers
-const handleBatchStatusUpdate = async (status: 'ACTIVE' | 'PAUSED' | 'TERMINATED') => {
-  if (selectedIds.value.length === 0) return
-
-  const statusLabel = status === 'ACTIVE' ? '有效' : status === 'PAUSED' ? '暫停' : '終止'
-  const confirmed = await confirm({
-    title: '批量更新狀態',
-    message: `確定要將 ${selectedIds.value.length} 份合約的狀態更新為「${statusLabel}」嗎？`,
-    confirmText: '確定更新',
-    confirmVariant: 'primary'
-  })
-
-  if (!confirmed) return
-
-  try {
-    await Promise.all(
-      selectedIds.value.map(id => updateContract(id, { contract_status: status }))
-    )
-    toast.success(`成功更新 ${selectedIds.value.length} 份合約狀態`)
-    selectedIds.value = []
-    await Promise.all([loadContracts(), loadStats()])
-  } catch (error) {
-    console.error('Failed to batch update:', error)
-    toast.error('批量更新失敗')
-  }
 }
 
 const handleExportSelected = () => {
@@ -137,14 +113,14 @@ const handleExportSelected = () => {
   const selectedContracts = contracts.value.filter(c => selectedSet.has(c.id))
   const headers = ['合約編號', '會員', '方案', '開始日期', '結束日期', '金額', '付款狀態', '合約狀態']
   const rows = selectedContracts.map(c => [
-    c.contract_no,
-    c.member?.full_name || '',
+    c.contractNo,
+    c.member?.fullName || '',
     c.plan?.name || '',
-    c.start_date ? exportDateFormatter.format(new Date(c.start_date)) : '',
-    c.end_date ? exportDateFormatter.format(new Date(c.end_date)) : '',
-    c.total_amount,
-    c.payment_status,
-    c.contract_status
+    c.startDate ? exportDateFormatter.format(new Date(c.startDate)) : '',
+    c.endDate ? exportDateFormatter.format(new Date(c.endDate)) : '',
+    c.totalAmount,
+    getPaymentStatusBadge(c.paymentStatus).label,
+    getContractStatusBadge(c.status).label
   ])
 
   const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
@@ -233,34 +209,21 @@ const handleExportSelected = () => {
               </svg>
               匯出
             </button>
-            <div class="batch-dropdown">
-              <button type="button" class="btn btn-secondary btn-small">
-                更新狀態
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </button>
-              <div class="dropdown-menu">
-                <button type="button" @click="handleBatchStatusUpdate('ACTIVE')">設為有效</button>
-                <button type="button" @click="handleBatchStatusUpdate('PAUSED')">設為暫停</button>
-                <button type="button" @click="handleBatchStatusUpdate('TERMINATED')">設為終止</button>
-              </div>
-            </div>
           </div>
         </div>
       </template>
       <!-- Contract Number Cell -->
       <template #contractNo="{ row }">
-        <code class="item-code">{{ row.contract_no }}</code>
+        <code class="item-code">{{ row.contractNo }}</code>
       </template>
 
       <!-- Member Cell -->
       <template #member="{ row }">
         <div class="member-cell">
-          <AppAvatar :name="row.member?.full_name" size="md" variant="blue" />
+          <AppAvatar :name="row.member?.fullName" size="md" variant="blue" />
           <div class="member-info">
-            <span class="member-name">{{ row.member?.full_name || '—' }}</span>
-            <span class="member-code text-caption text-tertiary">{{ row.member?.member_code }}</span>
+            <span class="member-name">{{ row.member?.fullName || '—' }}</span>
+            <span class="member-code text-caption text-tertiary">{{ row.member?.memberCode }}</span>
           </div>
         </div>
       </template>
@@ -268,30 +231,30 @@ const handleExportSelected = () => {
       <!-- Period Cell -->
       <template #period="{ row }">
         <div class="date-range">
-          <span>{{ formatDate(row.start_date) }}</span>
+          <span>{{ formatDate(row.startDate) }}</span>
           <span class="date-separator">→</span>
-          <span>{{ formatDate(row.end_date) }}</span>
+          <span>{{ formatDate(row.endDate) }}</span>
         </div>
       </template>
 
       <!-- Amount Cell -->
       <template #amount="{ row }">
-        <span class="amount">{{ formatCurrency(row.total_amount) }}</span>
+        <span class="amount">{{ formatCurrency(row.totalAmount) }}</span>
       </template>
 
       <!-- Payment Status Cell -->
       <template #paymentStatus="{ row }">
         <AppBadge
-          :label="getPaymentStatusBadge(row.payment_status).label"
-          :variant="getPaymentStatusBadge(row.payment_status).variant"
+          :label="getPaymentStatusBadge(row.paymentStatus).label"
+          :variant="getPaymentStatusBadge(row.paymentStatus).variant"
         />
       </template>
 
       <!-- Contract Status Cell -->
       <template #contractStatus="{ row }">
         <AppBadge
-          :label="getContractStatusBadge(row.contract_status).label"
-          :variant="getContractStatusBadge(row.contract_status).variant"
+          :label="getContractStatusBadge(row.status).label"
+          :variant="getContractStatusBadge(row.status).variant"
         />
       </template>
 
@@ -415,58 +378,5 @@ const handleExportSelected = () => {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-}
-
-/* Batch Dropdown */
-.batch-dropdown {
-  position: relative;
-}
-
-.batch-dropdown:hover .dropdown-menu {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: var(--space-xs);
-  min-width: 140px;
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px);
-  transition: all var(--duration-fast) var(--ease-out);
-  z-index: 100;
-}
-
-.dropdown-menu button {
-  display: block;
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  text-align: left;
-  font-size: 14px;
-  color: var(--color-text-primary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.dropdown-menu button:hover {
-  background: var(--color-bg-secondary);
-}
-
-.dropdown-menu button:first-child {
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.dropdown-menu button:last-child {
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 </style>
