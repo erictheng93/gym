@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, TEST_USERS } from './fixtures/auth'
+import { login, TEST_USERS, goto } from './fixtures/auth'
 
 const searchInput = 'input.input-search'
 
@@ -9,7 +9,7 @@ test.describe('會員管理', () => {
   })
 
   test('搜尋會員只顯示符合的結果', async ({ page }) => {
-    await page.goto('/members')
+    await goto(page, '/members')
     await expect(page.getByRole('heading', { level: 1, name: '會員管理' })).toBeVisible()
 
     await page.locator(searchInput).fill('趙小明')
@@ -18,7 +18,7 @@ test.describe('會員管理', () => {
   })
 
   test('新增會員必填欄位未填時顯示驗證錯誤並停留在表單', async ({ page }) => {
-    await page.goto('/members/new')
+    await goto(page, '/members/new')
     await expect(page.getByRole('heading', { level: 1, name: '新增會員' })).toBeVisible()
 
     await page.locator('button[type="submit"]').click()
@@ -31,7 +31,7 @@ test.describe('會員管理', () => {
     const stamp = Date.now().toString()
     const name = `E2E會員${stamp.slice(-6)}`
 
-    await page.goto('/members/new')
+    await goto(page, '/members/new')
     await page.getByPlaceholder('請輸入會員姓名').fill(name)
     await page.getByPlaceholder('0912345678').fill(`09${stamp.slice(-8)}`)
     await page.locator('button[type="submit"]').click()

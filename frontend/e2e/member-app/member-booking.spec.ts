@@ -4,12 +4,12 @@
  * data-independent behaviour (tabs, empty state) is asserted here.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Booking', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsMember(page)
-    await page.goto('/bookings')
+    await goto(page, '/bookings')
   })
 
   test('should display bookings page with both tabs', async ({ page }) => {

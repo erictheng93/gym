@@ -3,12 +3,12 @@
  * Seed: member1 = 趙小明 / MEM001 / member1@example.com. Edits are never saved.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Profile', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsMember(page)
-    await page.goto('/profile')
+    await goto(page, '/profile')
   })
 
   test('should display profile header with member info', async ({ page }) => {

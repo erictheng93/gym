@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, TEST_USERS } from './fixtures/auth'
+import { login, TEST_USERS, goto } from './fixtures/auth'
 
 /**
  * Every admin-web page renders its own <h1> for an authenticated admin.
@@ -49,7 +49,7 @@ test.describe('admin-web 頁面載入', () => {
 
   for (const [path, title] of pages) {
     test(`${path} 顯示「${title}」`, async ({ page }) => {
-      await page.goto(path)
+      await goto(page, path)
       await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible()
       await expect(page).toHaveURL(path)
     })
@@ -59,7 +59,7 @@ test.describe('admin-web 頁面載入', () => {
 test.describe('未登入存取受保護頁面', () => {
   for (const path of ['/members', '/contracts', '/hr/employees']) {
     test(`${path} 導向登入頁`, async ({ page }) => {
-      await page.goto(path)
+      await goto(page, path)
       await expect(page).toHaveURL('/login')
     })
   }

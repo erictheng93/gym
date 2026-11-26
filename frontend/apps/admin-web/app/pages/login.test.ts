@@ -14,7 +14,11 @@ vi.stubGlobal('navigateTo', mockNavigateTo)
 const mockLogin = vi.fn()
 const isLoading = ref(false)
 const isAuthenticated = ref(false)
-vi.stubGlobal('useAuth', () => ({ login: mockLogin, isLoading, isAuthenticated }))
+const mockCheckAuth = vi.fn()
+vi.stubGlobal('useAuth', () => ({ login: mockLogin, isLoading, isAuthenticated, checkAuth: mockCheckAuth }))
+
+const mockLoadSession = vi.fn()
+vi.mock('~/utils/session-storage', () => ({ loadSession: () => mockLoadSession() }))
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 vi.stubGlobal('useToast', () => toast)
@@ -36,6 +40,7 @@ describe('login.vue', () => {
     vi.clearAllMocks()
     isLoading.value = false
     isAuthenticated.value = false
+    mockLoadSession.mockReturnValue(null)
     localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
   })
@@ -50,6 +55,30 @@ describe('login.vue', () => {
       mountLogin()
       await flushPromises()
       expect(mockNavigateTo).toHaveBeenCalledWith('/')
+    })
+
+    it('redirects home after a full page load when the cached session is still valid', async () => {
+      mockLoadSession.mockReturnValue({ user: { id: 'u1' } })
+      mockCheckAuth.mockResolvedValue(true)
+      mountLogin()
+      await flushPromises()
+      expect(mockCheckAuth).toHaveBeenCalled()
+      expect(mockNavigateTo).toHaveBeenCalledWith('/')
+    })
+
+    it('stays on the login page when the cached session is no longer valid', async () => {
+      mockLoadSession.mockReturnValue({ user: { id: 'u1' } })
+      mockCheckAuth.mockResolvedValue(false)
+      mountLogin()
+      await flushPromises()
+      expect(mockNavigateTo).not.toHaveBeenCalled()
+    })
+
+    it('does not call the server when there is no cached session', async () => {
+      mountLogin()
+      await flushPromises()
+      expect(mockCheckAuth).not.toHaveBeenCalled()
+      expect(mockNavigateTo).not.toHaveBeenCalled()
     })
 
     it('defaults to the dark theme', async () => {

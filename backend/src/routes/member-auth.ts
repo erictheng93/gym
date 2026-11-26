@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { hash, verify } from '@node-rs/argon2';
 import { db, members, branches, memberCredentials } from '../db/index.js';
 import { eq, and, gt, or, sql } from 'drizzle-orm';
-import { rateLimiter, memberAuthMiddleware, requireMember } from '../middleware/index.js';
+import { rateLimiter, limitMax, memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import crypto from 'crypto';
 import { memberJwtService, getRecoveryTokenHash } from '../services/member-jwt.js';
@@ -78,7 +78,7 @@ const MEMBER_FORGOT_PW_SELECT = {
 
 const loginRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'test' ? 100 : 10,
+  max: limitMax(10),
   keyGenerator: (c) => {
     const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
                c.req.header('x-real-ip') || 'unknown';
@@ -89,7 +89,7 @@ const loginRateLimiter = rateLimiter({
 
 const passwordResetRateLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: process.env.NODE_ENV === 'test' ? 100 : 3,
+  max: limitMax(3),
   keyGenerator: (c) => {
     const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
                c.req.header('x-real-ip') || 'unknown';

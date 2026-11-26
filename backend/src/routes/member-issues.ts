@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, issueReports, branches, employees } from '../db/index.js';
 import { eq, and, desc, count } from 'drizzle-orm';
-import { memberAuthMiddleware, requireMember, rateLimiter } from '../middleware/index.js';
+import { memberAuthMiddleware, requireMember, rateLimiter, limitMax } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
 // =============================================================================
@@ -178,7 +178,7 @@ app.post(
   '/',
   rateLimiter({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: process.env.NODE_ENV === 'test' ? 100 : 5,
+    max: limitMax(5),
     keyGenerator: (c) => {
       const member = c.get('member');
       return `issue:create:${member?.id || 'unknown'}`;

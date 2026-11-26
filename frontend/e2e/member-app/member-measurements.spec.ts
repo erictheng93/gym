@@ -3,7 +3,7 @@
  * Seed data has no measurements for member1, so the empty state is asserted.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Body Measurements', () => {
   test.beforeEach(async ({ page }) => {
@@ -12,7 +12,7 @@ test.describe('Member Body Measurements', () => {
 
   test.describe('Measurements List Page', () => {
     test.beforeEach(async ({ page }) => {
-      await page.goto('/fitness/measurements')
+      await goto(page, '/fitness/measurements')
     })
 
     test('should display page with period selector and empty state', async ({ page }) => {
@@ -38,7 +38,7 @@ test.describe('Member Body Measurements', () => {
 
   test.describe('New Measurement Page', () => {
     test('should display new measurement form fields', async ({ page }) => {
-      await page.goto('/fitness/measurements/new')
+      await goto(page, '/fitness/measurements/new')
 
       await expect(page.getByRole('heading', { level: 1, name: '記錄體態' })).toBeVisible()
       await expect(page.getByLabel('日期')).toBeVisible()

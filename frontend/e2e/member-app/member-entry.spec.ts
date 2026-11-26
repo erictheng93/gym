@@ -2,12 +2,12 @@
  * E2E Tests for Member Home (QR entry code) page
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Entry (QR Code)', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsMember(page)
-    await page.goto('/')
+    await goto(page, '/')
   })
 
   test('should display QR code and member code', async ({ page }) => {

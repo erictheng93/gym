@@ -3,12 +3,12 @@
  * Seed data has no goals for member1, so the empty state is asserted.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Fitness Goals', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsMember(page)
-    await page.goto('/fitness/goals')
+    await goto(page, '/fitness/goals')
   })
 
   test('should display goals page with status tabs', async ({ page }) => {

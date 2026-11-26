@@ -3,12 +3,12 @@
  * Covers email/password, OTP tab validation, social buttons and route protection.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Login', () => {
   test.describe('Email Login', () => {
     test('should display login form', async ({ page }) => {
-      await page.goto('/login')
+      await goto(page, '/login')
 
       await expect(page.getByRole('heading', { name: 'GYM NEXUS' })).toBeVisible()
       await expect(page.locator('#email')).toBeVisible()
@@ -17,7 +17,7 @@ test.describe('Member Login', () => {
     })
 
     test('should show error for invalid credentials', async ({ page }) => {
-      await page.goto('/login')
+      await goto(page, '/login')
 
       await page.locator('#email').fill('invalid@example.com')
       await page.locator('#password').fill('wrongpassword')
@@ -28,7 +28,7 @@ test.describe('Member Login', () => {
     })
 
     test('should navigate to forgot password', async ({ page }) => {
-      await page.goto('/login')
+      await goto(page, '/login')
 
       await page.getByRole('link', { name: '忘記密碼？' }).click()
 
@@ -44,7 +44,7 @@ test.describe('Member Login', () => {
 
   test.describe('OTP Login', () => {
     test('should validate phone number format', async ({ page }) => {
-      await page.goto('/login')
+      await goto(page, '/login')
 
       await page.getByRole('button', { name: '手機驗證' }).click()
       await page.locator('#phone').fill('12345')
@@ -56,7 +56,7 @@ test.describe('Member Login', () => {
 
   test.describe('Social Login', () => {
     test('should display social login buttons', async ({ page }) => {
-      await page.goto('/login')
+      await goto(page, '/login')
 
       await expect(page.getByRole('button', { name: 'LINE' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Google' })).toBeVisible()
@@ -65,7 +65,7 @@ test.describe('Member Login', () => {
 
   test.describe('Authentication Flow', () => {
     test('should redirect to login when accessing protected route', async ({ page }) => {
-      await page.goto('/')
+      await goto(page, '/')
 
       await expect(page).toHaveURL(/\/login/)
     })

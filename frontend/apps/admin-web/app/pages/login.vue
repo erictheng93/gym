@@ -6,12 +6,13 @@ import {
   TIMING,
   MESSAGES
 } from '~/constants'
+import { loadSession } from '~/utils/session-storage'
 
 definePageMeta({
   layout: false
 })
 
-const { login, isLoading, isAuthenticated } = useAuth()
+const { login, isLoading, isAuthenticated, checkAuth } = useAuth()
 
 const form = reactive({
   email: '',
@@ -25,8 +26,9 @@ const mounted = ref(false)
 onMounted(async () => {
   mounted.value = true
 
-  // Check if already authenticated and redirect
-  if (isAuthenticated.value) {
+  // Already signed in: redirect home. After a full page load the in-memory auth state
+  // is empty (the auth middleware skips /login), so verify a cached session with the server.
+  if (isAuthenticated.value || (loadSession() && await checkAuth())) {
     await navigateTo('/')
     return
   }

@@ -4,12 +4,12 @@
  * Student list page: search and filter controls.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsCoach } from '../fixtures/auth'
+import { loginAsCoach, goto } from '../fixtures/auth'
 
 test.describe('Students List', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsCoach(page)
-    await page.goto('/students')
+    await goto(page, '/students')
   })
 
   test('should display students page with title', async ({ page }) => {

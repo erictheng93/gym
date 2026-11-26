@@ -5,12 +5,12 @@
  * need seeded BOOKED classes (the seed has none) and are not covered here.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsCoach } from '../fixtures/auth'
+import { loginAsCoach, goto } from '../fixtures/auth'
 
 test.describe('Classes List', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsCoach(page)
-    await page.goto('/classes')
+    await goto(page, '/classes')
   })
 
   test('should display classes page with date strip and status filters', async ({ page }) => {
@@ -24,7 +24,12 @@ test.describe('Classes List', () => {
   })
 
   test('should select a date from the date strip', async ({ page }) => {
-    const target = page.locator('.date-item:not(.active)').first()
+    // Pin the target by index: a `:not(.active)` locator would re-resolve to another
+    // date once the clicked one becomes active.
+    const items = page.locator('.date-item')
+    await expect(items).toHaveCount(7)
+    const index = await items.evaluateAll(els => els.findIndex(el => !el.classList.contains('active')))
+    const target = items.nth(index)
     await target.click()
 
     await expect(target).toHaveClass(/active/)

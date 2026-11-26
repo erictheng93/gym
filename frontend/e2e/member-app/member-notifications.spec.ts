@@ -2,12 +2,12 @@
  * E2E Tests for Member Notification Settings
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Notifications', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsMember(page)
-    await page.goto('/profile/notifications')
+    await goto(page, '/profile/notifications')
   })
 
   test('should display settings tab with channels and notification types', async ({ page }) => {

@@ -4,11 +4,11 @@
  * Login flow, session persistence, logout and the route auth guard.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsCoach } from '../fixtures/auth'
+import { loginAsCoach, goto } from '../fixtures/auth'
 
 test.describe('Coach Login Flow', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
+    await goto(page, '/login')
   })
 
   test('should display login form', async ({ page }) => {
@@ -71,7 +71,7 @@ test.describe('Coach Auth Middleware', () => {
 
   for (const route of protectedRoutes) {
     test(`should redirect to login when accessing ${route} without auth`, async ({ page }) => {
-      await page.goto(route)
+      await goto(page, route)
       await expect(page).toHaveURL(/\/login/)
     })
   }

@@ -45,8 +45,8 @@ const themeOptions: { value: ThemeModeType; label: string; icon: string }[] = [
  * 個人資料頁面
  * 顯示會員資料、編輯功能、更多選項
  */
-import { updateProfileSchema } from '../schemas/profile.schema'
-import { useFormValidation } from '../composables/useFormValidation'
+import { updateProfileSchema } from '../../schemas/profile.schema'
+import { useFormValidation } from '../../composables/useFormValidation'
 
 definePageMeta({
   middleware: 'auth'

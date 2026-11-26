@@ -4,12 +4,12 @@
  * Lesson plan list, template view and creation page.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsCoach } from '../fixtures/auth'
+import { loginAsCoach, goto } from '../fixtures/auth'
 
 test.describe('Lessons List', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsCoach(page)
-    await page.goto('/lessons')
+    await goto(page, '/lessons')
   })
 
   test('should display lessons page with title and subtitle', async ({ page }) => {
@@ -51,7 +51,7 @@ test.describe('Create Lesson', () => {
   })
 
   test('should navigate to new lesson page from the add button', async ({ page }) => {
-    await page.goto('/lessons')
+    await goto(page, '/lessons')
     await page.locator('.add-button').click()
 
     await expect(page).toHaveURL(/\/lessons\/new/)
@@ -59,7 +59,7 @@ test.describe('Create Lesson', () => {
   })
 
   test('should display lesson creation form', async ({ page }) => {
-    await page.goto('/lessons/new')
+    await goto(page, '/lessons/new')
 
     await expect(page.getByPlaceholder('例如：上肢力量訓練')).toBeVisible()
     await expect(page.getByPlaceholder('其他注意事項...')).toBeVisible()
