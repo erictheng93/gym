@@ -22,6 +22,9 @@ const createJobTitleSchema = z.object({
 
 const updateJobTitleSchema = createJobTitleSchema.partial();
 
+// A job title's permissionsConfig is every holder's default permission set: admins only.
+const PERMISSION_ADMIN_ROLES = ['super_admin', 'admin'];
+
 const JOB_TITLE_SELECT = {
   id: jobTitles.id,
   createdAt: jobTitles.createdAt,
@@ -78,9 +81,12 @@ app.get('/:id', async (c) => {
 });
 
 // Create job title (admin/manager only)
-app.post('/', requireRole('admin', 'manager'), zValidator('json', createJobTitleSchema), async (c) => {
+app.post('/', requireRole('super_admin', 'admin', 'manager'), zValidator('json', createJobTitleSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
+  if (data.permissionsConfig !== undefined && !PERMISSION_ADMIN_ROLES.includes(c.get('user')!.role)) {
+    return c.json({ success: false, error: '權限不足' }, 403);
+  }
 
   const [newJobTitle] = await db.insert(jobTitles).values({
     ...data,
@@ -94,10 +100,13 @@ app.post('/', requireRole('admin', 'manager'), zValidator('json', createJobTitle
 });
 
 // Update job title
-app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobTitleSchema), async (c) => {
+app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('json', updateJobTitleSchema), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
   const data = c.req.valid('json');
+  if (data.permissionsConfig !== undefined && !PERMISSION_ADMIN_ROLES.includes(c.get('user')!.role)) {
+    return c.json({ success: false, error: '權限不足' }, 403);
+  }
 
   const [updated] = await db
     .update(jobTitles)
@@ -116,7 +125,7 @@ app.patch('/:id', requireRole('admin', 'manager'), zValidator('json', updateJobT
 });
 
 // Delete job title
-app.delete('/:id', requireRole('admin'), async (c) => {
+app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
   const id = c.req.param('id');
   const tenantId = c.get('tenantId')!;
 
