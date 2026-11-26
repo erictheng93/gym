@@ -4,12 +4,12 @@
  * pause request, so the seeded contract stays ACTIVE for other specs.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Contracts', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsMember(page)
-    await page.goto('/contracts')
+    await goto(page, '/contracts')
   })
 
   test('should display contracts page heading', async ({ page }) => {

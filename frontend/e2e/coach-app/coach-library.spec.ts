@@ -4,12 +4,12 @@
  * Teaching materials library page, filters and creation page.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsCoach } from '../fixtures/auth'
+import { loginAsCoach, goto } from '../fixtures/auth'
 
 test.describe('Library Page', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsCoach(page)
-    await page.goto('/library')
+    await goto(page, '/library')
   })
 
   test('should display library page with title and subtitle', async ({ page }) => {
@@ -65,7 +65,7 @@ test.describe('Create Material', () => {
   })
 
   test('should navigate to new material page from the add button', async ({ page }) => {
-    await page.goto('/library')
+    await goto(page, '/library')
     await page.locator('.add-button').click()
 
     await expect(page).toHaveURL(/\/library\/new/)
@@ -73,7 +73,7 @@ test.describe('Create Material', () => {
   })
 
   test('should display material creation form', async ({ page }) => {
-    await page.goto('/library/new')
+    await goto(page, '/library/new')
 
     await expect(page.getByPlaceholder('例如：槓鈴深蹲')).toBeVisible()
     await expect(page.getByPlaceholder('動作簡介...')).toBeVisible()

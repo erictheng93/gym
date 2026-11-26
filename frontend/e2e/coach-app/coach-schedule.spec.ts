@@ -4,12 +4,12 @@
  * Weekly schedule display and week navigation.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsCoach } from '../fixtures/auth'
+import { loginAsCoach, goto } from '../fixtures/auth'
 
 test.describe('Schedule Page', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsCoach(page)
-    await page.goto('/schedule')
+    await goto(page, '/schedule')
   })
 
   test('should display schedule page with title', async ({ page }) => {
@@ -46,7 +46,7 @@ test.describe('Schedule Page', () => {
 test.describe('Week Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsCoach(page)
-    await page.goto('/schedule')
+    await goto(page, '/schedule')
   })
 
   test('should navigate to previous week', async ({ page }) => {

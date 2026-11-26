@@ -3,7 +3,7 @@
  * Seed data has no issues for member1, so the empty state is asserted.
  */
 import { test, expect } from '@playwright/test'
-import { loginAsMember } from '../fixtures/auth'
+import { loginAsMember, goto } from '../fixtures/auth'
 
 test.describe('Member Issue Reports', () => {
   test.beforeEach(async ({ page }) => {
@@ -12,7 +12,7 @@ test.describe('Member Issue Reports', () => {
 
   test.describe('Issues List Page', () => {
     test.beforeEach(async ({ page }) => {
-      await page.goto('/profile/issues')
+      await goto(page, '/profile/issues')
     })
 
     test('should display issues page with tabs and empty state', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('Member Issue Reports', () => {
 
   test.describe('New Issue Page', () => {
     test('should display the new issue form', async ({ page }) => {
-      await page.goto('/profile/issues/new')
+      await goto(page, '/profile/issues/new')
 
       await expect(page.getByRole('heading', { level: 1, name: '提交問題' })).toBeVisible()
       await expect(page.getByLabel('標題')).toBeVisible()

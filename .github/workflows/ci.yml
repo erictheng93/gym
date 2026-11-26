@@ -89,7 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [admin-web, member-app, coach-app]
+        app: [admin-web, coach-app]
     services:
       postgres:
         image: postgis/postgis:17-3.4
