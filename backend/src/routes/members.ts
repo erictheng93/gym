@@ -295,12 +295,8 @@ app.get('/:id', async (c) => {
       .orderBy(desc(contracts.createdAt)),
   ]);
 
-  if (!member) {
+  if (!member || !branchIds.includes(member.branchId!)) {
     return c.json({ success: false, error: '會員不存在' }, 404);
-  }
-
-  if (!branchIds.includes(member.branchId!)) {
-    return c.json({ success: false, error: '無權限存取此會員' }, 403);
   }
 
   return c.json({
@@ -366,16 +362,7 @@ app.patch('/:id', zValidator('json', updateMemberSchema), async (c) => {
     .returning(MEMBER_RETURNING);
 
   if (!updatedMember) {
-    const [existingMember] = await db
-      .select(MEMBER_ID_SELECT)
-      .from(members)
-      .where(eq(members.id, id))
-      .limit(1);
-
-    if (!existingMember) {
-      return c.json({ success: false, error: '會員不存在' }, 404);
-    }
-    return c.json({ success: false, error: '無權限修改此會員' }, 403);
+    return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
   return c.json({ success: true, data: updatedMember });
@@ -398,16 +385,7 @@ app.delete('/:id', async (c) => {
     .returning(MEMBER_ID_SELECT);
 
   if (!updatedMember) {
-    const [existingMember] = await db
-      .select(MEMBER_ID_SELECT)
-      .from(members)
-      .where(eq(members.id, id))
-      .limit(1);
-
-    if (!existingMember) {
-      return c.json({ success: false, error: '會員不存在' }, 404);
-    }
-    return c.json({ success: false, error: '無權限刪除此會員' }, 403);
+    return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
   return c.json({ success: true, message: '會員已封存' });
@@ -433,12 +411,8 @@ app.get('/:id/contracts', async (c) => {
       .orderBy(desc(contracts.createdAt)),
   ]);
 
-  if (!member) {
+  if (!member || !branchIds.includes(member.branchId!)) {
     return c.json({ success: false, error: '會員不存在' }, 404);
-  }
-
-  if (!branchIds.includes(member.branchId!)) {
-    return c.json({ success: false, error: '無權限存取此會員' }, 403);
   }
 
   return c.json({

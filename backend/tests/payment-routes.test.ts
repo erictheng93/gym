@@ -320,7 +320,7 @@ describe('Payment Routes', () => {
       expect(json.error).toBe('付款紀錄不存在');
     });
 
-    it('分店不在租戶內應該返回 403', async () => {
+    it('分店不在租戶內應該返回 404（與不存在無法區分）', async () => {
       dbResults.push([{
         payment: { id: PAYMENT_ID, branchId: BRANCH_ID },
         member: null,
@@ -331,8 +331,8 @@ describe('Payment Routes', () => {
       const res = await app.request(`/${PAYMENT_ID}`, { method: 'GET' });
       const json = await res.json() as any;
 
-      expect(res.status).toBe(403);
-      expect(json.error).toBe('無權限存取此付款紀錄');
+      expect(res.status).toBe(404);
+      expect(json.error).toBe('付款紀錄不存在');
     });
   });
 

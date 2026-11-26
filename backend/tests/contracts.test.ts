@@ -624,35 +624,35 @@ describe('Contracts API', () => {
       }
     });
 
-    it('should return 403 when getting a contract from another tenant', async () => {
+    it('should return 404 when getting a contract from another tenant', async () => {
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}`, {
         method: 'GET',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when updating a contract from another tenant', async () => {
+    it('should return 404 when updating a contract from another tenant', async () => {
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}`, {
         method: 'PATCH',
         token: authToken,
         body: JSON.stringify({ notes: 'Hijacked' }),
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when activating a contract from another tenant', async () => {
+    it('should return 404 when activating a contract from another tenant', async () => {
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}/activate`, {
         method: 'POST',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when pausing a contract from another tenant', async () => {
+    it('should return 404 when pausing a contract from another tenant', async () => {
       // A valid range, so the request reaches the tenant check
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}/pause`, {
         method: 'POST',
@@ -660,16 +660,16 @@ describe('Contracts API', () => {
         body: JSON.stringify({ startDate: '2026-12-01', endDate: '2026-12-08' }),
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
-    it('should return 403 when resuming a contract from another tenant', async () => {
+    it('should return 404 when resuming a contract from another tenant', async () => {
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}/resume`, {
         method: 'POST',
         token: authToken,
       });
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
   });
 

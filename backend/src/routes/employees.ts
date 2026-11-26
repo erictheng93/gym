@@ -97,10 +97,6 @@ const EMPLOYEE_ATTENDANCE_SELECT = {
   branchId: attendances.branchId,
 };
 
-const EMPLOYEE_ID_SELECT = {
-  id: employees.id,
-};
-
 const EMPLOYEE_RESIGNED_RETURNING = {
   id: employees.id,
   userId: employees.userId,
@@ -170,12 +166,8 @@ app.get('/:id', async (c) => {
       .catch(() => []),
   ]);
 
-  if (!employee) {
+  if (!employee || !employee.employee.branchId || !branchIds.includes(employee.employee.branchId)) {
     return c.json({ success: false, error: '員工不存在' }, 404);
-  }
-
-  if (!employee.employee.branchId || !branchIds.includes(employee.employee.branchId)) {
-    return c.json({ success: false, error: '無權限存取此員工' }, 403);
   }
 
   return c.json({
@@ -255,16 +247,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     .returning(EMPLOYEE_RETURNING);
 
   if (!updatedEmployee) {
-    const [existingEmployee] = await db
-      .select(EMPLOYEE_ID_SELECT)
-      .from(employees)
-      .where(eq(employees.id, id))
-      .limit(1);
-
-    if (!existingEmployee) {
-      return c.json({ success: false, error: '員工不存在' }, 404);
-    }
-    return c.json({ success: false, error: '無權限修改此員工' }, 403);
+    return c.json({ success: false, error: '員工不存在' }, 404);
   }
 
   return c.json({ success: true, data: updatedEmployee });
@@ -290,16 +273,7 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
     .returning(EMPLOYEE_RESIGNED_RETURNING);
 
   if (!resignedEmployee) {
-    const [existingEmployee] = await db
-      .select(EMPLOYEE_ID_SELECT)
-      .from(employees)
-      .where(eq(employees.id, id))
-      .limit(1);
-
-    if (!existingEmployee) {
-      return c.json({ success: false, error: '員工不存在' }, 404);
-    }
-    return c.json({ success: false, error: '無權限刪除此員工' }, 403);
+    return c.json({ success: false, error: '員工不存在' }, 404);
   }
 
   if (resignedEmployee.userId) {

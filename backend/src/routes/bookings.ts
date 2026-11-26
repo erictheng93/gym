@@ -247,12 +247,8 @@ app.get('/:id', async (c) => {
     getTenantBranchIds(tenantId),
   ]);
 
-  if (!booking) {
+  if (!booking || !branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '預約不存在' }, 404);
-  }
-
-  if (!branchIds.includes(booking.session.branchId)) {
-    return c.json({ success: false, error: '無權限存取此預約' }, 403);
   }
 
   return c.json({
@@ -299,12 +295,8 @@ app.post('/', zValidator('json', createBookingSchema), async (c) => {
         .limit(1),
     ]);
 
-    if (!session) {
+    if (!session || !branchIds.includes(session.branchId)) {
       return c.json({ success: false, error: '課程場次不存在' }, 404);
-    }
-
-    if (!branchIds.includes(session.branchId)) {
-      return c.json({ success: false, error: '無權限預約此課程' }, 403);
     }
 
     if (session.sessionStatus !== 'SCHEDULED') {
@@ -374,12 +366,8 @@ app.post('/:id/cancel', zValidator('json', cancelBookingSchema), async (c) => {
     getTenantBranchIds(tenantId),
   ]);
 
-  if (!booking) {
+  if (!booking || !booking.session.branchId || !branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '預約不存在' }, 404);
-  }
-
-  if (!booking.session.branchId || !branchIds.includes(booking.session.branchId)) {
-    return c.json({ success: false, error: '無權限取消此預約' }, 403);
   }
 
   if (['CANCELLED', 'ATTENDED', 'NO_SHOW'].includes(booking.booking.bookingStatus ?? '')) {
@@ -470,12 +458,8 @@ app.post('/:id/attend', async (c) => {
     getTenantBranchIds(tenantId),
   ]);
 
-  if (!booking) {
+  if (!booking || !booking.session.branchId || !branchIds.includes(booking.session.branchId)) {
     return c.json({ success: false, error: '預約不存在' }, 404);
-  }
-
-  if (!booking.session.branchId || !branchIds.includes(booking.session.branchId)) {
-    return c.json({ success: false, error: '無權限操作此預約' }, 403);
   }
 
   if (booking.booking.bookingStatus !== 'CONFIRMED') {

@@ -347,9 +347,10 @@ app.get('/:id', async (c) => {
     return c.json({ success: false, error: '付款紀錄不存在' }, 404);
   }
 
+  // Another tenant's payment is reported exactly like a missing one (no 403 oracle)
   const branchIds = await getTenantBranchIds(tenantId);
   if (!payment.payment.branchId || !branchIds.includes(payment.payment.branchId)) {
-    return c.json({ success: false, error: '無權限存取此付款紀錄' }, 403);
+    return c.json({ success: false, error: '付款紀錄不存在' }, 404);
   }
 
   return c.json({

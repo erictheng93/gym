@@ -66,10 +66,6 @@ const COUNT_SELECT = {
   count: sql<number>`count(*)`,
 };
 
-const BRANCH_ID_SELECT = {
-  id: branches.id,
-};
-
 const BRANCH_DELETE_CHECK_SELECT = {
   id: branches.id,
   tenantId: branches.tenantId,
@@ -130,12 +126,8 @@ app.get('/:id', async (c) => {
     .where(eq(branches.id, id))
     .limit(1);
 
-  if (!branch) {
+  if (!branch || branch.tenantId !== tenantId) {
     return c.json({ success: false, error: '分店不存在' }, 404);
-  }
-
-  if (branch.tenantId !== tenantId) {
-    return c.json({ success: false, error: '無權限存取此分店' }, 403);
   }
 
   const [branchEmployees, [memberCount]] = await Promise.all([
@@ -199,16 +191,7 @@ app.patch('/:id', requireRole('super_admin', 'admin', 'manager'), zValidator('js
     .returning(BRANCH_RETURNING);
 
   if (!updatedBranch) {
-    const [existing] = await db
-      .select(BRANCH_ID_SELECT)
-      .from(branches)
-      .where(eq(branches.id, id))
-      .limit(1);
-
-    if (!existing) {
-      return c.json({ success: false, error: '分店不存在' }, 404);
-    }
-    return c.json({ success: false, error: '無權限修改此分店' }, 403);
+    return c.json({ success: false, error: '分店不存在' }, 404);
   }
 
   invalidateTenantBranchesCache(tenantId);
@@ -232,12 +215,8 @@ app.delete('/:id', requireRole('super_admin', 'admin'), async (c) => {
       .where(eq(employees.branchId, id)),
   ]);
 
-  if (!branch) {
+  if (!branch || branch.tenantId !== tenantId) {
     return c.json({ success: false, error: '分店不存在' }, 404);
-  }
-
-  if (branch.tenantId !== tenantId) {
-    return c.json({ success: false, error: '無權限刪除此分店' }, 403);
   }
 
   if (branch.type === 'HEADQUARTER') {

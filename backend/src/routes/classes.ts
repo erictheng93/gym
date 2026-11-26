@@ -105,10 +105,6 @@ const CLASS_SCHEDULE_LIST_SELECT = {
   status: classSchedules.status,
 };
 
-const CLASS_ID_SELECT = {
-  id: classes.id,
-};
-
 const CLASS_BRANCH_ID_SELECT = {
   id: classes.id,
   branchId: classes.branchId,
@@ -186,12 +182,8 @@ app.get('/:id', async (c) => {
       .orderBy(classSchedules.dayOfWeek, classSchedules.startTime),
   ]);
 
-  if (!classItem) {
+  if (!classItem || !branchIds.includes(classItem.class.branchId)) {
     return c.json({ success: false, error: '課程不存在' }, 404);
-  }
-
-  if (!branchIds.includes(classItem.class.branchId)) {
-    return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
 
   return c.json({
@@ -262,10 +254,6 @@ app.patch('/:id', zValidator('json', updateClassSchema), async (c) => {
     .returning(CLASS_RETURNING);
 
   if (!updatedClass) {
-    const [exists] = await db.select(CLASS_ID_SELECT).from(classes).where(eq(classes.id, id)).limit(1);
-    if (exists) {
-      return c.json({ success: false, error: '無權限修改此課程' }, 403);
-    }
     return c.json({ success: false, error: '課程不存在' }, 404);
   }
 
@@ -300,12 +288,8 @@ app.get('/:id/sessions', async (c) => {
       .orderBy(classSessions.sessionDate, classSessions.startTime),
   ]);
 
-  if (!classItem) {
+  if (!classItem || !branchIds.includes(classItem.branchId)) {
     return c.json({ success: false, error: '課程不存在' }, 404);
-  }
-
-  if (!branchIds.includes(classItem.branchId)) {
-    return c.json({ success: false, error: '無權限存取此課程' }, 403);
   }
 
   const data = new Array(sessions.length);
