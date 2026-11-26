@@ -1,6 +1,8 @@
 // Note: Run `pnpm add puppeteer` to install PDF generation dependencies
 import { db, contracts, members, membershipPlans, branches, payments } from '../db/index.js';
 import { and, eq } from 'drizzle-orm';
+import { escapeHtml } from '../utils/html.js';
+export { escapeHtml };
 
 // Browser instance for PDF generation (puppeteer)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -10,22 +12,6 @@ type Browser = any;
 // PDF GENERATION SERVICE
 // =============================================================================
 // Generates PDFs for contracts, invoices, and receipts using Puppeteer
-
-// -----------------------------------------------------------------------------
-// HTML escaping
-// -----------------------------------------------------------------------------
-
-/**
- * Escape a DB-sourced value before interpolating it into an HTML template
- */
-export function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 // -----------------------------------------------------------------------------
 // Types

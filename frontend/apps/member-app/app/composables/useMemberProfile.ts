@@ -23,19 +23,18 @@ export interface MemberProfile {
 }
 
 /**
- * Editable fields, in the form's snake_case. No phone: a phone change needs an
- * SMS code (useMemberAuth().sendPhoneVerification + changePhone); PUT refuses it.
+ * Editable fields, in the form's snake_case. No phone or email: they are login
+ * identifiers and need a code (useMemberAuth().sendPhoneVerification + changePhone,
+ * sendEmailVerification + changeEmail); PUT refuses them.
  */
 export interface MemberProfileUpdate {
   full_name?: string
-  email?: string
   emergency_contact?: string
   emergency_phone?: string
 }
 
 const UPDATE_FIELD_MAP: Record<keyof MemberProfileUpdate, string> = {
   full_name: 'fullName',
-  email: 'email',
   emergency_contact: 'emergencyContact',
   emergency_phone: 'emergencyPhone',
 }

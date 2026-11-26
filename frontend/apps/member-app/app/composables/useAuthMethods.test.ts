@@ -119,6 +119,67 @@ describe('useAuthMethods', () => {
     })
   })
 
+  describe('password login and forgot-password tenant scope', () => {
+    it('sends the deployment tenantSlug with login and forgot-password when configured', async () => {
+      runtimePublic.tenantSlug = 'my-gym'
+      mockFetch.mockResolvedValueOnce({ success: false, error: 'x' })
+      mockFetch.mockResolvedValueOnce({ success: true, message: 'ok' })
+
+      const { login, forgotPassword } = useAuthMethods()
+      await login('test@example.com', 'password123')
+      await forgotPassword('test@example.com')
+
+      expect(mockFetch).toHaveBeenNthCalledWith(1, 'http://localhost:8056/api/member/auth/login', {
+        method: 'POST',
+        body: { email: 'test@example.com', account: 'test@example.com', password: 'password123', tenantSlug: 'my-gym' },
+      })
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://localhost:8056/api/member/auth/forgot-password', {
+        method: 'POST',
+        body: { email: 'test@example.com', tenantSlug: 'my-gym' },
+      })
+    })
+  })
+
+  describe('sendEmailVerification and changeEmail', () => {
+    it('posts the new email, then email + code, and refreshes the member', async () => {
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+      mockFetch.mockResolvedValueOnce({ success: true, message: '驗證碼已發送', data: { otp: '123456' } })
+      mockFetch.mockResolvedValueOnce({ success: true, message: 'Email 已更新' })
+
+      const { sendEmailVerification, changeEmail } = useAuthMethods()
+      const sent = await sendEmailVerification('new@example.com')
+      const changed = await changeEmail('new@example.com', '123456')
+
+      expect(mockFetch).toHaveBeenNthCalledWith(1, 'http://localhost:8056/api/member/me/email/otp', {
+        method: 'POST',
+        headers: { 'X-Member-Token': 'valid-token' },
+        body: { email: 'new@example.com' },
+      })
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://localhost:8056/api/member/me/email', {
+        method: 'POST',
+        headers: { 'X-Member-Token': 'valid-token' },
+        body: { email: 'new@example.com', otpCode: '123456' },
+      })
+      expect(sent).toMatchObject({ success: true, otp: '123456' })
+      expect(changed).toEqual({ success: true, message: 'Email 已更新' })
+      expect(mockFetchMember).toHaveBeenCalledWith('valid-token')
+    })
+
+    it('returns the backend code (e.g. EMAIL_TAKEN) and needs a session', async () => {
+      expect((await useAuthMethods().changeEmail('a@b.co', '123456')).code).toBe('UNAUTHORIZED')
+      expect((await useAuthMethods().sendEmailVerification('a@b.co')).code).toBe('UNAUTHORIZED')
+      expect(mockFetch).not.toHaveBeenCalled()
+
+      cookieStore.set('member_access_token', { value: 'valid-token' })
+      mockFetch.mockRejectedValueOnce(Object.assign(new Error('[POST] 409'), {
+        data: { success: false, error: '此 Email 已被其他會員使用', code: 'EMAIL_TAKEN' },
+      }))
+      const result = await useAuthMethods().changeEmail('a@b.co', '123456')
+      expect(result).toMatchObject({ success: false, code: 'EMAIL_TAKEN' })
+      expect(mockFetchMember).not.toHaveBeenCalled()
+    })
+  })
+
   describe('sendOtp', () => {
     it('should send OTP successfully', async () => {
       mockFetch.mockResolvedValueOnce({

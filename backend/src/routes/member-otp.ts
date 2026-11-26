@@ -12,6 +12,7 @@ import {
   consumeOtp,
   deliverPhoneOtp,
   otpDevMode,
+  otpEmailHtml,
   phoneOtpLogError,
   OTP_TTL_MS,
   SMS_UNAVAILABLE_RESPONSE,
@@ -254,18 +255,7 @@ app.post(
       sendSuccess = await emailService.send({
         to: identifier,
         subject: '您的登入驗證碼',
-        html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>登入驗證碼</h2>
-            <p>親愛的 ${singleMatch ? member.fullName : '會員'}，</p>
-            <p>您的驗證碼是：</p>
-            <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #333; background: #f5f5f5; padding: 16px; text-align: center; border-radius: 8px;">
-              ${code}
-            </p>
-            <p>驗證碼將在 5 分鐘後失效。</p>
-            <p>如果您沒有請求此驗證碼，請忽略此郵件。</p>
-          </div>
-        `,
+        html: otpEmailHtml({ title: '登入驗證碼', name: singleMatch ? member.fullName : '會員', code }),
       });
       if (sendSuccess) sendError = null;
     } else {

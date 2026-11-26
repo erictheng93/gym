@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { hash, verify } from '@node-rs/argon2';
-import { db, members, branches, memberCredentials } from '../db/index.js';
-import { eq, and, gt, or, sql } from 'drizzle-orm';
+import { db, members, branches, memberCredentials, tenants } from '../db/index.js';
+import { eq, and, gt, or, sql, asc } from 'drizzle-orm';
 import { rateLimiter, limitMax, memberAuthMiddleware, requireMember, getClientIp } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import crypto from 'crypto';
 import { memberJwtService, getRecoveryTokenHash } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
+import { escapeHtml } from '../utils/html.js';
 
 // =============================================================================
 // MEMBER PASSWORD AUTH ROUTES
@@ -16,6 +17,20 @@ import { emailService } from '../services/email.js';
 // Password-based authentication for member-app
 // Endpoints: /login, /set-password, /change-password, /has-password,
 //            /forgot-password, /reset-password
+
+// Tenant scope: one email/phone can belong to members of several gyms (tenants).
+// The member-app is deployed per gym and sends that gym's `tenantSlug`; login
+// and forgot-password then only look at that tenant. Without it, an identifier
+// that matches several members is never resolved by guessing:
+//   - login answers only after a password check: exactly one matching account
+//     whose password verifies logs in, more than one is 409 MULTIPLE_ACCOUNTS,
+//     none is the same generic 401 as an unknown account (and no failed-attempt
+//     counter moves, so guesses against one gym cannot lock another gym's member);
+//   - forgot-password mails a reset link for each match to that mailbox.
+// reset-password needs no scope: its token names the member.
+
+/** More rows than this are never needed: any count above 1 is "ambiguous". */
+const LOGIN_LOOKUP_LIMIT = 10;
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
@@ -99,6 +114,7 @@ const loginSchema = z.object({
   account: z.string().optional(),
   phone: z.string().optional(),
   password: z.string().min(8, '密碼至少 8 個字元'),
+  tenantSlug: z.string().trim().min(1).max(100).optional(),
 }).superRefine((data, ctx) => {
   const identifier = (data.account || data.phone || data.email || '').trim();
   if (!identifier) {
@@ -153,6 +169,7 @@ const changePasswordSchema = z.object({
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('請輸入有效的 Email'),
+  tenantSlug: z.string().trim().min(1).max(100).optional(),
 });
 
 const resetPasswordSchema = z.object({
@@ -178,7 +195,7 @@ app.post(
   loginRateLimiter,
   zValidator('json', loginSchema),
   async (c) => {
-    const { email, account, phone, password } = c.req.valid('json');
+    const { email, account, phone, password, tenantSlug } = c.req.valid('json');
     const identifier = (account || phone || email || '').trim();
 
     const isEmail = identifier.includes('@');
@@ -188,7 +205,7 @@ app.post(
 
     let memberCondition;
     if (isEmail) {
-      memberCondition = eq(members.email, identifier);
+      memberCondition = eq(sql`lower(${members.email})`, identifier.toLowerCase());
     } else if (isPhone) {
       memberCondition = or(
         eq(members.phone, identifier),
@@ -203,21 +220,51 @@ app.post(
       );
     }
 
-    // Find member, credentials, and branch info in a single joined query
-    const [result] = await db
+    // Find members, credentials, and branch info in a single joined query,
+    // within the gym the app is deployed for when it says which
+    const base = db
       .select(MEMBER_LOGIN_SELECT)
       .from(members)
       .leftJoin(memberCredentials, eq(members.id, memberCredentials.memberId))
-      .leftJoin(branches, eq(members.branchId, branches.id))
-      .where(memberCondition)
-      .limit(1);
+      .leftJoin(branches, eq(members.branchId, branches.id));
+    const rows = await (tenantSlug
+      ? base
+        .innerJoin(tenants, eq(tenants.id, members.tenantId))
+        .where(and(memberCondition, eq(tenants.slug, tenantSlug)))
+      : base.where(memberCondition))
+      .orderBy(asc(members.createdAt), asc(members.id))
+      .limit(LOGIN_LOOKUP_LIMIT);
 
-    if (!result || !result.member) {
-      return c.json({
-        success: false,
-        error: '帳號或密碼錯誤',
-        code: 'INVALID_CREDENTIALS',
-      }, 401);
+    const invalidCredentials = () => c.json({
+      success: false,
+      error: '帳號或密碼錯誤',
+      code: 'INVALID_CREDENTIALS',
+    }, 401);
+
+    if (rows.length === 0) return invalidCredentials();
+
+    let result: (typeof rows)[number];
+
+    if (rows.length > 1) {
+      // Ambiguous identifier: only a correct password may reveal anything
+      const verified: typeof rows = [];
+      for (const row of rows) {
+        const cred = row.credentials;
+        if (!cred || !cred.passwordHash || row.member.status === 'BANNED') continue;
+        if (cred.lockedUntil && new Date(cred.lockedUntil) > new Date()) continue;
+        if (await verify(cred.passwordHash, password, ARGON2_OPTIONS)) verified.push(row);
+      }
+      if (verified.length === 0) return invalidCredentials();
+      if (verified.length > 1) {
+        return c.json({
+          success: false,
+          error: '此帳號在多個場館都有會員資料，請使用您所屬場館的會員 App 登入，或洽櫃台協助',
+          code: 'MULTIPLE_ACCOUNTS',
+        }, 409);
+      }
+      result = verified[0];
+    } else {
+      result = rows[0];
     }
 
     const { member, credentials, branch } = result;
@@ -230,7 +277,7 @@ app.post(
       }, 403);
     }
 
-    if (!credentials) {
+    if (!credentials || !credentials.passwordHash) {
       return c.json({
         success: false,
         error: '尚未設定密碼，請使用 OTP 登入',
@@ -238,56 +285,58 @@ app.post(
       }, 400);
     }
 
-    // Check lockout
-    if (credentials.lockedUntil && new Date(credentials.lockedUntil) > new Date()) {
-      const remainingMs = new Date(credentials.lockedUntil).getTime() - Date.now();
-      const remainingMin = Math.ceil(remainingMs / 60000);
-      return c.json({
-        success: false,
-        error: `帳號已鎖定，請 ${remainingMin} 分鐘後再試`,
-        code: 'ACCOUNT_LOCKED',
-        lockedUntil: credentials.lockedUntil,
-      }, 403);
-    }
+    if (rows.length === 1) {
+      // Check lockout
+      if (credentials.lockedUntil && new Date(credentials.lockedUntil) > new Date()) {
+        const remainingMs = new Date(credentials.lockedUntil).getTime() - Date.now();
+        const remainingMin = Math.ceil(remainingMs / 60000);
+        return c.json({
+          success: false,
+          error: `帳號已鎖定，請 ${remainingMin} 分鐘後再試`,
+          code: 'ACCOUNT_LOCKED',
+          lockedUntil: credentials.lockedUntil,
+        }, 403);
+      }
 
-    // Verify password
-    const isValid = await verify(credentials.passwordHash, password, ARGON2_OPTIONS);
+      // Verify password
+      const isValid = await verify(credentials.passwordHash, password, ARGON2_OPTIONS);
 
-    if (!isValid) {
-      const newFailedAttempts = (credentials.failedAttempts || 0) + 1;
+      if (!isValid) {
+        const newFailedAttempts = (credentials.failedAttempts || 0) + 1;
 
-      // Update failed attempts
-      if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+        // Update failed attempts
+        if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+          await db
+            .update(memberCredentials)
+            .set({
+              failedAttempts: newFailedAttempts,
+              lockedUntil: new Date(Date.now() + LOCKOUT_DURATION_MS),
+              updatedAt: new Date(),
+            })
+            .where(eq(memberCredentials.id, credentials.id));
+
+          return c.json({
+            success: false,
+            error: '登入失敗次數過多，帳號已鎖定 30 分鐘',
+            code: 'ACCOUNT_LOCKED',
+          }, 403);
+        }
+
         await db
           .update(memberCredentials)
           .set({
             failedAttempts: newFailedAttempts,
-            lockedUntil: new Date(Date.now() + LOCKOUT_DURATION_MS),
             updatedAt: new Date(),
           })
           .where(eq(memberCredentials.id, credentials.id));
 
         return c.json({
           success: false,
-          error: '登入失敗次數過多，帳號已鎖定 30 分鐘',
-          code: 'ACCOUNT_LOCKED',
-        }, 403);
+          error: 'Email 或密碼錯誤',
+          code: 'INVALID_CREDENTIALS',
+          attemptsRemaining: MAX_FAILED_ATTEMPTS - newFailedAttempts,
+        }, 401);
       }
-
-      await db
-        .update(memberCredentials)
-        .set({
-          failedAttempts: newFailedAttempts,
-          updatedAt: new Date(),
-        })
-        .where(eq(memberCredentials.id, credentials.id));
-
-      return c.json({
-        success: false,
-        error: 'Email 或密碼錯誤',
-        code: 'INVALID_CREDENTIALS',
-        attemptsRemaining: MAX_FAILED_ATTEMPTS - newFailedAttempts,
-      }, 401);
     }
 
     // Reset failed attempts on successful login
@@ -466,17 +515,25 @@ app.post(
   passwordResetRateLimiter,
   zValidator('json', forgotPasswordSchema),
   async (c) => {
-    const { email } = c.req.valid('json');
+    const { email, tenantSlug } = c.req.valid('json');
 
-    // Find member (always return success to prevent enumeration)
-    const [member] = await db
-      .select(MEMBER_FORGOT_PW_SELECT)
-      .from(members)
-      .where(eq(members.email, email))
-      .limit(1);
+    // Find members (always return success to prevent enumeration). A mailbox
+    // shared by several gyms gets one link per account: only the mailbox owner
+    // sees them, so nothing is guessed and nothing is revealed.
+    const forgotBase = db.select(MEMBER_FORGOT_PW_SELECT).from(members);
+    const emailMatch = eq(sql`lower(${members.email})`, email.toLowerCase());
+    const matches = await (tenantSlug
+      ? forgotBase
+        .innerJoin(tenants, eq(tenants.id, members.tenantId))
+        .where(and(emailMatch, eq(tenants.slug, tenantSlug)))
+      : forgotBase.where(emailMatch))
+      .orderBy(asc(members.createdAt), asc(members.id))
+      .limit(LOGIN_LOOKUP_LIMIT);
 
-    // Only send if member exists and not banned
-    if (member && member.status !== 'BANNED') {
+    for (const member of matches) {
+      // Only send if the member is not banned
+      if (member.status === 'BANNED') continue;
+
       // Generate recovery token
       const { token, hash: tokenHash } = memberJwtService.generateRecoveryToken(member.id);
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
@@ -516,10 +573,10 @@ app.post(
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>密碼重設</h2>
-            <p>親愛的 ${member.fullName}，</p>
+            <p>親愛的 ${escapeHtml(member.fullName)}，</p>
             <p>我們收到了您的密碼重設請求。請點擊下方按鈕重設密碼：</p>
             <div style="text-align: center; margin: 24px 0;">
-              <a href="${resetUrl}" style="display: inline-block; background: #333; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
+              <a href="${escapeHtml(resetUrl)}" style="display: inline-block; background: #333; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
                 重設密碼
               </a>
             </div>

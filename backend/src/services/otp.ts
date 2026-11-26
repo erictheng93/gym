@@ -2,6 +2,7 @@ import { randomInt, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, gt, sql, type SQL } from 'drizzle-orm';
 import { db, otpTokens } from '../db/index.js';
 import { smsService } from './sms.js';
+import { escapeHtml } from '../utils/html.js';
 
 // =============================================================================
 // OTP SERVICE
@@ -29,6 +30,32 @@ export function otpCodeMatches(expected: string, provided: string): boolean {
  */
 export function memberPhoneOtpIdentifier(memberId: string, phone: string): string {
   return `member:${memberId}:${phone}`;
+}
+
+/**
+ * otp_tokens identifier for an email-verification code issued to one member
+ * (email change). Bound to the member and the lowercased address, and apart
+ * from login tokens (whose identifier is the bare address).
+ */
+export function memberEmailOtpIdentifier(memberId: string, email: string): string {
+  return `member:${memberId}:email:${email.toLowerCase()}`;
+}
+
+/** HTML body of a one-time-code email; every interpolated value is escaped. */
+export function otpEmailHtml(options: { title: string; name: string; code: string; intro?: string }): string {
+  const { title, name, code, intro = '您的驗證碼是：' } = options;
+  return `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>${escapeHtml(title)}</h2>
+            <p>親愛的 ${escapeHtml(name)}，</p>
+            <p>${escapeHtml(intro)}</p>
+            <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #333; background: #f5f5f5; padding: 16px; text-align: center; border-radius: 8px;">
+              ${escapeHtml(code)}
+            </p>
+            <p>驗證碼將在 5 分鐘後失效。</p>
+            <p>如果您沒有請求此驗證碼，請忽略此郵件。</p>
+          </div>
+        `;
 }
 
 export type OtpFailure =

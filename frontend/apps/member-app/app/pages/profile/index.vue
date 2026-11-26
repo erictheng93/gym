@@ -63,6 +63,8 @@ const isEditing = ref(false)
 const isSaving = ref(false)
 // 變更手機（需簡訊驗證，與一般編輯分開）
 const isChangingPhone = ref(false)
+// 變更 Email（需信箱驗證碼，與一般編輯分開）
+const isChangingEmail = ref(false)
 
 // Pull-to-refresh
 const isPulling = ref(false)
@@ -74,7 +76,6 @@ const PULL_THRESHOLD = 80
 // 編輯表單
 const editForm = reactive({
   full_name: '',
-  email: '',
   emergency_contact: '',
   emergency_phone: '',
 })
@@ -97,7 +98,6 @@ const loadMemberDetail = async () => {
 const startEdit = () => {
   if (memberDetail.value) {
     editForm.full_name = memberDetail.value.full_name || ''
-    editForm.email = memberDetail.value.email || ''
     editForm.emergency_contact = memberDetail.value.emergency_contact || ''
     editForm.emergency_phone = memberDetail.value.emergency_phone || ''
   }
@@ -116,7 +116,7 @@ const saveEdit = async () => {
   if (!member.value || !current) return
 
   const changed: MemberProfileUpdate = {}
-  for (const key of ['full_name', 'email', 'emergency_contact', 'emergency_phone'] as const) {
+  for (const key of ['full_name', 'emergency_contact', 'emergency_phone'] as const) {
     const value = editForm[key].trim()
     if (value && value !== (current[key] || '')) changed[key] = value
   }
@@ -154,7 +154,19 @@ const saveEdit = async () => {
 
 const startPhoneChange = () => {
   isEditing.value = false
+  isChangingEmail.value = false
   isChangingPhone.value = true
+}
+
+const startEmailChange = () => {
+  isEditing.value = false
+  isChangingPhone.value = false
+  isChangingEmail.value = true
+}
+
+const onEmailChanged = async () => {
+  isChangingEmail.value = false
+  await loadMemberDetail()
 }
 
 const onPhoneChanged = async () => {
@@ -328,7 +340,7 @@ onMounted(() => {
     <section class="section">
       <div class="section-header">
         <h2 class="section-title">個人資料</h2>
-        <button v-if="!isEditing && !isChangingPhone" class="edit-btn" @click="startEdit">
+        <button v-if="!isEditing && !isChangingPhone && !isChangingEmail" class="edit-btn" @click="startEdit">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -343,6 +355,14 @@ onMounted(() => {
         :current-phone="memberDetail?.phone ?? null"
         @changed="onPhoneChanged"
         @cancel="isChangingPhone = false"
+      />
+
+      <!-- Email change (mailbox verification) -->
+      <EmailChangeCard
+        v-else-if="isChangingEmail"
+        :current-email="memberDetail?.email ?? null"
+        @changed="onEmailChanged"
+        @cancel="isChangingEmail = false"
       />
 
       <!-- View Mode -->
@@ -368,7 +388,18 @@ onMounted(() => {
         </div>
         <div class="info-row">
           <span class="info-label">Email</span>
-          <span class="info-value email-value">{{ memberDetail?.email || '-' }}</span>
+          <span class="info-value phone-value">
+            <span class="email-value">{{ memberDetail?.email || '-' }}</span>
+            <button
+              v-if="memberDetail"
+              type="button"
+              class="change-pill"
+              aria-label="變更 Email"
+              @click="startEmailChange"
+            >
+              變更
+            </button>
+          </span>
         </div>
         <div class="info-row">
           <span class="info-label">性別</span>
@@ -401,16 +432,6 @@ onMounted(() => {
             v-model="editForm.full_name"
             type="text"
             placeholder="請輸入姓名"
-          >
-        </div>
-        <div class="input-group">
-          <label for="edit-email">Email</label>
-          <input
-            id="edit-email"
-            v-model="editForm.email"
-            type="email"
-            placeholder="example@email.com"
-            inputmode="email"
           >
         </div>
         <div class="input-group">
