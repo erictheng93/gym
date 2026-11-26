@@ -66,16 +66,17 @@ bunx playwright show-report
 
 ### 尚未接入 CI 的 project
 
-`member-app` 不在 matrix 中。在 CI 上試跑（剛 seed 的資料庫）時 50 個測試有 16 個失敗，原因是後端缺漏而非測試或 seed：
+`member-app` 不在 matrix 中。在 CI 上試跑（剛 seed 的資料庫、已等待 hydration、已修正 `/profile/*` 路由）時
+49 個測試有 11 個失敗，原因是後端缺漏而非測試或 seed：
 
 | 失敗的 spec | 後端回應 |
 |------|------|
-| `member-profile`（標頭、會員資料、統計卡、編輯）、`member-entry`（會員編號 `MEM001`、會員狀態「有效會員」） | `GET /api/member/profile` 404（profile 路由掛在 `/api/member/me` 與 `/api/member`，沒有 `/profile`） |
+| `member-profile`（標頭、會員資料、統計卡、編輯）、`member-entry`（會員編號 `MEM001`、會員狀態「有效會員」）、`member-notifications` 設定頁 | `GET /api/member/profile` 404（profile 路由掛在 `/api/member/me` 與 `/api/member`，沒有 `/profile`） |
 | `member-workouts` 空狀態 | `GET /api/member/workouts/stats` 500 |
 | `member-measurements` 空狀態 | `GET /api/member/measurements/stats` 404 |
-| `member-contracts` 暫停 modal（找不到「申請暫停」按鈕） | 合約卡片未顯示暫停操作，需再調查 |
-| `member-issues`、`member-notifications`（頁面 `<h1>` 未出現） | 需再調查；可能與 profile 404 連帶有關 |
-| （booking 相關請求） | `GET /api/member/classes/sessions`、`GET /api/member/bookings` 404 |
+| `member-contracts` 暫停 modal（合約卡片沒有「申請暫停」按鈕） | 待調查（可能也依賴 profile） |
+
+另外 `GET /api/member/classes/sessions`、`GET /api/member/bookings` 也回 404（目前的 booking spec 只檢查空狀態，所以仍通過）。
 
 修好上述端點後，在 matrix 加入 `member-app` 即可。
 
