@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq, or } from 'drizzle-orm';
 import app from '../src/app.js';
-import { db, payments } from '../src/db/index.js';
+import { db, payments, members, checkIns } from '../src/db/index.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -577,6 +577,30 @@ describe('Reports API', () => {
       expect(data.data).toHaveProperty('byMonth');
     });
 
+    it('counts members created inside a startDate/endDate window as newMembers (end day inclusive)', async () => {
+      const base = { branchId: TEST_BRANCH_ID, tenantId: TEST_TENANT_ID, status: 'ACTIVE' as const, joinDate: '2025-03-01' };
+      const inserted = await db.insert(members).values([
+        { ...base, fullName: 'Growth A', phone: '0911000001', memberCode: 'M-GROWTH-A', createdAt: new Date('2025-03-01T09:00:00+08:00') },
+        { ...base, fullName: 'Growth B', phone: '0911000002', memberCode: 'M-GROWTH-B', createdAt: new Date('2025-03-10T20:00:00+08:00') },
+        { ...base, fullName: 'Growth C', phone: '0911000003', memberCode: 'M-GROWTH-C', createdAt: new Date('2025-03-11T12:00:00+08:00') },
+      ]).returning({ id: members.id });
+
+      try {
+        const response = await authRequest(`/api/reports/member-growth?branchId=${TEST_BRANCH_ID}&startDate=2025-03-01&endDate=2025-03-10`, { method: 'GET', token });
+        expect(response.status).toBe(200);
+        expect((await response.json()).data.newMembers).toBe(2);
+
+        // Without a window newMembers is null (not a misleading 0)
+        const noWindow = await authRequest('/api/reports/member-growth', { method: 'GET', token });
+        expect((await noWindow.json()).data.newMembers).toBeNull();
+
+        const half = await authRequest('/api/reports/member-growth?startDate=2025-03-01', { method: 'GET', token });
+        expect(half.status).toBe(400);
+      } finally {
+        await db.delete(members).where(or(...inserted.map(m => eq(members.id, m.id))));
+      }
+    });
+
     it('should support months parameter', async () => {
       const response = await authRequest('/api/reports/member-growth?months=12', {
         method: 'GET',
@@ -629,6 +653,26 @@ describe('Reports API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       expect(data.data).toBeDefined();
+    });
+
+    it('uses a startDate/endDate window instead of days when given (end day inclusive)', async () => {
+      const base = { memberId: TEST_MEMBER_ID, branchId: TEST_BRANCH_ID };
+      const inserted = await db.insert(checkIns).values([
+        { ...base, checkInTime: new Date('2025-03-01T12:00:00+08:00') },
+        { ...base, checkInTime: new Date('2025-03-10T18:00:00+08:00') },
+        { ...base, checkInTime: new Date('2025-03-11T12:00:00+08:00') },
+      ]).returning({ id: checkIns.id });
+
+      try {
+        const response = await authRequest(`/api/reports/member-activity?branchId=${TEST_BRANCH_ID}&startDate=2025-03-01&endDate=2025-03-10`, { method: 'GET', token });
+        expect(response.status).toBe(200);
+        expect((await response.json()).data.totalCheckIns).toBe(2);
+
+        const bad = await authRequest('/api/reports/member-activity?startDate=2025-03-01&endDate=soon', { method: 'GET', token });
+        expect(bad.status).toBe(400);
+      } finally {
+        await db.delete(checkIns).where(or(...inserted.map(r => eq(checkIns.id, r.id))));
+      }
     });
 
     it('should support days parameter', async () => {

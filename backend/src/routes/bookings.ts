@@ -163,9 +163,15 @@ app.get('/', async (c) => {
   const memberId = c.req.query('memberId');
   const sessionId = c.req.query('sessionId');
   const status = c.req.query('status');
+  // Session day (YYYY-MM-DD)
+  const date = c.req.query('date');
   const page = Number(c.req.query('page')) || 1;
   const limit = Math.min(Number(c.req.query('limit')) || 20, 100);
   const offset = (page - 1) * limit;
+
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ success: false, error: '日期格式必須為 YYYY-MM-DD' }, 400);
+  }
 
   const branchIds = await getTenantBranchIds(tenantId);
 
@@ -189,6 +195,10 @@ app.get('/', async (c) => {
 
   if (status) {
     conditions.push(eq(bookings.bookingStatus, status as typeof BOOKING_STATUS[number]));
+  }
+
+  if (date) {
+    conditions.push(eq(classSessions.sessionDate, date));
   }
 
   const whereCondition = and(...conditions);

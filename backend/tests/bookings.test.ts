@@ -58,6 +58,33 @@ describe('Bookings API', () => {
       expect(data.success).toBe(true);
     });
 
+    it('should filter by session date', async () => {
+      const [session] = await db.select().from(classSessions).where(eq(classSessions.id, TEST_SESSION_ID)).limit(1);
+      const [booking] = await db.insert(bookings).values({
+        sessionId: TEST_SESSION_ID,
+        memberId: TEST_MEMBER_ID,
+        bookingStatus: 'CONFIRMED',
+      }).returning();
+
+      try {
+        const onDay = await authRequest(`/api/bookings?date=${session.sessionDate}`, { method: 'GET', token: authToken });
+        expect(onDay.status).toBe(200);
+        const onDayData = await onDay.json();
+        expect(onDayData.data.some((b: { id: string }) => b.id === booking.id)).toBe(true);
+        expect(onDayData.data.every((b: { session: { sessionDate: string } }) => b.session.sessionDate === session.sessionDate)).toBe(true);
+
+        const otherDay = await authRequest('/api/bookings?date=1999-01-01', { method: 'GET', token: authToken });
+        const otherDayData = await otherDay.json();
+        expect(otherDayData.data).toEqual([]);
+        expect(otherDayData.meta.total).toBe(0);
+
+        const bad = await authRequest('/api/bookings?date=tomorrow', { method: 'GET', token: authToken });
+        expect(bad.status).toBe(400);
+      } finally {
+        await db.delete(bookings).where(eq(bookings.id, booking.id));
+      }
+    });
+
     it('should filter by status', async () => {
       const response = await authRequest('/api/bookings?status=CONFIRMED', {
         method: 'GET',

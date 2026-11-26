@@ -6,209 +6,165 @@ const numberFormatter = new Intl.NumberFormat('zh-TW')
 <script setup lang="ts">
 import { MESSAGES, PAGES } from '~/constants'
 import { useReports } from '~/composables/useReports'
-import type { RevenueReport, MemberGrowthReport, ContractExpiryReport, MemberActivityReport } from '~/composables/useReports'
-import { exportRevenueReport, exportMemberGrowthReport, exportContractExpiryReport } from '~/utils/export'
-// GoogleSheetsExport 使用 Lazy 前缀自動懶加載（按需引入）
+import type { RevenueReport, MemberGrowthReport, ExpiringContract, MemberActivityReport, RevenueTrendPoint, ExportableReport, ExportFormat } from '~/composables/useReports'
+import { toLocalDateString } from '~/utils/date'
 
 const { branches, fetchBranches } = useBranches()
-const { getRevenueReport, getMemberGrowthReport, getContractExpiryReport, getMemberActivityReport } = useReports()
+const {
+  getRevenueReport,
+  getMemberGrowthReport,
+  getContractExpiryReport,
+  getMemberActivityReport,
+  getRevenueTrend,
+  downloadReport
+} = useReports()
+
+const EXPIRY_DAYS = 30
 
 const selectedBranch = ref('')
-const selectedPeriod = ref('month')
+const selectedPeriod = ref<'week' | 'month' | 'year'>('month')
 const loading = ref(true)
+const downloading = ref('')
 
-// Real report data - current period
+// Current period
 const revenueReport = ref<RevenueReport | null>(null)
 const memberGrowthReport = ref<MemberGrowthReport | null>(null)
-const contractExpiryReport = ref<ContractExpiryReport | null>(null)
+const expiringContracts = ref<ExpiringContract[] | null>(null)
 const memberActivityReport = ref<MemberActivityReport | null>(null)
+const revenueTrend = ref<RevenueTrendPoint[]>([])
 
-// Previous period data for comparison
+// Previous period of the same length, for the change percentages
 const prevRevenueReport = ref<RevenueReport | null>(null)
 const prevMemberGrowthReport = ref<MemberGrowthReport | null>(null)
 const prevMemberActivityReport = ref<MemberActivityReport | null>(null)
 
-// Helper to calculate percentage change
+/** The selected window and the one right before it, as YYYY-MM-DD (end day inclusive) */
+const currentWindow = ref({ startDate: '', endDate: '' })
+
 const calculateChange = (current: number, previous: number): number => {
   if (previous === 0) return current > 0 ? 100 : 0
   return ((current - previous) / previous) * 100
 }
 
-// Computed stats from real data with actual trend calculations
 const stats = computed(() => {
-  if (!revenueReport.value || !memberGrowthReport.value || !contractExpiryReport.value || !memberActivityReport.value) {
-    return {
-      revenue: 0,
-      revenueChange: 0,
-      newMembers: 0,
-      newMembersChange: 0,
-      activeContracts: 0,
-      contractsChange: 0,
-      checkins: 0,
-      checkinsChange: 0
-    }
-  }
-
-  // Calculate revenue change
-  const currentRevenue = revenueReport.value.summary.net_revenue
-  const prevRevenue = prevRevenueReport.value?.summary.net_revenue ?? 0
-  const revenueChange = calculateChange(currentRevenue, prevRevenue)
-
-  // Calculate new members change
-  const currentMembers = memberGrowthReport.value.summary.total_new_members
-  const prevMembers = prevMemberGrowthReport.value?.summary.total_new_members ?? 0
-  const newMembersChange = calculateChange(currentMembers, prevMembers)
-
-  // Calculate check-ins change
-  const currentCheckins = memberActivityReport.value.summary.total_check_ins
-  const prevCheckins = prevMemberActivityReport.value?.summary.total_check_ins ?? 0
-  const checkinsChange = calculateChange(currentCheckins, prevCheckins)
-
-  // Contract expiry doesn't need comparison - it's a current state
-  const activeContracts = contractExpiryReport.value.summary.total_expiring
+  const revenue = revenueReport.value?.total ?? 0
+  const newMembers = memberGrowthReport.value?.newMembers ?? 0
+  const checkins = memberActivityReport.value?.totalCheckIns ?? 0
 
   return {
-    revenue: currentRevenue,
-    revenueChange,
-    newMembers: currentMembers,
-    newMembersChange,
-    activeContracts,
-    contractsChange: 0, // Contract expiry is not a trend metric
-    checkins: currentCheckins,
-    checkinsChange
+    revenue,
+    revenueChange: calculateChange(revenue, prevRevenueReport.value?.total ?? 0),
+    newMembers,
+    newMembersChange: calculateChange(newMembers, prevMemberGrowthReport.value?.newMembers ?? 0),
+    expiringContracts: expiringContracts.value?.length ?? 0,
+    checkins,
+    checkinsChange: calculateChange(checkins, prevMemberActivityReport.value?.totalCheckIns ?? 0)
   }
 })
 
 const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'] as const
 
-// Last 6 months revenue data
-const revenueByMonth = computed(() => {
-  if (!revenueReport.value) return []
-
-  // Group by month and sum
-  const monthlyData: Record<string, number> = {}
-  revenueReport.value.data.forEach(item => {
-    const date = new Date(item.payment_day)
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-
-    if (!monthlyData[monthKey]) {
-      monthlyData[monthKey] = 0
-    }
-    monthlyData[monthKey] += parseFloat(item.net_revenue)
+// Last 6 months of COMPLETED income (GET /dashboard/revenue-trend?period=monthly)
+const revenueByMonth = computed(() =>
+  revenueTrend.value.slice(-6).map(point => {
+    const month = Number(point.period.split('-')[1])
+    return { month: MONTH_NAMES[month - 1] ?? point.period, revenue: point.amount }
   })
+)
 
-  // Convert to array and sort by date
-  return Object.entries(monthlyData)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-6)
-    .map(([key, revenue]) => {
-      const [, month] = key.split('-')
-      return {
-        month: MONTH_NAMES[parseInt(month!) - 1],
-        revenue
-      }
-    })
-})
+const shiftDays = (date: Date, days: number) => {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
 
-const topPlans = ref([
-  { name: '年卡方案', count: 42, revenue: 411600 },
-  { name: '半年卡方案', count: 28, revenue: 168000 },
-  { name: '10堂私教課程', count: 18, revenue: 216000 },
-  { name: '季卡方案', count: 15, revenue: 54000 },
-  { name: '月卡方案', count: 12, revenue: 18000 }
-])
+/** [start, end] of the selected period ending today, and the previous one of equal length */
+const periodWindows = (period: 'week' | 'month' | 'year') => {
+  const end = new Date()
+  const start = new Date(end)
+  if (period === 'week') start.setDate(start.getDate() - 6)
+  else if (period === 'year') start.setFullYear(start.getFullYear() - 1)
+  else start.setMonth(start.getMonth() - 1)
 
-// Load all reports
+  const lengthDays = Math.round((end.getTime() - start.getTime()) / 86_400_000)
+  const prevEnd = shiftDays(start, -1)
+  const prevStart = shiftDays(prevEnd, -lengthDays)
+
+  return {
+    current: { startDate: toLocalDateString(start), endDate: toLocalDateString(end) },
+    previous: { startDate: toLocalDateString(prevStart), endDate: toLocalDateString(prevEnd) }
+  }
+}
+
 const loadReports = async () => {
+  loading.value = true
   try {
-    loading.value = true
-
-    // Calculate date range based on selected period
-    const endDate = new Date()
-    let startDate: Date
-    let prevEndDate: Date
-    let prevStartDate: Date
-
-    switch (selectedPeriod.value) {
-      case 'week':
-        startDate = new Date(endDate)
-        startDate.setDate(startDate.getDate() - 7)
-        // Previous week
-        prevEndDate = new Date(startDate)
-        prevEndDate.setDate(prevEndDate.getDate() - 1)
-        prevStartDate = new Date(prevEndDate)
-        prevStartDate.setDate(prevStartDate.getDate() - 7)
-        break
-      case 'year':
-        startDate = new Date(endDate)
-        startDate.setFullYear(startDate.getFullYear() - 1)
-        // Previous year
-        prevEndDate = new Date(startDate)
-        prevEndDate.setDate(prevEndDate.getDate() - 1)
-        prevStartDate = new Date(prevEndDate)
-        prevStartDate.setFullYear(prevStartDate.getFullYear() - 1)
-        break
-      case 'month':
-      default:
-        startDate = new Date(endDate)
-        startDate.setMonth(startDate.getMonth() - 1)
-        // Previous month
-        prevEndDate = new Date(startDate)
-        prevEndDate.setDate(prevEndDate.getDate() - 1)
-        prevStartDate = new Date(prevEndDate)
-        prevStartDate.setMonth(prevStartDate.getMonth() - 1)
-        break
-    }
-
-    const formatDate = (d: Date) => d.toISOString().slice(0, 10)
+    const { current, previous } = periodWindows(selectedPeriod.value)
     const branchId = selectedBranch.value || undefined
+    currentWindow.value = current
 
-    // Fetch current and previous period reports in parallel
-    const [
-      revenue, growth, expiry, activity,
-      prevRevenue, prevGrowth, prevActivity
-    ] = await Promise.all([
-      // Current period
-      getRevenueReport(formatDate(startDate), formatDate(endDate), branchId),
-      getMemberGrowthReport(formatDate(startDate), formatDate(endDate), branchId),
-      getContractExpiryReport(30, branchId),
-      getMemberActivityReport(formatDate(startDate), formatDate(endDate), branchId),
-      // Previous period for comparison
-      getRevenueReport(formatDate(prevStartDate), formatDate(prevEndDate), branchId),
-      getMemberGrowthReport(formatDate(prevStartDate), formatDate(prevEndDate), branchId),
-      getMemberActivityReport(formatDate(prevStartDate), formatDate(prevEndDate), branchId)
+    const [revenue, growth, expiry, activity, trend, prevRevenue, prevGrowth, prevActivity] = await Promise.all([
+      getRevenueReport({ ...current, branchId }),
+      getMemberGrowthReport({ ...current, branchId }),
+      getContractExpiryReport(EXPIRY_DAYS, branchId),
+      getMemberActivityReport({ ...current, branchId }),
+      getRevenueTrend('monthly', branchId),
+      getRevenueReport({ ...previous, branchId }),
+      getMemberGrowthReport({ ...previous, branchId }),
+      getMemberActivityReport({ ...previous, branchId })
     ])
 
-    // Set current period data
     revenueReport.value = revenue
     memberGrowthReport.value = growth
-    contractExpiryReport.value = expiry
+    expiringContracts.value = expiry
     memberActivityReport.value = activity
-
-    // Set previous period data for trend calculation
+    revenueTrend.value = trend ?? []
     prevRevenueReport.value = prevRevenue
     prevMemberGrowthReport.value = prevGrowth
     prevMemberActivityReport.value = prevActivity
-  } catch (error) {
-    console.error('Failed to load reports:', error)
   } finally {
     loading.value = false
   }
 }
 
-const formatCurrency = (value: number) => {
-  return currencyFormatter.format(value)
+const EXPORTS: Array<{ type: ExportableReport; label: string }> = [
+  { type: 'revenue', label: '營收報表' },
+  { type: 'member-growth', label: '會員成長' },
+  { type: 'contract-expiry', label: `${EXPIRY_DAYS} 天內到期合約` },
+  { type: 'member-activity', label: '入場統計' }
+]
+
+const exportParams = (type: ExportableReport) => {
+  const branchId = selectedBranch.value || undefined
+  if (type === 'contract-expiry') return { days: EXPIRY_DAYS, branchId }
+  // The member-growth export is per month, the activity export takes a day count
+  if (type === 'member-growth') return { months: selectedPeriod.value === 'year' ? 12 : 6, branchId }
+  const { startDate, endDate } = currentWindow.value
+  if (type === 'member-activity') {
+    const days = Math.round((Date.parse(endDate) - Date.parse(startDate)) / 86_400_000) + 1
+    return { days, branchId }
+  }
+  return { startDate, endDate, branchId }
 }
 
-const formatNumber = (value: number) => {
-  return numberFormatter.format(value)
+const handleDownload = async (type: ExportableReport, format: ExportFormat) => {
+  downloading.value = `${type}:${format}`
+  try {
+    await downloadReport(type, exportParams(type), format)
+  } finally {
+    downloading.value = ''
+  }
 }
+
+const formatCurrency = (value: number) => currencyFormatter.format(value)
+
+const formatNumber = (value: number) => numberFormatter.format(value)
 
 const PERIOD_TABS = [
   { value: 'week', label: MESSAGES.TIME.THIS_WEEK },
   { value: 'month', label: MESSAGES.TIME.THIS_MONTH },
   { value: 'year', label: MESSAGES.TIME.THIS_YEAR },
-]
+] as const
 
 const formatPercent = (value: number) => {
   const prefix = value > 0 ? '+' : ''
@@ -217,10 +173,9 @@ const formatPercent = (value: number) => {
 
 const maxRevenue = computed(() => {
   if (revenueByMonth.value.length === 0) return 1
-  return Math.max(...revenueByMonth.value.map(m => m.revenue))
+  return Math.max(1, ...revenueByMonth.value.map(m => m.revenue))
 })
 
-// Watch for filter changes
 watch([selectedBranch, selectedPeriod], () => {
   loadReports()
 })
@@ -300,12 +255,9 @@ onMounted(async () => {
               <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" />
             </svg>
           </div>
-          <span class="metric-change" :class="stats.contractsChange > 0 ? 'positive' : 'negative'">
-            {{ formatPercent(stats.contractsChange) }}
-          </span>
         </div>
-        <div class="metric-value">{{ stats.activeContracts }}</div>
-        <div class="metric-label">{{ PAGES.REPORTS.ACTIVE_CONTRACTS }}</div>
+        <div class="metric-value">{{ stats.expiringContracts }}</div>
+        <div class="metric-label">{{ EXPIRY_DAYS }} 天內到期合約</div>
       </div>
 
       <div class="metric-card">
@@ -351,113 +303,46 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Top Plans -->
+      <!-- Top Plans: no backend aggregate for plan sales yet -->
       <div class="chart-card top-plans">
         <div class="chart-header">
           <h3>{{ PAGES.REPORTS.POPULAR_PLANS }}</h3>
           <span class="chart-subtitle">{{ PAGES.REPORTS.SORT_BY_SALES }}</span>
         </div>
-        <div class="plans-list">
-          <div v-for="(plan, index) in topPlans" :key="index" class="plan-item">
-            <div class="plan-rank">{{ index + 1 }}</div>
-            <div class="plan-info">
-              <span class="plan-name">{{ plan.name }}</span>
-              <span class="plan-stats">{{ plan.count }} {{ PAGES.REPORTS.ENTRIES }} · {{ formatCurrency(plan.revenue) }}</span>
-            </div>
-            <div class="plan-bar">
-              <div
-                class="plan-bar-fill"
-                :style="{ width: `${(plan.count / (topPlans[0]?.count || 1)) * 100}%` }"
-              ></div>
-            </div>
-          </div>
+        <div class="not-available">
+          <span class="not-available-badge">尚未開放</span>
+          <p>方案銷售統計尚未提供</p>
         </div>
       </div>
     </div>
 
-    <!-- Quick Actions -->
+    <!-- Exports (files generated by GET /api/reports/<type>/export) -->
     <div class="quick-actions">
       <h3>{{ PAGES.REPORTS.EXPORT_REPORTS }}</h3>
       <div class="actions-grid">
-        <!-- Revenue Export -->
-        <div class="export-wrapper">
-          <LazyGoogleSheetsExport
-            v-if="revenueReport"
-            :data="revenueReport.data"
-            report-type="revenue"
-            :filename="`營收報表_${new Date().toISOString().slice(0, 10)}`"
-          />
-          <p class="export-label">{{ PAGES.REPORTS.EXPORT_REVENUE }}</p>
-        </div>
-
-        <!-- Member Growth Export -->
-        <div class="export-wrapper">
-          <LazyGoogleSheetsExport
-            v-if="memberGrowthReport"
-            :data="memberGrowthReport.data"
-            report-type="member-growth"
-            :filename="`會員成長報表_${new Date().toISOString().slice(0, 10)}`"
-          />
-          <p class="export-label">{{ PAGES.REPORTS.EXPORT_MEMBERS }}</p>
-        </div>
-
-        <!-- Contract Expiry Export -->
-        <div class="export-wrapper">
-          <LazyGoogleSheetsExport
-            v-if="contractExpiryReport"
-            :data="contractExpiryReport.data"
-            report-type="contract-expiry"
-            :filename="`合約到期提醒_${new Date().toISOString().slice(0, 10)}`"
-          />
-          <p class="export-label">{{ PAGES.REPORTS.EXPORT_CONTRACTS }}</p>
-        </div>
-
-        <!-- Member Activity Export -->
-        <div class="export-wrapper">
-          <LazyGoogleSheetsExport
-            v-if="memberActivityReport"
-            :data="memberActivityReport.data"
-            report-type="member-activity"
-            :filename="`會員活躍度報表_${new Date().toISOString().slice(0, 10)}`"
-          />
-          <p class="export-label">{{ PAGES.REPORTS.EXPORT_CHECKINS }}</p>
-        </div>
-      </div>
-
-      <!-- Legacy Export Options (CSV, Excel, PDF) -->
-      <div class="legacy-exports">
-        <p class="section-subtitle">或使用傳統格式匯出：</p>
-        <div class="legacy-actions">
-          <button
-            v-if="revenueReport"
-            class="legacy-btn"
-            @click="exportRevenueReport(revenueReport.data, 'excel')"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
-            </svg>
-            Excel (營收)
-          </button>
-          <button
-            v-if="memberGrowthReport"
-            class="legacy-btn"
-            @click="exportMemberGrowthReport(memberGrowthReport.data, 'excel')"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
-            </svg>
-            Excel (會員成長)
-          </button>
-          <button
-            v-if="contractExpiryReport"
-            class="legacy-btn"
-            @click="exportContractExpiryReport(contractExpiryReport.data, 'pdf')"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
-            </svg>
-            PDF (合約到期)
-          </button>
+        <div v-for="item in EXPORTS" :key="item.type" class="export-wrapper">
+          <p class="export-label">{{ item.label }}</p>
+          <div class="legacy-actions">
+            <button
+              type="button"
+              class="legacy-btn"
+              :disabled="!!downloading"
+              @click="handleDownload(item.type, 'xlsx')"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
+              </svg>
+              Excel
+            </button>
+            <button
+              type="button"
+              class="legacy-btn"
+              :disabled="!!downloading"
+              @click="handleDownload(item.type, 'csv')"
+            >
+              CSV
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -710,66 +595,36 @@ onMounted(async () => {
   margin-top: var(--space-sm);
 }
 
-/* Top Plans */
-.plans-list {
+/* Not available yet (no backend endpoint) */
+.not-available {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
-}
-
-.plan-item {
-  display: flex;
   align-items: center;
-  gap: var(--space-md);
+  justify-content: center;
+  gap: var(--space-sm);
+  min-height: 160px;
+  text-align: center;
 }
 
-.plan-rank {
-  width: 24px;
-  height: 24px;
+.not-available-badge {
+  padding: 4px 12px;
   border-radius: var(--radius-full);
   background: var(--color-bg-tertiary);
   color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.plan-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.plan-name {
-  display: block;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-primary);
 }
 
-.plan-stats {
-  display: block;
-  font-size: 12px;
+.not-available p {
+  margin: 0;
+  font-size: 13px;
   color: var(--color-text-tertiary);
 }
 
-.plan-bar {
-  width: 80px;
-  height: 6px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-full);
-  overflow: hidden;
+.legacy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
-
-.plan-bar-fill {
-  height: 100%;
-  background: var(--color-accent);
-  border-radius: var(--radius-full);
-  transition: width var(--duration-normal) var(--ease-out);
-}
-
 /* Quick Actions */
 .quick-actions {
   background: var(--color-bg-primary);

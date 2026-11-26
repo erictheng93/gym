@@ -89,7 +89,6 @@ bunx playwright show-report
 |------|------|
 | `14-dashboard-war-room`：KPI 卡片、合約到期警示、匯出 JSON | `/api/admin/dashboard/*`、`/api/admin/analytics/checkin-heatmap` 只存在於 `rust-backend/`，Hono 後端回 404 |
 | `15-bi-reports`：會員分析 | `/api/admin/analytics/*`、`/api/admin/reports/member-growth` 同上 |
-| `15-bi-reports`：營運報表期間切換 | `useReports` 期待舊的回應格式（`summary.net_revenue`），實際 `/api/reports/*` 回 `{ data: { total, byBranch, byDay } }`，頁面拋出 TypeError |
 
 ## 撰寫原則
 

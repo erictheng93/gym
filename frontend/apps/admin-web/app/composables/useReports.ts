@@ -1,143 +1,75 @@
 /**
  * Reports API Composable
  * 提供報表資料查詢功能
+ *
+ * Shapes mirror backend/src/routes/reports.ts and dashboard.ts exactly (camelCase).
+ * Revenue counts COMPLETED INCOME payments only; date windows are YYYY-MM-DD with
+ * the end day inclusive.
  */
 
 import { MESSAGES } from '~/constants'
-import { useErrorHandler } from '~/composables/core'
+import { useErrorHandler } from '~/composables/core/useErrorHandler'
+import { useFetch } from '~/composables/core/useFetch'
 
-export interface ReportPeriod {
-  start_date: string
-  end_date: string
-}
-
-export interface RevenueSummary {
-  total_income: number
-  total_refund: number
-  net_revenue: number
-  total_transactions: number
-  average_daily_revenue: string
-}
-
-export interface RevenueData {
-  payment_day: string
-  branch_id: string
-  branch_name: string
-  transaction_count: string
-  total_income: string
-  total_refund: string
-  net_revenue: string
-  unique_members: string
-  cash_income: string
-  credit_card_income: string
-  bank_transfer_income: string
-  line_pay_income: string
-}
-
+/** GET /api/reports/revenue → data */
 export interface RevenueReport {
-  success: boolean
-  period: ReportPeriod
-  summary: RevenueSummary
-  data: RevenueData[]
+  total: number
+  byBranch: Array<{ branchId: string; branchName: string; total: number }>
+  byDay: Array<{ date: string; total: number }>
 }
 
-export interface MemberGrowthSummary {
-  total_new_members: number
-  total_members: number
-  average_daily_growth: string
-  gender_distribution: {
-    male: number
-    female: number
-  }
-}
-
-export interface MemberGrowthData {
-  join_day: string
-  branch_id: string
-  branch_name: string
-  new_members: string
-  active_members: string
-  male_count: string
-  female_count: string
-  sales_persons_involved: string
-}
-
+/** GET /api/reports/member-growth → data */
 export interface MemberGrowthReport {
-  success: boolean
-  period: ReportPeriod
-  summary: MemberGrowthSummary
-  data: MemberGrowthData[]
+  /** ACTIVE members now (not limited to the window) */
+  total: number
+  /** Members created inside startDate..endDate; null when no window was sent */
+  newMembers: number | null
+  byMonth: Array<{ month: string; count: number }>
 }
 
-export interface ContractExpiryItem {
-  contract_id: string
-  contract_no: string
-  member_id: string
-  member_name: string
-  member_code: string
-  member_phone: string
-  member_email: string
-  branch_id: string
-  branch_name: string
-  plan_name: string
-  start_date: string
-  end_date: string
-  contract_status: string
-  payment_status: string
-  days_until_expiry: number
-  sales_person_id: string
-  sales_person_name: string
-  total_amount: string
-  total_paid: string
-  outstanding_amount: string
+/** GET /api/reports/contract-expiry → data[] */
+export interface ExpiringContract {
+  id: string
+  contractNo: string
+  memberId: string
+  planId: string
+  branchId: string
+  status: string
+  startDate: string
+  endDate: string
+  remainingCounts: number | null
+  totalAmount: string | number
+  paidAmount: string | number
+  paymentStatus: string
+  member: { id: string; fullName: string; memberCode: string | null; phone: string | null }
+  branch: { id: string; name: string }
+  daysUntilExpiry: number
 }
 
-export interface ContractExpiryReport {
-  success: boolean
-  summary: {
-    total_expiring: number
-    urgent_count: number
-    soon_count: number
-    upcoming_count: number
-  }
-  grouped: {
-    urgent: ContractExpiryItem[]
-    soon: ContractExpiryItem[]
-    upcoming: ContractExpiryItem[]
-  }
-  data: ContractExpiryItem[]
-}
-
-export interface MemberActivitySummary {
-  total_check_ins: number
-  average_daily_check_ins: string
-  method_distribution: {
-    qr_code: number
-    manual: number
-    card: number
-  }
-}
-
-export interface MemberActivityData {
-  activity_day: string
-  branch_id: string
-  branch_name: string
-  total_check_ins: string
-  unique_members: string
-  qr_code_count: string
-  manual_count: string
-  card_count: string
-  morning_count: string
-  afternoon_count: string
-  evening_count: string
-}
-
+/** GET /api/reports/member-activity → data */
 export interface MemberActivityReport {
-  success: boolean
-  period: ReportPeriod
-  summary: MemberActivitySummary
-  data: MemberActivityData[]
+  totalCheckIns: number
+  byBranch: Array<{ branchId: string; branchName: string; checkInCount: number; uniqueMembers: number }>
+  byDay: Array<{ date: string; count: number }>
 }
+
+/** GET /api/dashboard/revenue-trend → data[]; period is YYYY-MM (monthly) or YYYY-MM-DD (daily) */
+export interface RevenueTrendPoint {
+  period: string
+  amount: number
+}
+
+export interface ReportWindow {
+  /** YYYY-MM-DD */
+  startDate?: string
+  /** YYYY-MM-DD, inclusive */
+  endDate?: string
+  branchId?: string
+}
+
+/** Reports that have a backend file export (GET /api/reports/<type>/export) */
+export type ExportableReport = 'revenue' | 'member-growth' | 'contract-expiry' | 'member-activity'
+export type ExportFormat = 'csv' | 'xlsx'
 
 // Branch Performance Report Types
 export interface BranchPerformancePeriod {
@@ -236,50 +168,43 @@ export interface CoachPerformanceReport {
 // In-flight deduplication map for reports
 const inFlightReports = new Map<string, Promise<any>>()
 
+type QueryValue = string | number | boolean | undefined
+
+const toQuery = (params: Record<string, QueryValue>) => {
+  const query: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query[key] = value
+  }
+  return query
+}
+
 export const useReports = () => {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBaseUrl || 'http://localhost:8056'
+  const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
 
   /**
-   * 帶認證的 fetch 請求 (使用 session cookies)
+   * GET an endpoint, sharing concurrent identical requests; null (after showing
+   * an error) on failure. `pick` selects what to return from the response body.
    */
-  const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
-    return fetch(url, {
-      ...options,
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-      }
-    })
-  }
-
-  /**
-   * 獲取營收報表
-   */
-  const getRevenueReport = async (
-    startDate?: string,
-    endDate?: string,
-    branchId?: string
-  ): Promise<RevenueReport | null> => {
-    const key = `revenue:${startDate || ''}:${endDate || ''}:${branchId || ''}`
+  const getReport = <T>(
+    endpoint: string,
+    params: Record<string, QueryValue>,
+    context: string,
+    pick: (body: any) => T = body => (body?.data ?? null) as T
+  ): Promise<T | null> => {
+    const query = toQuery(params)
+    const key = `${endpoint}?${JSON.stringify(query)}`
     const existing = inFlightReports.get(key)
     if (existing) return existing
 
     const promise = (async () => {
       try {
-        const params = new URLSearchParams()
-        if (startDate) params.append('start_date', startDate)
-        if (endDate) params.append('end_date', endDate)
-        if (branchId) params.append('branch_id', branchId)
-
-        const response = await authFetch(`${baseURL}/api/reports/revenue?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return await response.json()
+        return pick(await apiFetch(endpoint, { params: query })) ?? null
       } catch (error) {
         handleError(error, {
-          context: 'useReports.getRevenueReport',
+          context: `useReports.${context}`,
           customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
         })
         return null
@@ -292,208 +217,90 @@ export const useReports = () => {
     return promise
   }
 
-  /**
-   * 獲取會員成長報表
-   */
-  const getMemberGrowthReport = async (
-    startDate?: string,
-    endDate?: string,
-    branchId?: string
-  ): Promise<MemberGrowthReport | null> => {
-    const key = `memberGrowth:${startDate || ''}:${endDate || ''}:${branchId || ''}`
-    const existing = inFlightReports.get(key)
-    if (existing) return existing
+  /** 營收報表 (COMPLETED INCOME only, end day inclusive) */
+  const getRevenueReport = (window: ReportWindow = {}) =>
+    getReport<RevenueReport>('/reports/revenue', { ...window }, 'getRevenueReport')
 
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        if (startDate) params.append('start_date', startDate)
-        if (endDate) params.append('end_date', endDate)
-        if (branchId) params.append('branch_id', branchId)
+  /** 會員成長報表; `newMembers` is counted inside startDate..endDate */
+  const getMemberGrowthReport = (window: ReportWindow & { months?: number } = {}) =>
+    getReport<MemberGrowthReport>('/reports/member-growth', { ...window }, 'getMemberGrowthReport')
 
-        const response = await authFetch(`${baseURL}/api/reports/member-growth?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return await response.json()
-      } catch (error) {
-        handleError(error, {
-          context: 'useReports.getMemberGrowthReport',
-          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-        })
-        return null
-      } finally {
-        inFlightReports.delete(key)
-      }
-    })()
+  /** ACTIVE contracts ending within `days` days */
+  const getContractExpiryReport = (days = 30, branchId?: string) =>
+    getReport<ExpiringContract[]>('/reports/contract-expiry', { days, branchId }, 'getContractExpiryReport')
 
-    inFlightReports.set(key, promise)
-    return promise
-  }
+  /** 會員活躍度 (check-ins) inside startDate..endDate */
+  const getMemberActivityReport = (window: ReportWindow = {}) =>
+    getReport<MemberActivityReport>('/reports/member-activity', { ...window }, 'getMemberActivityReport')
 
-  /**
-   * 獲取合約到期提醒
-   */
-  const getContractExpiryReport = async (
-    daysAhead: number = 30,
-    branchId?: string,
-    limit: number = 100
-  ): Promise<ContractExpiryReport | null> => {
-    const key = `contractExpiry:${daysAhead}:${branchId || ''}:${limit}`
-    const existing = inFlightReports.get(key)
-    if (existing) return existing
+  /** Revenue per day (last 30 days) or per month (last 12 months) */
+  const getRevenueTrend = (period: 'daily' | 'monthly' = 'monthly', branchId?: string) =>
+    getReport<RevenueTrendPoint[]>('/dashboard/revenue-trend', { period, branchId }, 'getRevenueTrend')
 
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        params.append('days_ahead', daysAhead.toString())
-        if (branchId) params.append('branch_id', branchId)
-        params.append('limit', limit.toString())
-
-        const response = await authFetch(`${baseURL}/api/reports/contract-expiry?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return await response.json()
-      } catch (error) {
-        handleError(error, {
-          context: 'useReports.getContractExpiryReport',
-          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-        })
-        return null
-      } finally {
-        inFlightReports.delete(key)
-      }
-    })()
-
-    inFlightReports.set(key, promise)
-    return promise
-  }
-
-  /**
-   * 獲取會員活躍度報表
-   */
-  const getMemberActivityReport = async (
-    startDate?: string,
-    endDate?: string,
-    branchId?: string
-  ): Promise<MemberActivityReport | null> => {
-    const key = `memberActivity:${startDate || ''}:${endDate || ''}:${branchId || ''}`
-    const existing = inFlightReports.get(key)
-    if (existing) return existing
-
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        if (startDate) params.append('start_date', startDate)
-        if (endDate) params.append('end_date', endDate)
-        if (branchId) params.append('branch_id', branchId)
-
-        const response = await authFetch(`${baseURL}/api/reports/member-activity?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return await response.json()
-      } catch (error) {
-        handleError(error, {
-          context: 'useReports.getMemberActivityReport',
-          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-        })
-        return null
-      } finally {
-        inFlightReports.delete(key)
-      }
-    })()
-
-    inFlightReports.set(key, promise)
-    return promise
-  }
-
-  /**
-   * 刷新報表資料
-   */
-  const refreshReports = async (): Promise<{ success: boolean; message: string }> => {
-    try {
-      const response = await authFetch(`${baseURL}/api/reports/refresh`, {
-        method: 'POST'
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return await response.json()
-    } catch (error) {
-      handleError(error, {
-        context: 'useReports.refreshReports',
-        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-      })
-      return { success: false, message: '刷新報表失敗' }
-    }
-  }
-
-  /**
-   * 獲取分店業績報表
-   */
-  const getBranchPerformanceReport = async (
+  /** 分店業績報表 (the whole body: period, summary, data, ranking) */
+  const getBranchPerformanceReport = (
     period: 'week' | 'month' | 'year' = 'month',
     branchId?: string,
     compareWithPrevious: boolean = true
-  ): Promise<BranchPerformanceReport | null> => {
-    const key = `branchPerformance:${period}:${branchId || ''}:${compareWithPrevious}`
-    const existing = inFlightReports.get(key)
-    if (existing) return existing
+  ) =>
+    getReport<BranchPerformanceReport>(
+      '/reports/branch-performance',
+      { period, branchId, compareWithPrevious: String(compareWithPrevious) },
+      'getBranchPerformanceReport',
+      body => body as BranchPerformanceReport
+    )
 
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        params.append('period', period)
-        if (branchId) params.append('branch_id', branchId)
-        params.append('compareWithPrevious', String(compareWithPrevious))
-
-        const response = await authFetch(`${baseURL}/api/reports/branch-performance?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return await response.json()
-      } catch (error) {
-        handleError(error, {
-          context: 'useReports.getBranchPerformanceReport',
-          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-        })
-        return null
-      } finally {
-        inFlightReports.delete(key)
-      }
-    })()
-
-    inFlightReports.set(key, promise)
-    return promise
-  }
-
-  /**
-   * 獲取教練績效報表
-   */
-  const getCoachPerformanceReport = async (
+  /** 教練績效報表 (the whole body: period, summary, data) */
+  const getCoachPerformanceReport = (
     period: 'month' | 'quarter' | 'year' = 'month',
     coachId?: string,
     branchId?: string
-  ): Promise<CoachPerformanceReport | null> => {
-    const key = `coachPerformance:${period}:${coachId || ''}:${branchId || ''}`
-    const existing = inFlightReports.get(key)
-    if (existing) return existing
+  ) =>
+    getReport<CoachPerformanceReport>(
+      '/reports/coach-performance',
+      { period, coachId, branchId },
+      'getCoachPerformanceReport',
+      body => body as CoachPerformanceReport
+    )
 
-    const promise = (async () => {
-      try {
-        const params = new URLSearchParams()
-        params.append('period', period)
-        if (coachId) params.append('coach_id', coachId)
-        if (branchId) params.append('branch_id', branchId)
-
-        const response = await authFetch(`${baseURL}/api/reports/coach-performance?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return await response.json()
-      } catch (error) {
-        handleError(error, {
-          context: 'useReports.getCoachPerformanceReport',
-          customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
-        })
-        return null
-      } finally {
-        inFlightReports.delete(key)
+  /**
+   * Download the file the backend export endpoint generates.
+   * Returns false (after showing an error) when the request fails.
+   */
+  const downloadReport = async (
+    type: ExportableReport,
+    params: Record<string, string | number | undefined> = {},
+    format: ExportFormat = 'xlsx'
+  ): Promise<boolean> => {
+    try {
+      const search = new URLSearchParams()
+      for (const [key, value] of Object.entries(toQuery({ ...params, format }))) {
+        search.append(key, String(value))
       }
-    })()
+      const response = await fetch(`${baseURL}/api/reports/${type}/export?${search}`, {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-    inFlightReports.set(key, promise)
-    return promise
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const match = /filename="([^"]+)"/.exec(disposition)
+      const filename = match?.[1] ? decodeURIComponent(match[1]) : `${type}.${format}`
+
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+      return true
+    } catch (error) {
+      handleError(error, {
+        context: 'useReports.downloadReport',
+        customMessage: MESSAGES.ERRORS.REPORT_FETCH_FAILED
+      })
+      return false
+    }
   }
 
   return {
@@ -501,8 +308,9 @@ export const useReports = () => {
     getMemberGrowthReport,
     getContractExpiryReport,
     getMemberActivityReport,
+    getRevenueTrend,
     getBranchPerformanceReport,
     getCoachPerformanceReport,
-    refreshReports
+    downloadReport
   }
 }

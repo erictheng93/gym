@@ -42,6 +42,12 @@ const menuItems = [
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
   },
   {
+    // Bookings are reached from the classes page (quick link) and each class's sessions
+    label: MESSAGES.NAV.CLASSES,
+    to: '/classes',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5h11"/><path d="M6.5 17.5h11"/><path d="M3 10v4"/><path d="M21 10v4"/><path d="M6.5 4v16"/><path d="M17.5 4v16"/></svg>`
+  },
+  {
     label: MESSAGES.NAV.HR,
     to: '/hr',
     icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>`,
@@ -73,6 +79,37 @@ const menuItems = [
       {
         label: '職位管理',
         to: '/hr/job-titles'
+      },
+      {
+        label: '薪資管理',
+        to: '/hr/payroll'
+      },
+      {
+        label: '績效考核',
+        to: '/hr/performance'
+      },
+      {
+        label: '員工異動',
+        to: '/hr/promotions'
+      }
+    ]
+  },
+  {
+    label: '行銷管理',
+    to: '/marketing',
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>`,
+    submenu: [
+      {
+        label: '潛在客戶',
+        to: '/leads'
+      },
+      {
+        label: '行銷活動',
+        to: '/marketing/campaigns'
+      },
+      {
+        label: '優惠券',
+        to: '/marketing/coupons'
       }
     ]
   },
