@@ -30,6 +30,18 @@ export interface RateLimitOptions {
   message?: string;
 }
 
+/**
+ * Max requests for a limiter whose production budget is `productionMax`.
+ * Tests (NODE_ENV=test) and the E2E stack (RELAX_RATE_LIMITS=true, which a
+ * production process ignores) log in far more often than a real user, so they
+ * get a budget of 100.
+ */
+export function limitMax(productionMax: number, env: NodeJS.ProcessEnv = process.env): number {
+  const relaxed = env.NODE_ENV === 'test' ||
+    (env.RELAX_RATE_LIMITS === 'true' && env.NODE_ENV !== 'production');
+  return relaxed ? 100 : productionMax;
+}
+
 export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
   const {
     windowMs = 60 * 1000,
@@ -80,6 +92,6 @@ export const strictRateLimiter = rateLimiter({
 
 export const authRateLimiter = rateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 100 : 5,
+  max: limitMax(5),
   message: '登入嘗試過多，請 15 分鐘後再試',
 });

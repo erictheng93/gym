@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, checkIns, members, contracts, branches, membershipPlans } from '../db/index.js';
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
-import { memberAuthMiddleware, requireMember, rateLimiter } from '../middleware/index.js';
+import { memberAuthMiddleware, requireMember, rateLimiter, limitMax } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 
 // =============================================================================
@@ -117,7 +117,7 @@ app.post(
   '/qr',
   rateLimiter({
     windowMs: 60 * 1000,
-    max: process.env.NODE_ENV === 'test' ? 100 : 10,
+    max: limitMax(10),
     keyGenerator: (c) => {
       const member = c.get('member');
       return `checkin:qr:${member?.id || 'unknown'}`;

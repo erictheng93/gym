@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, members, branches, memberSocialAccounts } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
-import { memberAuthMiddleware, requireMember, rateLimiter } from '../middleware/index.js';
+import { memberAuthMiddleware, requireMember, rateLimiter, limitMax } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 
@@ -355,7 +355,7 @@ app.post(
   '/:provider/callback',
   rateLimiter({
     windowMs: 60 * 1000,
-    max: process.env.NODE_ENV === 'test' ? 100 : 10,
+    max: limitMax(10),
   }),
   zValidator('param', providerParamSchema),
   zValidator('json', callbackSchema),
@@ -592,7 +592,7 @@ app.post(
   requireMember,
   rateLimiter({
     windowMs: 60 * 1000,
-    max: process.env.NODE_ENV === 'test' ? 100 : 5,
+    max: limitMax(5),
   }),
   zValidator('json', linkAccountSchema),
   async (c) => {

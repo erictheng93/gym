@@ -6,7 +6,7 @@ export { memberAuthMiddleware, requireMember, getMemberFromToken } from './membe
 export type { MemberVariables } from './member-auth.js';
 export { coachAuthMiddleware, requireCoach, getCoachFromToken } from './coach-auth.js';
 export type { CoachVariables } from './coach-auth.js';
-export { rateLimiter, strictRateLimiter, authRateLimiter } from './rate-limiter.js';
+export { rateLimiter, strictRateLimiter, authRateLimiter, limitMax } from './rate-limiter.js';
 export { apiLogger } from './api-logger.js';
 export {
   csrfProtection,
