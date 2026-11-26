@@ -23,11 +23,14 @@ export interface FetchOptions {
 /** Thrown by apiFetch for a non-2xx response; `message` is the backend's `error` text */
 export class ApiError extends Error {
   readonly status: number
+  /** Machine-readable `code` of the error body (e.g. NO_VALID_CONTRACT), when the backend sends one */
+  readonly code?: string
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -73,13 +76,13 @@ export function useFetch() {
 
     if (!response.ok) {
       // Error bodies are usually JSON ({ error }), but a proxy or an unmatched route may not be
-      let json: { error?: string } | null = null
+      let json: { error?: string; code?: string } | null = null
       try {
         json = await response.json()
       } catch {
         // not JSON
       }
-      throw new ApiError(json?.error || `HTTP ${response.status}`, response.status)
+      throw new ApiError(json?.error || `HTTP ${response.status}`, response.status, json?.code)
     }
 
     const json = await response.json()

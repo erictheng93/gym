@@ -274,6 +274,13 @@ pnpm db:migrate
 which overflowed at a score of 100). `bun run db:push` applies it as an
 in-place `ALTER COLUMN TYPE`; widening precision is lossless and needs no backfill.
 
+### Booking override columns
+
+`bookings` gains two nullable columns, `override_reason` (text) and `override_by`
+(uuid, FK `users.id`, `ON DELETE SET NULL`), which record a manager+ booking made
+without a valid contract (trial / make-up class). `bun run db:push` adds them; no
+backfill is needed (existing rows stay NULL).
+
 ### Tenant backfill before `db:push` (#109)
 
 `members`, `contracts` and `payments` now have `tenant_id NOT NULL`. `db:push`

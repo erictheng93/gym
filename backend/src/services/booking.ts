@@ -1,5 +1,5 @@
-import { db, bookings, classSessions, members } from '../db/index.js';
-import { eq, and } from 'drizzle-orm';
+import { db, bookings, classSessions, members, contracts } from '../db/index.js';
+import { eq, and, lte, gte, desc } from 'drizzle-orm';
 
 // =============================================================================
 // BOOKING SERVICE
@@ -45,11 +45,39 @@ const BOOKING_RETURNING = {
   createdAt: bookings.createdAt,
 };
 
+/**
+ * A contract a member can book with: theirs, in the tenant, ACTIVE and valid today.
+ * With `contractId` only that contract qualifies; otherwise the one ending last.
+ */
+export async function findBookableContract(input: {
+  tenantId: string;
+  memberId: string;
+  contractId?: string | null;
+}): Promise<{ id: string } | undefined> {
+  const today = new Date().toISOString().slice(0, 10);
+  const [contract] = await db
+    .select({ id: contracts.id })
+    .from(contracts)
+    .where(and(
+      eq(contracts.memberId, input.memberId),
+      eq(contracts.tenantId, input.tenantId),
+      eq(contracts.status, 'ACTIVE'),
+      lte(contracts.startDate, today),
+      gte(contracts.endDate, today),
+      ...(input.contractId ? [eq(contracts.id, input.contractId)] : []),
+    ))
+    .orderBy(desc(contracts.endDate))
+    .limit(1);
+  return contract;
+}
+
 export async function createBooking(input: {
   branchIds: string[];
   sessionId: string;
   memberId: string;
   contractId?: string | null;
+  /** Manager+ exception: booked without a contract; recorded on the booking. Never deducts sessions. */
+  override?: { reason: string; approvedBy: string };
 }): Promise<CreateBookingResult> {
   const { branchIds, sessionId, memberId } = input;
 
@@ -110,7 +138,9 @@ export async function createBooking(input: {
     const waitlistPosition = isFull ? waitlistCount + 1 : null;
 
     const values = {
-      contractId: input.contractId ?? null,
+      contractId: input.override ? null : (input.contractId ?? null),
+      overrideReason: input.override?.reason ?? null,
+      overrideBy: input.override?.approvedBy ?? null,
       bookingStatus,
       waitlistPosition,
     };

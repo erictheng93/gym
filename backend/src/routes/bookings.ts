@@ -6,7 +6,7 @@ import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
-import { createBooking, cancelBooking } from '../services/booking.js';
+import { createBooking, cancelBooking, findBookableContract } from '../services/booking.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -25,6 +25,8 @@ const BOOKING_SELECT = {
   cancelReason: bookings.cancelReason,
   attendedAt: bookings.attendedAt,
   countDeducted: bookings.countDeducted,
+  overrideReason: bookings.overrideReason,
+  overrideBy: bookings.overrideBy,
 };
 const BOOKING_COUNT_SELECT = { count: sql<number>`count(*)` };
 
@@ -109,7 +111,16 @@ const createBookingSchema = z.object({
   sessionId: z.string().uuid(),
   memberId: z.string().uuid(),
   contractId: z.string().uuid().optional().nullable(),
+  // Manager+ only: book without a valid contract (trial / make-up class), with a reason.
+  override: z.object({
+    reason: z.string().trim().min(2, '請填寫例外原因（至少 2 字）').max(200, '例外原因不可超過 200 字'),
+  }).strict().optional(),
+}).refine(d => !(d.override && d.contractId), {
+  message: '例外預約不可同時指定合約',
+  path: ['override'],
 });
+
+const OVERRIDE_ROLES = ['super_admin', 'admin', 'manager'];
 
 const cancelBookingSchema = z.object({
   reason: z.string().optional(),
@@ -231,13 +242,34 @@ app.get('/:id', async (c) => {
 
 app.post('/', zValidator('json', createBookingSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
+  const user = c.get('user')!;
   const data = c.req.valid('json');
+
+  if (data.override && !OVERRIDE_ROLES.includes(user.role)) {
+    return c.json({ success: false, error: '權限不足：僅主管以上可建立例外預約' }, 403);
+  }
+
+  // Normal bookings need a contract valid today (it is attached to the booking);
+  // an explicit manager+ override books without one.
+  let contractId: string | null = null;
+  if (!data.override) {
+    const contract = await findBookableContract({ tenantId, memberId: data.memberId, contractId: data.contractId });
+    if (!contract) {
+      return c.json({
+        success: false,
+        error: data.contractId ? '此合約無法用於預約' : '沒有有效合約，無法預約課程',
+        code: 'NO_VALID_CONTRACT',
+      }, 400);
+    }
+    contractId = contract.id;
+  }
 
   const result = await createBooking({
     branchIds: await getTenantBranchIds(tenantId),
     sessionId: data.sessionId,
     memberId: data.memberId,
-    contractId: data.contractId,
+    contractId,
+    override: data.override ? { reason: data.override.reason, approvedBy: user.id } : undefined,
   });
 
   if (!result.ok) {
@@ -329,7 +361,8 @@ app.post('/:id/attend', async (c) => {
   await db.update(bookings).set({
     bookingStatus: 'ATTENDED',
     attendedAt: new Date(),
-    countDeducted: booking.class.requiresCount,
+    // No contract (manager override booking) => nothing is deducted.
+    countDeducted: false,
     updatedAt: new Date(),
   }).where(eq(bookings.id, id));
 

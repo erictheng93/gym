@@ -418,6 +418,9 @@ export const bookings = pgTable('bookings', {
   cancelReason: text('cancel_reason'),
   attendedAt: timestamp('attended_at', { withTimezone: true }),
   countDeducted: boolean('count_deducted').default(false),
+  // Set only when a manager+ booked the member without a valid contract (trial / make-up class).
+  overrideReason: text('override_reason'),
+  overrideBy: uuid('override_by').references(() => users.id, { onDelete: 'set null' }),
 }, (table) => [
   index('idx_bookings_member').on(table.memberId, table.bookingStatus),
   index('idx_bookings_session').on(table.sessionId, table.bookingStatus),

@@ -3,7 +3,8 @@
  *
  * Mirrors the staff bookings API (backend/src/routes/bookings.ts), camelCase:
  * - GET  /api/bookings?memberId=&sessionId=&status=&date=&page=&limit=   totals in `meta`
- * - POST /api/bookings              { sessionId, memberId, contractId? }
+ * - POST /api/bookings              { sessionId, memberId, contractId? } or, manager+ only,
+ *                                   { sessionId, memberId, override: { reason } } (no contract, never deducts)
  * - POST /api/bookings/:id/cancel   { reason? } (not within 2 h of the start; promotes the waitlist)
  * - POST /api/bookings/:id/attend   (session day only; deducts class counts)
  *
@@ -59,7 +60,14 @@ const errorMessage = (error: unknown, fallback: string) => {
   return message && !message.startsWith('[object') && !message.startsWith('HTTP ') ? message : fallback
 }
 
+/** Backend answer when a member has no ACTIVE, in-date contract (offer the manager override) */
+export const NO_VALID_CONTRACT = 'NO_VALID_CONTRACT'
+export const BOOKING_OVERRIDE_ROLES: readonly string[] = ['super_admin', 'admin', 'manager']
+
+export type BookSessionResult = { ok: true; data: { message: string } } | { ok: false; error: string; code?: string }
+
 export const useClassBookings = () => {
+  const { user } = useAuth()
   const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
 
@@ -101,14 +109,24 @@ export const useClassBookings = () => {
   }
 
   /** Book a member into a session; the backend puts them on the waitlist when it is full */
-  const bookSession = async (input: { sessionId: string; memberId: string; contractId?: string | null }): Promise<ActionResult<{ message: string }>> => {
+  const bookSession = async (input: {
+    sessionId: string
+    memberId: string
+    contractId?: string | null
+    /** Manager+ only: book without a valid contract (trial / make-up class); the reason is required */
+    override?: { reason: string }
+  }): Promise<BookSessionResult> => {
     try {
       const response = await apiFetch('/bookings', { method: 'POST', body: input }) as { message?: string }
       return { ok: true, data: { message: response.message ?? '預約成功' } }
     } catch (error) {
-      return { ok: false, error: errorMessage(error, '預約失敗') }
+      const code = (error as { code?: string } | null)?.code
+      return { ok: false, error: errorMessage(error, '預約失敗'), code }
     }
   }
+
+  /** super_admin / admin / manager may book without a valid contract (with a reason) */
+  const canOverrideBooking = computed(() => BOOKING_OVERRIDE_ROLES.includes(user.value?.role ?? ''))
 
   const cancelBooking = async (bookingId: string, reason?: string): Promise<ActionResult> => {
     try {
@@ -136,6 +154,7 @@ export const useClassBookings = () => {
     fetchBookings,
     getBookingStats,
     bookSession,
+    canOverrideBooking,
     cancelBooking,
     attendClass
   }

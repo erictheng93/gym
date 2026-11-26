@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db, classSessions, bookings, members, contracts, membershipPlans } from '../src/db/index.js';
+import { db, classSessions, bookings, members, contracts, membershipPlans, users, sessions } from '../src/db/index.js';
+import { hash } from '@node-rs/argon2';
 import { eq, and } from 'drizzle-orm';
 import {
   createTestFixtures,
@@ -9,6 +10,12 @@ import {
   TEST_BRANCH_ID,
   TEST_MEMBER_ID,
   TEST_CONTRACT_ID,
+  TEST_PLAN_ID,
+  TEST_USER_ID,
+  TEST_STAFF_USER_ID,
+  TEST_STAFF_EMAIL,
+  TEST_STAFF_PASSWORD,
+  memberAuthRequest,
   TEST_CLASS_ID,
   TEST_SESSION_ID,
   TEST_TENANT_ID,
@@ -161,6 +168,20 @@ describe('Bookings API', () => {
         joinDate: new Date().toISOString().split('T')[0],
         tenantId: TEST_TENANT_ID,
       }).returning();
+
+      await db.insert(contracts).values({
+        contractNo: 'C-WAIT-001',
+        memberId: waitlistMember.id,
+        planId: TEST_PLAN_ID,
+        startDate: new Date().toISOString().split('T')[0],
+        originalEndDate: '2099-01-01',
+        endDate: '2099-01-01',
+        status: 'ACTIVE',
+        totalAmount: '1000',
+        paymentStatus: 'PAID',
+        branchId: TEST_BRANCH_ID,
+        tenantId: TEST_TENANT_ID,
+      });
 
       const response = await authRequest('/api/bookings', {
         method: 'POST',
@@ -639,6 +660,187 @@ describe('Bookings API', () => {
       });
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  // =========================================================================
+  // Manager+ override: book without a valid contract (trial / make-up class)
+  // =========================================================================
+
+  describe('POST /api/bookings with override', () => {
+    const today = new Date().toISOString().split('T')[0];
+    let leadId: string;
+    let staffToken: string;
+    const sessionIds: string[] = [];
+
+    let slot = 0;
+    const newSession = async (sessionDate: string) => {
+      const startTime = `04:${String(slot++).padStart(2, '0')}`;
+      const [s] = await db.insert(classSessions).values({
+        classId: TEST_CLASS_ID,
+        branchId: TEST_BRANCH_ID,
+        sessionDate,
+        startTime,
+        endTime: '23:59',
+        maxCapacity: 20,
+        currentCount: 0,
+        sessionStatus: 'SCHEDULED',
+      }).returning();
+      sessionIds.push(s!.id);
+      return s!.id;
+    };
+    const tomorrow = () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0]!;
+    };
+    const book = (token: string, body: Record<string, unknown>) =>
+      authRequest('/api/bookings', { method: 'POST', token, body: JSON.stringify(body) });
+
+    beforeAll(async () => {
+      // A member with no contract at all (e.g. a lead trying a class)
+      const [lead] = await db.insert(members).values({
+        fullName: 'Trial Lead',
+        phone: '0911000999',
+        memberCode: 'M-TRIAL-001',
+        branchId: TEST_BRANCH_ID,
+        status: 'ACTIVE',
+        joinDate: today,
+        tenantId: TEST_TENANT_ID,
+      }).returning();
+      leadId = lead!.id;
+
+      await db.delete(users).where(eq(users.id, TEST_STAFF_USER_ID));
+      await db.insert(users).values({
+        id: TEST_STAFF_USER_ID,
+        email: TEST_STAFF_EMAIL,
+        passwordHash: await hash(TEST_STAFF_PASSWORD),
+        role: 'staff',
+        tenantId: TEST_TENANT_ID,
+        isActive: true,
+        emailVerified: true,
+      });
+      const login = await authRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: TEST_STAFF_EMAIL, password: TEST_STAFF_PASSWORD }),
+      });
+      staffToken = (await login.json()).data.token;
+    });
+
+    afterAll(async () => {
+      for (const id of sessionIds) {
+        await db.delete(bookings).where(eq(bookings.sessionId, id));
+        await db.delete(classSessions).where(eq(classSessions.id, id));
+      }
+      await db.delete(bookings).where(eq(bookings.memberId, leadId));
+      await db.delete(members).where(eq(members.id, leadId));
+      await db.delete(sessions).where(eq(sessions.userId, TEST_STAFF_USER_ID));
+      await db.delete(users).where(eq(users.id, TEST_STAFF_USER_ID));
+    });
+
+    it('still rejects a member without a valid contract when there is no override', async () => {
+      const sessionId = await newSession(tomorrow());
+      const response = await book(authToken, { sessionId, memberId: leadId });
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe('NO_VALID_CONTRACT');
+    });
+
+    it('lets a manager+ book without a contract and records the reason and approver', async () => {
+      const sessionId = await newSession(tomorrow());
+      const response = await book(authToken, { sessionId, memberId: leadId, override: { reason: '  體驗課  ' } });
+      expect(response.status).toBe(201);
+      const data = await response.json();
+      expect(data.data.contractId).toBeNull();
+
+      const [stored] = await db.select().from(bookings).where(eq(bookings.id, data.data.id));
+      expect(stored).toMatchObject({
+        contractId: null,
+        bookingStatus: 'CONFIRMED',
+        overrideReason: '體驗課',
+        overrideBy: TEST_USER_ID,
+      });
+    });
+
+    it('rejects an override from the staff role with 403 and books nothing', async () => {
+      const sessionId = await newSession(tomorrow());
+      const response = await book(staffToken, { sessionId, memberId: leadId, override: { reason: '體驗課' } });
+      expect(response.status).toBe(403);
+      expect(await db.select().from(bookings).where(eq(bookings.sessionId, sessionId))).toHaveLength(0);
+    });
+
+    it('lets the staff role book normally with a valid contract', async () => {
+      const sessionId = await newSession(tomorrow());
+      const response = await book(staffToken, { sessionId, memberId: TEST_MEMBER_ID });
+      expect(response.status).toBe(201);
+      const [stored] = await db.select().from(bookings).where(eq(bookings.sessionId, sessionId));
+      expect(stored).toMatchObject({ contractId: expect.any(String), overrideReason: null, overrideBy: null });
+    });
+
+    it.each([
+      ['empty', ''],
+      ['whitespace only', '    '],
+      ['too short', 'a'],
+      ['too long', 'x'.repeat(201)],
+    ])('rejects an override with a %s reason', async (_label, reason) => {
+      const sessionId = await newSession(tomorrow());
+      const response = await book(authToken, { sessionId, memberId: leadId, override: { reason } });
+      expect(response.status).toBe(400);
+      expect(await db.select().from(bookings).where(eq(bookings.sessionId, sessionId))).toHaveLength(0);
+    });
+
+    it('rejects an override that also names a contract', async () => {
+      const sessionId = await newSession(tomorrow());
+      const response = await book(authToken, {
+        sessionId, memberId: TEST_MEMBER_ID, contractId: TEST_CONTRACT_ID, override: { reason: '體驗課' },
+      });
+      expect(response.status).toBe(400);
+    });
+
+    it('still applies the duplicate-booking rule', async () => {
+      const sessionId = await newSession(tomorrow());
+      expect((await book(authToken, { sessionId, memberId: leadId, override: { reason: '體驗課' } })).status).toBe(201);
+      expect((await book(authToken, { sessionId, memberId: leadId, override: { reason: '體驗課' } })).status).toBe(400);
+    });
+
+    it('still applies capacity: a full session puts the override booking on the waitlist', async () => {
+      const sessionId = await newSession(tomorrow());
+      await db.update(classSessions).set({ maxCapacity: 1, currentCount: 1 }).where(eq(classSessions.id, sessionId));
+      const response = await book(authToken, { sessionId, memberId: leadId, override: { reason: '補課' } });
+      expect(response.status).toBe(201);
+      const data = await response.json();
+      expect(data.data).toMatchObject({ bookingStatus: 'WAITLIST', waitlistPosition: 1 });
+    });
+
+    it('attends an override booking without deducting any session or failing', async () => {
+      const sessionId = await newSession(today);
+      // A same-day session is already "past" for the booking API, so insert the override booking directly.
+      const [booking] = await db.insert(bookings).values({
+        sessionId, memberId: leadId, contractId: null, bookingStatus: 'CONFIRMED',
+        overrideReason: '體驗課', overrideBy: TEST_USER_ID,
+      }).returning();
+      const created = { data: { id: booking!.id } };
+
+      const [before] = await db.select().from(contracts).where(eq(contracts.id, TEST_CONTRACT_ID));
+      const response = await authRequest(`/api/bookings/${created.data.id}/attend`, { method: 'POST', token: authToken });
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.remainingCounts).toBeNull();
+
+      const [stored] = await db.select().from(bookings).where(eq(bookings.id, created.data.id));
+      expect(stored).toMatchObject({ bookingStatus: 'ATTENDED', countDeducted: false, contractId: null });
+      const [after] = await db.select().from(contracts).where(eq(contracts.id, TEST_CONTRACT_ID));
+      expect(after!.remainingCounts).toBe(before!.remainingCounts);
+    });
+
+    it('ignores the override field on the member self-service route', async () => {
+      const sessionId = await newSession(tomorrow());
+      const blocked = await memberAuthRequest('/api/member/bookings', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, override: { reason: '體驗課' } }),
+      });
+      // member has a valid contract: books normally, override is not recorded
+      expect(blocked.status).toBe(201);
+      const [stored] = await db.select().from(bookings).where(eq(bookings.sessionId, sessionId));
+      expect(stored).toMatchObject({ contractId: expect.any(String), overrideReason: null, overrideBy: null });
     });
   });
 });

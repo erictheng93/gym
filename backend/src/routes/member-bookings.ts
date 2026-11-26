@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, bookings, classSessions, classes, contracts, employees, classReviews, BOOKING_STATUS } from '../db/index.js';
-import { eq, and, gte, lte, inArray, desc } from 'drizzle-orm';
+import { db, bookings, classSessions, classes, employees, classReviews, BOOKING_STATUS } from '../db/index.js';
+import { eq, and, gte, inArray, desc } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
-import { createBooking, cancelBooking } from '../services/booking.js';
+import { createBooking, cancelBooking, findBookableContract } from '../services/booking.js';
 
 // =============================================================================
 // MEMBER BOOKINGS ROUTES
@@ -115,22 +115,8 @@ app.get('/', zValidator('query', listQuerySchema), async (c) => {
 app.post('/', zValidator('json', createSchema), async (c) => {
   const memberInfo = c.get('member')!;
   const { sessionId, contractId } = c.req.valid('json');
-  const today = new Date().toISOString().slice(0, 10);
-
   // A contract the member can book with: their own, in their tenant, ACTIVE and valid today.
-  const [contract] = await db
-    .select({ id: contracts.id })
-    .from(contracts)
-    .where(and(
-      eq(contracts.memberId, memberInfo.id),
-      eq(contracts.tenantId, memberInfo.tenantId),
-      eq(contracts.status, 'ACTIVE'),
-      lte(contracts.startDate, today),
-      gte(contracts.endDate, today),
-      ...(contractId ? [eq(contracts.id, contractId)] : []),
-    ))
-    .orderBy(desc(contracts.endDate))
-    .limit(1);
+  const contract = await findBookableContract({ tenantId: memberInfo.tenantId, memberId: memberInfo.id, contractId });
 
   if (!contract) {
     return c.json({
