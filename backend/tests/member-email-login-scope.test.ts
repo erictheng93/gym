@@ -240,7 +240,7 @@ describe('Member email: verified change, scoped login, escaped templates', () =>
       expect((await b.json()).data.member.id).toBe(SHARED_B_ID);
     });
 
-    it('without tenantSlug and a wrong password, answers like an unknown account and counts no failures', async () => {
+    it('without tenantSlug and a wrong password, answers like an unknown account but still counts the failure', async () => {
       const wrong = await login({ email: SHARED_EMAIL, password: 'NotThePassword1' });
       const unknown = await login({ email: 'nobody-here@scope.test', password: 'NotThePassword1' });
 
@@ -250,7 +250,18 @@ describe('Member email: verified change, scoped login, escaped templates', () =>
       const rows = await db.select({ failed: memberCredentials.failedAttempts })
         .from(memberCredentials)
         .where(inArray(memberCredentials.memberId, [SHARED_A_ID, SHARED_B_ID]));
-      expect(rows.map(r => r.failed ?? 0)).toEqual([0, 0]);
+      expect(rows.map(r => r.failed ?? 0)).toEqual([1, 1]);
+    });
+
+    it('without tenantSlug, repeated wrong guesses hit the same lockout (no brute-force bypass)', async () => {
+      for (let i = 0; i < 5; i++) await login({ email: SHARED_EMAIL, password: `Wrong${i}Guess` });
+      // both candidates are now locked, so even the right password is refused generically
+      const right = await login({ email: SHARED_EMAIL, password: PASSWORD_A });
+      expect(right.status).toBe(401);
+      const rows = await db.select({ lockedUntil: memberCredentials.lockedUntil })
+        .from(memberCredentials)
+        .where(inArray(memberCredentials.memberId, [SHARED_A_ID, SHARED_B_ID]));
+      expect(rows.every(r => r.lockedUntil && r.lockedUntil > new Date())).toBe(true);
     });
 
     it('without tenantSlug and the same password in both gyms, refuses with 409 MULTIPLE_ACCOUNTS', async () => {

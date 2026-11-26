@@ -48,6 +48,21 @@ const ARGON2_OPTIONS = {
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
+/** One wrong password: bump the counter, lock the credential at MAX_FAILED_ATTEMPTS. */
+async function recordFailedAttempt(cred: { id: string; failedAttempts: number | null }) {
+  const newFailedAttempts = (cred.failedAttempts || 0) + 1;
+  const locked = newFailedAttempts >= MAX_FAILED_ATTEMPTS;
+  await db
+    .update(memberCredentials)
+    .set({
+      failedAttempts: newFailedAttempts,
+      ...(locked && { lockedUntil: new Date(Date.now() + LOCKOUT_DURATION_MS) }),
+      updatedAt: new Date(),
+    })
+    .where(eq(memberCredentials.id, cred.id));
+  return { newFailedAttempts, locked };
+}
+
 const CREDENTIALS_HASH_SELECT = {
   id: memberCredentials.id,
   passwordHash: memberCredentials.passwordHash,
@@ -253,6 +268,9 @@ app.post(
         if (!cred || !cred.passwordHash || row.member.status === 'BANNED') continue;
         if (cred.lockedUntil && new Date(cred.lockedUntil) > new Date()) continue;
         if (await verify(cred.passwordHash, password, ARGON2_OPTIONS)) verified.push(row);
+        // Count every wrong guess so the slug-less path is held to the same lockout;
+        // the response stays generic, so it doesn't reveal which gym's account was hit.
+        else await recordFailedAttempt(cred);
       }
       if (verified.length === 0) return invalidCredentials();
       if (verified.length > 1) {
@@ -302,33 +320,14 @@ app.post(
       const isValid = await verify(credentials.passwordHash, password, ARGON2_OPTIONS);
 
       if (!isValid) {
-        const newFailedAttempts = (credentials.failedAttempts || 0) + 1;
-
-        // Update failed attempts
-        if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
-          await db
-            .update(memberCredentials)
-            .set({
-              failedAttempts: newFailedAttempts,
-              lockedUntil: new Date(Date.now() + LOCKOUT_DURATION_MS),
-              updatedAt: new Date(),
-            })
-            .where(eq(memberCredentials.id, credentials.id));
-
+        const { newFailedAttempts, locked } = await recordFailedAttempt(credentials);
+        if (locked) {
           return c.json({
             success: false,
             error: '登入失敗次數過多，帳號已鎖定 30 分鐘',
             code: 'ACCOUNT_LOCKED',
           }, 403);
         }
-
-        await db
-          .update(memberCredentials)
-          .set({
-            failedAttempts: newFailedAttempts,
-            updatedAt: new Date(),
-          })
-          .where(eq(memberCredentials.id, credentials.id));
 
         return c.json({
           success: false,
