@@ -152,10 +152,14 @@ const createContractSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
+// YYYY-MM-DD strings compare correctly as plain strings
 const pauseContractSchema = z.object({
-  startDate: z.string(),
-  endDate: z.string(),
+  startDate: z.iso.date(),
+  endDate: z.iso.date(),
   reason: z.string().optional(),
+}).refine((d) => d.endDate > d.startDate, {
+  message: '暫停結束日必須晚於開始日',
+  path: ['endDate'],
 });
 
 app.get('/', async (c) => {
@@ -525,37 +529,52 @@ app.post('/:id/pause', zValidator('json', pauseContractSchema), async (c) => {
     return c.json({ success: false, error: '只有有效狀態的合約可以暫停' }, 400);
   }
 
-  const pauseStart = new Date(data.startDate);
-  const pauseEnd = new Date(data.endDate);
-  const daysAffected = Math.ceil((pauseEnd.getTime() - pauseStart.getTime()) / (1000 * 60 * 60 * 24));
+  // Date-only strings parse as UTC midnight; stay in UTC so the server TZ can't shift days.
+  // The schema guarantees endDate > startDate, so daysAffected >= 1.
+  const daysAffected = Math.round(
+    (Date.parse(data.endDate) - Date.parse(data.startDate)) / (1000 * 60 * 60 * 24)
+  );
 
   let newEndDate = contract.endDate;
   if (contract.endDate) {
     const currentEnd = new Date(contract.endDate);
-    currentEnd.setDate(currentEnd.getDate() + daysAffected);
+    currentEnd.setUTCDate(currentEnd.getUTCDate() + daysAffected);
     newEndDate = currentEnd.toISOString().slice(0, 10);
   }
 
-  const [, [updatedContract]] = await Promise.all([
-    db.insert(contractLogs).values({
-      contractId: id,
-      logType: 'PAUSE',
-      startDate: data.startDate,
-      endDate: data.endDate,
-      daysAffected: daysAffected,
-      reason: data.reason,
-      tenantId: tenantId,
-    }),
-    db
+  // One transaction, and only an ACTIVE contract moves: a concurrent second pause
+  // finds no row and can't extend endDate twice or leave an orphan log.
+  const updatedContract = await db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(contracts)
       .set({
         status: 'PAUSED',
         endDate: newEndDate,
         updatedAt: new Date(),
       })
-      .where(eq(contracts.id, id))
-      .returning(CONTRACT_RETURNING),
-  ]);
+      .where(and(eq(contracts.id, id), eq(contracts.status, 'ACTIVE')))
+      .returning(CONTRACT_RETURNING);
+
+    if (!updated) return null;
+
+    await tx.insert(contractLogs).values({
+      contractId: id,
+      logType: 'PAUSE',
+      startDate: data.startDate,
+      endDate: data.endDate,
+      daysAffected,
+      reason: data.reason,
+      createdByEmployee: c.get('user')?.employeeId ?? null,
+      branchId: contract.branchId,
+      tenantId,
+    });
+
+    return updated;
+  });
+
+  if (!updatedContract) {
+    return c.json({ success: false, error: '合約狀態已變更，請重新整理後再試' }, 409);
+  }
 
   // Member status stays ACTIVE - the contract is paused, not the member
   // They can still have other active contracts

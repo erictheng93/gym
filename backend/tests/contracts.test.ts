@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { eq } from 'drizzle-orm';
 import app from '../src/app.js';
+import { db, contracts, contractLogs } from '../src/db/index.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -352,8 +354,57 @@ describe('Contracts API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       expect(data.data.status).toBe('PAUSED');
-      // End date should be extended by ~7 days
-      expect(new Date(data.data.endDate).getTime()).toBeGreaterThan(new Date(originalEndDate).getTime());
+      // End date is extended by exactly the pause length
+      const expectedEnd = new Date(`${originalEndDate}T00:00:00Z`);
+      expectedEnd.setUTCDate(expectedEnd.getUTCDate() + 7);
+      expect(data.data.endDate).toBe(expectedEnd.toISOString().split('T')[0]);
+
+      const [log] = await db.select().from(contractLogs).where(eq(contractLogs.contractId, contractId));
+      expect(log).toMatchObject({ logType: 'PAUSE', daysAffected: 7, reason: 'Vacation', branchId: TEST_BRANCH_ID });
+    });
+
+    // #117: invalid ranges must be rejected without touching the contract
+    async function createActiveContract() {
+      const today = new Date();
+      const end = new Date(today);
+      end.setMonth(end.getMonth() + 3);
+      const createRes = await authRequest('/api/contracts', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({
+          memberId: TEST_MEMBER_ID,
+          planId: TEST_PLAN_ID,
+          branchId: TEST_BRANCH_ID,
+          startDate: today.toISOString().split('T')[0],
+          endDate: end.toISOString().split('T')[0],
+          totalAmount: 3000,
+        }),
+      });
+      const { data } = await createRes.json();
+      await authRequest(`/api/contracts/${data.id}/activate`, { method: 'POST', token: authToken });
+      return data as { id: string; endDate: string };
+    }
+
+    it.each([
+      ['endDate before startDate', '2026-12-10', '2026-12-01'],
+      ['endDate equal to startDate', '2026-12-01', '2026-12-01'],
+      ['non-date strings', 'abc', 'xyz'],
+      ['impossible calendar date', '2026-02-30', '2026-03-05'],
+    ])('should reject a pause with %s (400) and leave the contract unchanged', async (_case, startDate, endDate) => {
+      const contract = await createActiveContract();
+
+      const response = await authRequest(`/api/contracts/${contract.id}/pause`, {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({ startDate, endDate }),
+      });
+
+      expect(response.status).toBe(400);
+      const [after] = await db.select().from(contracts).where(eq(contracts.id, contract.id));
+      expect(after.status).toBe('ACTIVE');
+      expect(after.endDate).toBe(contract.endDate);
+      const logs = await db.select().from(contractLogs).where(eq(contractLogs.contractId, contract.id));
+      expect(logs).toHaveLength(0);
     });
 
     it('should reject pausing a non-ACTIVE contract', async () => {
@@ -393,14 +444,16 @@ describe('Contracts API', () => {
     });
 
     it('should return 404 for non-existent contract', async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
       const response = await authRequest('/api/contracts/00000000-0000-4000-8000-999999999999/pause', {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
-          startDate: today,
-          endDate: today,
+          startDate: today.toISOString().split('T')[0],
+          endDate: tomorrow.toISOString().split('T')[0],
         }),
       });
 
@@ -584,12 +637,11 @@ describe('Contracts API', () => {
     });
 
     it('should return 403 when pausing a contract from another tenant', async () => {
-      const today = new Date().toISOString().split('T')[0];
-
+      // A valid range, so the request reaches the tenant check
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}/pause`, {
         method: 'POST',
         token: authToken,
-        body: JSON.stringify({ startDate: today, endDate: today }),
+        body: JSON.stringify({ startDate: '2026-12-01', endDate: '2026-12-08' }),
       });
 
       expect(response.status).toBe(403);

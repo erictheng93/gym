@@ -136,6 +136,21 @@ export const useContracts = () => {
     }
   }
 
+  // 暫停合約：由後端驗證日期、計算天數並延長到期日（同一 transaction 寫入異動紀錄）
+  const pauseContract = async (id: string, pause: { startDate: string; endDate: string; reason?: string }) => {
+    try {
+      const { data } = await apiFetch<Contract>(`/contracts/${id}/pause`, { method: 'POST', body: pause })
+      invalidateCache([CACHE_KEYS.CONTRACTS, CACHE_KEYS.MEMBERS])
+      return data
+    } catch (error) {
+      handleError(error, {
+        context: 'useContracts.pauseContract',
+        customMessage: MESSAGES.ERRORS.CONTRACT_PAUSE_FAILED
+      })
+      return null
+    }
+  }
+
   // 統計資料
   const getContractStats = async (branchId?: string, force = false) => {
     const defaultStats = { active: 0, expired: 0, draft: 0 }
@@ -202,6 +217,7 @@ export const useContracts = () => {
     createContract,
     updateContract,
     activateContract,
+    pauseContract,
     getContractStats
   }
 }
