@@ -80,13 +80,15 @@ const SMS_CHARSET = {
 // Module State
 // -----------------------------------------------------------------------------
 
+// Loaded from env at startup (MITAKE_*); initSmsService can still override
+// (tests). Nothing called initSmsService, so the env credentials were ignored.
 let config: SmsConfig = {
-  username: null,
-  password: null,
-  apiUrl: 'https://smsapi.mitake.com.tw/api/mtk/SmSend',
+  username: process.env.MITAKE_USERNAME || null,
+  password: process.env.MITAKE_PASSWORD || null,
+  apiUrl: process.env.MITAKE_API_URL || 'https://smsapi.mitake.com.tw/api/mtk/SmSend',
   costPerSegment: 0.5, // NT$ per SMS segment
 };
-let initialized = false;
+let initialized = !!(config.username && config.password);
 
 // -----------------------------------------------------------------------------
 // Initialization
@@ -111,6 +113,7 @@ export function initSmsService(options: {
   }
 
   if (!config.username || !config.password) {
+    initialized = false;
     console.log('[SMSService] Mitake credentials not configured - SMS notifications disabled');
     return false;
   }
@@ -185,6 +188,32 @@ export async function getConfigForBranch(branchId?: string): Promise<SmsConfig> 
   };
 }
 
+/** Whether an SMS to a member of `branchId` (or with no branch) has credentials to go out. */
+export async function isSmsAvailableForBranch(branchId?: string): Promise<boolean> {
+  const branchConfig = await smsService.getConfigForBranch(branchId);
+  return !!(branchConfig.username && branchConfig.password);
+}
+
+/** Whether any SMS credentials exist: the env (MITAKE_*) or an SMS-enabled branch. */
+export async function isAnySmsConfigured(): Promise<boolean> {
+  if (smsService.isSmsEnabled()) return true;
+  try {
+    const [row] = await db
+      .select({ branchId: branchNotificationConfig.branchId })
+      .from(branchNotificationConfig)
+      .where(and(
+        eq(branchNotificationConfig.smsEnabled, true),
+        sql`${branchNotificationConfig.mitakeUsername} is not null`,
+        sql`${branchNotificationConfig.mitakePassword} is not null`,
+      ))
+      .limit(1);
+    return !!row;
+  } catch (error) {
+    console.error('[SMSService] Error checking branch configs:', error);
+    return false;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Send SMS Function
 // -----------------------------------------------------------------------------
@@ -241,7 +270,7 @@ export async function sendSms(options: SendSmsOptions): Promise<SmsResult> {
       branchId,
       phoneNumber: normalizedPhone,
       notificationType: type,
-      messageContent: message,
+      messageContent: loggedMessageContent(type, data, message),
       characterCount: charCount,
       segmentCount,
       mitakeMsgid: result.msgid,
@@ -277,7 +306,7 @@ export async function sendSms(options: SendSmsOptions): Promise<SmsResult> {
       branchId,
       phoneNumber: normalizedPhone,
       notificationType: type,
-      messageContent: buildSmsMessage(type, data),
+      messageContent: loggedMessageContent(type, data, buildSmsMessage(type, data)),
       characterCount: 0,
       segmentCount: 0,
       success: false,
@@ -336,6 +365,11 @@ export function buildSmsMessage(type: SmsNotificationType, data: Record<string, 
 
   // Default message
   return `【Gym Nexus】${(data.message as string) || '您有新的通知，請登入APP查看。'}`;
+}
+
+/** Message text for sms_logs: a one-time code is never stored. */
+function loggedMessageContent(type: SmsNotificationType, data: Record<string, unknown>, message: string): string {
+  return type === 'otp' ? buildSmsMessage(type, { ...data, code: '******' }) : message;
 }
 
 // -----------------------------------------------------------------------------
@@ -651,6 +685,8 @@ export const smsService = {
   initSmsService,
   isSmsEnabled,
   getConfigForBranch,
+  isSmsAvailableForBranch,
+  isAnySmsConfigured,
   sendSms,
   buildSmsMessage,
   normalizePhoneNumber,

@@ -35,13 +35,30 @@ test.describe('Member Profile', () => {
     await page.getByRole('button', { name: '編輯' }).click()
 
     await expect(page.locator('#edit-name')).toHaveValue('趙小明')
-    await expect(page.locator('#edit-phone')).toBeVisible()
+    // Phone is not a plain edit field: it changes only through SMS verification
+    await expect(page.locator('#edit-phone')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '儲存' })).toBeVisible()
 
     await page.getByRole('button', { name: '取消' }).click()
 
     await expect(page.locator('.info-card')).toBeVisible()
     await expect(page.locator('#edit-name')).toBeHidden()
+  })
+
+  test('should open the verified phone change and cancel it', async ({ page }) => {
+    await page.getByRole('button', { name: '變更手機號碼' }).click()
+
+    await expect(page.locator('#change-phone')).toBeVisible()
+    await expect(page.getByRole('button', { name: '發送驗證碼' })).toBeVisible()
+
+    // Invalid number is refused client-side, no code is requested
+    await page.locator('#change-phone').fill('12345')
+    await page.getByRole('button', { name: '發送驗證碼' }).click()
+    await expect(page.locator('#change-phone-error')).toContainText('請輸入有效的手機號碼')
+
+    await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.locator('.info-card')).toBeVisible()
+    await expect(page.locator('#change-phone')).toHaveCount(0)
   })
 
   test('should show theme options', async ({ page }) => {

@@ -123,16 +123,21 @@ describe('Member Profile Routes', () => {
       expect(data.success).toBe(true);
     });
 
-    it('should reject invalid phone format', async () => {
+    it('refuses a phone change without verification and changes nothing', async () => {
+      const { db, members } = await import('../src/db/index.js');
+      const { eq } = await import('drizzle-orm');
+      const phoneOf = async () => (await db.select({ phone: members.phone, fullName: members.fullName })
+        .from(members).where(eq(members.id, TEST_MEMBER_ID)))[0];
+      const before = await phoneOf();
 
       const res = await memberRequest('/api/member/me', {
         method: 'PUT',
-        body: JSON.stringify({
-          phone: '12345',
-        }),
+        body: JSON.stringify({ phone: '0933999888', fullName: 'Should Not Save' }),
       });
 
       expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('PHONE_VERIFICATION_REQUIRED');
+      expect(await phoneOf()).toEqual(before);
     });
 
     it('should reject invalid email format', async () => {

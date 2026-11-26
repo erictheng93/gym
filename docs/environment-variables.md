@@ -104,9 +104,19 @@ npx web-push generate-vapid-keys
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MITAKE_USERNAME` | If using SMS | - | Mitake username |
-| `MITAKE_PASSWORD` | If using SMS | - | Mitake password |
+| `MITAKE_USERNAME` | Production (member phone OTP) | - | Mitake username |
+| `MITAKE_PASSWORD` | Production (member phone OTP) | - | Mitake password |
 | `MITAKE_API_URL` | No | `https://smsapi.mitake.com.tw/...` | API endpoint |
+
+Member phone OTP (login, phone change, complete-profile) has no other channel:
+without Mitake credentials (env or per-branch) production answers
+`503 SMS_UNAVAILABLE`. See [deployment-runbook.md](deployment-runbook.md#member-phone-otp-sms-mitake_-and-gym-scope-tenant_slug).
+
+### Member app
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TENANT_SLUG` | Yes (production) | branding: `gym-nexus`; OTP login: unscoped | `tenants.slug` of the gym this deployment serves; used for branding and to scope OTP login (read at build time for OTP; `NUXT_PUBLIC_TENANT_SLUG` overrides it at runtime) |
 
 ### Payment Gateways
 
