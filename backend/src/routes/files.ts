@@ -88,6 +88,48 @@ app.get('/', async (c) => {
 });
 
 /**
+ * GET /api/files/stats
+ * Get storage statistics
+ * Must be registered before GET /:id, which would otherwise match "stats" (#108)
+ */
+app.get('/stats', async (c) => {
+  const tenantId = c.get('tenantId')!;
+
+  const allFiles = await db
+    .select(FILE_STORAGE_STATS_SELECT)
+    .from(files)
+    .where(eq(files.tenantId, tenantId));
+
+  const totalSize = allFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+  const totalCount = allFiles.length;
+
+  // Group by mime type
+  const byType = allFiles.reduce((acc, f) => {
+    const type = f.mimeType?.split('/')[0] || 'unknown';
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Group by folder
+  const byFolder = allFiles.reduce((acc, f) => {
+    const folder = f.folder || 'root';
+    acc[folder] = (acc[folder] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return c.json({
+    success: true,
+    data: {
+      totalFiles: totalCount,
+      totalSizeBytes: totalSize,
+      totalSizeMB: Math.round(totalSize / 1024 / 1024 * 100) / 100,
+      byType,
+      byFolder,
+    },
+  });
+});
+
+/**
  * GET /api/files/:id
  * Get file by ID
  */
@@ -309,47 +351,6 @@ app.delete('/:id', async (c) => {
   }
 
   return c.json({ success: true, message: '檔案已刪除' });
-});
-
-/**
- * GET /api/files/stats
- * Get storage statistics
- */
-app.get('/stats', async (c) => {
-  const tenantId = c.get('tenantId')!;
-
-  const allFiles = await db
-    .select(FILE_STORAGE_STATS_SELECT)
-    .from(files)
-    .where(eq(files.tenantId, tenantId));
-
-  const totalSize = allFiles.reduce((sum, f) => sum + (f.size || 0), 0);
-  const totalCount = allFiles.length;
-
-  // Group by mime type
-  const byType = allFiles.reduce((acc, f) => {
-    const type = f.mimeType?.split('/')[0] || 'unknown';
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Group by folder
-  const byFolder = allFiles.reduce((acc, f) => {
-    const folder = f.folder || 'root';
-    acc[folder] = (acc[folder] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  return c.json({
-    success: true,
-    data: {
-      totalFiles: totalCount,
-      totalSizeBytes: totalSize,
-      totalSizeMB: Math.round(totalSize / 1024 / 1024 * 100) / 100,
-      byType,
-      byFolder,
-    },
-  });
 });
 
 export default app;
