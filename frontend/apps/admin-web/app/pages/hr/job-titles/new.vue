@@ -18,6 +18,7 @@ const { createJobTitle } = useJobTitles()
 const isSubmitting = ref(false)
 const form = reactive({
   name: '',
+  code: '',
   permissions_config: createEmptyPermissions()
 })
 
@@ -87,22 +88,23 @@ const handleSubmit = async () => {
   clearErrors()
 
   const isValid = validate(form, {
-    name: [required('請輸入職位名稱')]
+    name: [required('請輸入職位名稱')],
+    code: [required('請輸入職位代碼'), maxLength(20, '職位代碼不可超過 20 個字元')]
   })
 
   if (!isValid) return
 
   isSubmitting.value = true
   try {
-    await createJobTitle({
-      name: form.name,
-      permissions_config: form.permissions_config
+    // createJobTitle toasts the backend's reason and returns null on failure
+    const created = await createJobTitle({
+      name: form.name.trim(),
+      code: form.code.trim(),
+      permissionsConfig: form.permissions_config
     })
+    if (!created) return
     useToast().success(MESSAGES.SUCCESS.JOB_TITLE_CREATED)
     router.push('/hr/job-titles')
-  } catch (error) {
-    console.error('Failed to create job title:', error)
-    useToast().error(MESSAGES.ERRORS.JOB_TITLE_CREATE_FAILED)
   } finally {
     isSubmitting.value = false
   }
@@ -149,6 +151,15 @@ const handleSubmit = async () => {
           placeholder="例：店長、教練、櫃檯人員"
           :required="true"
           :error="errors.name"
+        />
+
+        <FormInput
+          v-model="form.code"
+          label="職位代碼"
+          placeholder="例：MANAGER、COACH"
+          :maxlength="20"
+          :required="true"
+          :error="errors.code"
         />
       </section>
 

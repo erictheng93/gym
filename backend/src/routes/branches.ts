@@ -18,6 +18,8 @@ const createBranchSchema = z.object({
   address: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   taxId: z.string().optional().nullable(),
+  // 'published' is the column default (a live branch); the DELETE route sets 'archived'
+  status: z.enum(['published', 'archived']).optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
 });
 

@@ -11,8 +11,29 @@ const inFlightShiftSchedulesMap = new Map<string, Promise<void>>()
 const inFlightEmployeeShiftsMap = new Map<string, Promise<void>>()
 const inFlightSingleShiftMap = new Map<string, Promise<ShiftSchedule | null>>()
 
+/** An ACTIVE employee of a branch, as the assignment picker shows it. */
+export interface BranchEmployee {
+  id: string
+  full_name: string
+  employee_code: string
+  branch_id: string
+}
+
+/** A row of GET /api/employees (camelCase, see backend routes/employees.ts). */
+interface ApiEmployee {
+  id: string
+  fullName: string
+  employeeCode: string
+  branchId: string
+  status: string
+}
+
+/**
+ * Write calls go through apiFetch, which throws with the backend's error text on a
+ * non-2xx response, so callers never report success for a rejected write.
+ */
 export const useShiftSchedules = () => {
-  const { readItems, readItem, createItem, updateItem } = useFetch()
+  const { apiFetch, readItems, readItem } = useFetch()
 
   // ============================================
   // 狀態
@@ -82,27 +103,30 @@ export const useShiftSchedules = () => {
   /**
    * 建立班表
    */
-  const createShiftSchedule = async (shift: Partial<ShiftSchedule>) => {
-    const data = await createItem<ShiftSchedule>('shift_schedules', {
-      ...shift,
-      status: 'published'
+  const createShiftSchedule = async (shift: Partial<ShiftSchedule>): Promise<ShiftSchedule> => {
+    const { data } = await apiFetch<ShiftSchedule>('/shift_schedules', {
+      method: 'POST',
+      body: { ...shift, status: 'published' }
     })
+    if (!data) throw new Error('建立班表失敗')
     return data
   }
 
   /**
    * 更新班表
    */
-  const updateShiftSchedule = async (id: string, shift: Partial<ShiftSchedule>) => {
-    const data = await updateItem<ShiftSchedule>('shift_schedules', id, shift)
+  const updateShiftSchedule = async (id: string, shift: Partial<ShiftSchedule>): Promise<ShiftSchedule> => {
+    const { data } = await apiFetch<ShiftSchedule>(`/shift_schedules/${id}`, { method: 'PATCH', body: shift })
+    if (!data) throw new Error('更新班表失敗')
     return data
   }
 
   /**
    * 刪除班表（軟刪除）
    */
-  const deleteShiftSchedule = async (id: string) => {
-    await updateItem<ShiftSchedule>('shift_schedules', id, { status: 'archived' })
+  const deleteShiftSchedule = async (id: string): Promise<void> => {
+    // DELETE archives the schedule (soft delete) on the backend
+    await apiFetch(`/shift_schedules/${id}`, { method: 'DELETE' })
   }
 
   // ============================================
@@ -231,19 +255,25 @@ export const useShiftSchedules = () => {
     const currentShift = await getEmployeeCurrentShift(data.employeeId)
 
     if (currentShift && currentShift.shift_schedule_id !== data.shiftScheduleId) {
-      await updateItem<EmployeeShift>('employee_shifts', currentShift.id, {
-        end_date: new Date(new Date(data.effectiveDate).getTime() - 86400000).toISOString().slice(0, 10)
+      await apiFetch<EmployeeShift>(`/employee_shifts/${currentShift.id}`, {
+        method: 'PATCH',
+        body: {
+          end_date: new Date(new Date(data.effectiveDate).getTime() - 86400000).toISOString().slice(0, 10)
+        }
       })
     }
 
-    const result = await createItem<EmployeeShift>('employee_shifts', {
-      employee_id: data.employeeId,
-      shift_schedule_id: data.shiftScheduleId,
-      effective_date: data.effectiveDate,
-      end_date: data.endDate || null
+    const { data: created } = await apiFetch<EmployeeShift>('/employee_shifts', {
+      method: 'POST',
+      body: {
+        employee_id: data.employeeId,
+        shift_schedule_id: data.shiftScheduleId,
+        effective_date: data.effectiveDate,
+        end_date: data.endDate || null
+      }
     })
-
-    return result
+    if (!created) throw new Error('指派班表失敗')
+    return created
   }
 
   /**
@@ -266,7 +296,7 @@ export const useShiftSchedules = () => {
       )
     )
 
-    return results.filter((r): r is EmployeeShift => r !== null)
+    return results
   }
 
   /**
@@ -276,11 +306,12 @@ export const useShiftSchedules = () => {
     effectiveDate?: string
     endDate?: string | null
   }) => {
-    const result = await updateItem<EmployeeShift>('employee_shifts', shiftId, {
-      effective_date: data.effectiveDate,
-      end_date: data.endDate
+    const { data: updated } = await apiFetch<EmployeeShift>(`/employee_shifts/${shiftId}`, {
+      method: 'PATCH',
+      body: { effective_date: data.effectiveDate, end_date: data.endDate }
     })
-    return result
+    if (!updated) throw new Error('更新班表指派失敗')
+    return updated
   }
 
   /**
@@ -290,25 +321,23 @@ export const useShiftSchedules = () => {
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
 
-    const result = await updateItem<EmployeeShift>('employee_shifts', shiftId, {
-      end_date: toLocalDateString(yesterday)
+    const { data: updated } = await apiFetch<EmployeeShift>(`/employee_shifts/${shiftId}`, {
+      method: 'PATCH',
+      body: { end_date: toLocalDateString(yesterday) }
     })
-    return result
+    if (!updated) throw new Error('移除班表指派失敗')
+    return updated
   }
 
   /**
    * 取得分店員工列表（用於排班選擇）
    */
-  const fetchBranchEmployees = async (branchId: string) => {
-    const result = await readItems<Employee>('employees', {
-      filter: {
-        branch_id: branchId,
-        employment_status: 'ACTIVE',
-        status: 'active'
-      },
-      sort: 'full_name'
-    })
-    return result.data
+  const fetchBranchEmployees = async (branchId: string): Promise<BranchEmployee[]> => {
+    // GET /employees reads only `branchId` and returns every status, sorted by name
+    const { data } = await apiFetch<ApiEmployee[]>('/employees', { params: { branchId } })
+    return (data || [])
+      .filter(e => e.status === 'ACTIVE')
+      .map(e => ({ id: e.id, full_name: e.fullName, employee_code: e.employeeCode, branch_id: e.branchId }))
   }
 
   return {

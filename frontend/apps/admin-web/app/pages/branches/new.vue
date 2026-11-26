@@ -7,7 +7,7 @@ const branchTypeOptions = [
 ]
 
 const statusOptions = [
-  { value: 'active', label: STATUS.OPERATING },
+  { value: 'published', label: STATUS.OPERATING },
   { value: 'archived', label: STATUS.DISABLED }
 ]
 </script>
@@ -37,7 +37,7 @@ const initialData: CreateBranchInput = {
   address: '',
   phone: '',
   tax_id: '',
-  status: 'active'
+  status: 'published'
 }
 
 const {
@@ -65,7 +65,7 @@ const handleSubmit = async () => {
         type: form.type,
         address: form.address?.trim() || null,
         phone: form.phone?.trim() || null,
-        tax_id: form.tax_id?.trim() || null,
+        taxId: form.tax_id?.trim() || null,
         status: form.status
       }
 
@@ -77,7 +77,8 @@ const handleSubmit = async () => {
     },
     {
       successMessage: MESSAGES.SUCCESS.BRANCH_CREATED,
-      errorMessage: MESSAGES.ERRORS.BRANCH_CREATE_FAILED,
+      // useBranches.createBranch already toasted the backend's reason
+      showErrorToast: false,
       onSuccess: () => { router.push('/branches') },
       onError: () => setError('submit', PAGES.BRANCHES.ERROR_CREATE_FAILED)
     }

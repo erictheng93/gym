@@ -133,6 +133,34 @@ describe('Branches API', () => {
       expect(data.data.phone).toBe('0999888777');
     });
 
+    it('should save taxId and status (archive / re-publish)', async () => {
+      const archive = await authRequest(`/api/branches/${createdBranchId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ taxId: '12345678', status: 'archived' }),
+      });
+      expect(archive.status).toBe(200);
+      const archived = (await archive.json()).data;
+      expect(archived.taxId).toBe('12345678');
+      expect(archived.status).toBe('archived');
+
+      const publish = await authRequest(`/api/branches/${createdBranchId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ status: 'published' }),
+      });
+      expect((await publish.json()).data.status).toBe('published');
+    });
+
+    it('should reject an unknown status', async () => {
+      const response = await authRequest(`/api/branches/${createdBranchId}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ status: 'active' }),
+      });
+      expect(response.status).toBe(400);
+    });
+
     it('should return 404 for non-existent branch', async () => {
       const response = await authRequest('/api/branches/00000000-0000-4000-8000-999999999999', {
         method: 'PATCH',

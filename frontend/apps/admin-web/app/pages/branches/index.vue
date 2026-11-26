@@ -5,6 +5,7 @@
  * 使用 @gym-nexus/ui 組件庫重構
  */
 import { MESSAGES, PAGES, LABELS, STATUS } from '~/constants'
+import { isBranchActive } from '~/composables/useBranches'
 
 definePageMeta({
   middleware: 'auth'
@@ -20,7 +21,7 @@ const statsConfig = computed(() => {
   let activeCount = 0
   for (const b of list) {
     if (b.type === 'HEADQUARTER') hqCount++
-    if (b.status === 'active') activeCount++
+    if (isBranchActive(b)) activeCount++
   }
   return [
     { label: PAGES.BRANCHES.TOTAL_BRANCHES, value: list.length, icon: 'calendar' as const, variant: 'default' as const },
@@ -31,7 +32,7 @@ const statsConfig = computed(() => {
 
 // Initial load
 onMounted(() => {
-  fetchBranches()
+  fetchBranches(true)
 })
 
 // Helper functions
@@ -114,11 +115,11 @@ const branchTypeLabel = (type: string) => {
             <span>{{ branch.phone }}</span>
           </div>
 
-          <div v-if="branch.tax_id" class="detail-item">
+          <div v-if="branch.taxId" class="detail-item">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" />
             </svg>
-            <span>{{ PAGES.BRANCHES.TAX_ID_PREFIX }}{{ branch.tax_id }}</span>
+            <span>{{ PAGES.BRANCHES.TAX_ID_PREFIX }}{{ branch.taxId }}</span>
           </div>
         </div>
 

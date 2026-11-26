@@ -5,7 +5,7 @@
  * 管理職位與權限設定
  */
 import { MESSAGES } from '~/constants'
-import type { JobTitle } from '~/types/schema'
+import type { ApiJobTitle } from '~/composables/useJobTitles'
 
 definePageMeta({
   middleware: 'auth'
@@ -16,7 +16,7 @@ const { jobTitles, isLoading, fetchJobTitles, deleteJobTitle } = useJobTitles()
 
 // Modal state
 const showDeleteModal = ref(false)
-const selectedJobTitle = ref<JobTitle | null>(null)
+const selectedJobTitle = ref<ApiJobTitle | null>(null)
 const isDeleting = ref(false)
 
 // Load job titles
@@ -25,12 +25,12 @@ onMounted(async () => {
 })
 
 // Handle edit
-const handleEdit = (jobTitle: JobTitle) => {
+const handleEdit = (jobTitle: ApiJobTitle) => {
   router.push(`/hr/job-titles/${jobTitle.id}/edit`)
 }
 
 // Handle delete confirm
-const confirmDelete = (jobTitle: JobTitle) => {
+const confirmDelete = (jobTitle: ApiJobTitle) => {
   selectedJobTitle.value = jobTitle
   showDeleteModal.value = true
 }
@@ -41,26 +41,24 @@ const handleDelete = async () => {
 
   isDeleting.value = true
   try {
-    await deleteJobTitle(selectedJobTitle.value.id)
+    // deleteJobTitle toasts the backend's reason (e.g. 403 for non-admins) and returns false
+    if (!(await deleteJobTitle(selectedJobTitle.value.id))) return
     useToast().success(MESSAGES.SUCCESS.JOB_TITLE_DELETED)
     showDeleteModal.value = false
     selectedJobTitle.value = null
     await fetchJobTitles()
-  } catch (error) {
-    console.error('Failed to delete job title:', error)
-    useToast().error(MESSAGES.ERRORS.JOB_TITLE_DELETE_FAILED)
   } finally {
     isDeleting.value = false
   }
 }
 
 // Get permission count
-const getPermissionCount = (jobTitle: JobTitle) => {
-  if (!jobTitle.permissions_config || typeof jobTitle.permissions_config !== 'object') {
+const getPermissionCount = (jobTitle: ApiJobTitle) => {
+  if (!jobTitle.permissionsConfig || typeof jobTitle.permissionsConfig !== 'object') {
     return 0
   }
   let count = 0
-  const permissions = jobTitle.permissions_config as Record<string, Record<string, boolean>>
+  const permissions = jobTitle.permissionsConfig
   Object.values(permissions).forEach(module => {
     if (module && typeof module === 'object') {
       Object.values(module).forEach(value => {

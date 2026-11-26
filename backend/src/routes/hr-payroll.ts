@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, salaryRecords, promotionRecords, employees, jobTitles, branches } from '../db/index.js';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
-import { authMiddleware, requireAuth, requireTenant } from '../middleware/index.js';
+import { authMiddleware, requireAuth, requireTenant, requireRole } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { generateExcel, generateCsv, payrollColumns, translateStatus } from '../services/export.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
@@ -165,7 +165,14 @@ const EMPLOYEE_PROMOTION_SELECT = {
   branchId: employees.branchId,
 };
 
-app.use('*', authMiddleware, requireAuth, requireTenant);
+// Salary data is not for every staff member: reading needs a manager, and
+// anything that creates, changes, approves or pays a salary (or a promotion,
+// which changes salary) needs an admin - the same split as branches/employees
+// (writes: super_admin/admin/manager, deletes and money: super_admin/admin).
+const HR_READ_ROLES = ['super_admin', 'admin', 'manager'];
+const HR_ADMIN_ROLES = ['super_admin', 'admin'];
+
+app.use('*', authMiddleware, requireAuth, requireTenant, requireRole(...HR_READ_ROLES));
 
 // -----------------------------------------------------------------------------
 // GET /api/payroll/salary-records - List Salary Records
@@ -295,7 +302,7 @@ const generateSchema = z.object({
   employee_ids: z.array(z.string().uuid()).optional(),
 });
 
-app.post('/generate', zValidator('json', generateSchema), async (c) => {
+app.post('/generate', requireRole(...HR_ADMIN_ROLES), zValidator('json', generateSchema), async (c) => {
   const { period, branch_id, employee_ids } = c.req.valid('json');
   const tenantId = c.get('tenantId')!;
   const branchIds = await getTenantBranchIds(tenantId);
@@ -384,7 +391,7 @@ const updateSchema = z.object({
   notes: z.string().optional(),
 });
 
-app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => {
+app.patch('/salary-records/:id', requireRole(...HR_ADMIN_ROLES), zValidator('json', updateSchema), async (c) => {
   const id = c.req.param('id');
   const updates = c.req.valid('json');
   const branchIds = await getTenantBranchIds(c.get('tenantId')!);
@@ -438,7 +445,7 @@ app.patch('/salary-records/:id', zValidator('json', updateSchema), async (c) => 
 // POST /api/payroll/salary-records/:id/approve - Approve Salary Record
 // -----------------------------------------------------------------------------
 
-app.post('/salary-records/:id/approve', async (c) => {
+app.post('/salary-records/:id/approve', requireRole(...HR_ADMIN_ROLES), async (c) => {
   const id = c.req.param('id');
   const user = c.get('user');
   const branchIds = await getTenantBranchIds(c.get('tenantId')!);
@@ -487,7 +494,7 @@ const batchApproveSchema = z.object({
   ids: z.array(z.string().uuid()),
 });
 
-app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => {
+app.post('/batch-approve', requireRole(...HR_ADMIN_ROLES), zValidator('json', batchApproveSchema), async (c) => {
   const { ids } = c.req.valid('json');
   const user = c.get('user');
   const branchIds = await getTenantBranchIds(c.get('tenantId')!);
@@ -519,7 +526,7 @@ app.post('/batch-approve', zValidator('json', batchApproveSchema), async (c) => 
 // POST /api/payroll/salary-records/:id/pay - Mark as Paid
 // -----------------------------------------------------------------------------
 
-app.post('/salary-records/:id/pay', async (c) => {
+app.post('/salary-records/:id/pay', requireRole(...HR_ADMIN_ROLES), async (c) => {
   const id = c.req.param('id');
   const branchIds = await getTenantBranchIds(c.get('tenantId')!);
 
@@ -690,7 +697,7 @@ const promotionSchema = z.object({
   reason: z.string().optional(),
 });
 
-app.post('/promotions', zValidator('json', promotionSchema), async (c) => {
+app.post('/promotions', requireRole(...HR_ADMIN_ROLES), zValidator('json', promotionSchema), async (c) => {
   const data = c.req.valid('json');
   const user = c.get('user');
   const tenantId = c.get('tenantId')!;

@@ -10,7 +10,8 @@ const branchDateFormatter = new Intl.DateTimeFormat('zh-TW', {
 
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS, LABELS } from '~/constants'
-import type { Branch, Employee } from '~/types/schema'
+import { isBranchActive, type ApiBranch } from '~/composables/useBranches'
+import type { ApiEmployee } from '~/composables/useEmployees'
 
 definePageMeta({
   middleware: 'auth',
@@ -24,8 +25,8 @@ const route = useRoute()
 const router = useRouter()
 const { fetchBranch, fetchBranchEmployees, updateBranch, deleteBranch } = useBranches()
 
-const branch = ref<Branch | null>(null)
-const employees = ref<Employee[]>([])
+const branch = ref<ApiBranch | null>(null)
+const employees = ref<ApiEmployee[]>([])
 const isLoading = ref(true)
 const isDeleting = ref(false)
 const showDeleteModal = ref(false)
@@ -65,28 +66,23 @@ const branchTypeLabel = (type: string) => {
 
 const handleToggleStatus = async () => {
   if (!branch.value) return
-  try {
-    const newStatus = branch.value.status === 'active' ? 'archived' : 'active'
-    await updateBranch(branch.value.id, { status: newStatus })
-    branch.value.status = newStatus
-    useToast().success(newStatus === 'active' ? MESSAGES.SUCCESS.BRANCH_ACTIVATED : MESSAGES.SUCCESS.BRANCH_ARCHIVED)
-    showArchiveModal.value = false
-  } catch (error) {
-    console.error('Failed to update branch status:', error)
-    useToast().error(MESSAGES.ERRORS.BRANCH_UPDATE_STATUS_FAILED)
-  }
+  const newStatus = isBranchActive(branch.value) ? 'archived' : 'published'
+  // updateBranch toasts the backend's reason and returns null on failure
+  const updated = await updateBranch(branch.value.id, { status: newStatus })
+  if (!updated) return
+  branch.value.status = updated.status
+  useToast().success(newStatus === 'published' ? MESSAGES.SUCCESS.BRANCH_ACTIVATED : MESSAGES.SUCCESS.BRANCH_ARCHIVED)
+  showArchiveModal.value = false
 }
 
 const handleDelete = async () => {
   if (!branch.value) return
   isDeleting.value = true
   try {
-    await deleteBranch(branch.value.id)
+    // deleteBranch toasts the backend's reason (HQ, branch with employees, no permission) and returns false
+    if (!(await deleteBranch(branch.value.id))) return
     useToast().success(MESSAGES.SUCCESS.BRANCH_DELETED)
     router.push('/branches')
-  } catch (error) {
-    console.error('Failed to delete branch:', error)
-    useToast().error(MESSAGES.ERRORS.BRANCH_DELETE_FAILED)
   } finally {
     isDeleting.value = false
     showDeleteModal.value = false
@@ -121,16 +117,16 @@ const handleDelete = async () => {
           </NuxtLink>
           <button
             class="btn btn-ghost"
-            :class="branch.status === 'active' ? 'btn-warning' : 'btn-success'"
+            :class="isBranchActive(branch) ? 'btn-warning' : 'btn-success'"
             @click="showArchiveModal = true"
           >
-            <svg v-if="branch.status === 'active'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg v-if="isBranchActive(branch)" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" />
             </svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
             </svg>
-            {{ branch.status === 'active' ? PAGES.BRANCHES.ARCHIVE_BRANCH : PAGES.BRANCHES.ACTIVATE_BRANCH }}
+            {{ isBranchActive(branch) ? PAGES.BRANCHES.ARCHIVE_BRANCH : PAGES.BRANCHES.ACTIVATE_BRANCH }}
           </button>
           <button class="btn btn-ghost btn-danger" @click="showDeleteModal = true">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -204,13 +200,13 @@ const handleDelete = async () => {
             </div>
             <div class="info-item">
               <label>{{ PAGES.BRANCHES.STATUS }}</label>
-              <span :class="branch.status === 'active' ? 'text-success' : 'text-secondary'">
-                {{ branch.status === 'active' ? STATUS.OPERATING : STATUS.DISABLED }}
+              <span :class="isBranchActive(branch) ? 'text-success' : 'text-secondary'">
+                {{ isBranchActive(branch) ? STATUS.OPERATING : STATUS.DISABLED }}
               </span>
             </div>
             <div class="info-item">
               <label>{{ PAGES.BRANCHES.TAX_ID }}</label>
-              <span>{{ branch.tax_id || '—' }}</span>
+              <span>{{ branch.taxId || '—' }}</span>
             </div>
           </div>
         </section>
@@ -246,11 +242,11 @@ const handleDelete = async () => {
           <div class="info-grid">
             <div class="info-item">
               <label>{{ PAGES.BRANCHES.CREATED_AT }}</label>
-              <span>{{ formatDate(branch.date_created) }}</span>
+              <span>{{ formatDate(branch.createdAt) }}</span>
             </div>
             <div class="info-item">
               <label>{{ PAGES.BRANCHES.UPDATED_AT }}</label>
-              <span>{{ formatDate(branch.date_updated) }}</span>
+              <span>{{ formatDate(branch.updatedAt) }}</span>
             </div>
           </div>
         </section>
@@ -291,11 +287,11 @@ const handleDelete = async () => {
             class="employee-card card card-interactive"
           >
             <div class="employee-avatar">
-              {{ employee.full_name[0] }}
+              {{ employee.fullName[0] }}
             </div>
             <div class="employee-info">
-              <h4 class="employee-name">{{ employee.full_name }}</h4>
-              <span class="employee-title">{{ employee.job_title?.name || '—' }}</span>
+              <h4 class="employee-name">{{ employee.fullName }}</h4>
+              <span class="employee-title">{{ employee.jobTitle?.name || '—' }}</span>
             </div>
             <svg class="card-arrow" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="m9 18 6-6-6-6" />
@@ -315,8 +311,8 @@ const handleDelete = async () => {
     <Teleport to="body">
       <div v-if="showArchiveModal" class="modal-overlay" @click.self="showArchiveModal = false">
         <div class="modal-content glass-card">
-          <div class="modal-icon" :class="branch?.status === 'active' ? 'modal-icon-warning' : 'modal-icon-success'">
-            <svg v-if="branch?.status === 'active'" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <div class="modal-icon" :class="branch && isBranchActive(branch) ? 'modal-icon-warning' : 'modal-icon-success'">
+            <svg v-if="branch && isBranchActive(branch)" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" />
             </svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -324,16 +320,16 @@ const handleDelete = async () => {
             </svg>
           </div>
           <h3 class="modal-title">
-            {{ branch?.status === 'active' ? PAGES.BRANCHES.ARCHIVE_BRANCH : PAGES.BRANCHES.ACTIVATE_BRANCH }}
+            {{ branch && isBranchActive(branch) ? PAGES.BRANCHES.ARCHIVE_BRANCH : PAGES.BRANCHES.ACTIVATE_BRANCH }}
           </h3>
           <p class="modal-desc text-secondary">
-            {{ branch?.status === 'active' ? PAGES.BRANCHES.CONFIRM_ARCHIVE : `確定要啟用「${branch?.name}」嗎？` }}
+            {{ branch && isBranchActive(branch) ? PAGES.BRANCHES.CONFIRM_ARCHIVE : `確定要啟用「${branch?.name}」嗎？` }}
           </p>
           <div class="modal-actions">
             <button class="btn btn-secondary" @click="showArchiveModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
             <button
               class="btn"
-              :class="branch?.status === 'active' ? 'btn-warning' : 'btn-success'"
+              :class="branch && isBranchActive(branch) ? 'btn-warning' : 'btn-success'"
               @click="handleToggleStatus"
             >
               {{ MESSAGES.ACTIONS.CONFIRM }}

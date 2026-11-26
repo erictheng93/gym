@@ -103,93 +103,103 @@ describe('useShiftSchedules', () => {
     })
   })
 
+  // Writes go through apiFetch: it throws with the backend's error text on a non-2xx
+  // answer (the old createItem/updateItem helpers returned null and the page then
+  // toasted success). Shapes follow backend routes/shift-schedules.ts.
+  const apiSchedule = (overrides: Partial<ShiftSchedule> = {}): ShiftSchedule => ({
+    id: 'shift-new',
+    status: 'published',
+    date_created: '2025-01-15T10:00:00.000Z',
+    date_updated: null,
+    branch_id: 'branch-1',
+    name: '早班',
+    start_time: '09:00:00',
+    end_time: '18:00:00',
+    break_start: null,
+    break_end: null,
+    grace_period_minutes: 15,
+    early_leave_minutes: 15,
+    overtime_start_after: null,
+    is_default: false,
+    applicable_days: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
+    ...overrides
+  })
+
   describe('班表 CRUD - createShiftSchedule', () => {
-    it('應該成功建立班表', async () => {
-      const newShift: Partial<ShiftSchedule> = {
-        name: '新班表',
-        start_time: '10:00',
-        end_time: '19:00'
-      }
-
-      const createdShift: Partial<ShiftSchedule> = {
-        id: 'shift-new',
-        ...newShift,
-        status: 'published'
-      }
-
-      mockFetchInstance.createItem.mockResolvedValueOnce(createdShift)
+    it('POSTs the schedule with status published and returns the created row', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiSchedule() })
 
       const { createShiftSchedule } = useShiftSchedules()
+      const result = await createShiftSchedule({
+        name: '早班',
+        branch_id: 'branch-1',
+        start_time: '09:00',
+        end_time: '18:00',
+        applicable_days: ['MONDAY', 'FRIDAY']
+      })
 
-      const result = await createShiftSchedule(newShift)
-
-      expect(result).toEqual(createdShift)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
-        'shift_schedules',
-        expect.objectContaining({
-          name: '新班表',
+      expect(result).toMatchObject({ id: 'shift-new', name: '早班' })
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/shift_schedules', {
+        method: 'POST',
+        body: {
+          name: '早班',
+          branch_id: 'branch-1',
+          start_time: '09:00',
+          end_time: '18:00',
+          applicable_days: ['MONDAY', 'FRIDAY'],
           status: 'published'
-        })
-      )
+        }
+      })
     })
 
-    it('應該在建立失敗時返回 null', async () => {
-      mockFetchInstance.createItem.mockResolvedValueOnce(null)
+    it('throws the backend error instead of returning null', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('無效的分店'))
 
       const { createShiftSchedule } = useShiftSchedules()
 
-      const result = await createShiftSchedule({ name: 'Test' })
-
-      expect(result).toBeNull()
-    })
-
-    it('建立時一律強制 status 為 published', async () => {
-      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'shift-new' })
-
-      const { createShiftSchedule } = useShiftSchedules()
-
-      await createShiftSchedule({ name: 'Test', status: 'archived' })
-
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('shift_schedules', { name: 'Test', status: 'published' })
+      await expect(createShiftSchedule({ name: 'Test' })).rejects.toThrow('無效的分店')
     })
   })
 
   describe('班表 CRUD - updateShiftSchedule', () => {
-    it('應該成功更新班表', async () => {
-      const updateData = { name: '更新後的班表' }
-      const updatedShift: Partial<ShiftSchedule> = {
-        id: 'shift-1',
-        name: '更新後的班表'
-      }
+    it('PATCHes the schedule and returns the updated row', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiSchedule({ id: 'shift-1', name: '新早班' }) })
 
-      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedShift)
+      const { updateShiftSchedule } = useShiftSchedules()
+      const result = await updateShiftSchedule('shift-1', { name: '新早班' })
+
+      expect(result).toMatchObject({ id: 'shift-1', name: '新早班' })
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/shift_schedules/shift-1', {
+        method: 'PATCH',
+        body: { name: '新早班' }
+      })
+    })
+
+    it('throws on a 404 / 400 answer', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到班表'))
 
       const { updateShiftSchedule } = useShiftSchedules()
 
-      const result = await updateShiftSchedule('shift-1', updateData)
-
-      expect(result).toEqual(updatedShift)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'shift_schedules',
-        'shift-1',
-        updateData
-      )
+      await expect(updateShiftSchedule('shift-1', { name: 'x' })).rejects.toThrow('找不到班表')
     })
   })
 
   describe('班表 CRUD - deleteShiftSchedule', () => {
-    it('應該軟刪除班表（設為 archived）', async () => {
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+    it('DELETEs the schedule (the backend archives it)', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, message: '班表已刪除' })
+
+      const { deleteShiftSchedule } = useShiftSchedules()
+      await deleteShiftSchedule('shift-1')
+
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/shift_schedules/shift-1', { method: 'DELETE' })
+    })
+
+    it('throws when the backend refuses', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
       const { deleteShiftSchedule } = useShiftSchedules()
 
-      await deleteShiftSchedule('shift-1')
-
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'shift_schedules',
-        'shift-1',
-        { status: 'archived' }
-      )
+      await expect(deleteShiftSchedule('shift-1')).rejects.toThrow('權限不足')
     })
   })
 
@@ -498,268 +508,213 @@ describe('useShiftSchedules', () => {
     })
   })
 
+  // Backend-shaped assignment row (routes/shift-schedules.ts formatEmployeeShift)
+  const apiAssignment = (overrides: Partial<EmployeeShift> = {}): Partial<EmployeeShift> => ({
+    id: 'es-new',
+    date_created: '2025-01-15T10:00:00.000Z',
+    employee_id: 'emp-1',
+    shift_schedule_id: 'shift-1',
+    effective_date: '2025-01-15',
+    end_date: null,
+    ...overrides
+  })
+
   describe('員工排班 - assignShiftToEmployee', () => {
-    it('應該指派班表給沒有當前班表的員工', async () => {
-      // Mock getEmployeeCurrentShift - 沒有當前班表
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [],
-        total: 0
-      })
-
-      const newEmployeeShift: Partial<EmployeeShift> = {
-        id: 'es-new',
-        employee_id: 'emp-1',
-        shift_schedule_id: 'shift-1'
-      }
-
-      mockFetchInstance.createItem.mockResolvedValueOnce(newEmployeeShift)
+    it('POSTs to /employee_shifts for an employee without a current shift', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAssignment() })
 
       const { assignShiftToEmployee } = useShiftSchedules()
-
       const result = await assignShiftToEmployee({
         employeeId: 'emp-1',
         shiftScheduleId: 'shift-1',
         effectiveDate: '2025-01-15'
       })
 
-      expect(result).toEqual(newEmployeeShift)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employee_shifts', {
-        employee_id: 'emp-1',
-        shift_schedule_id: 'shift-1',
-        effective_date: '2025-01-15',
-        end_date: null
+      expect(result).toMatchObject({ id: 'es-new', employee_id: 'emp-1' })
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employee_shifts', {
+        method: 'POST',
+        body: {
+          employee_id: 'emp-1',
+          shift_schedule_id: 'shift-1',
+          effective_date: '2025-01-15',
+          end_date: null
+        }
       })
-      expect(mockFetchInstance.updateItem).not.toHaveBeenCalled()
     })
 
-    it('應該把結束日期帶入新的指派', async () => {
+    it('passes the end date to the new assignment', async () => {
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'es-new' })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAssignment({ end_date: '2025-06-30' }) })
 
       const { assignShiftToEmployee } = useShiftSchedules()
-
       await assignShiftToEmployee({
         employeeId: 'emp-1',
         shiftScheduleId: 'shift-1',
-        effectiveDate: '2025-02-01',
+        effectiveDate: '2025-01-15',
         endDate: '2025-06-30'
       })
 
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employee_shifts', expect.objectContaining({
-        effective_date: '2025-02-01',
-        end_date: '2025-06-30'
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employee_shifts', expect.objectContaining({
+        body: expect.objectContaining({ end_date: '2025-06-30' })
       }))
     })
 
-    it('應該在更換班表時結束舊班表', async () => {
-      // Mock getEmployeeCurrentShift - 有當前班表
-      const currentShift: Partial<EmployeeShift> = {
-        id: 'es-old',
-        employee_id: 'emp-1',
-        shift_schedule_id: 'shift-old',
-        effective_date: '2024-01-01',
-        end_date: null
-      }
-
+    it('ends the current assignment the day before when switching schedules', async () => {
       mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [currentShift],
+        data: [apiAssignment({ id: 'es-old', shift_schedule_id: 'shift-old', effective_date: '2024-01-01' })],
         total: 1
       })
-
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
-
-      const newEmployeeShift: Partial<EmployeeShift> = {
-        id: 'es-new',
-        employee_id: 'emp-1',
-        shift_schedule_id: 'shift-new'
-      }
-
-      mockFetchInstance.createItem.mockResolvedValueOnce(newEmployeeShift)
+      mockFetchInstance.apiFetch
+        .mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-old', end_date: '2025-01-14' }) })
+        .mockResolvedValueOnce({ success: true, data: apiAssignment({ shift_schedule_id: 'shift-new' }) })
 
       const { assignShiftToEmployee } = useShiftSchedules()
-
       await assignShiftToEmployee({
         employeeId: 'emp-1',
         shiftScheduleId: 'shift-new',
         effectiveDate: '2025-01-15'
       })
 
-      // 應該更新舊班表的結束日期
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'employee_shifts',
-        'es-old',
-        { end_date: '2025-01-14' } // 前一天
-      )
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employee_shifts', expect.objectContaining({
-        shift_schedule_id: 'shift-new',
-        effective_date: '2025-01-15'
+      expect(mockFetchInstance.apiFetch).toHaveBeenNthCalledWith(1, '/employee_shifts/es-old', {
+        method: 'PATCH',
+        body: { end_date: '2025-01-14' }
+      })
+      expect(mockFetchInstance.apiFetch).toHaveBeenNthCalledWith(2, '/employee_shifts', expect.objectContaining({
+        method: 'POST',
+        body: expect.objectContaining({ shift_schedule_id: 'shift-new', effective_date: '2025-01-15' })
       }))
     })
 
-    it('應該在相同班表時不更新舊班表', async () => {
-      const currentShift: Partial<EmployeeShift> = {
-        id: 'es-current',
-        employee_id: 'emp-1',
-        shift_schedule_id: 'shift-1', // 相同班表
-        effective_date: '2024-01-01',
-        end_date: null
-      }
-
+    it('does not touch the current assignment of the same schedule', async () => {
       mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: [currentShift],
+        data: [apiAssignment({ id: 'es-old', shift_schedule_id: 'shift-1' })],
         total: 1
       })
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAssignment() })
 
-      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'es-new' })
+      const { assignShiftToEmployee } = useShiftSchedules()
+      await assignShiftToEmployee({ employeeId: 'emp-1', shiftScheduleId: 'shift-1', effectiveDate: '2025-01-15' })
+
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employee_shifts', expect.objectContaining({ method: 'POST' }))
+    })
+
+    it('throws the backend error (e.g. 403 for staff) instead of returning null', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('權限不足'))
 
       const { assignShiftToEmployee } = useShiftSchedules()
 
-      await assignShiftToEmployee({
-        employeeId: 'emp-1',
-        shiftScheduleId: 'shift-1',
-        effectiveDate: '2025-01-15'
-      })
-
-      // 不應該呼叫 updateItem
-      expect(mockFetchInstance.updateItem).not.toHaveBeenCalled()
+      await expect(assignShiftToEmployee({
+        employeeId: 'emp-1', shiftScheduleId: 'shift-1', effectiveDate: '2025-01-15'
+      })).rejects.toThrow('權限不足')
     })
   })
 
   describe('員工排班 - batchAssignShift', () => {
-    it('應該批量指派班表給多個員工', async () => {
-      // Mock for each employee
-      mockFetchInstance.readItems
-        .mockResolvedValueOnce({ data: [], total: 0 })
-        .mockResolvedValueOnce({ data: [], total: 0 })
-        .mockResolvedValueOnce({ data: [], total: 0 })
-
-      mockFetchInstance.createItem
-        .mockResolvedValueOnce({ id: 'es-1', employee_id: 'emp-1' })
-        .mockResolvedValueOnce({ id: 'es-2', employee_id: 'emp-2' })
-        .mockResolvedValueOnce({ id: 'es-3', employee_id: 'emp-3' })
+    it('assigns every employee', async () => {
+      mockFetchInstance.readItems.mockResolvedValue({ data: [], total: 0 })
+      mockFetchInstance.apiFetch
+        .mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-1', employee_id: 'emp-1' }) })
+        .mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-2', employee_id: 'emp-2' }) })
+        .mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-3', employee_id: 'emp-3' }) })
 
       const { batchAssignShift } = useShiftSchedules()
-
-      const result = await batchAssignShift({
+      const results = await batchAssignShift({
         employeeIds: ['emp-1', 'emp-2', 'emp-3'],
         shiftScheduleId: 'shift-1',
         effectiveDate: '2025-01-15'
       })
 
-      expect(result).toHaveLength(3)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(3)
-      const assignedEmployees = mockFetchInstance.createItem.mock.calls.map(call => call[1].employee_id)
-      expect(assignedEmployees).toEqual(['emp-1', 'emp-2', 'emp-3'])
+      expect(results.map(r => r.id)).toEqual(['es-1', 'es-2', 'es-3'])
+      const posted = mockFetchInstance.apiFetch.mock.calls.map(call => call[1].body.employee_id)
+      expect(posted).toEqual(['emp-1', 'emp-2', 'emp-3'])
     })
 
-    it('應該過濾掉失敗的指派', async () => {
-      mockFetchInstance.readItems
-        .mockResolvedValueOnce({ data: [], total: 0 })
-        .mockResolvedValueOnce({ data: [], total: 0 })
-
-      mockFetchInstance.createItem
-        .mockResolvedValueOnce({ id: 'es-1', employee_id: 'emp-1' })
-        .mockResolvedValueOnce(null) // 失敗
+    it('rejects when one assignment fails, so the page does not report success', async () => {
+      mockFetchInstance.readItems.mockResolvedValue({ data: [], total: 0 })
+      mockFetchInstance.apiFetch
+        .mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-1' }) })
+        .mockRejectedValueOnce(new Error('員工不存在'))
 
       const { batchAssignShift } = useShiftSchedules()
 
-      const result = await batchAssignShift({
+      await expect(batchAssignShift({
         employeeIds: ['emp-1', 'emp-2'],
         shiftScheduleId: 'shift-1',
         effectiveDate: '2025-01-15'
-      })
-
-      expect(result).toHaveLength(1)
-      expect(result[0]!.id).toBe('es-1')
+      })).rejects.toThrow('員工不存在')
     })
   })
 
   describe('員工排班 - updateEmployeeShift', () => {
-    it('應該更新員工班表指派', async () => {
-      const updatedShift: Partial<EmployeeShift> = {
-        id: 'es-1',
-        effective_date: '2025-02-01',
-        end_date: '2025-06-30'
-      }
-
-      mockFetchInstance.updateItem.mockResolvedValueOnce(updatedShift)
+    it('PATCHes /employee_shifts/:id', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-1', end_date: '2025-12-31' }) })
 
       const { updateEmployeeShift } = useShiftSchedules()
+      const result = await updateEmployeeShift('es-1', { endDate: '2025-12-31' })
 
-      const result = await updateEmployeeShift('es-1', {
-        effectiveDate: '2025-02-01',
-        endDate: '2025-06-30'
+      expect(result).toMatchObject({ id: 'es-1', end_date: '2025-12-31' })
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employee_shifts/es-1', {
+        method: 'PATCH',
+        body: { effective_date: undefined, end_date: '2025-12-31' }
       })
-
-      expect(result).toEqual(updatedShift)
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'employee_shifts',
-        'es-1',
-        {
-          effective_date: '2025-02-01',
-          end_date: '2025-06-30'
-        }
-      )
     })
 
-    it('應該允許把結束日期清空（無限期）', async () => {
-      mockFetchInstance.updateItem.mockResolvedValueOnce({ id: 'es-1', end_date: null })
+    it('allows clearing the end date (open-ended)', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-1', end_date: null }) })
 
       const { updateEmployeeShift } = useShiftSchedules()
-
       await updateEmployeeShift('es-1', { endDate: null })
 
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('employee_shifts', 'es-1', {
-        effective_date: undefined,
-        end_date: null
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employee_shifts/es-1', {
+        method: 'PATCH',
+        body: { effective_date: undefined, end_date: null }
       })
     })
   })
 
   describe('員工排班 - removeEmployeeShift', () => {
-    it('應該將結束日期設為昨天', async () => {
-      mockFetchInstance.updateItem.mockResolvedValueOnce({})
+    it('ends the assignment yesterday', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data: apiAssignment({ id: 'es-1', end_date: '2025-01-14' }) })
+
+      const { removeEmployeeShift } = useShiftSchedules()
+      await removeEmployeeShift('es-1')
+
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employee_shifts/es-1', {
+        method: 'PATCH',
+        body: { end_date: '2025-01-14' }
+      })
+    })
+
+    it('throws when the backend refuses (no false 「已移除」)', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('找不到班表指派'))
 
       const { removeEmployeeShift } = useShiftSchedules()
 
-      await removeEmployeeShift('es-1')
-
-      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
-        'employee_shifts',
-        'es-1',
-        { end_date: '2025-01-14' } // 昨天
-      )
+      await expect(removeEmployeeShift('es-1')).rejects.toThrow('找不到班表指派')
     })
   })
 
   describe('fetchBranchEmployees', () => {
-    it('應該取得分店員工列表', async () => {
-      const mockEmployees: Partial<Employee>[] = [
-        { id: 'emp-1', full_name: 'John' },
-        { id: 'emp-2', full_name: 'Jane' }
-      ]
-
-      mockFetchInstance.readItems.mockResolvedValueOnce({
-        data: mockEmployees,
-        total: 2
+    it('reads GET /employees?branchId= (camelCase rows) and keeps ACTIVE employees', async () => {
+      mockFetchInstance.apiFetch.mockResolvedValueOnce({
+        success: true,
+        data: [
+          { id: 'emp-1', fullName: '王小明', employeeCode: 'E00001', branchId: 'branch-1', status: 'ACTIVE' },
+          { id: 'emp-2', fullName: '李離職', employeeCode: 'E00002', branchId: 'branch-1', status: 'RESIGNED' }
+        ]
       })
 
       const { fetchBranchEmployees } = useShiftSchedules()
-
       const result = await fetchBranchEmployees('branch-1')
 
-      expect(result).toEqual(mockEmployees)
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith(
-        'employees',
-        {
-          filter: {
-            branch_id: 'branch-1',
-            employment_status: 'ACTIVE',
-            status: 'active'
-          },
-          sort: 'full_name'
-        }
-      )
+      expect(mockFetchInstance.apiFetch).toHaveBeenCalledWith('/employees', { params: { branchId: 'branch-1' } })
+      expect(result).toEqual([
+        { id: 'emp-1', full_name: '王小明', employee_code: 'E00001', branch_id: 'branch-1' }
+      ])
     })
   })
 

@@ -11,7 +11,7 @@ const branchTypeOptions = [
 
 <script setup lang="ts">
 import { MESSAGES, PAGES, STATUS } from '~/constants'
-import type { Branch } from '~/types/schema'
+import type { ApiBranch } from '~/composables/useBranches'
 
 definePageMeta({
   middleware: 'auth',
@@ -25,7 +25,7 @@ const route = useRoute()
 const router = useRouter()
 const { fetchBranch, updateBranch } = useBranches()
 
-const branch = ref<Branch | null>(null)
+const branch = ref<ApiBranch | null>(null)
 const isLoading = ref(true)
 const isSubmitting = ref(false)
 const errors = ref<Record<string, string>>({})
@@ -38,7 +38,7 @@ const form = reactive({
   address: '',
   phone: '',
   tax_id: '',
-  status: 'active' as 'active' | 'archived'
+  status: 'published' as 'published' | 'archived'
 })
 
 const loadBranch = async () => {
@@ -54,8 +54,8 @@ const loadBranch = async () => {
     form.type = data.type
     form.address = data.address || ''
     form.phone = data.phone || ''
-    form.tax_id = data.tax_id || ''
-    form.status = data.status
+    form.tax_id = data.taxId || ''
+    form.status = data.status === 'archived' ? 'archived' : 'published'
   } catch (error) {
     console.error('Failed to load branch:', error)
     useToast().error(MESSAGES.ERRORS.BRANCH_LOAD_FAILED)
@@ -90,11 +90,16 @@ const handleSubmit = async () => {
       type: form.type,
       address: form.address.trim() || null,
       phone: form.phone.trim() || null,
-      tax_id: form.tax_id.trim() || null,
+      taxId: form.tax_id.trim() || null,
       status: form.status
     }
 
-    await updateBranch(branchId.value, branchData)
+    // updateBranch toasts the backend's reason and returns null on failure
+    const updated = await updateBranch(branchId.value, branchData)
+    if (!updated) {
+      errors.value.submit = PAGES.BRANCHES.ERROR_UPDATE_FAILED
+      return
+    }
     useToast().success(MESSAGES.SUCCESS.BRANCH_UPDATED)
     router.push(`/branches/${branchId.value}`)
   } catch (error) {
@@ -190,12 +195,12 @@ const handleSubmit = async () => {
               <div class="radio-group">
                 <label
                   class="radio-option"
-                  :class="{ active: form.status === 'active' }"
+                  :class="{ active: form.status === 'published' }"
                 >
                   <input
                     v-model="form.status"
                     type="radio"
-                    value="active"
+                    value="published"
                     class="radio-input"
                   />
                   {{ STATUS.OPERATING }}

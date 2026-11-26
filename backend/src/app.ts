@@ -71,7 +71,7 @@ import pdfRoutes from './routes/pdf.js';
 import hrPayrollRoutes from './routes/hr-payroll.js';
 import hrPerformanceRoutes from './routes/hr-performance.js';
 import attendancesRoutes from './routes/attendances.js';
-import shiftSchedulesRoutes from './routes/shift-schedules.js';
+import { shiftSchedulesRoutes, employeeShiftsRoutes } from './routes/shift-schedules.js';
 
 // Tenant routes
 import tenantRoutes from './routes/tenant.js';
@@ -213,7 +213,7 @@ app.route('/api/payroll', hrPayrollRoutes);
 app.route('/api/performance', hrPerformanceRoutes);
 app.route('/api/attendances', attendancesRoutes);
 app.route('/api/shift_schedules', shiftSchedulesRoutes);
-app.route('/api/employee_shifts', shiftSchedulesRoutes);
+app.route('/api/employee_shifts', employeeShiftsRoutes);
 
 // Tenant routes
 app.route('/api/tenant', tenantRoutes);
