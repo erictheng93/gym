@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { login, TEST_USERS } from './fixtures/auth'
+import { login, TEST_USERS, goto } from './fixtures/auth'
 
 test.describe('戰情室 Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await login(page, TEST_USERS.admin)
-    await page.goto('/dashboard/war-room')
+    await goto(page, '/dashboard/war-room')
     await expect(page.getByRole('heading', { level: 1, name: '戰情室' })).toBeVisible()
   })
 

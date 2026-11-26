@@ -8,8 +8,25 @@ export interface TestUser {
 
 export const TEST_USERS = TestEnv.users
 
+declare global {
+  interface Window {
+    useNuxtApp?: () => { isHydrating?: boolean }
+  }
+}
+
+/**
+ * Navigate and wait for Nuxt to finish hydrating (same check as @nuxt/test-utils'
+ * waitForHydration). Before hydration the SSR markup is inert: text typed into a
+ * v-model input is reset when Vue hydrates it, and clicks hit no handlers.
+ * Use this instead of `page.goto` before interacting with a page.
+ */
+export async function goto(page: Page, path: string) {
+  await page.goto(path)
+  await page.waitForFunction(() => window.useNuxtApp?.().isHydrating === false)
+}
+
 async function submitLogin(page: Page, identifierSelector: string, user: TestUser) {
-  await page.goto('/login')
+  await goto(page, '/login')
   await page.locator(identifierSelector).fill(user.email)
   await page.locator('#password').fill(user.password)
   await page.locator('button[type="submit"]').click()

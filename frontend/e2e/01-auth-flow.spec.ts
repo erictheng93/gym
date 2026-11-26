@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { TEST_USERS, login } from './fixtures/auth'
+import { TEST_USERS, login, goto } from './fixtures/auth'
 
 const sidebar = '.sidebar'
 const SESSION_KEY = 'gn_sess_ctx'
@@ -14,7 +14,7 @@ test.describe('登入流程', () => {
   })
 
   test('空白送出顯示必填錯誤', async ({ page }) => {
-    await page.goto('/login')
+    await goto(page, '/login')
     await page.locator('button[type="submit"]').click()
 
     await expect(page.locator('.error-banner')).toContainText('請填寫帳號和密碼')
@@ -22,7 +22,7 @@ test.describe('登入流程', () => {
   })
 
   test('錯誤帳密顯示錯誤並停留在登入頁', async ({ page }) => {
-    await page.goto('/login')
+    await goto(page, '/login')
     await page.locator('#email').fill('wrong@example.com')
     await page.locator('#password').fill('wrongpassword')
     await page.locator('button[type="submit"]').click()
@@ -32,7 +32,7 @@ test.describe('登入流程', () => {
   })
 
   test('Email 格式無效時被瀏覽器驗證攔下', async ({ page }) => {
-    await page.goto('/login')
+    await goto(page, '/login')
     const email = page.locator('#email')
     await email.fill('invalid-email')
     await page.locator('#password').fill('password123')
@@ -55,7 +55,7 @@ test.describe('登入流程', () => {
 
   test('已登入時造訪登入頁會導回首頁', async ({ page }) => {
     await login(page, TEST_USERS.admin)
-    await page.goto('/login')
+    await goto(page, '/login')
 
     await expect(page).toHaveURL('/')
   })
@@ -74,7 +74,7 @@ test.describe('登入流程', () => {
     await login(page, TEST_USERS.admin)
     await context.clearCookies()
 
-    await page.goto('/members')
+    await goto(page, '/members')
 
     await expect(page).toHaveURL('/login')
   })
