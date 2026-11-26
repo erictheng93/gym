@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { eq, and, or, sql, desc, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { performanceReviews, kpiTemplates, employees, jobTitles, branches } from '../db/schema.js';
@@ -23,6 +24,9 @@ const HR_READ_ROLES = ['super_admin', 'admin', 'manager'];
 const HR_ADMIN_ROLES = ['super_admin', 'admin'];
 
 app.use('*', authMiddleware, requireAuth, requireTenant, requireRole(...HR_READ_ROLES));
+
+// Overall scores are on a 0-100 scale (the dashboard buckets at 90 / 70).
+const scoreSchema = z.number().min(0, '分數需介於 0 到 100').max(100, '分數需介於 0 到 100');
 
 const TENANT_EMPLOYEE_ID_SELECT = { id: employees.id };
 
@@ -302,6 +306,7 @@ app.post('/reviews', async (c) => {
   const body = await c.req.json();
   const { employee_id, review_period, review_type, template_id, score, comments } = body;
   const tenantId = c.get('tenantId')!;
+  const user = c.get('user');
 
   if (!employee_id || !review_period || !review_type) {
     return c.json({
@@ -310,9 +315,21 @@ app.post('/reviews', async (c) => {
     }, 400);
   }
 
+  if (score !== undefined && score !== null) {
+    const parsed = scoreSchema.safeParse(score);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.issues[0].message }, 400);
+    }
+  }
+
   if (!(await isTenantEmployee(employee_id, tenantId))) {
     return c.json({ success: false, error: '找不到員工' }, 404);
   }
+
+  // The creator becomes the reviewer. An account without an employee record
+  // (e.g. a pure admin login) may still create reviews: reviewer stays null and
+  // can be assigned later via PATCH, rather than locking those admins out.
+  const reviewerId = user?.employeeId ?? null;
 
   // If template_id is provided, fetch KPIs from template
   let kpiData: unknown[] = [];
@@ -330,6 +347,7 @@ app.post('/reviews', async (c) => {
   const [created] = await db.insert(performanceReviews)
     .values({
       employeeId: employee_id,
+      reviewerId,
       reviewPeriod: review_period,
       reviewType: review_type,
       kpiData,
@@ -350,6 +368,13 @@ app.post('/reviews', async (c) => {
 app.patch('/reviews/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
+
+  if (body.score !== undefined && body.score !== null) {
+    const parsed = scoreSchema.safeParse(body.score);
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.issues[0].message }, 400);
+    }
+  }
 
   const updateData: Record<string, unknown> = {
     updatedAt: new Date(),
@@ -601,11 +626,19 @@ app.delete('/kpi-templates/:id', requireRole(...HR_ADMIN_ROLES), async (c) => {
 // -----------------------------------------------------------------------------
 
 app.get('/team-dashboard', async (c) => {
-  const { period } = c.req.query();
-  // Note: branch_id filtering would require joining with employees table
-  // For now we filter by period only
+  const { period, branch_id } = c.req.query();
+  const tenantId = c.get('tenantId')!;
 
-  const conditions = [await reviewScope(c.get('tenantId')!)];
+  const conditions = [await reviewScope(tenantId)];
+  if (branch_id) {
+    // A branch outside the caller's tenant is indistinguishable from a missing one
+    const branchIds = await getTenantBranchIds(tenantId);
+    if (!branchIds.includes(branch_id)) {
+      return c.json({ success: false, error: '找不到分店' }, 404);
+    }
+    conditions.push(inArray(performanceReviews.employeeId,
+      db.select(TENANT_EMPLOYEE_ID_SELECT).from(employees).where(eq(employees.branchId, branch_id))));
+  }
   if (period) {
     conditions.push(eq(performanceReviews.reviewPeriod, period));
   }

@@ -98,7 +98,9 @@ const SALARY_RECORD_BY_ID_SELECT = {
   createdAt: salaryRecords.createdAt,
   employeeName: employees.fullName,
   employeeCode: employees.employeeCode,
+  branchId: salaryRecords.branchId,
   branchName: branches.name,
+  jobTitleName: jobTitles.name,
 };
 
 const EMPLOYEE_GENERATE_SELECT = {
@@ -254,6 +256,7 @@ app.get('/salary-records/:id', async (c) => {
     .from(salaryRecords)
     .innerJoin(employees, eq(salaryRecords.employeeId, employees.id))
     .innerJoin(branches, eq(salaryRecords.branchId, branches.id))
+    .leftJoin(jobTitles, and(eq(employees.jobTitleId, jobTitles.id), eq(jobTitles.tenantId, c.get('tenantId')!)))
     .where(and(eq(salaryRecords.id, id), inArray(salaryRecords.branchId, branchIds)))
     .limit(1);
 
@@ -270,7 +273,11 @@ app.get('/salary-records/:id', async (c) => {
         id: record.employeeId,
         full_name: record.employeeName,
         employee_code: record.employeeCode,
+        job_title: record.jobTitleName,
       },
+      branch_id: record.branchId,
+      branch_name: record.branchName,
+      job_title: record.jobTitleName,
       period: record.period,
       base_salary: parseFloat(record.baseSalary),
       overtime_hours: parseFloat(record.overtimeHours || '0'),
