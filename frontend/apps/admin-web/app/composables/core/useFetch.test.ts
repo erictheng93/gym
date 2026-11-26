@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useFetch.test.ts
  * Tests for the API fetch utility composable
@@ -84,7 +83,7 @@ describe('useFetch', () => {
         params: { page: 1, limit: 20, search: 'test' }
       })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('page=1')
       expect(calledUrl).toContain('limit=20')
       expect(calledUrl).toContain('search=test')
@@ -101,7 +100,7 @@ describe('useFetch', () => {
         params: { page: 1, limit: undefined, search: '' }
       })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('page=1')
       expect(calledUrl).not.toContain('limit')
       expect(calledUrl).not.toContain('search')
@@ -118,7 +117,7 @@ describe('useFetch', () => {
         params: { active: true }
       })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('active=true')
     })
   })
@@ -171,7 +170,7 @@ describe('useFetch', () => {
       const { apiFetch } = useFetch()
       await apiFetch('/members', { method: 'GET', body: { test: true } })
 
-      const calledOptions = mockFetch.mock.calls[0][1] as RequestInit
+      const calledOptions = mockFetch.mock.calls[0]![1] as RequestInit
       expect(calledOptions.body).toBeUndefined()
     })
   })
@@ -233,7 +232,7 @@ describe('useFetch', () => {
       const { readItems } = useFetch()
       await readItems('members', { page: 2, limit: 10 })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('page=2')
       expect(calledUrl).toContain('limit=10')
     })
@@ -247,7 +246,7 @@ describe('useFetch', () => {
       const { readItems } = useFetch()
       await readItems('members', { search: 'john' })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('search=john')
     })
 
@@ -260,7 +259,7 @@ describe('useFetch', () => {
       const { readItems } = useFetch()
       await readItems('members', { sort: 'created_at', sortOrder: 'desc' })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('sortBy=created_at')
       expect(calledUrl).toContain('sortOrder=desc')
     })
@@ -276,7 +275,7 @@ describe('useFetch', () => {
         filter: { status: 'active', branch_id: 'branch-1' }
       })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('status=active')
       expect(calledUrl).toContain('branch_id=branch-1')
     })
@@ -292,7 +291,7 @@ describe('useFetch', () => {
         filter: { status: 'active', branch_id: undefined }
       })
 
-      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const calledUrl = mockFetch.mock.calls[0]![0] as string
       expect(calledUrl).toContain('status=active')
       expect(calledUrl).not.toContain('branch_id')
     })

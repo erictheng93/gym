@@ -73,7 +73,7 @@ vi.mock('../src/db/index.js', () => ({
     branchId: 'branchId', amount: 'amount', type: 'type',
     paymentMethod: 'paymentMethod', paymentDate: 'paymentDate',
     receiptNo: 'receiptNo', notes: 'notes', createdAt: 'createdAt',
-    createdBy: 'createdBy', tenantId: 'tenantId',
+    createdBy: 'createdBy', tenantId: 'tenantId', status: 'payments.status',
   },
   contracts: {
     id: 'contracts.id', contractNo: 'contractNo', totalAmount: 'totalAmount',
@@ -280,6 +280,10 @@ describe('Payment Routes', () => {
 
       expect(res.status).toBe(200);
       expect(json.data.netIncome).toBe(7000);
+      // open / failed gateway checkouts are not revenue
+      expect(chainFns.where).toHaveBeenCalledWith(expect.objectContaining({
+        args: expect.arrayContaining([{ _op: 'eq', a: 'payments.status', b: 'COMPLETED' }]),
+      }));
     });
   });
 
@@ -435,12 +439,15 @@ describe('Payment Routes', () => {
       expect(chainFns.set).toHaveBeenCalledWith(
         expect.objectContaining({ paidAmount: '3000.50', paymentStatus: 'PARTIAL' }),
       );
-      // Paid total sums only this contract's INCOME payments in this tenant
+      // staff record money already received
+      expect(chainFns.values).toHaveBeenCalledWith(expect.objectContaining({ status: 'COMPLETED' }));
+      // Paid total sums only this contract's COMPLETED INCOME payments in this tenant
       expect(chainFns.where).toHaveBeenCalledWith({
         _op: 'and',
         args: [
           { _op: 'eq', a: 'contractId', b: CONTRACT_ID },
           { _op: 'eq', a: 'type', b: 'INCOME' },
+          { _op: 'eq', a: 'payments.status', b: 'COMPLETED' },
           { _op: 'eq', a: 'tenantId', b: TEST_TENANT_ID },
         ],
       });

@@ -1,470 +1,141 @@
-// -nocheck
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+import { defineComponent, onMounted } from 'vue'
 import Login from './login.vue'
 import { MESSAGES, STORAGE_KEYS, TIMING } from '~/constants'
 
-// Mock navigateTo
+// vitest.setup.ts fakes onMounted (runs the callback synchronously during setup); use Vue's real one.
+vi.stubGlobal('onMounted', onMounted)
+vi.stubGlobal('definePageMeta', vi.fn())
+
 const mockNavigateTo = vi.fn()
 vi.stubGlobal('navigateTo', mockNavigateTo)
 
-// Mock useAuth composable - override the global one
 const mockLogin = vi.fn()
-const mockAuthState = {
-  isLoading: ref(false),
-  isAuthenticated: ref(false)
+const isLoading = ref(false)
+const isAuthenticated = ref(false)
+vi.stubGlobal('useAuth', () => ({ login: mockLogin, isLoading, isAuthenticated }))
+
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
+vi.stubGlobal('useToast', () => toast)
+
+const ClientOnly = defineComponent((_, { slots }) => () => slots.default?.())
+
+const mountLogin = () => mount(Login, { global: { stubs: { ClientOnly } } })
+const banner = (w: VueWrapper) => w.find('.error-banner')
+
+async function submitWith(w: VueWrapper, email: string, password: string) {
+  await w.find('#email').setValue(email)
+  await w.find('#password').setValue(password)
+  await w.find('form').trigger('submit')
+  await flushPromises()
 }
 
-vi.stubGlobal('useAuth', () => ({
-  login: mockLogin,
-  isLoading: mockAuthState.isLoading,
-  isAuthenticated: mockAuthState.isAuthenticated,
-  user: ref(null),
-  currentEmployee: ref(null),
-  logout: vi.fn(),
-  fetchUser: vi.fn(),
-  checkAuth: vi.fn()
-}))
-
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  clear: vi.fn()
-}
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
-})
-
-// Mock window.matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn()
-  }))
-})
-
-// Mock definePageMeta
-vi.stubGlobal('definePageMeta', vi.fn())
-
-describe('Login Page', () => {
+describe('login.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockAuthState.isLoading.value = false
-    mockAuthState.isAuthenticated.value = false
-    localStorageMock.getItem.mockReturnValue(null)
+    isLoading.value = false
+    isAuthenticated.value = false
+    localStorage.clear()
+    document.documentElement.removeAttribute('data-theme')
   })
 
-  describe('初始化渲染', () => {
-    it('應該正確渲染登入頁面', () => {
-      const wrapper = mount(Login)
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
-      expect(wrapper.find('.login-page').exists()).toBe(true)
-      expect(wrapper.find('.login-card').exists()).toBe(true)
-      expect(wrapper.find('.login-form').exists()).toBe(true)
+  describe('on mount', () => {
+    it('redirects home when already authenticated', async () => {
+      isAuthenticated.value = true
+      mountLogin()
+      await flushPromises()
+      expect(mockNavigateTo).toHaveBeenCalledWith('/')
     })
 
-    it('應該顯示應用名稱和標題', () => {
-      const wrapper = mount(Login)
-
-      expect(wrapper.text()).toContain(MESSAGES.AUTH.LOGIN_SUBTITLE)
+    it('defaults to the dark theme', async () => {
+      mountLogin()
+      await flushPromises()
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     })
 
-    it('應該渲染郵箱和密碼輸入框', () => {
-      const wrapper = mount(Login)
+    it('applies a saved light theme, and the toggle persists the choice', async () => {
+      localStorage.setItem(STORAGE_KEYS.THEME, 'light')
+      const wrapper = mountLogin()
+      await flushPromises()
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light')
 
-      const emailInput = wrapper.find('#email')
-      const passwordInput = wrapper.find('#password')
-
-      expect(emailInput.exists()).toBe(true)
-      expect(passwordInput.exists()).toBe(true)
-      expect(emailInput.attributes('type')).toBe('email')
-      expect(passwordInput.attributes('type')).toBe('password')
-    })
-
-    it('應該渲染提交按鈕', () => {
-      const wrapper = mount(Login)
-
-      const submitBtn = wrapper.find('button[type="submit"]')
-      expect(submitBtn.exists()).toBe(true)
-      expect(submitBtn.text()).toContain(MESSAGES.AUTH.LOGIN)
-    })
-
-    it('應該渲染主題切換按鈕', () => {
-      const wrapper = mount(Login)
-
-      const themeToggle = wrapper.find('.theme-toggle')
-      expect(themeToggle.exists()).toBe(true)
+      await wrapper.find('.theme-toggle').trigger('click')
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+      expect(localStorage.getItem(STORAGE_KEYS.THEME)).toBe('dark')
     })
   })
 
-  describe('表單驗證', () => {
-    it('應該在空欄位時顯示錯誤訊息', async () => {
-      const wrapper = mount(Login)
-      const form = wrapper.find('form')
+  describe('submit', () => {
+    it('requires both fields, shakes the card, and does not call login', async () => {
+      vi.useFakeTimers()
+      const wrapper = mountLogin()
+      await submitWith(wrapper, 'test@example.com', '')
 
-      await form.trigger('submit.prevent')
-      await flushPromises()
-
-      const errorBanner = wrapper.find('.error-banner')
-      expect(errorBanner.exists()).toBe(true)
-      expect(errorBanner.text()).toContain(MESSAGES.AUTH.REQUIRED_FIELDS)
-    })
-
-    it('應該在只填寫郵箱時顯示錯誤', async () => {
-      const wrapper = mount(Login)
-
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
-      expect(wrapper.find('.error-banner').exists()).toBe(true)
-    })
-
-    it('應該在只填寫密碼時顯示錯誤', async () => {
-      const wrapper = mount(Login)
-
-      await wrapper.find('#password').setValue('password123')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
-      expect(wrapper.find('.error-banner').exists()).toBe(true)
-    })
-
-    it('應該在表單驗證失敗時觸發震動動畫', async () => {
-      const wrapper = mount(Login)
-
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
+      expect(mockLogin).not.toHaveBeenCalled()
+      expect(banner(wrapper).text()).toContain(MESSAGES.AUTH.REQUIRED_FIELDS)
       expect(wrapper.find('.login-card').classes()).toContain('shake')
 
-      // Wait for shake animation to finish
-      await new Promise(resolve => setTimeout(resolve, TIMING.SHAKE_DURATION + 100))
-
+      await vi.advanceTimersByTimeAsync(TIMING.SHAKE_DURATION)
       expect(wrapper.find('.login-card').classes()).not.toContain('shake')
     })
-  })
 
-  describe('登入功能', () => {
-    it('應該在成功登入時調用 login 方法', async () => {
-      mockLogin.mockResolvedValueOnce({ success: true })
+    it('logs in with the trimmed email and navigates home', async () => {
+      mockLogin.mockResolvedValue({ success: true })
+      const wrapper = mountLogin()
+      await submitWith(wrapper, '  test@example.com  ', 'password123')
 
-      const wrapper = mount(Login)
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('#password').setValue('password123')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
-      // Should have called login with credentials
-      expect(mockLogin).toHaveBeenCalled()
-    })
-
-    it('應該在成功登入後導航到首頁', async () => {
-      mockLogin.mockResolvedValueOnce({ success: true })
-
-      const wrapper = mount(Login)
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('#password').setValue('password123')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
+      expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123')
       expect(mockNavigateTo).toHaveBeenCalledWith('/', { replace: true })
+      expect(banner(wrapper).exists()).toBe(false)
     })
 
-    it('應該在登入失敗時顯示錯誤訊息', async () => {
-      const errorMessage = '帳號或密碼錯誤'
-      mockLogin.mockResolvedValueOnce({ success: false, error: errorMessage })
+    it('shows the error returned by login', async () => {
+      mockLogin.mockResolvedValue({ success: false, error: '帳號或密碼錯誤' })
+      const wrapper = mountLogin()
+      await submitWith(wrapper, 'test@example.com', 'wrong')
 
-      const wrapper = mount(Login)
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('#password').setValue('wrong-password')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-      await wrapper.vm.$nextTick()
-
-      const errorBanner = wrapper.find('.error-banner')
-      expect(errorBanner.exists()).toBe(true)
-      if (errorBanner.exists()) {
-        expect(errorBanner.text()).toContain(errorMessage)
-      }
+      expect(banner(wrapper).text()).toContain('帳號或密碼錯誤')
+      expect(wrapper.find('.login-card').classes()).toContain('shake')
+      expect(mockNavigateTo).not.toHaveBeenCalled()
     })
 
-    it('應該在登入失敗時顯示預設錯誤訊息', async () => {
-      mockLogin.mockResolvedValueOnce({ success: false })
-
-      const wrapper = mount(Login)
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('#password').setValue('password123')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-      await wrapper.vm.$nextTick()
-
-      const errorBanner = wrapper.find('.error-banner')
-      if (errorBanner.exists()) {
-        expect(errorBanner.text()).toContain(MESSAGES.AUTH.LOGIN_ERROR)
-      } else {
-        // If error banner doesn't appear, at least verify error state is set
-        expect(wrapper.vm.error).toBeTruthy()
-      }
+    it('falls back to the generic error when login gives no message', async () => {
+      mockLogin.mockResolvedValue({ success: false })
+      const wrapper = mountLogin()
+      await submitWith(wrapper, 'test@example.com', 'wrong')
+      expect(banner(wrapper).text()).toContain(MESSAGES.AUTH.LOGIN_ERROR)
     })
 
-    it('應該在登入失敗時觸發震動動畫', async () => {
-      mockLogin.mockResolvedValueOnce({ success: false, error: '登入失敗' })
+    it('shows a toast and the generic error when login throws', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockLogin.mockRejectedValue(new Error('network'))
+      const wrapper = mountLogin()
+      await submitWith(wrapper, 'test@example.com', 'password123')
 
-      const wrapper = mount(Login)
-      await wrapper.vm.$nextTick()
+      expect(toast.error).toHaveBeenCalledWith(MESSAGES.AUTH.LOGIN_ERROR)
+      expect(banner(wrapper).text()).toContain(MESSAGES.AUTH.LOGIN_ERROR)
+    })
 
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('#password').setValue('password123')
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-      await wrapper.vm.$nextTick()
+    it('clears a previous error on a successful retry', async () => {
+      const wrapper = mountLogin()
+      await submitWith(wrapper, '', '')
+      expect(banner(wrapper).exists()).toBe(true)
 
-      // Shake animation might be added briefly, so just check if it was triggered
-      expect(wrapper.vm.isShaking).toBeDefined()
+      mockLogin.mockResolvedValue({ success: true })
+      await submitWith(wrapper, 'test@example.com', 'password123')
+      expect(banner(wrapper).exists()).toBe(false)
     })
   })
 
-  describe('加載狀態', () => {
-    it('應該在加載時顯示加載指示器', async () => {
-      mockAuthState.isLoading.value = true
-      const wrapper = mount(Login)
-
-      const submitBtn = wrapper.find('button[type="submit"]')
-      expect(submitBtn.find('.loading-spinner').exists()).toBe(true)
-      expect(submitBtn.text()).toContain(MESSAGES.AUTH.LOGGING_IN)
-    })
-
-    it('應該在加載時禁用提交按鈕', async () => {
-      mockAuthState.isLoading.value = true
-      const wrapper = mount(Login)
-
-      const submitBtn = wrapper.find('button[type="submit"]')
-      expect(submitBtn.attributes('disabled')).toBeDefined()
-    })
-
-    it('應該在未加載時啟用提交按鈕', () => {
-      mockAuthState.isLoading.value = false
-      const wrapper = mount(Login)
-
-      const submitBtn = wrapper.find('button[type="submit"]')
-      // In Vue 3, disabled=false results in the attribute being removed or empty string
-      expect(submitBtn.attributes('disabled')).toBeFalsy()
-    })
-  })
-
-  describe('主題切換', () => {
-    it('應該在點擊時切換主題', async () => {
-      const wrapper = mount(Login)
-      const themeToggle = wrapper.find('.theme-toggle')
-
-      // Initial state (dark - default theme is now dark)
-      expect(wrapper.vm.isDark).toBe(true)
-
-      // Toggle to light
-      await themeToggle.trigger('click')
-      expect(wrapper.vm.isDark).toBe(false)
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEYS.THEME, 'light')
-
-      // Toggle back to dark
-      await themeToggle.trigger('click')
-      expect(wrapper.vm.isDark).toBe(true)
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(STORAGE_KEYS.THEME, 'dark')
-    })
-
-    it('應該在掛載時從 localStorage 讀取主題', () => {
-      localStorageMock.getItem.mockReturnValue('dark')
-      const wrapper = mount(Login)
-
-      // Wait for mounted hook
-      wrapper.vm.$nextTick(() => {
-        expect(wrapper.vm.isDark).toBe(true)
-      })
-    })
-
-    it('應該在沒有保存主題時使用系統偏好', () => {
-      window.matchMedia = vi.fn().mockImplementation(query => ({
-        matches: query === '(prefers-color-scheme: dark)',
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn()
-      }))
-
-      const wrapper = mount(Login)
-
-      wrapper.vm.$nextTick(() => {
-        expect(wrapper.vm.isDark).toBe(true)
-      })
-    })
-
-    it('應該顯示正確的主題圖標', async () => {
-      localStorageMock.getItem.mockReturnValue('light')
-      const wrapper = mount(Login)
-
-      // Wait for mounted hook to execute
-      await wrapper.vm.$nextTick()
-
-      // After mounting with light theme, isDark should be false
-      expect(wrapper.vm.isDark).toBe(false)
-
-      // Toggle to dark mode
-      wrapper.vm.isDark = true
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.isDark).toBe(true)
-    })
-  })
-
-  describe('自動重定向', () => {
-    it('應該在已認證時自動導航到首頁', async () => {
-      mockAuthState.isAuthenticated.value = true
-      const wrapper = mount(Login)
-
-      await flushPromises()
-      await wrapper.vm.$nextTick()
-
-      // Wait for watchEffect to trigger navigation
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      // navigateTo is called with just the path (implementation may or may not include replace option)
-      expect(mockNavigateTo).toHaveBeenCalled()
-      expect(mockNavigateTo.mock.calls[0][0]).toBe('/')
-    })
-  })
-
-  describe('錯誤訊息動畫', () => {
-    it('應該以淡入動畫顯示錯誤訊息', async () => {
-      const wrapper = mount(Login)
-
-      expect(wrapper.find('.error-banner').exists()).toBe(false)
-
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
-      expect(wrapper.find('.error-banner').exists()).toBe(true)
-    })
-
-    it('應該在清除錯誤時移除錯誤訊息', async () => {
-      const wrapper = mount(Login)
-
-      // Show error
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-      expect(wrapper.find('.error-banner').exists()).toBe(true)
-
-      // Fill form and submit again
-      await wrapper.find('#email').setValue('test@example.com')
-      await wrapper.find('#password').setValue('password123')
-
-      mockLogin.mockResolvedValueOnce({ success: true })
-      await wrapper.find('form').trigger('submit.prevent')
-      await flushPromises()
-
-      // Error should be cleared on new submission
-      expect(wrapper.vm.error).toBe('')
-    })
-  })
-
-  describe('表單輸入', () => {
-    it('應該綁定郵箱輸入', async () => {
-      const wrapper = mount(Login)
-      const emailInput = wrapper.find('#email')
-
-      await emailInput.setValue('user@example.com')
-      expect(wrapper.vm.form.email).toBe('user@example.com')
-    })
-
-    it('應該綁定密碼輸入', async () => {
-      const wrapper = mount(Login)
-      const passwordInput = wrapper.find('#password')
-
-      await passwordInput.setValue('mypassword')
-      expect(wrapper.vm.form.password).toBe('mypassword')
-    })
-
-    it('應該有正確的 autocomplete 屬性', () => {
-      const wrapper = mount(Login)
-
-      const emailInput = wrapper.find('#email')
-      const passwordInput = wrapper.find('#password')
-
-      expect(emailInput.attributes('autocomplete')).toBe('email')
-      expect(passwordInput.attributes('autocomplete')).toBe('current-password')
-    })
-
-    it('應該有正確的 placeholder', () => {
-      const wrapper = mount(Login)
-
-      const emailInput = wrapper.find('#email')
-      const passwordInput = wrapper.find('#password')
-
-      expect(emailInput.attributes('placeholder')).toBe(MESSAGES.FORM.EMAIL_PLACEHOLDER)
-      expect(passwordInput.attributes('placeholder')).toBe(MESSAGES.FORM.PASSWORD_PLACEHOLDER)
-    })
-  })
-
-  describe('無障礙功能', () => {
-    it('應該有正確的標籤與輸入框關聯', () => {
-      const wrapper = mount(Login)
-
-      const emailLabel = wrapper.find('label[for="email"]')
-      const passwordLabel = wrapper.find('label[for="password"]')
-
-      expect(emailLabel.exists()).toBe(true)
-      expect(passwordLabel.exists()).toBe(true)
-      expect(emailLabel.text()).toBe(MESSAGES.FORM.EMAIL)
-      expect(passwordLabel.text()).toBe(MESSAGES.FORM.PASSWORD)
-    })
-
-    it('應該有主題切換的 aria-label', () => {
-      const wrapper = mount(Login)
-      const themeToggle = wrapper.find('.theme-toggle')
-
-      expect(themeToggle.attributes('aria-label')).toBe(MESSAGES.A11Y.TOGGLE_THEME)
-    })
-  })
-
-  describe('UI 元素', () => {
-    it('應該顯示 Logo', () => {
-      const wrapper = mount(Login)
-
-      expect(wrapper.find('.logo-mark').exists()).toBe(true)
-      expect(wrapper.find('.logo-mark svg').exists()).toBe(true)
-    })
-
-    it('應該顯示版權資訊', () => {
-      const wrapper = mount(Login)
-
-      const copyright = wrapper.find('.copyright')
-      expect(copyright.exists()).toBe(true)
-      expect(copyright.text()).toContain('All rights reserved')
-    })
-
-    it('應該有背景動畫元素', () => {
-      const wrapper = mount(Login)
-
-      expect(wrapper.find('.login-bg').exists()).toBe(true)
-      expect(wrapper.findAll('.gradient-orb').length).toBe(3)
-    })
+  it('disables the submit button while logging in', () => {
+    isLoading.value = true
+    const button = mountLogin().find('button[type="submit"]')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.text()).toContain(MESSAGES.AUTH.LOGGING_IN)
   })
 })

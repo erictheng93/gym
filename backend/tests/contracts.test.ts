@@ -358,6 +358,7 @@ describe('Contracts API', () => {
       const expectedEnd = new Date(`${originalEndDate}T00:00:00Z`);
       expectedEnd.setUTCDate(expectedEnd.getUTCDate() + 7);
       expect(data.data.endDate).toBe(expectedEnd.toISOString().split('T')[0]);
+      expect(data.data.originalEndDate).toBe(originalEndDate);
 
       const [log] = await db.select().from(contractLogs).where(eq(contractLogs.contractId, contractId));
       expect(log).toMatchObject({ logType: 'PAUSE', daysAffected: 7, reason: 'Vacation', branchId: TEST_BRANCH_ID });
@@ -608,6 +609,21 @@ describe('Contracts API', () => {
   });
 
   describe('Tenant Isolation', () => {
+    it('should reject creating a contract for a member or plan of another tenant', async () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      for (const ids of [
+        { memberId: TEST_MEMBER_B_ID, planId: TEST_PLAN_ID },
+        { memberId: TEST_MEMBER_ID, planId: TEST_PLAN_B_ID },
+      ]) {
+        const response = await authRequest('/api/contracts', {
+          method: 'POST',
+          token: authToken,
+          body: JSON.stringify({ ...ids, branchId: TEST_BRANCH_ID, startDate: todayStr, totalAmount: 1000 }),
+        });
+        expect(response.status).toBe(404);
+      }
+    });
+
     it('should return 403 when getting a contract from another tenant', async () => {
       const response = await authRequest(`/api/contracts/${TEST_CONTRACT_B_ID}`, {
         method: 'GET',

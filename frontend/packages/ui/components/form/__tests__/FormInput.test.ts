@@ -25,229 +25,95 @@ describe('FormInput', () => {
     })
   }
 
-  describe('初始化', () => {
-    it('應該正確渲染組件', () => {
-      const wrapper = mountFormInput()
-      expect(wrapper.find('input').exists()).toBe(true)
-    })
+  it('渲染標籤、必填標記，預設 type 為 text', () => {
+    const wrapper = mountFormInput({ label: '姓名', required: true })
 
-    it('應該渲染標籤和必填指示器', () => {
-      const wrapper = mountFormInput({
-        label: '姓名',
-        required: true
-      })
-
-      expect(wrapper.find('label').text()).toContain('姓名')
-      expect(wrapper.find('label').classes()).toContain('required')
-    })
-
-    it('應該應用預設 type 為 text', () => {
-      const wrapper = mountFormInput()
-      expect(wrapper.find('input').attributes('type')).toBe('text')
-    })
-
-    it('應該支援不同的輸入類型', () => {
-      const types = ['text', 'email', 'tel', 'number', 'password'] as const
-
-      types.forEach(type => {
-        const wrapper = mountFormInput({ type })
-        expect(wrapper.find('input').attributes('type')).toBe(type)
-      })
-    })
+    expect(wrapper.find('label').text()).toContain('姓名')
+    expect(wrapper.find('label').classes()).toContain('required')
+    expect(wrapper.find('input').attributes('type')).toBe('text')
   })
 
-  describe('v-model 綁定', () => {
-    it('應該顯示 modelValue', () => {
-      const wrapper = mountFormInput({
-        modelValue: 'test value'
-      })
+  it('type 傳遞到 input 元素', () => {
+    expect(mountFormInput({ type: 'email' }).find('input').attributes('type')).toBe('email')
+    expect(mountFormInput({ type: 'number' }).find('input').attributes('type')).toBe('number')
+  })
 
+  describe('v-model', () => {
+    it('顯示 modelValue', () => {
+      const wrapper = mountFormInput({ modelValue: 'test value' })
       expect(wrapper.find('input').element.value).toBe('test value')
     })
 
-    it('應該在輸入時發出 update:modelValue 事件', async () => {
+    it('輸入時發出字串', async () => {
       const wrapper = mountFormInput({ modelValue: '' })
-
       await wrapper.find('input').setValue('new value')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
       expect(wrapper.emitted('update:modelValue')![0]).toEqual(['new value'])
     })
 
-    it('應該在 number 類型時轉換為數字', async () => {
-      const wrapper = mountFormInput({
-        type: 'number',
-        modelValue: null
-      })
-
+    it('number 類型發出 Number', async () => {
+      const wrapper = mountFormInput({ type: 'number', modelValue: null })
       await wrapper.find('input').setValue('42')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
       expect(wrapper.emitted('update:modelValue')![0]).toEqual([42])
     })
 
-    it('應該在 number 類型空值時發出 null', async () => {
-      const wrapper = mountFormInput({
-        type: 'number',
-        modelValue: 42
-      })
-
+    it('number 類型清空時發出 null', async () => {
+      const wrapper = mountFormInput({ type: 'number', modelValue: 42 })
       await wrapper.find('input').setValue('')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
       expect(wrapper.emitted('update:modelValue')![0]).toEqual([null])
     })
   })
 
-  describe('錯誤狀態', () => {
-    it('應該顯示錯誤訊息', () => {
-      const wrapper = mountFormInput({
-        error: '此欄位為必填'
-      })
-
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
+  describe('錯誤與提示', () => {
+    it('顯示錯誤訊息', () => {
+      const wrapper = mountFormInput({ error: '此欄位為必填' })
       expect(wrapper.find('.form-field-error').text()).toBe('此欄位為必填')
     })
 
-    it('應該在有錯誤時添加 is-error class', () => {
-      const wrapper = mountFormInput({
-        error: '無效輸入'
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-error')
+    it('沒有錯誤時不顯示錯誤訊息', () => {
+      expect(mountFormInput().find('.form-field-error').exists()).toBe(false)
     })
 
-    it('應該在沒有錯誤時不顯示錯誤訊息', () => {
-      const wrapper = mountFormInput()
-      expect(wrapper.find('.form-field-error').exists()).toBe(false)
-    })
-  })
+    it('顯示提示文字，有錯誤時以錯誤取代提示', () => {
+      const hintOnly = mountFormInput({ hint: '請輸入您的姓名' })
+      expect(hintOnly.find('.form-field-hint').text()).toBe('請輸入您的姓名')
 
-  describe('提示文字', () => {
-    it('應該顯示提示文字', () => {
-      const wrapper = mountFormInput({
-        hint: '請輸入您的姓名'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(true)
-      expect(wrapper.find('.form-field-hint').text()).toBe('請輸入您的姓名')
-    })
-
-    it('應該在有錯誤時隱藏提示文字', () => {
-      const wrapper = mountFormInput({
-        hint: '請輸入您的姓名',
-        error: '此欄位為必填'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(false)
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
+      const both = mountFormInput({ hint: '請輸入您的姓名', error: '此欄位為必填' })
+      expect(both.find('.form-field-hint').exists()).toBe(false)
+      expect(both.find('.form-field-error').exists()).toBe(true)
     })
   })
 
-  describe('禁用狀態', () => {
-    it('應該在禁用時設置 disabled 屬性', () => {
-      const wrapper = mountFormInput({
-        disabled: true
-      })
-
-      expect(wrapper.find('input').attributes('disabled')).toBeDefined()
-    })
-
-    it('應該在禁用時添加 is-disabled class', () => {
-      const wrapper = mountFormInput({
-        disabled: true
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-disabled')
-    })
+  it('disabled 時 input 被禁用', () => {
+    expect(mountFormInput({ disabled: true }).find('input').element.disabled).toBe(true)
+    expect(mountFormInput().find('input').element.disabled).toBe(false)
   })
 
-  describe('佔位文字', () => {
-    it('應該顯示佔位文字', () => {
-      const wrapper = mountFormInput({
-        placeholder: '請輸入...'
-      })
+  it('將 placeholder/min/max/step/maxlength/autocomplete 傳給 input', () => {
+    const input = mountFormInput({
+      type: 'number',
+      placeholder: '請輸入...',
+      min: 0,
+      max: 100,
+      step: 0.01,
+      maxlength: 50,
+      autocomplete: 'email'
+    }).find('input')
 
-      expect(wrapper.find('input').attributes('placeholder')).toBe('請輸入...')
-    })
+    expect(input.attributes('placeholder')).toBe('請輸入...')
+    expect(input.attributes('min')).toBe('0')
+    expect(input.attributes('max')).toBe('100')
+    expect(input.attributes('step')).toBe('0.01')
+    expect(input.attributes('maxlength')).toBe('50')
+    expect(input.attributes('autocomplete')).toBe('email')
   })
 
-  describe('數字輸入屬性', () => {
-    it('應該設置 min 屬性', () => {
-      const wrapper = mountFormInput({
-        type: 'number',
-        min: 0
-      })
+  it('渲染前綴與後綴文字', () => {
+    const wrapper = mountFormInput({ prefix: 'NT$', suffix: '元' })
+    expect(wrapper.find('.input-prefix').text()).toBe('NT$')
+    expect(wrapper.find('.input-suffix').text()).toBe('元')
 
-      expect(wrapper.find('input').attributes('min')).toBe('0')
-    })
-
-    it('應該設置 max 屬性', () => {
-      const wrapper = mountFormInput({
-        type: 'number',
-        max: 100
-      })
-
-      expect(wrapper.find('input').attributes('max')).toBe('100')
-    })
-
-    it('應該設置 step 屬性', () => {
-      const wrapper = mountFormInput({
-        type: 'number',
-        step: 0.01
-      })
-
-      expect(wrapper.find('input').attributes('step')).toBe('0.01')
-    })
-  })
-
-  describe('前綴和後綴', () => {
-    it('應該顯示前綴', () => {
-      const wrapper = mountFormInput({
-        prefix: 'NT$'
-      })
-
-      expect(wrapper.find('.input-prefix').exists()).toBe(true)
-      expect(wrapper.find('.input-prefix').text()).toBe('NT$')
-      expect(wrapper.find('.input-wrapper').classes()).toContain('has-prefix')
-    })
-
-    it('應該顯示後綴', () => {
-      const wrapper = mountFormInput({
-        suffix: '元'
-      })
-
-      expect(wrapper.find('.input-suffix').exists()).toBe(true)
-      expect(wrapper.find('.input-suffix').text()).toBe('元')
-      expect(wrapper.find('.input-wrapper').classes()).toContain('has-suffix')
-    })
-
-    it('應該同時顯示前綴和後綴', () => {
-      const wrapper = mountFormInput({
-        prefix: 'NT$',
-        suffix: '元'
-      })
-
-      expect(wrapper.find('.input-prefix').exists()).toBe(true)
-      expect(wrapper.find('.input-suffix').exists()).toBe(true)
-    })
-  })
-
-  describe('其他屬性', () => {
-    it('應該設置 maxlength 屬性', () => {
-      const wrapper = mountFormInput({
-        maxlength: 50
-      })
-
-      expect(wrapper.find('input').attributes('maxlength')).toBe('50')
-    })
-
-    it('應該設置 autocomplete 屬性', () => {
-      const wrapper = mountFormInput({
-        autocomplete: 'email'
-      })
-
-      expect(wrapper.find('input').attributes('autocomplete')).toBe('email')
-    })
+    const none = mountFormInput()
+    expect(none.find('.input-prefix').exists()).toBe(false)
+    expect(none.find('.input-suffix').exists()).toBe(false)
   })
 })

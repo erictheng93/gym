@@ -21,6 +21,7 @@ const PAYMENT_RETURNING = {
   paymentMethod: payments.paymentMethod,
   paymentDate: payments.paymentDate,
   type: payments.type,
+  status: payments.status,
   receiptNo: payments.receiptNo,
   notes: payments.notes,
   createdBy: payments.createdBy,
@@ -217,6 +218,9 @@ app.get('/summary', async (c) => {
     conditions.push(sql`${payments.paymentDate} <= ${endDate}`);
   }
 
+  // Revenue: only payments that were actually received (not open/failed gateway checkouts)
+  conditions.push(eq(payments.status, 'COMPLETED'));
+
   const whereCondition = and(...conditions);
 
   const [summaryResult] = await db
@@ -275,6 +279,9 @@ app.get('/export', async (c) => {
   if (endDate) {
     conditions.push(lte(payments.paymentDate, new Date(endDate)));
   }
+
+  // Export is a record of money received: leave out open/failed gateway checkouts
+  conditions.push(eq(payments.status, 'COMPLETED'));
 
   const result = await db
     .select(PAYMENT_EXPORT_SELECT)
@@ -383,19 +390,20 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
 
   const contractCondition = and(eq(contracts.id, data.contractId), eq(contracts.tenantId, tenantId));
 
-  const [contract] = await db
-    .select(CONTRACT_TOTAL_AMOUNT_SELECT)
-    .from(contracts)
-    .where(and(contractCondition, eq(contracts.memberId, data.memberId)))
-    .limit(1);
-
-  if (!contract) {
-    return c.json({ success: false, error: '合約不存在' }, 404);
-  }
-
-  // Insert and recalculate atomically; the contract row is locked inside
-  // recalculateContractPayment so concurrent payments cannot race the total
+  // Lock the contract row FOR UPDATE before inserting the payment. The insert's
+  // foreign-key check takes FOR KEY SHARE on the contract; locking it only
+  // afterwards (in recalculateContractPayment) lets two concurrent payments
+  // each hold KEY SHARE and wait for the other's FOR UPDATE -> deadlock.
   const newPayment = await db.transaction(async (tx) => {
+    const [contract] = await tx
+      .select(CONTRACT_TOTAL_AMOUNT_SELECT)
+      .from(contracts)
+      .where(and(contractCondition, eq(contracts.memberId, data.memberId)))
+      .limit(1)
+      .for('update');
+
+    if (!contract) return null;
+
     const [inserted] = await tx.insert(payments).values({
       contractId,
       memberId: data.memberId,
@@ -404,6 +412,7 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
       paymentMethod: data.paymentMethod,
       paymentDate: new Date(),
       type: data.paymentType,
+      status: 'COMPLETED', // staff record money already received
       notes: data.notes,
       createdBy: user.employeeId,
       tenantId,
@@ -413,6 +422,10 @@ app.post('/', zValidator('json', createPaymentSchema), async (c) => {
 
     return inserted;
   });
+
+  if (!newPayment) {
+    return c.json({ success: false, error: '合約不存在' }, 404);
+  }
 
   return c.json({ success: true, data: newPayment }, 201);
 });

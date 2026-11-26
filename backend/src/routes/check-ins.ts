@@ -245,9 +245,12 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
           eq(contracts.tenantId, tenantId),
           eq(contracts.status, 'ACTIVE'),
           lte(contracts.startDate, today),
-          gte(contracts.endDate, today)
+          gte(contracts.endDate, today),
+          // An explicit contract must itself be ACTIVE and in date
+          data.contractId ? eq(contracts.id, data.contractId) : undefined,
         )
       )
+      .orderBy(desc(contracts.endDate))
       .limit(1),
     db
       .select(CHECK_IN_EXISTING_SELECT)
@@ -271,25 +274,24 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     return c.json({ success: false, error: '會員不存在' }, 404);
   }
 
-  if (data.contractId) {
-    const [ownContract] = await db
-      .select({ id: contracts.id })
-      .from(contracts)
-      .where(and(
-        eq(contracts.id, data.contractId),
-        eq(contracts.memberId, data.memberId),
-        eq(contracts.tenantId, tenantId),
-      ))
-      .limit(1);
-    if (!ownContract) {
-      return c.json({ success: false, error: '合約不存在' }, 404);
-    }
-  }
-
   const activeContract = activeContractResult?.contract;
   const activePlan = activeContractResult?.plan;
 
-  if (!activeContract && !data.contractId) {
+  if (!activeContract) {
+    if (data.contractId) {
+      const [ownContract] = await db
+        .select({ id: contracts.id })
+        .from(contracts)
+        .where(and(
+          eq(contracts.id, data.contractId),
+          eq(contracts.memberId, data.memberId),
+          eq(contracts.tenantId, tenantId),
+        ))
+        .limit(1);
+      if (!ownContract) {
+        return c.json({ success: false, error: '合約不存在' }, 404);
+      }
+    }
     return c.json({
       success: false,
       error: '會員無有效合約',
@@ -309,17 +311,26 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
     });
   }
 
+  // Same rule as the member QR check-in: a class package with no sessions left does not admit
+  if (activePlan?.planType === 'COUNT_BASED' && (activeContract.remainingCounts ?? 0) <= 0) {
+    return c.json({
+      success: false,
+      error: '剩餘次數不足',
+      data: { member, hasActiveContract: true, remainingCounts: 0 },
+    }, 400);
+  }
+
   const newCheckIn = await db.transaction(async (tx) => {
     const [entry] = await tx.insert(checkIns).values({
       memberId: data.memberId,
       branchId: data.branchId,
-      contractId: data.contractId || activeContract?.id,
+      contractId: activeContract.id,
       checkInType: data.checkInType,
       checkInTime: new Date(),
       processedById: user.employeeId,
       notes: data.notes,
     }).returning(CHECK_IN_RETURNING);
-    if (activePlan?.planType === 'COUNT_BASED' && activeContract) {
+    if (activePlan?.planType === 'COUNT_BASED') {
       await tx.update(contracts)
         .set({
           remainingCounts: sql`GREATEST(0, ${contracts.remainingCounts} - 1)`,

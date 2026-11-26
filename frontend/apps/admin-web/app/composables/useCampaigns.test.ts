@@ -1,4 +1,3 @@
-// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useCampaigns } from './useCampaigns'
 import type { Campaign, CampaignMetrics, ROIReport, ROISummary } from './useCampaigns'

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { db, notifications } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
@@ -47,7 +46,6 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Notification Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
 
     // Create a test notification
@@ -68,7 +66,6 @@ describe('Member Notification Routes', () => {
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await db.delete(notifications).where(eq(notifications.targetMemberId, TEST_MEMBER_ID));
     await cleanupTestFixtures();
   });
@@ -90,7 +87,6 @@ describe('Member Notification Routes', () => {
 
   describe('GET /api/member/notifications/preferences', () => {
     it('should return notification preferences', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/preferences');
 
@@ -107,7 +103,6 @@ describe('Member Notification Routes', () => {
 
   describe('PUT /api/member/notifications/preferences', () => {
     it('should update notification preferences', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/preferences', {
         method: 'PUT',
@@ -140,7 +135,6 @@ describe('Member Notification Routes', () => {
 
   describe('GET /api/member/notifications/channels', () => {
     it('should return available channels', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/channels');
 
@@ -158,7 +152,6 @@ describe('Member Notification Routes', () => {
 
   describe('GET /api/member/notifications/history', () => {
     it('should return notification history with pagination', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/history');
 
@@ -171,7 +164,6 @@ describe('Member Notification Routes', () => {
     });
 
     it('should support pagination parameters', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/history?page=1&limit=5');
 
@@ -187,7 +179,6 @@ describe('Member Notification Routes', () => {
 
   describe('GET /api/member/notifications/unread-count', () => {
     it('should return unread count', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/unread-count');
 
@@ -205,7 +196,6 @@ describe('Member Notification Routes', () => {
 
   describe('POST /api/member/notifications/:id/read', () => {
     it('should mark notification as read', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(`/api/member/notifications/${testNotificationId}/read`, {
         method: 'POST',
@@ -217,7 +207,6 @@ describe('Member Notification Routes', () => {
     });
 
     it('should return 404 for non-existent notification', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/notifications/00000000-0000-4000-8000-000000099999/read',
@@ -234,7 +223,6 @@ describe('Member Notification Routes', () => {
 
   describe('POST /api/member/notifications/read-all', () => {
     it('should mark all notifications as read', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/notifications/read-all', {
         method: 'POST',

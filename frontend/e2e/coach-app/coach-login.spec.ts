@@ -1,120 +1,78 @@
 /**
  * Coach App Login E2E Tests
  *
- * Tests the complete login flow for coaches
+ * Login flow, session persistence, logout and the route auth guard.
  */
 import { test, expect } from '@playwright/test'
+import { loginAsCoach } from '../fixtures/auth'
 
 test.describe('Coach Login Flow', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to login page
-    await page.goto('http://localhost:3003/login')
+    await page.goto('/login')
   })
 
   test('should display login form', async ({ page }) => {
-    // Check page title
-    await expect(page.locator('h1')).toContainText('教練登入')
+    await expect(page.locator('h1')).toHaveText('GymNexus')
+    await expect(page.getByText('教練端 COACH')).toBeVisible()
 
-    // Check form elements exist
-    await expect(page.locator('input[type="text"]')).toBeVisible()
-    await expect(page.locator('input[type="password"]')).toBeVisible()
-    await expect(page.locator('button[type="submit"]')).toBeVisible()
+    await expect(page.getByLabel('帳號')).toBeVisible()
+    await expect(page.getByLabel('密碼')).toBeVisible()
+    await expect(page.getByRole('button', { name: '登入系統' })).toBeVisible()
   })
 
-  test('should show error for empty credentials', async ({ page }) => {
-    // Click submit without filling form
-    await page.locator('button[type="submit"]').click()
+  test('should disable submit until both fields are filled', async ({ page }) => {
+    const submit = page.getByRole('button', { name: '登入系統' })
+    await expect(submit).toBeDisabled()
 
-    // Check for HTML5 validation or custom error
-    const emailInput = page.locator('input[type="text"]')
-    await expect(emailInput).toHaveAttribute('required', '')
+    await page.locator('#identifier').fill('someone@example.com')
+    await expect(submit).toBeDisabled()
+
+    await page.locator('#password').fill('secret')
+    await expect(submit).toBeEnabled()
   })
 
   test('should show error for invalid credentials', async ({ page }) => {
-    // Fill in invalid credentials
-    await page.locator('input[type="text"]').fill('invalid@example.com')
-    await page.locator('input[type="password"]').fill('wrongpassword')
+    await page.locator('#identifier').fill('invalid@example.com')
+    await page.locator('#password').fill('wrongpassword')
+    await page.getByRole('button', { name: '登入系統' }).click()
 
-    // Submit form
-    await page.locator('button[type="submit"]').click()
-
-    // Wait for error message
-    await expect(page.locator('.text-red-500, [class*="error"]')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.error-alert')).toBeVisible()
+    await expect(page).toHaveURL(/\/login/)
   })
 
   test('should successfully login with valid credentials', async ({ page }) => {
-    // This test requires a valid test account
-    // Skip in CI or use mock API
+    await loginAsCoach(page)
 
-    // Fill in test credentials
-    await page.locator('input[type="text"]').fill('test-coach@example.com')
-    await page.locator('input[type="password"]').fill('testpassword123')
-
-    // Submit form
-    await page.locator('button[type="submit"]').click()
-
-    // Should redirect to dashboard
-    await expect(page).toHaveURL(/\/$/i, { timeout: 10000 })
-
-    // Dashboard should show coach name
-    await expect(page.locator('text=今日課程')).toBeVisible()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '今日課程' })).toBeVisible()
   })
 
   test('should persist login across page refresh', async ({ page }) => {
-    // Login first
-    await page.locator('input[type="text"]').fill('test-coach@example.com')
-    await page.locator('input[type="password"]').fill('testpassword123')
-    await page.locator('button[type="submit"]').click()
+    await loginAsCoach(page)
 
-    // Wait for dashboard
-    await page.waitForURL(/\/$/)
-
-    // Refresh page
     await page.reload()
 
-    // Should still be on dashboard (not redirected to login)
     await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '今日課程' })).toBeVisible()
   })
 
   test('should logout successfully', async ({ page }) => {
-    // Login first
-    await page.locator('input[type="text"]').fill('test-coach@example.com')
-    await page.locator('input[type="password"]').fill('testpassword123')
-    await page.locator('button[type="submit"]').click()
+    await loginAsCoach(page)
 
-    // Wait for dashboard
-    await page.waitForURL(/\/$/)
+    await page.locator('.menu-button').click()
+    await page.getByRole('button', { name: '登出' }).click()
 
-    // Click menu button (if exists)
-    const menuButton = page.locator('[aria-label="menu"], .menu-button, button:has-text("選單")')
-    if (await menuButton.isVisible()) {
-      await menuButton.click()
-    }
-
-    // Click logout
-    await page.locator('text=登出').click()
-
-    // Should redirect to login
     await expect(page).toHaveURL(/\/login/)
   })
 })
 
 test.describe('Coach Auth Middleware', () => {
-  test('should redirect to login when accessing protected route without auth', async ({ page }) => {
-    // Try to access dashboard directly
-    await page.goto('http://localhost:3003/')
+  const protectedRoutes = ['/', '/students', '/classes', '/schedule', '/lessons', '/library']
 
-    // Should be redirected to login
-    await expect(page).toHaveURL(/\/login/)
-  })
-
-  test('should redirect to login when accessing students page without auth', async ({ page }) => {
-    await page.goto('http://localhost:3003/students')
-    await expect(page).toHaveURL(/\/login/)
-  })
-
-  test('should redirect to login when accessing classes page without auth', async ({ page }) => {
-    await page.goto('http://localhost:3003/classes')
-    await expect(page).toHaveURL(/\/login/)
-  })
+  for (const route of protectedRoutes) {
+    test(`should redirect to login when accessing ${route} without auth`, async ({ page }) => {
+      await page.goto(route)
+      await expect(page).toHaveURL(/\/login/)
+    })
+  }
 })

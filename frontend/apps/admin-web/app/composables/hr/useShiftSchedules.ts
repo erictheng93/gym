@@ -3,6 +3,7 @@
  * 包含：班表 CRUD、員工排班、班表指派
  */
 
+import { toLocalDateString } from '~/utils/date'
 import { useFetch } from '~/composables/core/useFetch'
 import type { ShiftSchedule, EmployeeShift, Employee } from '~/types/schema'
 
@@ -131,7 +132,7 @@ export const useShiftSchedules = () => {
         if (shiftScheduleId) filter.shift_schedule_id = shiftScheduleId
 
         if (activeOnly) {
-          const today = new Date().toISOString().slice(0, 10)
+          const today = toLocalDateString()
           filter.effective_date_lte = today
           // For end_date null or >= today, we'll filter client-side
         }
@@ -147,7 +148,7 @@ export const useShiftSchedules = () => {
 
         // Filter for active shifts (end_date is null or >= today)
         if (activeOnly) {
-          const today = new Date().toISOString().slice(0, 10)!
+          const today = toLocalDateString()
           filtered = filtered.filter(es =>
             !es.end_date || es.end_date >= today
           )
@@ -178,7 +179,7 @@ export const useShiftSchedules = () => {
    * 取得班表的指派員工
    */
   const fetchShiftEmployees = async (shiftScheduleId: string) => {
-    const today = new Date().toISOString().slice(0, 10)!
+    const today = toLocalDateString()
 
     const result = await readItems<EmployeeShift>('employee_shifts', {
       filter: {
@@ -200,7 +201,7 @@ export const useShiftSchedules = () => {
    * 取得員工的當前班表
    */
   const getEmployeeCurrentShift = async (employeeId: string) => {
-    const today = new Date().toISOString().slice(0, 10)!
+    const today = toLocalDateString()
 
     const result = await readItems<EmployeeShift>('employee_shifts', {
       filter: {
@@ -290,7 +291,7 @@ export const useShiftSchedules = () => {
     yesterday.setDate(yesterday.getDate() - 1)
 
     const result = await updateItem<EmployeeShift>('employee_shifts', shiftId, {
-      end_date: yesterday.toISOString().slice(0, 10)
+      end_date: toLocalDateString(yesterday)
     })
     return result
   }

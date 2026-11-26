@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { db, classReviews, bookings, classSessions, classes, members } from '../db/index.js';
+import { db, classReviews, bookings, classSessions, classes, members, branches } from '../db/index.js';
 import { eq, and, desc, avg, count } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
@@ -461,16 +461,20 @@ app.get(
   '/class/:classId',
   zValidator('query', classReviewsQuerySchema),
   async (c) => {
+    const memberInfo = c.get('member')!;
     const classId = c.req.param('classId');
     const { page, limit } = c.req.valid('query');
     const offset = (page - 1) * limit;
 
-    // Concurrently get class info, review stats, and reviews list
+    // Concurrently get class info, review stats, and reviews list.
+    // The class must belong to the member's tenant (via its branch); another
+    // tenant's class is reported as not found.
     const [[classInfo], [stats], reviews] = await Promise.all([
       db
         .select(CLASS_INFO_SELECT)
         .from(classes)
-        .where(eq(classes.id, classId))
+        .innerJoin(branches, eq(classes.branchId, branches.id))
+        .where(and(eq(classes.id, classId), eq(branches.tenantId, memberInfo.tenantId)))
         .limit(1),
       db
         .select(CLASS_REVIEW_STATS_SELECT)

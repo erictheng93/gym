@@ -1,4 +1,3 @@
-// -nocheck
 /**
  * useShiftSchedules.test.ts
  * Tests for the shift schedule management composable
@@ -37,6 +36,7 @@ describe('useShiftSchedules', () => {
 
       expect(shiftSchedules.value).toEqual(mockShifts)
       expect(isShiftLoading.value).toBe(false)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('shift_schedules', { filter: {}, sort: 'start_time' })
     })
 
     it('應該支援分店過濾', async () => {
@@ -61,12 +61,14 @@ describe('useShiftSchedules', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
-      const { fetchShiftSchedules, isShiftLoading } = useShiftSchedules()
+      const { fetchShiftSchedules, isShiftLoading, shiftSchedules } = useShiftSchedules()
+      shiftSchedules.value = [{ id: 'keep' } as ShiftSchedule]
 
       await fetchShiftSchedules()
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch shift schedules:', expect.any(Error))
       expect(isShiftLoading.value).toBe(false)
+      expect(shiftSchedules.value).toEqual([{ id: 'keep' }]) // previous list is kept on failure
 
       consoleErrorSpy.mockRestore()
     })
@@ -140,6 +142,16 @@ describe('useShiftSchedules', () => {
 
       expect(result).toBeNull()
     })
+
+    it('建立時一律強制 status 為 published', async () => {
+      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'shift-new' })
+
+      const { createShiftSchedule } = useShiftSchedules()
+
+      await createShiftSchedule({ name: 'Test', status: 'archived' })
+
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('shift_schedules', { name: 'Test', status: 'published' })
+    })
   })
 
   describe('班表 CRUD - updateShiftSchedule', () => {
@@ -204,6 +216,11 @@ describe('useShiftSchedules', () => {
 
       expect(employeeShifts.value).toEqual(mockEmployeeShifts)
       expect(isEmployeeShiftLoading.value).toBe(false)
+      // activeOnly defaults to true: only assignments already in effect today are requested
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employee_shifts', expect.objectContaining({
+        filter: { effective_date_lte: '2025-01-15' },
+        limit: 1000
+      }))
     })
 
     it('應該支援員工 ID 過濾', async () => {
@@ -296,6 +313,25 @@ describe('useShiftSchedules', () => {
       await fetchEmployeeShifts({ activeOnly: false })
 
       expect(employeeShifts.value).toHaveLength(2)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employee_shifts', expect.objectContaining({
+        filter: {}
+      }))
+    })
+
+    it('結束日期為今天仍視為有效，昨天結束則無效', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({
+        data: [
+          { id: 'ends-today', effective_date: '2025-01-01', end_date: '2025-01-15' },
+          { id: 'ended-yesterday', effective_date: '2025-01-01', end_date: '2025-01-14' }
+        ],
+        total: 2
+      })
+
+      const { fetchEmployeeShifts, employeeShifts } = useShiftSchedules()
+
+      await fetchEmployeeShifts()
+
+      expect(employeeShifts.value.map(es => es.id)).toEqual(['ends-today'])
     })
 
     it('應該支援分店過濾', async () => {
@@ -324,19 +360,21 @@ describe('useShiftSchedules', () => {
       await fetchEmployeeShifts({ branchId: 'branch-1' })
 
       expect(employeeShifts.value).toHaveLength(1)
-      expect(employeeShifts.value[0].id).toBe('es-1')
+      expect(employeeShifts.value[0]!.id).toBe('es-1')
     })
 
     it('應該處理取得失敗的情況', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Fetch failed'))
 
-      const { fetchEmployeeShifts, isEmployeeShiftLoading } = useShiftSchedules()
+      const { fetchEmployeeShifts, isEmployeeShiftLoading, employeeShifts } = useShiftSchedules()
+      employeeShifts.value = [{ id: 'keep' } as EmployeeShift]
 
       await fetchEmployeeShifts()
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch employee shifts:', expect.any(Error))
       expect(isEmployeeShiftLoading.value).toBe(false)
+      expect(employeeShifts.value).toEqual([{ id: 'keep' }]) // previous list is kept on failure
 
       consoleErrorSpy.mockRestore()
     })
@@ -364,7 +402,11 @@ describe('useShiftSchedules', () => {
       const result = await fetchShiftEmployees('shift-1')
 
       expect(result).toHaveLength(1)
-      expect(result[0].shift_schedule_id).toBe('shift-1')
+      expect(result[0]!.shift_schedule_id).toBe('shift-1')
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employee_shifts', {
+        filter: { shift_schedule_id: 'shift-1', effective_date_lte: '2025-01-15' },
+        limit: 1000
+      })
     })
 
     it('應該過濾掉已結束的指派', async () => {
@@ -383,7 +425,7 @@ describe('useShiftSchedules', () => {
       const result = await fetchShiftEmployees('shift-1')
 
       expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('es-1')
+      expect(result[0]!.id).toBe('es-1')
     })
   })
 
@@ -407,6 +449,24 @@ describe('useShiftSchedules', () => {
       const result = await getEmployeeCurrentShift('emp-1')
 
       expect(result).toEqual(mockEmployeeShift)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employee_shifts', {
+        filter: { employee_id: 'emp-1', effective_date_lte: '2025-01-15' },
+        limit: 100
+      })
+    })
+
+    it('應該略過已結束的班表，返回仍有效的那一筆', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({
+        data: [
+          { id: 'es-ended', effective_date: '2024-01-01', end_date: '2025-01-10' },
+          { id: 'es-open', effective_date: '2025-01-11', end_date: null }
+        ],
+        total: 2
+      })
+
+      const { getEmployeeCurrentShift } = useShiftSchedules()
+
+      expect((await getEmployeeCurrentShift('emp-1'))?.id).toBe('es-open')
     })
 
     it('應該在沒有有效班表時返回 null', async () => {
@@ -463,14 +523,32 @@ describe('useShiftSchedules', () => {
       })
 
       expect(result).toEqual(newEmployeeShift)
-      expect(mockFetchInstance.createItem).toHaveBeenCalledWith(
-        'employee_shifts',
-        expect.objectContaining({
-          employee_id: 'emp-1',
-          shift_schedule_id: 'shift-1',
-          effective_date: '2025-01-15'
-        })
-      )
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employee_shifts', {
+        employee_id: 'emp-1',
+        shift_schedule_id: 'shift-1',
+        effective_date: '2025-01-15',
+        end_date: null
+      })
+      expect(mockFetchInstance.updateItem).not.toHaveBeenCalled()
+    })
+
+    it('應該把結束日期帶入新的指派', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+      mockFetchInstance.createItem.mockResolvedValueOnce({ id: 'es-new' })
+
+      const { assignShiftToEmployee } = useShiftSchedules()
+
+      await assignShiftToEmployee({
+        employeeId: 'emp-1',
+        shiftScheduleId: 'shift-1',
+        effectiveDate: '2025-02-01',
+        endDate: '2025-06-30'
+      })
+
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employee_shifts', expect.objectContaining({
+        effective_date: '2025-02-01',
+        end_date: '2025-06-30'
+      }))
     })
 
     it('應該在更換班表時結束舊班表', async () => {
@@ -510,10 +588,12 @@ describe('useShiftSchedules', () => {
       expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
         'employee_shifts',
         'es-old',
-        expect.objectContaining({
-          end_date: '2025-01-14' // 前一天
-        })
+        { end_date: '2025-01-14' } // 前一天
       )
+      expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employee_shifts', expect.objectContaining({
+        shift_schedule_id: 'shift-new',
+        effective_date: '2025-01-15'
+      }))
     })
 
     it('應該在相同班表時不更新舊班表', async () => {
@@ -568,6 +648,8 @@ describe('useShiftSchedules', () => {
 
       expect(result).toHaveLength(3)
       expect(mockFetchInstance.createItem).toHaveBeenCalledTimes(3)
+      const assignedEmployees = mockFetchInstance.createItem.mock.calls.map(call => call[1].employee_id)
+      expect(assignedEmployees).toEqual(['emp-1', 'emp-2', 'emp-3'])
     })
 
     it('應該過濾掉失敗的指派', async () => {
@@ -588,7 +670,7 @@ describe('useShiftSchedules', () => {
       })
 
       expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('es-1')
+      expect(result[0]!.id).toBe('es-1')
     })
   })
 
@@ -613,11 +695,24 @@ describe('useShiftSchedules', () => {
       expect(mockFetchInstance.updateItem).toHaveBeenCalledWith(
         'employee_shifts',
         'es-1',
-        expect.objectContaining({
+        {
           effective_date: '2025-02-01',
           end_date: '2025-06-30'
-        })
+        }
       )
+    })
+
+    it('應該允許把結束日期清空（無限期）', async () => {
+      mockFetchInstance.updateItem.mockResolvedValueOnce({ id: 'es-1', end_date: null })
+
+      const { updateEmployeeShift } = useShiftSchedules()
+
+      await updateEmployeeShift('es-1', { endDate: null })
+
+      expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('employee_shifts', 'es-1', {
+        effective_date: undefined,
+        end_date: null
+      })
     })
   })
 
@@ -656,12 +751,37 @@ describe('useShiftSchedules', () => {
       expect(result).toEqual(mockEmployees)
       expect(mockFetchInstance.readItems).toHaveBeenCalledWith(
         'employees',
-        expect.objectContaining({
-          filter: expect.objectContaining({
+        {
+          filter: {
             branch_id: 'branch-1',
             employment_status: 'ACTIVE',
             status: 'active'
-          })
+          },
+          sort: 'full_name'
+        }
+      )
+    })
+  })
+
+  describe('local date handling (Asia/Taipei, UTC+8)', () => {
+    const originalTZ = process.env.TZ
+    beforeEach(() => {
+      process.env.TZ = 'Asia/Taipei'
+      // 07:30 local on Jan 15 = 23:30 UTC on Jan 14
+      vi.setSystemTime(new Date('2026-01-15T07:30:00+08:00'))
+    })
+    afterEach(() => {
+      if (originalTZ === undefined) delete process.env.TZ
+      else process.env.TZ = originalTZ
+    })
+
+    it('filters active assignments by the local date, not the UTC date', async () => {
+      mockFetchInstance.readItems.mockResolvedValue({ data: [], total: 0 })
+      await useShiftSchedules().fetchShiftEmployees('shift-1')
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith(
+        'employee_shifts',
+        expect.objectContaining({
+          filter: expect.objectContaining({ effective_date_lte: '2026-01-15' })
         })
       )
     })

@@ -1,8 +1,46 @@
-// -nocheck
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useBranches } from './useBranches'
 import type { Branch, Employee } from '~/types/schema'
+
+const makeBranch = (overrides: Partial<Branch> = {}): Branch => ({
+  id: 'branch-1',
+  name: '總店',
+  type: 'HEADQUARTER',
+  status: 'active',
+  address: null,
+  phone: null,
+  tax_id: null,
+  settings: null,
+  date_created: '2024-01-01',
+  date_updated: null,
+  user_created: null,
+  user_updated: null,
+  ...overrides
+})
+
+const makeEmployee = (overrides: Partial<Employee> = {}): Employee => ({
+  id: 'emp-1',
+  full_name: '張三',
+  employee_code: 'EMP001',
+  status: 'active',
+  user_id: null,
+  branch_id: 'branch-1',
+  job_title_id: 'job-1',
+  supervisor_id: null,
+  hire_date: null,
+  employment_status: 'ACTIVE',
+  employment_type: 'FULL_TIME',
+  basic_salary: null,
+  custom_permissions: null,
+  phone: null,
+  email: null,
+  date_created: '2024-01-01',
+  date_updated: null,
+  user_created: null,
+  user_updated: null,
+  ...overrides
+})
 
 describe('useBranches', () => {
   beforeEach(() => {
@@ -21,22 +59,8 @@ describe('useBranches', () => {
   describe('fetchBranches', () => {
     it('應該成功取得分店列表', async () => {
       const mockBranches: Branch[] = [
-        {
-          id: 'branch-1',
-          name: '總店',
-          type: 'HEADQUARTER',
-          status: 'active',
-          date_created: '2024-01-01',
-          date_updated: null
-        },
-        {
-          id: 'branch-2',
-          name: '分店A',
-          type: 'BRANCH',
-          status: 'active',
-          date_created: '2024-01-02',
-          date_updated: null
-        }
+        makeBranch(),
+        makeBranch({ id: 'branch-2', name: '分店A', type: 'BRANCH', date_created: '2024-01-02' })
       ]
 
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockBranches, total: 2 })
@@ -98,16 +122,7 @@ describe('useBranches', () => {
 
   describe('fetchBranch', () => {
     it('應該成功取得單個分店詳情', async () => {
-      const mockBranch: Branch = {
-        id: 'branch-1',
-        name: '總店',
-        type: 'HEADQUARTER',
-        status: 'active',
-        address: '台北市信義區',
-        phone: '02-12345678',
-        date_created: '2024-01-01',
-        date_updated: null
-      }
+      const mockBranch = makeBranch({ address: '台北市信義區', phone: '02-12345678' })
 
       mockFetchInstance.readItem.mockResolvedValueOnce(mockBranch)
 
@@ -133,16 +148,7 @@ describe('useBranches', () => {
   describe('fetchBranchEmployees', () => {
     it('應該成功取得分店員工列表', async () => {
       const mockEmployees: Employee[] = [
-        {
-          id: 'emp-1',
-          full_name: '張三',
-          employee_code: 'EMP001',
-          status: 'active',
-          branch_id: 'branch-1',
-          job_title_id: 'job-1',
-          date_created: '2024-01-01',
-          date_updated: null
-        }
+        makeEmployee()
       ]
 
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockEmployees, total: 1 })
@@ -177,12 +183,7 @@ describe('useBranches', () => {
         status: 'active'
       }
 
-      const createdBranch: Branch = {
-        id: 'branch-new',
-        ...newBranch,
-        date_created: '2024-01-01',
-        date_updated: null
-      } as Branch
+      const createdBranch = makeBranch({ id: 'branch-new', ...newBranch })
 
       mockFetchInstance.createItem.mockResolvedValueOnce(createdBranch)
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
@@ -192,10 +193,12 @@ describe('useBranches', () => {
 
       expect(result).toEqual(createdBranch)
       expect(mockFetchInstance.createItem).toHaveBeenCalledWith('branches', newBranch)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.any(Object))
     })
 
     it('應該在創建失敗時返回 null 並呼叫 handleError', async () => {
       mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
+      mockFetchInstance.readItems.mockClear()
 
       const { createBranch } = useBranches()
 
@@ -203,6 +206,7 @@ describe('useBranches', () => {
 
       expect(result).toBeNull()
       expect(mockHandleError).toHaveBeenCalled()
+      expect(mockFetchInstance.readItems).not.toHaveBeenCalled()
     })
   })
 
@@ -212,14 +216,7 @@ describe('useBranches', () => {
         name: '更新後的名稱'
       }
 
-      const updatedBranch: Branch = {
-        id: 'branch-1',
-        name: '更新後的名稱',
-        type: 'BRANCH',
-        status: 'active',
-        date_created: '2024-01-01',
-        date_updated: '2024-01-02'
-      }
+      const updatedBranch = makeBranch({ name: '更新後的名稱', type: 'BRANCH', date_updated: '2024-01-02' })
 
       mockFetchInstance.updateItem.mockResolvedValueOnce(updatedBranch)
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
@@ -229,6 +226,7 @@ describe('useBranches', () => {
 
       expect(result).toEqual(updatedBranch)
       expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('branches', 'branch-1', updates)
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.any(Object))
     })
 
     it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
@@ -253,6 +251,7 @@ describe('useBranches', () => {
 
       expect(result).toBe(true)
       expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('branches', 'branch-1')
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('branches', expect.any(Object))
     })
 
     it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
@@ -272,7 +271,7 @@ describe('useBranches', () => {
       const instance1 = useBranches()
       const instance2 = useBranches()
 
-      instance1.branches.value = [{ id: 'branch-1', name: 'Test' } as Branch]
+      instance1.branches.value = [makeBranch({ name: 'Test' })]
 
       expect(instance2.branches.value).toEqual(instance1.branches.value)
     })

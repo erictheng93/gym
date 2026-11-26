@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import app from '../src/app.js';
-import { dbAvailable } from './setup.js';
+import { pushService } from '../src/services/push.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import { db, pushSubscriptions } from '../src/db/index.js';
 import { eq } from 'drizzle-orm';
@@ -44,12 +44,10 @@ function memberRequest(path: string, options: RequestInit = {}) {
 
 describe('Member Push Routes', () => {
   beforeAll(async () => {
-    if (!dbAvailable) return;
     await createTestFixtures();
   });
 
   afterAll(async () => {
-    if (!dbAvailable) return;
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.memberId, TEST_MEMBER_ID));
     await cleanupTestFixtures();
   });
@@ -59,17 +57,30 @@ describe('Member Push Routes', () => {
   // ---------------------------------------------------------------------------
 
   describe('GET /api/member/push/vapid-public-key', () => {
-    it('should return VAPID public key without auth', async () => {
-      const res = await app.request('/api/member/push/vapid-public-key');
-      // May return 200 with key, 500 or 503 if VAPID not configured
-      expect([200, 500, 503]).toContain(res.status);
-
-      if (res.status === 200) {
+    it('returns the VAPID public key without auth when configured', async () => {
+      const spy = vi.spyOn(pushService, 'getPublicKey').mockReturnValue('test-public-key');
+      try {
+        const res = await app.request('/api/member/push/vapid-public-key');
+        expect(res.status).toBe(200);
         const data = await res.json();
         expect(data.success).toBe(true);
-        expect(data.data).toHaveProperty('publicKey');
+        expect(data.data.publicKey).toBe('test-public-key');
+      } finally {
+        spy.mockRestore();
       }
     });
+
+    it('returns 503 PUSH_NOT_CONFIGURED when no key is configured', async () => {
+      const spy = vi.spyOn(pushService, 'getPublicKey').mockReturnValue(null);
+      try {
+        const res = await app.request('/api/member/push/vapid-public-key');
+        expect(res.status).toBe(503);
+        expect((await res.json()).code).toBe('PUSH_NOT_CONFIGURED');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
   });
 
   // ---------------------------------------------------------------------------
@@ -101,7 +112,6 @@ describe('Member Push Routes', () => {
 
   describe('POST /api/member/push/subscribe', () => {
     it('should reject missing endpoint', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/push/subscribe', {
         method: 'POST',
@@ -114,7 +124,6 @@ describe('Member Push Routes', () => {
     });
 
     it('should reject missing keys', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/push/subscribe', {
         method: 'POST',
@@ -127,7 +136,6 @@ describe('Member Push Routes', () => {
     });
 
     it('should subscribe successfully with valid data', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/push/subscribe', {
         method: 'POST',
@@ -153,7 +161,6 @@ describe('Member Push Routes', () => {
 
   describe('GET /api/member/push/subscriptions', () => {
     it('should return member subscriptions', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/push/subscriptions');
 
@@ -171,7 +178,6 @@ describe('Member Push Routes', () => {
 
   describe('PATCH /api/member/push/preferences', () => {
     it('should update notification preferences', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest('/api/member/push/preferences', {
         method: 'PATCH',
@@ -194,7 +200,6 @@ describe('Member Push Routes', () => {
 
   describe('DELETE /api/member/push/unsubscribe', () => {
     it('should unsubscribe specific endpoint', async () => {
-      if (!dbAvailable) return;
 
       const res = await memberRequest(
         '/api/member/push/unsubscribe?endpoint=https://push.example.com/test-endpoint-1',

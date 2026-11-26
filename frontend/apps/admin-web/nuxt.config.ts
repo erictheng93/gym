@@ -65,7 +65,8 @@ export default defineNuxtConfig({
   // Vite aliases for proper path resolution
   alias: {
     '@shared': resolve(__dirname, '../../packages/shared'),
-    '@ui': resolve(__dirname, '../../packages/ui')
+    '@ui': resolve(__dirname, '../../packages/ui'),
+    '@test/setup': resolve(__dirname, '../../vitest.setup.ts')
   },
 
   // Auto-import utilities from shared package using aliases

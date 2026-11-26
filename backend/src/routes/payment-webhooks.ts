@@ -25,6 +25,7 @@ const PAYMENT_SUCCESS_SELECT = {
   contractId: payments.contractId,
   tenantId: payments.tenantId,
   receiptNo: payments.receiptNo,
+  status: payments.status,
 };
 
 const app = new Hono();
@@ -84,7 +85,12 @@ app.post('/stripe', async (c) => {
         const paymentId = session.metadata?.payment_id;
 
         if (paymentId) {
-          // Payment session expired - no action needed as payment stays unpaid
+          // The checkout can no longer be paid: close the open row. Only a PENDING
+          // row changes, so a completed payment is never touched by this event.
+          await db
+            .update(payments)
+            .set({ status: 'FAILED' })
+            .where(and(eq(payments.id, paymentId), eq(payments.status, 'PENDING')));
           console.log(`[Stripe Webhook] Session expired for payment ${paymentId}`);
         }
         break;
@@ -303,10 +309,11 @@ interface PaymentSuccessDetails {
  * Record a successful gateway payment and update its contract.
  *
  * Runs in one transaction with the payment row locked (SELECT ... FOR UPDATE),
- * so retried and concurrent duplicate webhooks are serialized. A payment is
- * "processed" once payments.receiptNo holds a gateway transaction id (gateway
- * payment rows are created at checkout with receiptNo = NULL); a processed
- * payment is never processed again.
+ * so retried and concurrent duplicate webhooks are serialized. Gateway rows are
+ * created at checkout as status PENDING with receiptNo = NULL; success sets
+ * status COMPLETED and receiptNo to the gateway transaction id. A payment that
+ * is already COMPLETED (or carries a transaction id) is never processed again,
+ * and only COMPLETED rows count towards the contract's paid total.
  */
 async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDetails): Promise<void> {
   if (!details.transactionId) {
@@ -328,7 +335,7 @@ async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDe
         return;
       }
 
-      if (payment.receiptNo) {
+      if (payment.status === 'COMPLETED' || payment.receiptNo) {
         if (payment.receiptNo === details.transactionId) {
           console.log(
             `[Payment Success] Payment ${paymentId} already processed ` +
@@ -364,6 +371,7 @@ async function handlePaymentSuccess(paymentId: string, details: PaymentSuccessDe
       await tx
         .update(payments)
         .set({
+          status: 'COMPLETED',
           receiptNo: details.transactionId,
           notes: `Paid via ${details.gateway} - Transaction: ${details.transactionId}`,
         })

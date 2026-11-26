@@ -104,6 +104,7 @@ const CONTRACT_PAYMENTS_SELECT = {
   paymentMethod: payments.paymentMethod,
   paymentDate: payments.paymentDate,
   type: payments.type,
+  status: payments.status,
   receiptNo: payments.receiptNo,
   createdAt: payments.createdAt,
 };

@@ -259,6 +259,16 @@ If the script exits non-zero with `BLOCKED`, the listed branches have NULL
 `tenant_id`: set `branches.tenant_id` for each one by hand, then re-run from
 step 1. The script never changes anything in that case.
 
+### Payment status column
+
+`payments.status` (`PENDING` / `COMPLETED` / `FAILED`) is added by `db:push` as
+`varchar(20) NOT NULL DEFAULT 'COMPLETED'`, so every existing row is backfilled as
+`COMPLETED` (all existing rows were entered by staff). No backfill script is
+needed: run `bun run db:push` as usual (after `db:backfill-tenant` above).
+Gateway checkouts are inserted as `PENDING`, become `COMPLETED` when the gateway
+confirms them and `FAILED` when the checkout expires or cannot be created; only
+`COMPLETED` rows count towards contract totals, revenue reports and exports.
+
 ### Manual Migration
 
 ```bash

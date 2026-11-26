@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db, checkIns, contracts, members, membershipPlans } from '../src/db/index.js';
+import { db, checkIns, contracts, members } from '../src/db/index.js';
 import { eq, inArray } from 'drizzle-orm';
 import {
   createTestFixtures,
@@ -9,8 +9,9 @@ import {
   getAuthToken,
   TEST_MEMBER_ID,
   TEST_BRANCH_ID,
-  TEST_CONTRACT_ID,
   TEST_TENANT_ID,
+  TEST_PLAN_ID,
+  TEST_COUNT_PLAN_ID,
 } from './helpers.js';
 
 describe('Check-ins API', () => {
@@ -157,79 +158,115 @@ describe('Check-ins API', () => {
   });
 
   describe('COUNT_BASED contract session deduction', () => {
-    it('should deduct session for COUNT_BASED contract', async () => {
-      // Create a COUNT_BASED plan
-      const [countPlan] = await db.insert(membershipPlans).values({
-        name: 'Test Count Plan',
-        code: 'COUNT001',
-        planType: 'COUNT_BASED',
-        classCounts: 10,
-        price: '3000',
-        tenantId: TEST_TENANT_ID,
+    const createdMemberIds: string[] = [];
+
+    /** A fresh member (so same-day check-ins don't collide) with one contract */
+    async function memberWithContract(contract: {
+      planId?: string;
+      status?: 'ACTIVE' | 'PAUSED' | 'EXPIRED';
+      remainingCounts?: number | null;
+      endOffsetDays?: number;
+    }) {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const end = new Date();
+      end.setDate(end.getDate() + (contract.endOffsetDays ?? 90));
+      const endStr = end.toISOString().split('T')[0];
+
+      const [member] = await db.insert(members).values({
+        fullName: `Count Test ${suffix}`,
+        phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`,
+        memberCode: `MC${suffix}`,
         branchId: TEST_BRANCH_ID,
-        isActive: true,
-        allowPause: false,
-        allowTransfer: false,
-      }).returning();
-
-      // Create a COUNT_BASED contract
-      const today = new Date();
-      const endDate = new Date(today);
-      endDate.setMonth(endDate.getMonth() + 3);
-
-      const [countContract] = await db.insert(contracts).values({
-        contractNo: 'C-COUNT-001',
-        memberId: TEST_MEMBER_ID,
-        planId: countPlan.id,
-        startDate: today.toISOString().split('T')[0],
-        originalEndDate: endDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
         status: 'ACTIVE',
-        remainingCounts: 10,
-        totalAmount: '3000',
+        joinDate: todayStr,
+        tenantId: TEST_TENANT_ID,
+      }).returning();
+      createdMemberIds.push(member.id);
+
+      const [row] = await db.insert(contracts).values({
+        contractNo: `CC${suffix}`,
+        memberId: member.id,
+        planId: contract.planId ?? TEST_COUNT_PLAN_ID,
+        startDate: todayStr,
+        originalEndDate: endStr,
+        endDate: endStr,
+        status: contract.status ?? 'ACTIVE',
+        remainingCounts: contract.remainingCounts === undefined ? 10 : contract.remainingCounts,
+        totalAmount: '2000',
         paymentStatus: 'PAID',
         branchId: TEST_BRANCH_ID,
         tenantId: TEST_TENANT_ID,
       }).returning();
+      return { member, contract: row };
+    }
 
-      // Create a new member for this test to avoid duplicate check-in issues
-      const [testMember] = await db.insert(members).values({
-        fullName: 'Count Test Member',
-        phone: '0999888777',
-        memberCode: 'M-COUNT-001',
-        branchId: TEST_BRANCH_ID,
-        status: 'ACTIVE',
-        joinDate: today.toISOString().split('T')[0],
-        tenantId: TEST_TENANT_ID,
-      }).returning();
-
-      // Update contract with new member
-      await db.update(contracts).set({ memberId: testMember.id }).where(eq(contracts.id, countContract.id));
-
-      // Check-in
-      const response = await authRequest('/api/check-ins', {
+    function checkIn(memberId: string, extra: Record<string, unknown> = {}) {
+      return authRequest('/api/check-ins', {
         method: 'POST',
         token: authToken,
-        body: JSON.stringify({
-          memberId: testMember.id,
-          branchId: TEST_BRANCH_ID,
-        }),
+        body: JSON.stringify({ memberId, branchId: TEST_BRANCH_ID, ...extra }),
       });
+    }
 
-      expect(response.status).toBe(201);
+    async function remainingCounts(contractId: string) {
+      const [row] = await db.select().from(contracts).where(eq(contracts.id, contractId));
+      return row.remainingCounts;
+    }
 
-      // Verify session was deducted
-      const [updatedContract] = await db
-        .select()
-        .from(contracts)
-        .where(eq(contracts.id, countContract.id));
+    afterAll(async () => {
+      if (createdMemberIds.length === 0) return;
+      await db.delete(checkIns).where(inArray(checkIns.memberId, createdMemberIds));
+      await db.delete(contracts).where(inArray(contracts.memberId, createdMemberIds));
+      await db.delete(members).where(inArray(members.id, createdMemberIds));
+    });
 
-      expect(updatedContract.remainingCounts).toBe(9); // 10 - 1
+    it('deducts one session per check-in and not again for a same-day repeat', async () => {
+      const { member, contract } = await memberWithContract({ remainingCounts: 10 });
 
-      // Cleanup
-      await db.delete(contracts).where(eq(contracts.id, countContract.id));
-      await db.delete(members).where(eq(members.id, testMember.id));
-      await db.delete(membershipPlans).where(eq(membershipPlans.id, countPlan.id));
+      expect((await checkIn(member.id)).status).toBe(201);
+      expect(await remainingCounts(contract.id)).toBe(9);
+
+      const repeat = await checkIn(member.id);
+      expect(repeat.status).toBe(200);
+      expect((await repeat.json()).data.alreadyCheckedIn).toBe(true);
+      expect(await remainingCounts(contract.id)).toBe(9);
+    });
+
+    it('does not touch remainingCounts of a TIME_BASED contract', async () => {
+      const { member, contract } = await memberWithContract({ planId: TEST_PLAN_ID, remainingCounts: null });
+
+      expect((await checkIn(member.id)).status).toBe(201);
+      expect(await remainingCounts(contract.id)).toBeNull();
+    });
+
+    it('rejects a member whose only contract is PAUSED or expired', async () => {
+      const paused = await memberWithContract({ status: 'PAUSED' });
+      const expired = await memberWithContract({ endOffsetDays: -1 });
+
+      for (const { member, contract } of [paused, expired]) {
+        const response = await checkIn(member.id);
+        expect(response.status).toBe(400);
+        expect((await response.json()).data.hasActiveContract).toBe(false);
+        expect(await remainingCounts(contract.id)).toBe(10);
+      }
+    });
+
+    it('rejects check-in when a COUNT_BASED contract has no sessions left', async () => {
+      const { member, contract } = await memberWithContract({ remainingCounts: 0 });
+
+      const response = await checkIn(member.id);
+
+      expect(response.status).toBe(400);
+      expect(await remainingCounts(contract.id)).toBe(0);
+    });
+
+    it('rejects check-in with an explicit contractId of a non-active contract', async () => {
+      const { member, contract } = await memberWithContract({ status: 'PAUSED' });
+
+      const response = await checkIn(member.id, { contractId: contract.id });
+
+      expect(response.status).toBe(400);
     });
   });
 

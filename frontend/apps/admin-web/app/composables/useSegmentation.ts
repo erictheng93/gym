@@ -321,20 +321,21 @@ export const useSegmentation = () => {
     return labels[segment] || segment
   }
 
+  // Solid CSS colors (iOS system palette); used as badge background and accent text color
   const getSegmentColor = (segment: RFMSegment): string => {
     const colors: Record<RFMSegment, string> = {
-      CHAMPIONS: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-      LOYAL: 'bg-green-100 text-green-800 border-green-300',
-      POTENTIAL_LOYAL: 'bg-teal-100 text-teal-800 border-teal-300',
-      NEW_CUSTOMERS: 'bg-blue-100 text-blue-800 border-blue-300',
-      PROMISING: 'bg-cyan-100 text-cyan-800 border-cyan-300',
-      NEED_ATTENTION: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      ABOUT_TO_SLEEP: 'bg-orange-100 text-orange-800 border-orange-300',
-      AT_RISK: 'bg-red-100 text-red-800 border-red-300',
-      HIBERNATING: 'bg-gray-100 text-gray-800 border-gray-300',
-      LOST: 'bg-slate-100 text-slate-800 border-slate-300'
+      CHAMPIONS: '#248A3D',
+      LOYAL: '#34C759',
+      POTENTIAL_LOYAL: '#30B0C7',
+      NEW_CUSTOMERS: '#007AFF',
+      PROMISING: '#5AC8FA',
+      NEED_ATTENTION: '#C93400',
+      ABOUT_TO_SLEEP: '#FF9500',
+      AT_RISK: '#FF3B30',
+      HIBERNATING: '#8E8E93',
+      LOST: '#636366'
     }
-    return colors[segment] || 'bg-gray-100 text-gray-800'
+    return colors[segment] || '#8E8E93'
   }
 
   const getSegmentIcon = (segment: RFMSegment): string => {

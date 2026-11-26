@@ -1,272 +1,81 @@
 import { test, expect } from '@playwright/test'
-import { TEST_USERS, login, logout } from './fixtures/auth'
-import { TestEnv } from './config/test-env'
-import { waitForElementStable } from './helpers/wait-helpers'
-import { findButton, findInput } from './helpers/selector-helpers'
+import { TEST_USERS, login } from './fixtures/auth'
 
-test.describe('登录流程 E2E', () => {
-  test.beforeEach(async ({ page }) => {
+const sidebar = '.sidebar'
+const SESSION_KEY = 'gn_sess_ctx'
+
+test.describe('登入流程', () => {
+  test('登入成功後進入首頁並顯示側邊欄', async ({ page }) => {
+    await login(page, TEST_USERS.admin)
+
+    await expect(page).toHaveURL('/')
+    await expect(page.locator(sidebar)).toBeVisible()
+    await expect(page.locator('.user-email')).toHaveText(TEST_USERS.admin.email)
+  })
+
+  test('空白送出顯示必填錯誤', async ({ page }) => {
     await page.goto('/login')
-    // 等待頁面完全載入
-    await page.waitForLoadState('networkidle')
-  })
+    await page.locator('button[type="submit"]').click()
 
-  test('应该成功登录并跳转到首页', async ({ page }) => {
-    // 使用 login 助手函数
-    await login(page, TEST_USERS.admin)
-
-    // 验证页面包含预期内容（例如导航菜单）
-    const navigation = page.locator('nav, [role="navigation"]').first()
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 验证显示欢迎信息或用户相关内容
-    await expect(page.locator('h1, h2').first()).toBeVisible()
-  })
-
-  test('应该在空字段时显示错误信息', async ({ page }) => {
-    // 等待表單元素穩定
-    const submitButton = findButton(page, { testId: 'submit', text: /登/ })
-    await waitForElementStable(submitButton)
-
-    // 不填写任何字段直接提交
-    await submitButton.click()
-
-    // 等待错误消息显示 - 使用 .error-banner 類名
-    const errorBanner = page.locator('.error-banner')
-    await expect(errorBanner).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 验证错误消息内容包含必填相关文字
-    await expect(errorBanner).toContainText(/必填|請填寫|required/i)
-
-    // 确保没有跳转
+    await expect(page.locator('.error-banner')).toContainText('請填寫帳號和密碼')
     await expect(page).toHaveURL('/login')
   })
 
-  test('应该在错误的凭证时显示错误信息', async ({ page }) => {
-    // 等待表單元素穩定
-    const emailInput = findInput(page, { name: 'email', type: 'email' })
-    await waitForElementStable(emailInput)
+  test('錯誤帳密顯示錯誤並停留在登入頁', async ({ page }) => {
+    await page.goto('/login')
+    await page.locator('#email').fill('wrong@example.com')
+    await page.locator('#password').fill('wrongpassword')
+    await page.locator('button[type="submit"]').click()
 
-    // 填写错误的凭证
-    await emailInput.fill('wrong@example.com')
-    await findInput(page, { name: 'password', type: 'password' }).fill('wrongpassword')
-
-    // 点击登录按钮
-    await findButton(page, { testId: 'submit', text: /登/ }).click()
-
-    // 等待错误消息显示
-    const errorBanner = page.locator('.error-banner')
-    await expect(errorBanner).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 确保没有跳转
+    await expect(page.locator('.error-banner')).toBeVisible()
     await expect(page).toHaveURL('/login')
   })
 
-  test('应该在邮箱格式无效时进行前端验证', async ({ page }) => {
-    // 等待表單元素穩定
-    const emailInput = findInput(page, { name: 'email', type: 'email' })
-    await waitForElementStable(emailInput)
+  test('Email 格式無效時被瀏覽器驗證攔下', async ({ page }) => {
+    await page.goto('/login')
+    const email = page.locator('#email')
+    await email.fill('invalid-email')
+    await page.locator('#password').fill('password123')
+    await page.locator('button[type="submit"]').click()
 
-    // 填写无效的邮箱
-    await emailInput.fill('invalid-email')
-    await findInput(page, { name: 'password', type: 'password' }).fill('password123')
-
-    // HTML5验证应该阻止表单提交
-    const validationMessage = await emailInput.evaluate((el: HTMLInputElement) => el.validationMessage)
-
-    // 验证浏览器显示验证消息
-    expect(validationMessage).toBeTruthy()
-  })
-
-  test('应该成功登出并返回登录页', async ({ page }) => {
-    // 先登录
-    await login(page, TEST_USERS.admin)
-
-    // 使用 logout 助手函数
-    await logout(page)
-
-    // 验证已经回到登录页
+    expect(await email.evaluate((el: HTMLInputElement) => el.validity.valid)).toBe(false)
     await expect(page).toHaveURL('/login')
-
-    // 验证登录表单可见
-    const emailInput = findInput(page, { name: 'email', type: 'email' })
-    await expect(emailInput).toBeVisible()
   })
 
-  test('应该在加载时显示加载状态', async ({ page }) => {
-    // 等待表單元素穩定
-    const emailInput = findInput(page, { name: 'email', type: 'email' })
-    await waitForElementStable(emailInput)
+  test('登出後回到登入頁並清除 session 快取', async ({ page }) => {
+    await login(page, TEST_USERS.admin)
+    expect(await page.evaluate(k => sessionStorage.getItem(k), SESSION_KEY)).toBeTruthy()
 
-    // 填写登录表单
-    await emailInput.fill(TEST_USERS.admin.email)
-    await findInput(page, { name: 'password', type: 'password' }).fill(TEST_USERS.admin.password)
+    await page.locator('.logout-btn').click()
 
-    // 使用 Promise.all 同時點擊按鈕並檢測加載狀態
-    const submitButton = findButton(page, { testId: 'submit', text: /登/ })
-
-    // 點擊按鈕後立即檢查
-    await submitButton.click()
-
-    // 登入過程中按鈕應該被禁用或顯示加載狀態
-    // 注意：這個測試可能因網路速度而有不同結果，所以我們只檢查最終狀態
-    // 等待頁面導航完成
-    await page.waitForURL('/', { timeout: TestEnv.timeouts.navigation })
-
-    // 驗證最終登入成功
-    await expect(page.locator('nav, [role="navigation"]').first()).toBeVisible()
+    await expect(page).toHaveURL('/login')
+    await expect(page.locator('#email')).toBeVisible()
+    expect(await page.evaluate(k => sessionStorage.getItem(k), SESSION_KEY)).toBeNull()
   })
 
-  test('应该在已登录时访问登录页会自动跳转到首页', async ({ page, context }) => {
-    // 先登录
+  test('已登入時造訪登入頁會導回首頁', async ({ page }) => {
+    await login(page, TEST_USERS.admin)
+    await page.goto('/login')
+
+    await expect(page).toHaveURL('/')
+  })
+
+  test('重新整理後維持登入狀態，不跳回登入頁', async ({ page }) => {
     await login(page, TEST_USERS.admin)
 
-    // 打开新标签页并访问登录页
-    const newPage = await context.newPage()
-    await newPage.goto('/login')
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    expect(page.url()).not.toContain('/login')
 
-    // 等待重定向或頁面載入
-    await newPage.waitForLoadState('networkidle')
-
-    // 應該已經被重定向到首頁，或者仍在登入頁（取決於 cookie 是否共享）
-    // 由於 cookie 可能不會在新 tab 之間立即共享，我們只驗證頁面正常載入
-    const currentUrl = newPage.url()
-    expect(currentUrl).toMatch(/\/(login)?$/)
-
-    await newPage.close()
+    await expect(page.locator(sidebar)).toBeVisible()
+    await expect(page).toHaveURL('/')
   })
 
-  test('应该在页面刷新后保持登录状态', async ({ page }) => {
-    // 先登录
+  test('清除 cookies 後造訪受保護頁面會被導向登入頁', async ({ page, context }) => {
     await login(page, TEST_USERS.admin)
-
-    // 验证已登录 - 应该能看到导航
-    const navigation = page.locator('nav, [role="navigation"]').first()
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 刷新页面
-    await page.reload()
-
-    // 等待页面完全加载
-    await page.waitForLoadState('networkidle')
-
-    // 应该仍然在首页而不是登录页
-    await expect(page).not.toHaveURL('/login')
-
-    // 导航应该仍然可见（表示用户仍然登录）
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-  })
-
-  test('应该在清除 cookies 后重定向到登录页', async ({ page, context }) => {
-    // 先登录
-    await login(page, TEST_USERS.admin)
-
-    // 验证已登录
-    const navigation = page.locator('nav, [role="navigation"]').first()
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 清除所有 cookies 来模拟 token 过期
     await context.clearCookies()
 
-    // 访问受保护的页面
     await page.goto('/members')
 
-    // 等待重定向
-    await page.waitForLoadState('networkidle')
-
-    // 应该被重定向到登录页
-    await expect(page).toHaveURL('/login', { timeout: TestEnv.timeouts.navigation })
-  })
-
-  test('应该在登出后清除 localStorage session', async ({ page }) => {
-    // 先登录
-    await login(page, TEST_USERS.admin)
-
-    // 验证 localStorage 有 session 数据
-    const sessionBefore = await page.evaluate(() => {
-      return localStorage.getItem('gym-nexus-session')
-    })
-    expect(sessionBefore).toBeTruthy()
-
-    // 登出
-    await logout(page)
-
-    // 验证 localStorage session 已清除
-    const sessionAfter = await page.evaluate(() => {
-      return localStorage.getItem('gym-nexus-session')
-    })
-    expect(sessionAfter).toBeNull()
-  })
-
-  test('Hard refresh 不應該閃爍到登入頁面', async ({ page }) => {
-    // 先登录
-    await login(page, TEST_USERS.admin)
-
-    // 确认已在首页
-    await expect(page).not.toHaveURL('/login')
-    const navigation = page.locator('nav, [role="navigation"]').first()
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 验证 localStorage 有 session 数据
-    const sessionBeforeRefresh = await page.evaluate(() => {
-      return localStorage.getItem('gym-nexus-session')
-    })
-    expect(sessionBeforeRefresh).toBeTruthy()
-    console.log('[Test] Session before refresh:', sessionBeforeRefresh ? 'exists' : 'missing')
-
-    // 执行 hard refresh
-    await page.reload({ waitUntil: 'domcontentloaded' })
-
-    // 立即检查 URL - 关键测试点
-    const urlImmediatelyAfterRefresh = page.url()
-    console.log('[Test] URL immediately after refresh:', urlImmediatelyAfterRefresh)
-
-    // 等待网络空闲
-    await page.waitForLoadState('networkidle')
-
-    // 验证最终 URL 不是登入页
-    const finalUrl = page.url()
-    console.log('[Test] Final URL:', finalUrl)
-
-    // 关键断言：刷新后不应该在登入页
-    expect(finalUrl).not.toContain('/login')
-
-    // 验证导航仍然可见
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-  })
-
-  test('Hard refresh 後應該立即顯示 Dashboard 內容', async ({ page }) => {
-    // 先登录
-    await login(page, TEST_USERS.admin)
-
-    // 确认已在首页并等待内容完全加载
-    await expect(page).not.toHaveURL('/login')
-    const navigation = page.locator('nav, [role="navigation"]').first()
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 记录刷新前的 URL
-    const urlBeforeRefresh = page.url()
-
-    // 执行 hard refresh 并测量时间
-    const startTime = Date.now()
-    await page.reload({ waitUntil: 'domcontentloaded' })
-
-    // 立即检查 URL - 应该不是登入页面
-    const urlAfterDomLoaded = page.url()
-    expect(urlAfterDomLoaded).not.toContain('/login')
-
-    // 等待网络空闲
-    await page.waitForLoadState('networkidle')
-    const endTime = Date.now()
-
-    // 验证最终 URL
-    await expect(page).not.toHaveURL('/login')
-
-    // 验证导航可见
-    await expect(navigation).toBeVisible({ timeout: TestEnv.timeouts.default })
-
-    // 记录加载时间（用于调试）
-    console.log(`Hard refresh completed in ${endTime - startTime}ms`)
-    console.log(`URL before: ${urlBeforeRefresh}, URL after DOM: ${urlAfterDomLoaded}, Final URL: ${page.url()}`)
+    await expect(page).toHaveURL('/login')
   })
 })

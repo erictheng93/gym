@@ -1,7 +1,30 @@
-// -nocheck
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mockFetchInstance } from '@test/setup'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useEmployees } from './useEmployees'
+import type { Employee } from '~/types/schema'
+
+const makeEmployee = (overrides: Partial<Employee> = {}): Employee => ({
+  id: 'emp-1',
+  full_name: '張三',
+  employee_code: 'EMP001',
+  status: 'active',
+  user_id: null,
+  branch_id: 'branch-1',
+  job_title_id: 'job-1',
+  supervisor_id: null,
+  hire_date: null,
+  employment_status: 'ACTIVE',
+  employment_type: 'FULL_TIME',
+  basic_salary: null,
+  custom_permissions: null,
+  phone: null,
+  email: null,
+  date_created: '2024-01-01',
+  date_updated: null,
+  user_created: null,
+  user_updated: null,
+  ...overrides
+})
 
 describe('useEmployees', () => {
   beforeEach(() => {
@@ -21,20 +44,8 @@ describe('useEmployees', () => {
   describe('fetchEmployees', () => {
     it('應該成功取得員工列表', async () => {
       const mockEmployees = [
-        {
-          id: 'emp-1',
-          full_name: '張三',
-          employee_code: 'EMP001',
-          branch_id: { name: '總店' },
-          job_title_id: { name: '經理' }
-        },
-        {
-          id: 'emp-2',
-          full_name: '李四',
-          employee_code: 'EMP002',
-          branch_id: { name: '分店A' },
-          job_title_id: { name: '教練' }
-        }
+        makeEmployee(),
+        makeEmployee({ id: 'emp-2', full_name: '李四', employee_code: 'EMP002', branch_id: 'branch-2', job_title_id: 'job-2' })
       ]
 
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockEmployees, total: 2 })
@@ -44,6 +55,21 @@ describe('useEmployees', () => {
 
       expect(employees.value).toEqual(mockEmployees)
       expect(totalCount.value).toBe(2)
+    })
+
+    it('應該以第 1 頁、每頁 20 筆、建立時間倒序為預設', async () => {
+      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
+
+      const { fetchEmployees } = useEmployees()
+      await fetchEmployees()
+
+      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('employees', expect.objectContaining({
+        page: 1,
+        limit: 20,
+        filter: {},
+        sort: 'date_created',
+        sortOrder: 'desc'
+      }))
     })
 
     it('應該支援分頁查詢', async () => {
@@ -105,10 +131,13 @@ describe('useEmployees', () => {
     it('應該處理取得失敗', async () => {
       mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
 
-      const { fetchEmployees, isLoading } = useEmployees()
+      const { fetchEmployees, isLoading, employees, totalCount } = useEmployees()
       await fetchEmployees()
 
       expect(isLoading.value).toBe(false)
+      expect(employees.value).toEqual([])
+      expect(totalCount.value).toBe(0)
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
     it('應該在載入時設定 isLoading', async () => {
@@ -128,13 +157,7 @@ describe('useEmployees', () => {
 
   describe('getEmployee', () => {
     it('應該成功取得單一員工資訊', async () => {
-      const mockEmployee = {
-        id: 'emp-1',
-        full_name: '張三',
-        employee_code: 'EMP001',
-        branch_id: { name: '總店', id: 'branch-1' },
-        job_title_id: { name: '經理', id: 'job-1' }
-      }
+      const mockEmployee = makeEmployee()
 
       mockFetchInstance.readItem.mockResolvedValueOnce(mockEmployee)
 
@@ -144,18 +167,28 @@ describe('useEmployees', () => {
       expect(result).toEqual(mockEmployee)
       expect(mockFetchInstance.readItem).toHaveBeenCalledWith('employees', 'emp-1')
     })
+
+    it('應該在取得失敗時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.readItem.mockRejectedValueOnce(new Error('Not found'))
+
+      const { getEmployee } = useEmployees()
+      const result = await getEmployee('emp-x')
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
+    })
   })
 
   describe('createEmployee', () => {
     it('應該成功建立員工', async () => {
-      const newEmployee = {
+      const newEmployee: Partial<Employee> = {
         full_name: '王五',
         employee_code: 'EMP003',
         branch_id: 'branch-1',
         job_title_id: 'job-1'
       }
 
-      const createdEmployee = { id: 'emp-3', ...newEmployee }
+      const createdEmployee = makeEmployee({ id: 'emp-3', ...newEmployee })
       mockFetchInstance.createItem.mockResolvedValueOnce(createdEmployee)
 
       const { createEmployee } = useEmployees()
@@ -164,12 +197,22 @@ describe('useEmployees', () => {
       expect(result).toEqual(createdEmployee)
       expect(mockFetchInstance.createItem).toHaveBeenCalledWith('employees', newEmployee)
     })
+
+    it('應該在建立失敗時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.createItem.mockRejectedValueOnce(new Error('Create failed'))
+
+      const { createEmployee } = useEmployees()
+      const result = await createEmployee({ full_name: '王五' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
+    })
   })
 
   describe('updateEmployee', () => {
     it('應該成功更新員工', async () => {
-      const updates = { full_name: '張三（已更新）' }
-      const updatedEmployee = { id: 'emp-1', ...updates }
+      const updates: Partial<Employee> = { full_name: '張三（已更新）' }
+      const updatedEmployee = makeEmployee(updates)
 
       mockFetchInstance.updateItem.mockResolvedValueOnce(updatedEmployee)
 
@@ -178,6 +221,16 @@ describe('useEmployees', () => {
 
       expect(result).toEqual(updatedEmployee)
       expect(mockFetchInstance.updateItem).toHaveBeenCalledWith('employees', 'emp-1', updates)
+    })
+
+    it('應該在更新失敗時返回 null 並呼叫 handleError', async () => {
+      mockFetchInstance.updateItem.mockRejectedValueOnce(new Error('Update failed'))
+
+      const { updateEmployee } = useEmployees()
+      const result = await updateEmployee('emp-1', { full_name: 'X' })
+
+      expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -191,23 +244,23 @@ describe('useEmployees', () => {
       expect(result).toBe(true)
       expect(mockFetchInstance.deleteItem).toHaveBeenCalledWith('employees', 'emp-1')
     })
+
+    it('應該在刪除失敗時返回 false 並呼叫 handleError', async () => {
+      mockFetchInstance.deleteItem.mockRejectedValueOnce(new Error('Delete failed'))
+
+      const { deleteEmployee } = useEmployees()
+      const result = await deleteEmployee('emp-1')
+
+      expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
+    })
   })
 
   describe('fetchAllEmployees', () => {
     it('應該取得所有在職員工', async () => {
       const mockEmployees = [
-        {
-          id: 'emp-1',
-          full_name: '張三',
-          employee_code: 'EMP001',
-          branch_id: 'branch-1'
-        },
-        {
-          id: 'emp-2',
-          full_name: '李四',
-          employee_code: 'EMP002',
-          branch_id: 'branch-1'
-        }
+        makeEmployee(),
+        makeEmployee({ id: 'emp-2', full_name: '李四', employee_code: 'EMP002' })
       ]
 
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockEmployees, total: 2 })

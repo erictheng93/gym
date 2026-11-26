@@ -1,4 +1,3 @@
-// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useLeads } from './useLeads'
 import type { Lead, LeadActivity, LeadAnalytics } from './useLeads'
@@ -271,7 +270,7 @@ describe('useLeads', () => {
   describe('addActivity', () => {
     it('應該成功新增跟進紀錄', async () => {
       const activityData = {
-        activity_type: 'CALL',
+        activity_type: 'CALL' as const,
         content: '電話聯繫客戶',
         result: '有興趣',
         next_action: '安排體驗',

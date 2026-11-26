@@ -1,5 +1,5 @@
-// -nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mockHandleError } from '@test/setup'
 import { usePerformance } from './usePerformance'
 import type { PerformanceReview, KPITemplate, TeamDashboard } from './usePerformance'
 
@@ -15,13 +15,15 @@ vi.stubGlobal('useRuntimeConfig', () => ({
   }
 }))
 
+const requestedUrl = (callIndex = 0) => new URL(String(mockFetch.mock.calls[callIndex]![0]))
+
 describe('usePerformance', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    mockFetch.mockReset()
   })
 
   afterEach(() => {
-    vi.clearAllMocks()
+    mockFetch.mockReset()
   })
 
   describe('fetchReviews', () => {
@@ -58,6 +60,10 @@ describe('usePerformance', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
       expect(reviews.value).toEqual(mockReviews)
       expect(totalCount.value).toBe(2)
+      const url = requestedUrl()
+      expect(url.pathname).toBe('/api/performance/reviews')
+      expect(url.searchParams.get('limit')).toBe('20')
+      expect(url.searchParams.get('offset')).toBe('0')
     })
 
     it('應該支援篩選參數', async () => {
@@ -71,18 +77,19 @@ describe('usePerformance', () => {
 
       await fetchReviews({
         employee_id: 'emp-1',
-        status: 'PENDING',
+        status: 'SUBMITTED',
         review_type: 'MONTHLY',
-        page: 2,
+        page: 3,
         limit: 10
       })
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('employee_id=emp-1')
-      )
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('status=PENDING')
-      )
+      const url = requestedUrl()
+      expect(url.searchParams.get('employee_id')).toBe('emp-1')
+      expect(url.searchParams.get('status')).toBe('SUBMITTED')
+      expect(url.searchParams.get('review_type')).toBe('MONTHLY')
+      expect(url.searchParams.get('limit')).toBe('10')
+      expect(url.searchParams.get('offset')).toBe('20') // page 3 of 10 per page
+      expect(url.searchParams.has('page')).toBe(false)
     })
 
     it('應該處理取得失敗的情況', async () => {
@@ -94,6 +101,7 @@ describe('usePerformance', () => {
 
       expect(reviews.value).toEqual([])
       expect(totalCount.value).toBe(0)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -131,6 +139,7 @@ describe('usePerformance', () => {
       await fetchReview('non-existent')
 
       expect(currentReview.value).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -139,7 +148,7 @@ describe('usePerformance', () => {
       const newReview = {
         employee_id: 'emp-1',
         review_period: '2025-02',
-        review_type: 'MONTHLY'
+        review_type: 'MONTHLY' as const
       }
 
       const createdReview: Partial<PerformanceReview> = {
@@ -214,6 +223,14 @@ describe('usePerformance', () => {
       )
       expect(result.score).toBe(85)
     })
+
+    it('應該在更新失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { updateReview } = usePerformance()
+
+      await expect(updateReview('review-1', { score: 1 })).rejects.toThrow('更新績效考核失敗')
+    })
   })
 
   describe('submitReview', () => {
@@ -237,6 +254,14 @@ describe('usePerformance', () => {
         expect.objectContaining({ method: 'POST' })
       )
       expect(result.status).toBe('SUBMITTED')
+    })
+
+    it('應該在提交失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { submitReview } = usePerformance()
+
+      await expect(submitReview('review-1')).rejects.toThrow('提交績效考核失敗')
     })
   })
 
@@ -262,6 +287,14 @@ describe('usePerformance', () => {
       )
       expect(result.status).toBe('APPROVED')
     })
+
+    it('應該在核准失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { approveReview } = usePerformance()
+
+      await expect(approveReview('review-1')).rejects.toThrow('核准績效考核失敗')
+    })
   })
 
   describe('rejectReview', () => {
@@ -278,8 +311,9 @@ describe('usePerformance', () => {
 
       const { rejectReview } = usePerformance()
 
-      await rejectReview('review-1', '需要補充說明')
+      const result = await rejectReview('review-1', '需要補充說明')
 
+      expect(result).toEqual(rejectedReview)
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/performance/reviews/review-1/reject'),
         expect.objectContaining({
@@ -287,6 +321,14 @@ describe('usePerformance', () => {
           body: { reason: '需要補充說明' }
         })
       )
+    })
+
+    it('應該在退回失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { rejectReview } = usePerformance()
+
+      await expect(rejectReview('review-1', 'x')).rejects.toThrow('退回績效考核失敗')
     })
   })
 
@@ -312,6 +354,19 @@ describe('usePerformance', () => {
       await fetchKPITemplates()
 
       expect(kpiTemplates.value).toEqual(mockTemplates)
+      expect(requestedUrl().pathname).toBe('/api/performance/kpi-templates')
+    })
+
+    it('應該在取得失敗時清空範本並呼叫 handleError', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      const { fetchKPITemplates, kpiTemplates } = usePerformance()
+      kpiTemplates.value = [{ id: 'old' } as KPITemplate]
+
+      await fetchKPITemplates()
+
+      expect(kpiTemplates.value).toEqual([])
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -339,6 +394,18 @@ describe('usePerformance', () => {
       const result = await createKPITemplate(newTemplate)
 
       expect(result.id).toBe('tpl-new')
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/performance/kpi-templates'),
+        expect.objectContaining({ method: 'POST', body: newTemplate })
+      )
+    })
+
+    it('應該在建立失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { createKPITemplate } = usePerformance()
+
+      await expect(createKPITemplate({ name: 'x', kpis: [] })).rejects.toThrow('建立 KPI 範本失敗')
     })
   })
 
@@ -354,6 +421,14 @@ describe('usePerformance', () => {
         expect.stringContaining('/performance/kpi-templates/tpl-1'),
         expect.objectContaining({ method: 'DELETE' })
       )
+    })
+
+    it('應該在刪除失敗時拋出錯誤', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { deleteKPITemplate } = usePerformance()
+
+      await expect(deleteKPITemplate('tpl-1')).rejects.toThrow('刪除 KPI 範本失敗')
     })
   })
 
@@ -384,6 +459,27 @@ describe('usePerformance', () => {
       const result = await fetchTeamDashboard({ period: '2025-01' })
 
       expect(result).toEqual(mockDashboard)
+      const url = requestedUrl()
+      expect(url.pathname).toBe('/api/performance/team-dashboard')
+      expect(url.searchParams.get('period')).toBe('2025-01')
+      expect(url.searchParams.has('branch_id')).toBe(false)
+    })
+
+    it('應該在 API 回報失敗時返回 null', async () => {
+      mockFetch.mockResolvedValueOnce({ success: false })
+
+      const { fetchTeamDashboard } = usePerformance()
+
+      expect(await fetchTeamDashboard({ branch_id: 'branch-1' })).toBeNull()
+    })
+
+    it('應該在請求錯誤時返回 null 並呼叫 handleError', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+      const { fetchTeamDashboard } = usePerformance()
+
+      expect(await fetchTeamDashboard()).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 

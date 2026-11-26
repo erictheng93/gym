@@ -6,30 +6,6 @@
 import { vi, beforeEach } from 'vitest'
 import * as Vue from 'vue'
 
-// Type declarations for global mocks
-declare global {
-   
-  var useState: <T>(key: string, init?: () => T) => { value: T }
-   
-  var computed: <T>(getter: () => T) => { readonly value: T }
-   
-  var watch: ReturnType<typeof vi.fn>
-   
-  var onMounted: (callback: () => void) => void
-   
-  var navigateTo: ReturnType<typeof vi.fn>
-   
-  var defineNuxtRouteMiddleware: (middleware: unknown) => unknown
-   
-  var useRuntimeConfig: () => { public: { apiBaseUrl: string } }
-   
-  var useAuth: ReturnType<typeof vi.fn>
-   
-  var useToast: ReturnType<typeof vi.fn>
-   
-  var useErrorHandler: ReturnType<typeof vi.fn>
-}
-
 // Mock useErrorHandler module - MUST be before other imports
 export const mockHandleError = vi.fn()
 export const mockErrorHandlerInstance = {
@@ -186,17 +162,20 @@ export const mockToast = {
 // useErrorHandler is mocked via vi.mock() at the top of this file
 
 // 在全局作用域设置 mocks
-globalThis.useState = mockUseState as any
-globalThis.computed = mockComputed as any
-globalThis.watch = mockWatch as any
-globalThis.onMounted = mockOnMounted as any
-globalThis.navigateTo = mockNavigateTo as any
-globalThis.defineNuxtRouteMiddleware = mockDefineNuxtRouteMiddleware as any
-globalThis.useRuntimeConfig = vi.fn(() => mockRuntimeConfig) as any
-globalThis.useAuth = vi.fn(() => mockAuthInstance) as any
-globalThis.useToast = vi.fn(() => mockToast) as any
-globalThis.useErrorHandler = vi.fn(() => mockErrorHandlerInstance) as any
-globalThis.fetch = mockGlobalFetch as any
+// ponytail: untyped on purpose; Nuxt's generated auto-import types already declare these globals.
+Object.assign(globalThis, {
+  useState: mockUseState,
+  computed: mockComputed,
+  watch: mockWatch,
+  onMounted: mockOnMounted,
+  navigateTo: mockNavigateTo,
+  defineNuxtRouteMiddleware: mockDefineNuxtRouteMiddleware,
+  useRuntimeConfig: vi.fn(() => mockRuntimeConfig),
+  useAuth: vi.fn(() => mockAuthInstance),
+  useToast: vi.fn(() => mockToast),
+  useErrorHandler: vi.fn(() => mockErrorHandlerInstance),
+  fetch: mockGlobalFetch,
+})
 
 // 清理函数
 export function clearGlobalMocks() {

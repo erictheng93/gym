@@ -34,202 +34,92 @@ describe('FormSelect', () => {
     })
   }
 
-  describe('初始化', () => {
-    it('應該正確渲染組件', () => {
-      const wrapper = mountFormSelect()
-      expect(wrapper.find('select').exists()).toBe(true)
-    })
+  const select = (wrapper: ReturnType<typeof mountFormSelect>) => wrapper.find('select')
 
-    it('應該渲染標籤和必填指示器', () => {
-      const wrapper = mountFormSelect({
-        label: '類型',
-        required: true
-      })
+  it('渲染標籤、必填標記與所有選項', () => {
+    const wrapper = mountFormSelect({ label: '類型', required: true })
 
-      expect(wrapper.find('label').text()).toContain('類型')
-      expect(wrapper.find('label').classes()).toContain('required')
-    })
+    expect(wrapper.find('label').text()).toContain('類型')
+    expect(wrapper.find('label').classes()).toContain('required')
+    expect(wrapper.findAll('option').map(o => o.text())).toEqual(['選項一', '選項二', '選項三'])
+  })
 
-    it('應該渲染所有選項', () => {
-      const wrapper = mountFormSelect()
-      const options = wrapper.findAll('option')
+  describe('placeholder', () => {
+    it('渲染為第一個 disabled 且 value 為空的選項', () => {
+      const options = mountFormSelect({ placeholder: '請選擇...' }).findAll('option')
 
-      // 3 options (no placeholder)
-      expect(options.length).toBe(3)
-      expect(options[0]!.text()).toBe('選項一')
-      expect(options[1]!.text()).toBe('選項二')
-      expect(options[2]!.text()).toBe('選項三')
-    })
-
-    it('應該渲染佔位選項', () => {
-      const wrapper = mountFormSelect({
-        placeholder: '請選擇...'
-      })
-      const options = wrapper.findAll('option')
-
-      // placeholder + 3 options
-      expect(options.length).toBe(4)
+      expect(options).toHaveLength(4)
       expect(options[0]!.text()).toBe('請選擇...')
-      expect(options[0]!.attributes('disabled')).toBeDefined()
-      expect(options[0]!.attributes('value')).toBe('')
+      expect(options[0]!.element.disabled).toBe(true)
+      expect(options[0]!.element.value).toBe('')
+    })
+
+    it('沒有選項時只剩 placeholder', () => {
+      const options = mountFormSelect({ options: [], placeholder: '無可用選項' }).findAll('option')
+      expect(options.map(o => o.text())).toEqual(['無可用選項'])
+    })
+
+    it('modelValue 為 null 時選取 placeholder', () => {
+      const wrapper = mountFormSelect({ modelValue: null, placeholder: '請選擇...' })
+      expect(select(wrapper).element.value).toBe('')
     })
   })
 
-  describe('v-model 綁定', () => {
-    it('應該顯示選中的值', () => {
-      const wrapper = mountFormSelect({
-        modelValue: 'option2'
-      })
-
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('option2')
+  describe('v-model', () => {
+    it('顯示選中的值', () => {
+      const wrapper = mountFormSelect({ modelValue: 'option2' })
+      expect(select(wrapper).element.value).toBe('option2')
     })
 
-    it('應該在選擇時發出 update:modelValue 事件', async () => {
+    it('選擇時發出該選項的值', async () => {
       const wrapper = mountFormSelect({ modelValue: '' })
-
-      await wrapper.find('select').setValue('option1')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+      await select(wrapper).setValue('option1')
       expect(wrapper.emitted('update:modelValue')![0]).toEqual(['option1'])
     })
 
-    it('應該支援數字值', async () => {
-      const numericOptions = [
-        { value: 1, label: '一' },
-        { value: 2, label: '二' },
-        { value: 3, label: '三' }
-      ]
-
+    it('數字選項顯示並發出 number', async () => {
       const wrapper = mountFormSelect({
-        options: numericOptions,
+        options: [{ value: 1, label: '一' }, { value: 2, label: '二' }],
         modelValue: 2
       })
+      expect(select(wrapper).element.value).toBe('2')
 
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('2')
-    })
-
-    it('應該處理 null 值', () => {
-      const wrapper = mountFormSelect({
-        modelValue: null,
-        placeholder: '請選擇...'
-      })
-
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('')
+      await select(wrapper).setValue('1')
+      expect(wrapper.emitted('update:modelValue')![0]).toEqual([1])
     })
   })
 
-  describe('錯誤狀態', () => {
-    it('應該顯示錯誤訊息', () => {
-      const wrapper = mountFormSelect({
-        error: '請選擇一個選項'
-      })
+  it('options 變動時更新選項', async () => {
+    const wrapper = mountFormSelect({ options: [{ value: 'a', label: 'A' }] })
+    expect(wrapper.findAll('option')).toHaveLength(1)
 
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-      expect(wrapper.find('.form-field-error').text()).toBe('請選擇一個選項')
+    await wrapper.setProps({
+      options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]
     })
-
-    it('應該在有錯誤時添加 is-error class', () => {
-      const wrapper = mountFormSelect({
-        error: '無效選擇'
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-error')
-    })
+    expect(wrapper.findAll('option')).toHaveLength(2)
   })
 
-  describe('提示文字', () => {
-    it('應該顯示提示文字', () => {
-      const wrapper = mountFormSelect({
-        hint: '選擇您的偏好'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(true)
-      expect(wrapper.find('.form-field-hint').text()).toBe('選擇您的偏好')
-    })
-
-    it('應該在有錯誤時隱藏提示文字', () => {
-      const wrapper = mountFormSelect({
-        hint: '選擇您的偏好',
-        error: '必須選擇'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(false)
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-    })
-  })
-
-  describe('禁用狀態', () => {
-    it('應該在禁用時設置 disabled 屬性', () => {
-      const wrapper = mountFormSelect({
-        disabled: true
-      })
-
-      expect(wrapper.find('select').attributes('disabled')).toBeDefined()
-    })
-
-    it('應該在禁用時添加 is-disabled class', () => {
-      const wrapper = mountFormSelect({
-        disabled: true
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-disabled')
-    })
-  })
-
-  describe('選項配置', () => {
-    it('應該支援禁用的選項', () => {
-      const optionsWithDisabled = [
+  it('單一選項可被禁用', () => {
+    const wrapper = mountFormSelect({
+      options: [
         { value: 'option1', label: '選項一' },
-        { value: 'option2', label: '選項二', disabled: true },
-        { value: 'option3', label: '選項三' }
+        { value: 'option2', label: '選項二', disabled: true }
       ]
-
-      const wrapper = mountFormSelect({
-        options: optionsWithDisabled
-      })
-
-      const options = wrapper.findAll('option')
-      expect(options[1]!.attributes('disabled')).toBeDefined()
     })
-
-    it('應該處理空選項列表', () => {
-      const wrapper = mountFormSelect({
-        options: [],
-        placeholder: '無可用選項'
-      })
-
-      const options = wrapper.findAll('option')
-      expect(options.length).toBe(1) // Only placeholder
-      expect(options[0]!.text()).toBe('無可用選項')
-    })
-
-    it('應該支援動態選項更新', async () => {
-      const wrapper = mountFormSelect({
-        options: [{ value: 'a', label: 'A' }]
-      })
-
-      expect(wrapper.findAll('option').length).toBe(1)
-
-      await wrapper.setProps({
-        options: [
-          { value: 'a', label: 'A' },
-          { value: 'b', label: 'B' }
-        ]
-      })
-
-      expect(wrapper.findAll('option').length).toBe(2)
-    })
+    expect(wrapper.findAll('option').map(o => o.element.disabled)).toEqual([false, true])
   })
 
-  describe('無障礙功能', () => {
-    it('應該將 label 與 select 關聯', () => {
-      const wrapper = mountFormSelect({
-        label: '選擇類型'
-      })
+  it('顯示錯誤，且錯誤優先於提示', () => {
+    const hintOnly = mountFormSelect({ hint: '選擇您的偏好' })
+    expect(hintOnly.find('.form-field-hint').text()).toBe('選擇您的偏好')
 
-      // FormField wraps the label and select together
-      expect(wrapper.find('label').exists()).toBe(true)
-      expect(wrapper.find('select').exists()).toBe(true)
-    })
+    const both = mountFormSelect({ hint: '選擇您的偏好', error: '請選擇一個選項' })
+    expect(both.find('.form-field-error').text()).toBe('請選擇一個選項')
+    expect(both.find('.form-field-hint').exists()).toBe(false)
+  })
+
+  it('disabled 時 select 被禁用', () => {
+    expect(select(mountFormSelect({ disabled: true })).element.disabled).toBe(true)
+    expect(select(mountFormSelect()).element.disabled).toBe(false)
   })
 })

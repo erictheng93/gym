@@ -84,6 +84,7 @@ export async function runRFMSegmentation() {
         .where(
           and(
             eq(payments.type, 'INCOME'),
+            eq(payments.status, 'COMPLETED'),
             gte(payments.paymentDate, oneYearAgo)
           )
         )

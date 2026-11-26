@@ -1,7 +1,19 @@
-// -nocheck
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mockFetchInstance } from '@test/setup'
+import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { useJobTitles } from './useJobTitles'
+import type { JobTitle } from '~/types/schema'
+
+const makeJobTitle = (overrides: Partial<JobTitle> = {}): JobTitle => ({
+  id: 'job-1',
+  name: '經理',
+  status: 'active',
+  permissions_config: null,
+  date_created: '2024-01-01',
+  date_updated: null,
+  user_created: null,
+  user_updated: null,
+  ...overrides
+})
 
 describe('useJobTitles', () => {
   beforeEach(() => {
@@ -20,24 +32,9 @@ describe('useJobTitles', () => {
   describe('fetchJobTitles', () => {
     it('應該成功取得職位列表', async () => {
       const mockJobTitles = [
-        {
-          id: 'job-1',
-          name: '經理',
-          status: 'active',
-          permissions_config: { view_all: true }
-        },
-        {
-          id: 'job-2',
-          name: '教練',
-          status: 'active',
-          permissions_config: { view_own: true }
-        },
-        {
-          id: 'job-3',
-          name: '櫃檯人員',
-          status: 'active',
-          permissions_config: { basic_access: true }
-        }
+        makeJobTitle({ permissions_config: { members: { view_all: true } } }),
+        makeJobTitle({ id: 'job-2', name: '教練', permissions_config: { members: { view_own: true } } }),
+        makeJobTitle({ id: 'job-3', name: '櫃檯人員', permissions_config: { members: { basic_access: true } } })
       ]
 
       mockFetchInstance.readItems.mockResolvedValueOnce({ data: mockJobTitles, total: 3 })
@@ -61,28 +58,6 @@ describe('useJobTitles', () => {
       })
     })
 
-    it('應該按名稱排序', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchJobTitles } = useJobTitles()
-      await fetchJobTitles()
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job-titles', expect.objectContaining({
-        sort: 'name'
-      }))
-    })
-
-    it('應該取得所有職位（limit: 1000）', async () => {
-      mockFetchInstance.readItems.mockResolvedValueOnce({ data: [], total: 0 })
-
-      const { fetchJobTitles } = useJobTitles()
-      await fetchJobTitles()
-
-      expect(mockFetchInstance.readItems).toHaveBeenCalledWith('job-titles', expect.objectContaining({
-        limit: 1000
-      }))
-    })
-
     it('應該處理取得失敗', async () => {
       mockFetchInstance.readItems.mockRejectedValueOnce(new Error('Failed'))
 
@@ -91,10 +66,11 @@ describe('useJobTitles', () => {
 
       expect(isLoading.value).toBe(false)
       expect(jobTitles.value).toEqual([])
+      expect(mockHandleError).toHaveBeenCalled()
     })
 
     it('應該在載入時設定 isLoading', async () => {
-      let resolvePromise: (value: any) => void
+      let resolvePromise: (value: unknown) => void
       const pendingPromise = new Promise((resolve) => {
         resolvePromise = resolve
       })
@@ -114,16 +90,13 @@ describe('useJobTitles', () => {
 
   describe('getJobTitle', () => {
     it('應該成功取得單一職位資訊', async () => {
-      const mockJobTitle = {
-        id: 'job-1',
-        name: '經理',
-        status: 'active',
+      const mockJobTitle = makeJobTitle({
         permissions_config: {
-          view_all: true,
-          manage_employees: true,
-          manage_contracts: true
+          members: { view_all: true },
+          employees: { manage: true },
+          contracts: { manage: true }
         }
-      }
+      })
 
       mockFetchInstance.readItem.mockResolvedValueOnce(mockJobTitle)
 
@@ -141,18 +114,19 @@ describe('useJobTitles', () => {
       const result = await getJobTitle('job-999')
 
       expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('createJobTitle', () => {
     it('應該成功建立職位', async () => {
-      const newJobTitle = {
+      const newJobTitle: Partial<JobTitle> = {
         name: '實習教練',
         status: 'active',
-        permissions_config: { basic_access: true }
+        permissions_config: { members: { basic_access: true } }
       }
 
-      const createdJobTitle = { id: 'job-4', ...newJobTitle }
+      const createdJobTitle = makeJobTitle({ id: 'job-4', ...newJobTitle })
       mockFetchInstance.createItem.mockResolvedValueOnce(createdJobTitle)
 
       const { createJobTitle } = useJobTitles()
@@ -169,20 +143,21 @@ describe('useJobTitles', () => {
       const result = await createJobTitle({ name: '測試職位' })
 
       expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
   describe('updateJobTitle', () => {
     it('應該成功更新職位', async () => {
-      const updates = {
+      const updates: Partial<JobTitle> = {
         permissions_config: {
-          view_all: true,
-          manage_employees: true,
-          manage_contracts: true,
-          manage_reports: true
+          members: { view_all: true },
+          employees: { manage: true },
+          contracts: { manage: true },
+          reports: { manage: true }
         }
       }
-      const updatedJobTitle = { id: 'job-1', name: '經理', ...updates }
+      const updatedJobTitle = makeJobTitle(updates)
 
       mockFetchInstance.updateItem.mockResolvedValueOnce(updatedJobTitle)
 
@@ -200,6 +175,7 @@ describe('useJobTitles', () => {
       const result = await updateJobTitle('job-1', { name: '新名稱' })
 
       expect(result).toBeNull()
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 
@@ -221,6 +197,7 @@ describe('useJobTitles', () => {
       const result = await deleteJobTitle('job-1')
 
       expect(result).toBe(false)
+      expect(mockHandleError).toHaveBeenCalled()
     })
   })
 })

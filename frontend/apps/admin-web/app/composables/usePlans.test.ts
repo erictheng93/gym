@@ -1,4 +1,3 @@
-// -nocheck
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
 import { usePlans } from './usePlans'
@@ -24,15 +23,13 @@ describe('usePlans', () => {
           id: 'plan-1',
           name: '月會員',
           plan_type: 'TIME_BASED',
-          price: 2000,
-          status: 'active'
+          price: 2000
         },
         {
           id: 'plan-2',
           name: '年會員',
           plan_type: 'TIME_BASED',
-          price: 20000,
-          status: 'active'
+          price: 20000
         }
       ]
 
@@ -133,8 +130,7 @@ describe('usePlans', () => {
         name: '月會員',
         plan_type: 'TIME_BASED',
         duration_months: 1,
-        price: 2000,
-        status: 'active'
+        price: 2000
       }
 
       mockFetchInstance.readItem.mockResolvedValueOnce(mockPlan)
@@ -161,12 +157,12 @@ describe('usePlans', () => {
     it('應該成功建立方案', async () => {
       const newPlan = {
         name: '季會員',
-        plan_type: 'TIME_BASED',
+        plan_type: 'TIME_BASED' as const,
         duration_months: 3,
         price: 5000
       }
 
-      const createdPlan = { id: 'plan-3', ...newPlan, status: 'active' }
+      const createdPlan = { id: 'plan-3', ...newPlan }
       mockFetchInstance.createItem.mockResolvedValueOnce(createdPlan)
 
       const { createPlan } = usePlans()

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { createHmac } from 'crypto';
+import { generateCoachTokens } from '../src/services/coach-jwt.js';
 import {
   generateMemberTokens,
   verifyMemberAccessToken,
@@ -10,6 +12,14 @@ import {
   verifyPasswordResetToken,
   getTokenHash,
 } from '../src/services/member-jwt.js';
+
+/** Build an HS256 JWT signed with the given secret. */
+function forgeJwt(secret: string, payload: Record<string, unknown>) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createHmac('sha256', secret).update(`${header}.${body}`).digest().toString('base64url');
+  return `${header}.${body}.${signature}`;
+}
 
 describe('Member JWT Service', () => {
   const mockMember = {
@@ -86,7 +96,6 @@ describe('Member JWT Service', () => {
     it('should reject an expired token', () => {
       // Mock Date.now to simulate future time
       const now = Date.now();
-      const originalDateNow = Date.now;
 
       // Generate token normally
       const tokens = generateMemberTokens(mockMember);
@@ -110,6 +119,44 @@ describe('Member JWT Service', () => {
       expect(verifyMemberAccessToken('not-a-jwt')).toBeNull();
       expect(verifyMemberAccessToken('abc.def.ghi')).toBeNull();
     });
+
+    it('should reject a token signed with a different secret', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const forged = forgeJwt('not-the-member-secret', {
+        type: 'member',
+        sub: mockMember.id,
+        memberCode: mockMember.memberCode,
+        branchId: mockMember.branchId,
+        tenantId: mockMember.tenantId,
+        iat: now,
+        exp: now + 3600,
+      });
+
+      expect(verifyMemberAccessToken(forged)).toBeNull();
+    });
+
+    it('should reject a payload edited without re-signing (tenant switch)', () => {
+      const tokens = generateMemberTokens(mockMember);
+      const [header, payload, signature] = tokens.accessToken.split('.');
+      const edited = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      edited.tenantId = 'another-tenant';
+      const forged = [header, Buffer.from(JSON.stringify(edited)).toString('base64url'), signature].join('.');
+
+      expect(verifyMemberAccessToken(forged)).toBeNull();
+    });
+
+    it('should not accept coach tokens as member tokens', () => {
+      const coachTokens = generateCoachTokens({
+        id: 'employee-001',
+        employeeCode: 'EMP001',
+        branchId: 'branch-001',
+        tenantId: 'tenant-001',
+        jobTitle: 'COACH',
+      });
+
+      expect(verifyMemberAccessToken(coachTokens.accessToken)).toBeNull();
+      expect(verifyMemberRefreshToken(coachTokens.refreshToken)).toBeNull();
+    });
   });
 
   describe('verifyMemberRefreshToken', () => {
@@ -119,8 +166,7 @@ describe('Member JWT Service', () => {
 
       expect(result).not.toBeNull();
       expect(result!.memberId).toBe(mockMember.id);
-      expect(result!.jti).toBeDefined();
-      expect(typeof result!.jti).toBe('string');
+      expect(result!.jti).toMatch(/^[0-9a-f]{32}$/);
     });
 
     it('should reject an access token as a refresh token', () => {
@@ -185,7 +231,7 @@ describe('Member JWT Service', () => {
 
       expect(result).not.toBeNull();
       expect(result!.memberId).toBe('member-001');
-      expect(result!.jti).toBeDefined();
+      expect(result!.jti).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('should reject an expired recovery token', () => {

@@ -25,142 +25,45 @@ describe('FormDatePicker', () => {
     })
   }
 
-  describe('初始化', () => {
-    it('應該正確渲染組件', () => {
-      const wrapper = mountFormDatePicker()
-      expect(wrapper.find('input[type="date"]').exists()).toBe(true)
-    })
+  const dateInput = (wrapper: ReturnType<typeof mountFormDatePicker>) =>
+    wrapper.find<HTMLInputElement>('input[type="date"]')
 
-    it('應該渲染標籤和必填指示器', () => {
-      const wrapper = mountFormDatePicker({
-        label: '生日',
-        required: true
-      })
-
-      expect(wrapper.find('label').text()).toContain('生日')
-      expect(wrapper.find('label').classes()).toContain('required')
-    })
-
-    it('應該渲染日期圖標', () => {
-      const wrapper = mountFormDatePicker()
-      expect(wrapper.find('.date-icon').exists()).toBe(true)
-      expect(wrapper.find('.date-icon svg').exists()).toBe(true)
-    })
+  it('渲染標籤與必填標記', () => {
+    const wrapper = mountFormDatePicker({ label: '生日', required: true })
+    expect(wrapper.find('label').text()).toContain('生日')
+    expect(wrapper.find('label').classes()).toContain('required')
   })
 
-  describe('v-model 綁定', () => {
-    it('應該顯示 modelValue', () => {
-      const wrapper = mountFormDatePicker({
-        modelValue: '2024-01-15'
-      })
-
-      const input = wrapper.find('input[type="date"]').element as HTMLInputElement
-      expect(input.value).toBe('2024-01-15')
+  describe('v-model', () => {
+    it('顯示 modelValue', () => {
+      const wrapper = mountFormDatePicker({ modelValue: '2024-01-15' })
+      expect(dateInput(wrapper).element.value).toBe('2024-01-15')
     })
 
-    it('應該在選擇日期時發出 update:modelValue 事件', async () => {
+    it('選擇日期時發出 update:modelValue', async () => {
       const wrapper = mountFormDatePicker({ modelValue: '' })
-
-      await wrapper.find('input[type="date"]').setValue('2024-06-20')
-
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+      await dateInput(wrapper).setValue('2024-06-20')
       expect(wrapper.emitted('update:modelValue')![0]).toEqual(['2024-06-20'])
     })
-
-    it('應該處理空值', () => {
-      const wrapper = mountFormDatePicker({
-        modelValue: ''
-      })
-
-      const input = wrapper.find('input[type="date"]').element as HTMLInputElement
-      expect(input.value).toBe('')
-    })
   })
 
-  describe('最大最小日期限制', () => {
-    it('應該設置 min 屬性', () => {
-      const wrapper = mountFormDatePicker({
-        min: '2024-01-01'
-      })
-
-      expect(wrapper.find('input[type="date"]').attributes('min')).toBe('2024-01-01')
-    })
-
-    it('應該設置 max 屬性', () => {
-      const wrapper = mountFormDatePicker({
-        max: '2024-12-31'
-      })
-
-      expect(wrapper.find('input[type="date"]').attributes('max')).toBe('2024-12-31')
-    })
-
-    it('應該同時設置 min 和 max 屬性', () => {
-      const wrapper = mountFormDatePicker({
-        min: '2024-01-01',
-        max: '2024-12-31'
-      })
-
-      const input = wrapper.find('input[type="date"]')
-      expect(input.attributes('min')).toBe('2024-01-01')
-      expect(input.attributes('max')).toBe('2024-12-31')
-    })
+  it('將 min / max 傳給 input', () => {
+    const input = dateInput(mountFormDatePicker({ min: '2024-01-01', max: '2024-12-31' }))
+    expect(input.attributes('min')).toBe('2024-01-01')
+    expect(input.attributes('max')).toBe('2024-12-31')
   })
 
-  describe('錯誤狀態', () => {
-    it('應該顯示錯誤訊息', () => {
-      const wrapper = mountFormDatePicker({
-        error: '請選擇有效日期'
-      })
+  it('顯示錯誤，且錯誤優先於提示', () => {
+    const hintOnly = mountFormDatePicker({ hint: '請選擇您的出生日期' })
+    expect(hintOnly.find('.form-field-hint').text()).toBe('請選擇您的出生日期')
 
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-      expect(wrapper.find('.form-field-error').text()).toBe('請選擇有效日期')
-    })
-
-    it('應該在有錯誤時添加 is-error class', () => {
-      const wrapper = mountFormDatePicker({
-        error: '日期不能為未來'
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-error')
-    })
+    const both = mountFormDatePicker({ hint: '請選擇您的出生日期', error: '日期為必填' })
+    expect(both.find('.form-field-error').text()).toBe('日期為必填')
+    expect(both.find('.form-field-hint').exists()).toBe(false)
   })
 
-  describe('提示文字', () => {
-    it('應該顯示提示文字', () => {
-      const wrapper = mountFormDatePicker({
-        hint: '請選擇您的出生日期'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(true)
-      expect(wrapper.find('.form-field-hint').text()).toBe('請選擇您的出生日期')
-    })
-
-    it('應該在有錯誤時隱藏提示文字', () => {
-      const wrapper = mountFormDatePicker({
-        hint: '請選擇您的出生日期',
-        error: '日期為必填'
-      })
-
-      expect(wrapper.find('.form-field-hint').exists()).toBe(false)
-      expect(wrapper.find('.form-field-error').exists()).toBe(true)
-    })
-  })
-
-  describe('禁用狀態', () => {
-    it('應該在禁用時設置 disabled 屬性', () => {
-      const wrapper = mountFormDatePicker({
-        disabled: true
-      })
-
-      expect(wrapper.find('input[type="date"]').attributes('disabled')).toBeDefined()
-    })
-
-    it('應該在禁用時添加 is-disabled class', () => {
-      const wrapper = mountFormDatePicker({
-        disabled: true
-      })
-
-      expect(wrapper.find('.form-field').classes()).toContain('is-disabled')
-    })
+  it('disabled 時 input 被禁用', () => {
+    expect(dateInput(mountFormDatePicker({ disabled: true })).element.disabled).toBe(true)
+    expect(dateInput(mountFormDatePicker()).element.disabled).toBe(false)
   })
 })

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { eq, or } from 'drizzle-orm';
 import app from '../src/app.js';
+import { db, payments } from '../src/db/index.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -7,6 +9,12 @@ import {
   authRequest,
   TEST_TENANT_ID,
   TEST_BRANCH_ID,
+  TEST_BRANCH_B_ID,
+  TEST_MEMBER_ID,
+  TEST_MEMBER_B_ID,
+  TEST_CONTRACT_ID,
+  TEST_CONTRACT_B_ID,
+  TEST_TENANT_B_ID,
 } from './helpers.js';
 
 // =============================================================================
@@ -19,7 +27,11 @@ describe('Reports API', () => {
   beforeAll(async () => {
     await createTestFixtures();
     token = await getAuthToken();
-  });
+    // generateExcel lazy-loads exceljs on first use. That cold load (hundreds of
+    // modules) takes ~1s on an idle machine but has exceeded the 30s test timeout
+    // under heavy load, so pay it here instead of inside the first xlsx test.
+    await import('exceljs');
+  }, 120_000);
 
   afterAll(async () => {
     await cleanupTestFixtures();
@@ -133,10 +145,27 @@ describe('Reports API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       // Should only contain data for the specified branch
-      if (data.data.length > 0) {
-        data.data.forEach((branch: any) => {
-          expect(branch.branch_id).toBe(TEST_BRANCH_ID);
-        });
+      expect(data.data.map((branch: any) => branch.branch_id)).toEqual([TEST_BRANCH_ID]);
+    });
+
+    it("sums only this tenant's INCOME payments into branch revenue", async () => {
+      const common = { paymentMethod: 'CASH' as const, paymentDate: new Date() };
+      await db.insert(payments).values([
+        { ...common, contractId: TEST_CONTRACT_ID, memberId: TEST_MEMBER_ID, branchId: TEST_BRANCH_ID, tenantId: TEST_TENANT_ID, amount: '1200.50', type: 'INCOME' },
+        { ...common, contractId: TEST_CONTRACT_ID, memberId: TEST_MEMBER_ID, branchId: TEST_BRANCH_ID, tenantId: TEST_TENANT_ID, amount: '-200.00', type: 'REFUND' },
+        { ...common, contractId: TEST_CONTRACT_B_ID, memberId: TEST_MEMBER_B_ID, branchId: TEST_BRANCH_B_ID, tenantId: TEST_TENANT_B_ID, amount: '9999.00', type: 'INCOME' },
+      ]);
+
+      try {
+        const response = await authRequest('/api/reports/branch-performance', { method: 'GET', token });
+        expect(response.status).toBe(200);
+        const data = await response.json();
+
+        expect(data.data.map((b: any) => b.branch_id)).toEqual([TEST_BRANCH_ID]);
+        expect(data.data[0].current_period.revenue).toBe(1200.5);
+        expect(data.summary.total_revenue).toBe(1200.5);
+      } finally {
+        await db.delete(payments).where(or(eq(payments.branchId, TEST_BRANCH_ID), eq(payments.branchId, TEST_BRANCH_B_ID)));
       }
     });
 
@@ -189,7 +218,8 @@ describe('Reports API', () => {
       expect(data.success).toBe(true);
 
       // Check that branch data includes growth info
-      if (data.data.length > 0) {
+      expect(data.data.length).toBeGreaterThan(0);
+      {
         const branch = data.data[0];
         expect(branch).toHaveProperty('current_period');
         expect(branch).toHaveProperty('previous_period');
@@ -226,6 +256,9 @@ describe('Reports API', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('spreadsheetml');
       expect(response.headers.get('content-disposition')).toContain('.xlsx');
+      // .xlsx is a zip archive
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      expect(String.fromCharCode(bytes[0], bytes[1])).toBe('PK');
     });
 
     it('should export branch performance as Excel when format=excel', async () => {
@@ -426,6 +459,9 @@ describe('Reports API', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('spreadsheetml');
       expect(response.headers.get('content-disposition')).toContain('.xlsx');
+      // .xlsx is a zip archive
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      expect(String.fromCharCode(bytes[0], bytes[1])).toBe('PK');
     });
 
     it('should export coach performance as Excel when format=excel', async () => {

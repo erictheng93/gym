@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { db, branches } from '../src/db/index.js';
 import {
   createTestFixtures,
   cleanupTestFixtures,
@@ -34,6 +36,9 @@ describe('Branches API', () => {
       expect(data.success).toBe(true);
       expect(Array.isArray(data.data)).toBe(true);
       expect(data.data.length).toBeGreaterThanOrEqual(1);
+
+      // Another tenant's branch must never be listed
+      expect(data.data.map((b: { id: string }) => b.id)).not.toContain(TEST_BRANCH_B_ID);
 
       // Each branch should have stats
       const branch = data.data[0];
@@ -179,7 +184,7 @@ describe('Branches API', () => {
       const branchWithStaffId = createData.data.id;
 
       // Create an employee in the new branch
-      await authRequest('/api/employees', {
+      const empRes = await authRequest('/api/employees', {
         method: 'POST',
         token: authToken,
         body: JSON.stringify({
@@ -189,6 +194,7 @@ describe('Branches API', () => {
           employmentType: 'FULL_TIME',
         }),
       });
+      expect(empRes.status).toBe(201);
 
       // Try to delete
       const deleteRes = await authRequest(`/api/branches/${branchWithStaffId}`, {
@@ -213,6 +219,18 @@ describe('Branches API', () => {
   });
 
   describe('Tenant Isolation', () => {
+    it('should not change another tenant branch when PATCH is rejected', async () => {
+      await authRequest(`/api/branches/${TEST_BRANCH_B_ID}`, {
+        method: 'PATCH',
+        token: authToken,
+        body: JSON.stringify({ name: 'Hijacked' }),
+      });
+
+      const [row] = await db.select().from(branches).where(eq(branches.id, TEST_BRANCH_B_ID));
+      expect(row.name).not.toBe('Hijacked');
+      expect(row.status).not.toBe('archived');
+    });
+
     it('should return 403 when getting a branch from another tenant', async () => {
       const response = await authRequest(`/api/branches/${TEST_BRANCH_B_ID}`, {
         method: 'GET',

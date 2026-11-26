@@ -508,6 +508,7 @@ describe('Payment Service', () => {
       expect(result.success).toBe(true);
       expect(result.paymentId).toBe('payment-123');
       expect(result.status).toBe('completed');
+      expect(mockInsertValues).toHaveBeenCalledWith(expect.objectContaining({ status: 'COMPLETED' }));
     });
 
     it('DB 錯誤應該返回錯誤訊息', async () => {
@@ -530,6 +531,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
       }]);
 
       const result = await getPaymentStatus('payment-1');
@@ -537,6 +539,17 @@ describe('Payment Service', () => {
       expect(result.success).toBe(true);
       expect(result.paymentId).toBe('payment-1');
       expect(result.status).toBe('completed');
+    });
+
+    it.each([
+      ['PENDING', 'pending'],
+      ['FAILED', 'failed'],
+    ])('%s 的 gateway checkout 應該返回 %s 狀態', async (status, expected) => {
+      mockSelectLimit.mockResolvedValueOnce([{ id: 'payment-3', type: 'INCOME', status }]);
+
+      const result = await getPaymentStatus('payment-3');
+
+      expect(result.status).toBe(expected);
     });
 
     it('REFUND 類型應該返回 refunded 狀態', async () => {
@@ -598,10 +611,26 @@ describe('Payment Service', () => {
       expect(result.error).toBe('Payment is already refunded');
     });
 
+    it('尚未完成（PENDING）的支付不能退款', async () => {
+      mockSelectLimit.mockResolvedValueOnce([{
+        id: 'payment-1',
+        type: 'INCOME',
+        status: 'PENDING',
+        amount: '1000',
+        paymentMethod: 'CASH',
+      }]);
+
+      const result = await processRefund({ paymentId: 'payment-1' });
+
+      expect(result).toEqual({ success: false, error: 'Only completed payments can be refunded' });
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
     it('Manual 支付全額退款應該成功', async () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '5000',
         paymentMethod: 'CASH',
         contractId: 'contract-1',
@@ -620,6 +649,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '5000',
         paymentMethod: 'CASH',
         contractId: 'contract-1',
@@ -651,6 +681,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '3000',
         paymentMethod: 'BANK_TRANSFER',
         contractId: 'contract-1',
@@ -671,6 +702,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '8000',
         paymentMethod: 'CREDIT_CARD',
         contractId: 'contract-1',
@@ -689,6 +721,7 @@ describe('Payment Service', () => {
     const LINE_PAY_PAYMENT = {
       id: 'payment-1',
       type: 'INCOME',
+      status: 'COMPLETED',
       amount: '2000',
       paymentMethod: 'LINE_PAY',
       contractId: 'contract-1',
@@ -760,6 +793,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '1500',
         paymentMethod: 'DEBIT_CARD',
         contractId: 'contract-1',
@@ -779,6 +813,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '1000',
         paymentMethod: null,
         contractId: 'contract-1',
@@ -829,6 +864,9 @@ describe('Payment Service', () => {
       expect(result.checkoutUrl).toBe('https://checkout.stripe.com/session123');
       expect(result.status).toBe('pending');
       expect(result.transactionId).toBe('cs_test_session123');
+      // the checkout row is unpaid until the webhook completes it
+      expect(mockInsertValues).toHaveBeenCalledWith(expect.objectContaining({ status: 'PENDING' }));
+      expect(mockUpdateSet).not.toHaveBeenCalledWith({ status: 'FAILED' });
 
       // Verify Stripe API was called correctly
       expect(mockFetch).toHaveBeenCalledWith(
@@ -864,6 +902,8 @@ describe('Payment Service', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Invalid API key');
+      // a checkout that could not be created can never be paid
+      expect(mockUpdateSet).toHaveBeenCalledWith({ status: 'FAILED' });
     });
 
     it('Stripe fetch 網路錯誤應該返回錯誤', async () => {
@@ -1149,6 +1189,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '5000',
         paymentMethod: 'CREDIT_CARD',
         contractId: 'contract-1',
@@ -1293,6 +1334,7 @@ describe('Payment Service', () => {
       mockSelectLimit.mockResolvedValueOnce([{
         id: 'payment-1',
         type: 'INCOME',
+        status: 'COMPLETED',
         amount: '3000',
         paymentMethod: 'BITCOIN', // unknown method → map fallback → 'manual'
         contractId: 'contract-1',

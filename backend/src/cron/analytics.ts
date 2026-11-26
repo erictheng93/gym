@@ -52,6 +52,7 @@ async function generateDailySnapshot() {
       .where(
         and(
           eq(payments.type, 'INCOME'),
+          eq(payments.status, 'COMPLETED'),
           // Half-open [day, day+1) range, sargable. date -> timestamptz casts at
           // midnight in the DB session time zone, the same zone DATE() used.
           gte(payments.paymentDate, sql`${yesterdayStr}::date`),

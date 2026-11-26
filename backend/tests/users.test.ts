@@ -9,6 +9,8 @@ import {
   getAuthToken,
   authRequest,
   TEST_TENANT_ID,
+  TEST_TENANT_B_ID,
+  TEST_EMPLOYEE_B_ID,
   TEST_BRANCH_ID,
   TEST_USER_ID,
   TEST_USER_EMAIL,
@@ -197,15 +199,16 @@ describe('Users API', () => {
       expect(data.error).toContain('管理員權限');
     });
 
-    it('should allow admin users', async () => {
-      const response = await authRequest('/api/users', {
-        method: 'GET',
-        token: adminToken,
-      });
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data.success).toBe(true);
+    it.each([
+      ['POST', '/api/users', JSON.stringify({ email: 'staffmade@test.test', password: 'Password123!', role: 'staff' })],
+      ['PATCH', `/api/users/${TEST_USER_ID}`, JSON.stringify({ role: 'staff' })],
+      ['DELETE', `/api/users/${TEST_USER_ID}`, undefined],
+      ['POST', `/api/users/${TEST_USER_ID}/reset-password`, JSON.stringify({ newPassword: 'Password123!' })],
+      ['GET', '/api/users/available-employees', undefined],
+    ])('should reject non-admin users on %s %s', async (method, path, body) => {
+      const staffToken = await getStaffAuthToken();
+      const response = await authRequest(path, { method, token: staffToken, body });
+      expect(response.status).toBe(403);
     });
   });
 
@@ -288,20 +291,6 @@ describe('Users API', () => {
       expect(adminUser).toBeDefined();
       expect(adminUser.employee).toBeDefined();
       expect(adminUser.employee.fullName).toBe('Test Admin');
-    });
-
-    it('should only return users from same tenant', async () => {
-      const response = await authRequest('/api/users', {
-        method: 'GET',
-        token: adminToken,
-      });
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-
-      // All returned users should belong to the test tenant
-      // (We can't directly verify tenantId as it's not returned, but the query filters by it)
-      expect(data.success).toBe(true);
     });
   });
 
@@ -1024,6 +1013,80 @@ describe('Users API', () => {
 
       // All returned employees should be active (verified by query logic)
       expect(data.success).toBe(true);
+    });
+  });
+
+  // ============================================
+  // Tenant isolation
+  // ============================================
+  describe('Tenant isolation', () => {
+    const otherUserId = '00000000-0000-4000-8000-0000000000d1';
+
+    beforeAll(async () => {
+      await db.insert(users).values({
+        id: otherUserId,
+        email: 'other-tenant-user@test.test',
+        passwordHash: await hash('OtherPass123!'),
+        role: 'staff',
+        tenantId: TEST_TENANT_B_ID,
+        isActive: true,
+        emailVerified: true,
+      });
+    });
+
+    afterAll(async () => {
+      await db.delete(users).where(eq(users.id, otherUserId));
+    });
+
+    it('should not list users from another tenant', async () => {
+      const response = await authRequest('/api/users?limit=100', { token: adminToken });
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      const ids = data.data.map((u: { id: string }) => u.id);
+      expect(ids).toContain(TEST_USER_ID);
+      expect(ids).not.toContain(otherUserId);
+    });
+
+    it.each([
+      ['GET', undefined],
+      ['PATCH', JSON.stringify({ role: 'admin' })],
+      ['DELETE', undefined],
+    ])('should return 404 for %s on a user of another tenant', async (method, body) => {
+      const response = await authRequest(`/api/users/${otherUserId}`, { method, token: adminToken, body });
+      expect(response.status).toBe(404);
+    });
+
+    it('should return 404 when resetting the password of a user of another tenant', async () => {
+      const response = await authRequest(`/api/users/${otherUserId}/reset-password`, {
+        method: 'POST',
+        token: adminToken,
+        body: JSON.stringify({ newPassword: 'Hijacked123!' }),
+      });
+      expect(response.status).toBe(404);
+    });
+
+    it('should leave the other tenant user unchanged', async () => {
+      const [row] = await db.select().from(users).where(eq(users.id, otherUserId));
+      expect(row.role).toBe('staff');
+      expect(row.isActive).toBe(true);
+      expect(await verify(row.passwordHash, 'OtherPass123!')).toBe(true);
+    });
+
+    it('should not link an employee of another tenant when creating a user', async () => {
+      const response = await authRequest('/api/users', {
+        method: 'POST',
+        token: adminToken,
+        body: JSON.stringify({
+          email: 'crosslink@test.test',
+          password: 'Password123!',
+          role: 'staff',
+          employeeId: TEST_EMPLOYEE_B_ID,
+        }),
+      });
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(response.status).toBeLessThan(500);
+      const [row] = await db.select().from(users).where(eq(users.email, 'crosslink@test.test'));
+      expect(row).toBeUndefined();
     });
   });
 });
