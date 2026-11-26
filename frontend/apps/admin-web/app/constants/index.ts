@@ -61,6 +61,8 @@ export const STATUS = {
     PAUSED: '暫停',
     DRAFT: '草稿',
     TERMINATED: '終止',
+    CANCELLED: '終止',
+    TRANSFERRED: '已轉讓',
   },
   // Member Status
   MEMBER: {
@@ -558,6 +560,12 @@ export const PAGES = {
     CONFIRM_TERMINATE_QUESTION: '確定要終止此合約嗎？此操作無法恢復。',
     REFUND_AMOUNT: '退款金額',
     NO_REFUND: '不退款',
+    REFUND_MAX: '最多可退',
+    REFUND_EXCEEDS_PAID: '退款金額不可超過已收金額',
+    // Not yet available (business rules not decided)
+    NOT_YET_AVAILABLE: '尚未開放',
+    TRANSFER_NOT_AVAILABLE: '轉讓功能尚未開放：轉讓手續費與權益移轉方式尚待確認',
+    RENEW_NOT_AVAILABLE: '續約功能尚未開放：續約計價方式尚待確認，請先以「新增合約」建立新合約',
     // Extend
     EXTEND_HINT: '延期將延長合約的結束日期',
     EXTEND_DAYS: '延期天數',

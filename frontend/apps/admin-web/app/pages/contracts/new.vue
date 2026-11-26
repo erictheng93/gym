@@ -135,29 +135,26 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const contractData = {
-      member_id: form.member_id,
-      plan_id: form.plan_id,
-      branch_id: form.branch_id,
-      start_date: form.start_date,
-      end_date: calculatedEndDate.value,
-      original_end_date: calculatedEndDate.value,
-      sign_date: new Date().toISOString().slice(0, 10),
-      total_amount: form.total_amount,
-      notes: form.notes,
-      digital_signature: form.digital_signature,
-      contract_status: 'ACTIVE' as const,
-      payment_status: 'UNPAID' as const,
-      remaining_counts: selectedPlan.value?.class_counts || null
+    // POST /api/contracts schema. The backend derives endDate / remainingCounts from the
+    // plan and creates the contract as DRAFT (activated on the detail page once paid).
+    // It has no field for the drawn signature, so the signature only gates submission.
+    const created = await createContract({
+      memberId: form.member_id,
+      planId: form.plan_id,
+      branchId: form.branch_id,
+      startDate: form.start_date,
+      totalAmount: Number(form.total_amount),
+      notes: form.notes || null
+    })
+
+    // createContract already showed the backend's reason; stay on the page
+    if (!created) {
+      setError('submit', PAGES.CONTRACTS.ERROR_CREATE_FAILED)
+      return
     }
 
-    await createContract(contractData)
     useToast().success(MESSAGES.SUCCESS.CONTRACT_CREATED)
-    router.push('/contracts')
-  } catch (error) {
-    console.error('Failed to create contract:', error)
-    useToast().error(MESSAGES.ERRORS.CONTRACT_CREATE_FAILED)
-    setError('submit', PAGES.CONTRACTS.ERROR_CREATE_FAILED)
+    router.push(`/contracts/${created.id}`)
   } finally {
     isSubmitting.value = false
   }

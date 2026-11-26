@@ -221,49 +221,43 @@ describe('contracts/new.vue', () => {
       expect(mockCreateContract).not.toHaveBeenCalled()
     })
 
-    it('creates an ACTIVE/UNPAID time-based contract and navigates to the list', async () => {
+    it('posts the backend schema (camelCase, no derived fields) and opens the new DRAFT contract', async () => {
       const wrapper = await mountPage()
       await goToStep3(wrapper, 'plan-year')
       wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
       await wrapper.find('form').trigger('submit')
       await flushPromises()
 
+      // Exactly the keys of createContractSchema in backend/src/routes/contracts.ts;
+      // endDate / remainingCounts / status are derived by the backend.
       expect(mockCreateContract).toHaveBeenCalledWith({
-        member_id: 'member-1',
-        plan_id: 'plan-year',
-        branch_id: 'branch-1',
-        start_date: '2024-11-15',
-        end_date: '2025-11-15',
-        original_end_date: '2025-11-15',
-        sign_date: '2024-11-15',
-        total_amount: 30000,
-        notes: '',
-        digital_signature: SIGNATURE,
-        contract_status: 'ACTIVE',
-        payment_status: 'UNPAID',
-        remaining_counts: null
+        memberId: 'member-1',
+        planId: 'plan-year',
+        branchId: 'branch-1',
+        startDate: '2024-11-15',
+        totalAmount: 30000,
+        notes: null
       })
       expect(toast.success).toHaveBeenCalledWith(MESSAGES.SUCCESS.CONTRACT_CREATED)
-      expect(mockPush).toHaveBeenCalledWith('/contracts')
+      expect(mockPush).toHaveBeenCalledWith('/contracts/contract-1')
     })
 
-    it('sets remaining_counts from the plan for COUNT_BASED contracts', async () => {
+    it('sends the plan price as a number even when the plan API returns a decimal string', async () => {
+      mockPlans.value = [{ id: 'plan-count', name: '計次方案', price: '5000.00' as unknown as number, plan_type: 'COUNT_BASED', class_counts: 10 }]
       const wrapper = await mountPage()
       await goToStep3(wrapper, 'plan-count')
       wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
       await wrapper.find('form').trigger('submit')
       await flushPromises()
 
-      expect(mockCreateContract).toHaveBeenCalledWith(expect.objectContaining({
-        plan_id: 'plan-count',
-        total_amount: 5000,
-        remaining_counts: 10
-      }))
+      expect(mockCreateContract).toHaveBeenCalledWith(expect.objectContaining({ planId: 'plan-count', totalAmount: 5000 }))
+      const body = mockCreateContract.mock.calls[0]![0]
+      expect(Object.keys(body).some(k => k.includes('_'))).toBe(false)
     })
 
-    it('shows an error and stays on the page when creation fails', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {})
-      mockCreateContract.mockRejectedValue(new Error('boom'))
+    it('stays on the page with an error and does not toast success when creation fails', async () => {
+      // createContract resolves null after it has already shown the backend's reason
+      mockCreateContract.mockResolvedValue(null)
       const wrapper = await mountPage()
       await goToStep3(wrapper)
       wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
@@ -271,7 +265,7 @@ describe('contracts/new.vue', () => {
       await flushPromises()
 
       expect(wrapper.find('.submit-error').text()).toContain(PAGES.CONTRACTS.ERROR_CREATE_FAILED)
-      expect(toast.error).toHaveBeenCalledWith(MESSAGES.ERRORS.CONTRACT_CREATE_FAILED)
+      expect(toast.success).not.toHaveBeenCalled()
       expect(mockPush).not.toHaveBeenCalled()
       expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
     })
