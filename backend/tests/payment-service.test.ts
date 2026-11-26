@@ -14,16 +14,16 @@ vi.stubGlobal('fetch', mockFetch);
 
 const mockInsertReturning = vi.fn();
 const mockInsertValues = vi.fn(() => ({ returning: mockInsertReturning }));
-const mockInsert = vi.fn(() => ({ values: mockInsertValues }));
+const mockInsert = vi.fn((..._args: unknown[]) => ({ values: mockInsertValues }));
 
 const mockUpdateWhere = vi.fn().mockResolvedValue(undefined);
 const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
-const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }));
+const mockUpdate = vi.fn((..._args: unknown[]) => ({ set: mockUpdateSet }));
 
 const mockSelectLimit = vi.fn();
 const mockSelectWhere = vi.fn(() => ({ limit: mockSelectLimit }));
 const mockSelectFrom = vi.fn(() => ({ where: mockSelectWhere }));
-const mockSelect = vi.fn(() => ({ from: mockSelectFrom }));
+const mockSelect = vi.fn((..._args: unknown[]) => ({ from: mockSelectFrom }));
 
 vi.mock('../src/db/index.js', () => ({
   db: {

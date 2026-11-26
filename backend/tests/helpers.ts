@@ -1,4 +1,4 @@
-import { db, users, employees, branches, tenants, members, contracts, membershipPlans, sessions, jobTitles, checkIns, classes, classSessions, bookings, classReviews, classRecords, contractLogs, coachMemberAssignments, teachingMaterials, lessonPlans, coachNotes } from '../src/db/index.js';
+import { db, users, employees, branches, tenants, members, contracts, membershipPlans, sessions, jobTitles, checkIns, classes, classSessions, bookings, classReviews, contractLogs, coachMemberAssignments, teachingMaterials, lessonPlans, coachNotes } from '../src/db/index.js';
 import { hash } from '@node-rs/argon2';
 import { eq, and, or } from 'drizzle-orm';
 import app from '../src/app.js';
@@ -571,7 +571,7 @@ export async function createCoachTestFixtures() {
     maxCapacity: 1,
     branchId: TEST_BRANCH_ID,
     instructorId: TEST_COACH_EMPLOYEE_ID,
-    category: 'PERSONAL',
+    category: 'OTHER',
   }).onConflictDoNothing();
 
   // Create a class session for today
