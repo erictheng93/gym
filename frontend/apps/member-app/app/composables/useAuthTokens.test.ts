@@ -124,6 +124,24 @@ describe('useAuthTokens', () => {
       expect(cookieStore.get('member_refresh_token')?.value).toBe('new-refresh-token')
     })
 
+    it('concurrent 401s share one refresh request (#16)', async () => {
+      cookieStore.set('member_refresh_token', { value: 'old-refresh' })
+      let resolveFetch!: (v: unknown) => void
+      mockFetch.mockImplementationOnce(() => new Promise((r) => { resolveFetch = r }))
+
+      const { refreshAccessToken } = useAuthTokens()
+      const pending = [refreshAccessToken(), refreshAccessToken(), useAuthTokens().refreshAccessToken()]
+      resolveFetch({ success: true, data: { accessToken: 'new-access-token', refreshToken: 'new-refresh-token' } })
+
+      expect(await Promise.all(pending)).toEqual([true, true, true])
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      // Once settled, the next refresh is a new request with the rotated token
+      mockFetch.mockResolvedValueOnce({ success: true, data: { accessToken: 'newer-access', refreshToken: 'newer-refresh' } })
+      expect(await refreshAccessToken()).toBe(true)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
     it('should return false on refresh failure', async () => {
       cookieStore.set('member_refresh_token', { value: 'old-refresh-token' })
 

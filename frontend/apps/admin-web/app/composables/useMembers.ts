@@ -79,6 +79,9 @@ const buildQuery = (params: Record<string, string | number | undefined>) => {
   return query
 }
 
+// Only the latest fetchMembers call may write the shared list (#17): typing fast
+// sends several searches, and a slower, older response must not overwrite a newer one.
+let latestMembersFetch = 0
 const inFlightMembersMap = new Map<string, Promise<void>>()
 const inFlightMemberDetailMap = new Map<string, Promise<ApiMember | null>>()
 
@@ -105,20 +108,23 @@ export const useMembers = () => {
     }
 
     const promise = (async () => {
+      const seq = ++latestMembersFetch
       isLoading.value = true
       const { page = 1, limit = 20, ...rest } = filters
 
       try {
         const { rows, total } = await listMembers({ page, limit, ...rest })
+        if (seq !== latestMembersFetch) return // a newer fetch owns the list now
         members.value = rows
         totalCount.value = total
       } catch (error) {
+        if (seq !== latestMembersFetch) return
         handleError(error, {
           context: 'useMembers.fetchMembers',
           customMessage: MESSAGES.ERRORS.MEMBER_FETCH_FAILED
         })
       } finally {
-        isLoading.value = false
+        if (seq === latestMembersFetch) isLoading.value = false
         inFlightMembersMap.delete(key)
       }
     })()

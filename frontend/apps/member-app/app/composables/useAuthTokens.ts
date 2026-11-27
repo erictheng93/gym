@@ -7,6 +7,11 @@
 
 import type { TokenState } from '../types/auth'
 
+// In-flight refreshes, keyed by the refresh token being spent (#16). Concurrent 401s
+// share one refresh instead of each spending the same token. Keyed by token, not a
+// single global, because module state is shared across users during SSR.
+const refreshesInFlight = new Map<string, Promise<boolean>>()
+
 export const useAuthTokens = () => {
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiBaseUrl
@@ -56,7 +61,18 @@ export const useAuthTokens = () => {
    * Refresh access token using refresh token
    * Returns true if refresh was successful
    */
-  const refreshAccessToken = async (): Promise<boolean> => {
+  const refreshAccessToken = (): Promise<boolean> => {
+    const token = refreshToken.value
+    if (!token) return Promise.resolve(false)
+    let inFlight = refreshesInFlight.get(token)
+    if (!inFlight) {
+      inFlight = doRefresh().finally(() => refreshesInFlight.delete(token))
+      refreshesInFlight.set(token, inFlight)
+    }
+    return inFlight
+  }
+
+  const doRefresh = async (): Promise<boolean> => {
     if (!refreshToken.value) return false
 
     try {
