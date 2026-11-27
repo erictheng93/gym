@@ -205,6 +205,22 @@ describe('useOfflineSync with IndexedDB', () => {
       expect(result).toBeNull()
     })
 
+    // Keys embed query options (date ranges, filters), so most are never read
+    // again and getCache's delete-on-read never removes them.
+    it('prunes expired entries that are never read again, keeping live ones', async () => {
+      const { setCache, getCache, pruneExpiredCache } = useOfflineSync()
+
+      await setCache('classes:{"from":"2026-01-01"}', ['old'], 1)
+      await setCache('classes:{"from":"2026-01-08"}', ['old'], 1)
+      await setCache('live-key', ['fresh'], 60_000)
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      expect(await pruneExpiredCache()).toBe(2)
+      // Physically removed: a second pass finds nothing left to prune
+      expect(await pruneExpiredCache()).toBe(0)
+      expect(await getCache('live-key')).toEqual(['fresh'])
+    })
+
     it('should delete specific cache entry', async () => {
       const { setCache, getCache, deleteCache } = useOfflineSync()
 

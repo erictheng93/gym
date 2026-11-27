@@ -89,3 +89,47 @@ describe('rateLimiter client address', () => {
     expect(trustedProxyHops({ TRUST_PROXY: '2' })).toBe(2);
   });
 });
+
+describe('rateLimiter store cap', () => {
+  // Keys can be attacker-chosen (e.g. the OTP identifier on the unauthenticated
+  // /api/member/otp/send), so the store must not grow without bound.
+  async function freshLimiter(cap: string) {
+    vi.resetModules();
+    vi.stubEnv('RATE_LIMIT_MAX_KEYS', cap);
+    const mod = await import('../src/middleware/rate-limiter.js');
+    const app = new Hono();
+    app.post('/:key', mod.rateLimiter({ max: 2, windowMs: 60_000, keyGenerator: (c) => c.req.param('key') }), (c) => c.text('ok'));
+    return (key: string) => app.request(`/${key}`, { method: 'POST' });
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it('refuses new keys once full instead of evicting existing counters', async () => {
+    const hit = await freshLimiter('3');
+    expect((await hit('a')).status).toBe(200);
+    expect((await hit('a')).status).toBe(200);
+    expect((await hit('b')).status).toBe(200);
+    expect((await hit('c')).status).toBe(200);
+
+    const refused = await hit('d');
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBeTruthy();
+
+    // 'a' kept its count: flooding new keys cannot reset a brute-force counter
+    expect((await hit('a')).status).toBe(429);
+  });
+
+  it('admits new keys again once expired entries can be pruned', async () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const hit = await freshLimiter('2');
+    expect((await hit('a')).status).toBe(200);
+    expect((await hit('b')).status).toBe(200);
+    expect((await hit('c')).status).toBe(429);
+
+    vi.setSystemTime(1_000_000 + 60_001);
+    expect((await hit('c')).status).toBe(200);
+  });
+});

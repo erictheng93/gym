@@ -97,6 +97,14 @@ describe('RFM cron batching', () => {
     expect(render(state.executed[2]).params).toHaveLength(402);
   });
 
+  it('returns empty stats without querying aggregates when there are no active members', async () => {
+    state.selectResults = [[]];
+    const result = await runRFMSegmentation();
+    expect(result.totalMembers).toBe(0);
+    expect(state.selectResults).toHaveLength(0);
+    expect(state.executed).toHaveLength(0);
+  });
+
   it('issues no UPDATE when nothing changed', async () => {
     state.selectResults = [[{ id: uuid(1), tags: ['RFM:LOST'] }], [], []];
     await runRFMSegmentation();
