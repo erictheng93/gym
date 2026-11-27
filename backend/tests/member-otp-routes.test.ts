@@ -228,6 +228,8 @@ describe('Member OTP Routes', () => {
         const blocked = await send(100, '203.0.113.9');
         expect(blocked.status).toBe(429);
         expect((await send(101, '203.0.113.10')).status).toBe(200);
+        // An internal address means a mis-set TRUST_PROXY: skip the IP cap rather than lock everyone out
+        for (let n = 200; n <= 300; n++) expect((await send(n, '10.0.0.5')).status).toBe(200);
       } finally {
         vi.unstubAllEnvs();
         const { db, otpSendLogs } = await import('../src/db/index.js');

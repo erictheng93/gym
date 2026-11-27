@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { BlockList, isIP } from 'node:net';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
 /**
@@ -49,4 +50,26 @@ export function getClientIp(c: Context, env: Record<string, string | undefined> 
     if (realIp) return realIp;
   }
   return socketAddress(c) ?? 'unknown';
+}
+
+// Private, loopback, link-local and CGNAT ranges: an address from here is a
+// proxy or container hop, never a visitor that came in through Cloudflare.
+const internalRanges = new BlockList();
+for (const [net, prefix] of [['10.0.0.0', 8], ['172.16.0.0', 12], ['192.168.0.0', 16], ['127.0.0.0', 8], ['169.254.0.0', 16], ['100.64.0.0', 10]] as const) {
+  internalRanges.addSubnet(net, prefix, 'ipv4');
+}
+for (const [net, prefix] of [['::1', 128], ['fc00::', 7], ['fe80::', 10]] as const) {
+  internalRanges.addSubnet(net, prefix, 'ipv6');
+}
+
+/**
+ * True when `ip` looks like a real visitor (a public address). False for
+ * 'unknown' and internal addresses, which mean TRUST_PROXY does not match the
+ * proxy chain and every request would share one per-address bucket.
+ */
+export function isPublicAddress(ip: string): boolean {
+  const mapped = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  const family = isIP(mapped);
+  if (family === 0) return false;
+  return !internalRanges.check(mapped, family === 4 ? 'ipv4' : 'ipv6');
 }
