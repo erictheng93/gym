@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, count, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { AnyColumn, SQL } from 'drizzle-orm';
-import { db, members, contracts, payments, checkIns, branches, membershipPlans, bookings, classSessions } from '../db/index.js';
+import { db, members, contracts, payments, checkIns, branches, membershipPlans, bookings, classSessions, revenueTargets } from '../db/index.js';
 import { requireAuth, requireRole, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranches } from '../utils/tenant-cache.js';
@@ -31,6 +31,7 @@ import type { ExportColumn } from '../services/export.js';
 import {
   PERIOD_TYPES,
   addDays,
+  addMonths,
   dateInDays,
   eachDay,
   localDay,
@@ -453,9 +454,110 @@ adminDashboardRoutes.get('/contract-alerts', async (c) => {
   });
 });
 
-// Revenue targets have no table yet, so no branch has one: the war room shows
-// achievement against a target only once targets can be stored.
-adminDashboardRoutes.get('/revenue-targets', (c) => c.json({ success: true, targets: [] }));
+// Revenue targets: one amount per tenant + branch + month (month = first day).
+// Reading is open to the war-room roles; writing is admin / super_admin only.
+const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+const monthEnd = (monthStart: string) => addDays(addMonths(monthStart, 1), -1);
+
+adminDashboardRoutes.get('/revenue-targets', async (c) => {
+  const monthParam = c.req.query('month');
+  const yearParam = c.req.query('year');
+  let start: string;
+  let end: string;
+  if (monthParam) {
+    if (!MONTH_RE.test(monthParam)) return c.json({ success: false, error: 'month 格式必須為 YYYY-MM' }, 400);
+    start = `${monthParam}-01`;
+    end = monthEnd(start);
+  } else if (yearParam) {
+    if (!/^\d{4}$/.test(yearParam)) return c.json({ success: false, error: 'year 格式必須為 YYYY' }, 400);
+    start = `${yearParam}-01-01`;
+    end = `${yearParam}-12-31`;
+  } else {
+    start = `${localToday().slice(0, 7)}-01`;
+    end = monthEnd(start);
+  }
+
+  const branchList = await scopeBranches(c);
+  const rows = await db
+    .select({
+      id: revenueTargets.id,
+      branchId: revenueTargets.branchId,
+      month: revenueTargets.month,
+      targetAmount: revenueTargets.targetAmount,
+    })
+    .from(revenueTargets)
+    .where(and(
+      eq(revenueTargets.tenantId, c.get('tenantId')!),
+      inBranches(revenueTargets.branchId, branchList),
+      dateInDays(revenueTargets.month, start, end),
+    ))
+    .orderBy(revenueTargets.month, revenueTargets.branchId);
+
+  // Actual revenue per (branch, month): COMPLETED income, half-open Taiwan-day ranges.
+  const actualMonth = sql<string>`to_char(date_trunc('month', ${payments.paymentDate} at time zone 'Asia/Taipei'), 'YYYY-MM-DD')`;
+  const actuals = rows.length === 0 ? [] : await db
+    .select({ branchId: payments.branchId, month: actualMonth, amount: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+    .from(payments)
+    .where(and(completedIncome(branchList), timestampInDays(payments.paymentDate, start, end)))
+    .groupBy(payments.branchId, actualMonth);
+  const actualMap = new Map(actuals.map(a => [`${a.branchId}|${a.month}`, money(a.amount)]));
+  const branchNames = new Map(branchList.map(b => [b.id, b.name]));
+
+  const targets = rows.map(r => {
+    const target = money(r.targetAmount);
+    const actual = actualMap.get(`${r.branchId}|${r.month}`) ?? 0;
+    return {
+      id: r.id,
+      branch_id: r.branchId,
+      branch_name: branchNames.get(r.branchId) ?? '',
+      year: Number(r.month.slice(0, 4)),
+      month: Number(r.month.slice(5, 7)),
+      target_amount: target,
+      actual_amount: actual,
+      achievement_percent: percentage(actual, target),
+    };
+  });
+  return c.json({ success: true, targets });
+});
+
+adminDashboardRoutes.put('/revenue-targets', requireRole('super_admin', 'admin'), async (c) => {
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const branchId = body?.branch_id;
+  const rawAmount = body?.target_amount;
+  const amount = typeof rawAmount === 'number' ? rawAmount : typeof rawAmount === 'string' && rawAmount.trim() !== '' ? Number(rawAmount) : NaN;
+  let monthKey: string | null = null;
+  if (typeof body?.month === 'string') {
+    monthKey = MONTH_RE.test(body.month) ? body.month : null;
+  } else if (Number.isInteger(body?.year) && Number.isInteger(body?.month)) {
+    const key = `${String(body!.year).padStart(4, '0')}-${String(body!.month).padStart(2, '0')}`;
+    monthKey = MONTH_RE.test(key) ? key : null;
+  }
+  if (typeof branchId !== 'string' || !monthKey || !Number.isFinite(amount) || amount < 0 || amount >= 1e10) {
+    return c.json({ success: false, error: 'branch_id、month (YYYY-MM) 與 target_amount (>= 0) 為必填' }, 400);
+  }
+  const tenantId = c.get('tenantId')!;
+  const branch = (await getTenantBranches(tenantId)).find(b => b.id === branchId);
+  if (!branch) return c.json({ success: false, error: '找不到分店' }, 404);
+
+  const [row] = await db.insert(revenueTargets)
+    .values({ tenantId, branchId, month: `${monthKey}-01`, targetAmount: amount.toFixed(2), createdBy: c.get('user')?.id ?? null })
+    .onConflictDoUpdate({
+      target: [revenueTargets.tenantId, revenueTargets.branchId, revenueTargets.month],
+      set: { targetAmount: amount.toFixed(2), updatedAt: new Date() },
+    })
+    .returning();
+  return c.json({
+    success: true,
+    target: {
+      id: row!.id,
+      branch_id: branchId,
+      branch_name: branch.name,
+      year: Number(monthKey.slice(0, 4)),
+      month: Number(monthKey.slice(5, 7)),
+      target_amount: money(row!.targetAmount),
+    },
+  });
+});
 
 // -----------------------------------------------------------------------------
 // /api/admin/dashboard/export

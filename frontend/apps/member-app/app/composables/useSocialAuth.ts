@@ -122,7 +122,7 @@ export const useSocialAuth = () => {
    *
    * @param providerId - 提供者 ID (google, line, apple)
    */
-  const loginWithProvider = async (providerId: string) => {
+  const loginWithProvider = async (providerId: string, intent: 'login' | 'link' = 'login') => {
     error.value = null
     loadingProvider.value = providerId
 
@@ -160,6 +160,9 @@ export const useSocialAuth = () => {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('oauth_state', result.data.state)
         sessionStorage.setItem('oauth_provider', providerId)
+        // 綁定流程：callback 頁面看到 link 意圖時呼叫 /link 而非登入
+        if (intent === 'link') sessionStorage.setItem('oauth_intent', 'link')
+        else sessionStorage.removeItem('oauth_intent')
       }
 
       // 使用 location.href 進行導向 (PWA 相容，避免 popup)

@@ -501,7 +501,7 @@ describe('useDashboard', () => {
       expect(result).toBe(true)
     })
 
-    it('應該使用 POST 方法', async () => {
+    it('應該使用 PUT 方法', async () => {
       mockFetch
         .mockResolvedValueOnce(createMockResponse({ success: true }))
         .mockResolvedValueOnce(createMockResponse(mockRevenueTargetsResponse))
@@ -512,7 +512,7 @@ describe('useDashboard', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          method: 'POST'
+          method: 'PUT'
         })
       )
     })

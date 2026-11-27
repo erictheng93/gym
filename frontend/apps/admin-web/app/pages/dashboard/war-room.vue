@@ -28,6 +28,7 @@ const {
   fetchKPIs,
   fetchContractAlerts,
   fetchRevenueTargets,
+  setRevenueTarget,
   startLiveUpdates,
   stopLiveUpdates
 } = useDashboard()
@@ -47,6 +48,16 @@ const isHeadquarter = computed(() => {
          user.value?.role === 'manager'
 })
 
+// 營收目標：僅 admin / super_admin 可設定
+const canEditTargets = computed(() =>
+  user.value?.role === 'admin' || user.value?.role === 'super_admin'
+)
+
+const saveTarget = async (branchId: string, amount: number) => {
+  const now = new Date()
+  await setRevenueTarget(branchId, now.getFullYear(), now.getMonth() + 1, amount)
+}
+
 // 期間選項
 const periodOptions = PERIOD_OPTIONS
 
@@ -57,7 +68,7 @@ const loadData = async () => {
   await Promise.all([
     fetchKPIs(selectedPeriod.value, branchId),
     fetchContractAlerts(30, branchId),
-    fetchRevenueTargets(new Date().getFullYear(), branchId),
+    fetchRevenueTargets(new Date().getFullYear(), branchId, new Date().getMonth() + 1),
     loadHeatmapData(branchId)
   ])
 }
@@ -308,6 +319,8 @@ onUnmounted(() => {
       <LazyDashboardBranchComparison
         :kpis="kpis"
         :targets="revenueTargets"
+        :can-edit-targets="canEditTargets"
+        @save-target="saveTarget"
         :loading="isLoading"
       />
     </section>

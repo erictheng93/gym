@@ -105,7 +105,7 @@ const otpIdentifierSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('email'),
-    identifier: z.string().min(1, '請輸入手機號碼或 Email'),
+    identifier: z.string().trim().min(1, '請輸入手機號碼或 Email').transform(email => email.toLowerCase()),
   }),
 ]);
 
@@ -145,14 +145,14 @@ function otpClientIp(c: Context): string | undefined {
 function memberIdentifierMatches(type: 'phone' | 'email', identifier: string) {
   return type === 'phone'
     ? eq(sql`translate(${members.phone}, '- ', '')`, identifier)
-    : eq(members.email, identifier);
+    : eq(sql`lower(${members.email})`, identifier);
 }
 
 function tokenIdentifierMatches(type: 'phone' | 'email', identifier: string) {
   // Pending phone tokens issued before normalization may still contain separators.
   return type === 'phone'
     ? eq(sql`translate(${otpTokens.identifier}, '- ', '')`, identifier)
-    : eq(otpTokens.identifier, identifier);
+    : eq(sql`lower(${otpTokens.identifier})`, identifier);
 }
 
 /**

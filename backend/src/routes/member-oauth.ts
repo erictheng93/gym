@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, members, branches, memberSocialAccounts } from '../db/index.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter, limitMax } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
@@ -497,7 +497,7 @@ app.post(
       const [memberByEmail] = await db
         .select(MEMBER_OAUTH_DETAIL_SELECT)
         .from(members)
-        .where(eq(members.email, userInfo.email))
+        .where(eq(sql`lower(${members.email})`, userInfo.email.trim().toLowerCase()))
         .limit(1);
 
       if (memberByEmail) {

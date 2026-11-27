@@ -26,6 +26,8 @@ definePageMeta({
 
 const { addToast } = useToast()
 const { changePassword, member } = useMemberAuth()
+const { availableProviders, loadingProvider, loginWithProvider, error: socialError } = useSocialAuth()
+const bindableProviders = computed(() => availableProviders.value.filter(p => p.id !== 'apple'))
 
 // Form state
 const currentPassword = ref('')
@@ -287,6 +289,25 @@ const handleSubmit = async () => {
         </div>
       </section>
 
+      <!-- Social account binding -->
+      <section class="form-section" data-testid="social-binding">
+        <h2 class="section-title">綁定社群帳號</h2>
+        <p class="section-description">綁定後即可使用 Google / LINE 快速登入</p>
+        <div class="social-bind-list">
+          <button
+            v-for="p in bindableProviders"
+            :key="p.id"
+            type="button"
+            class="social-bind-btn"
+            :disabled="!!loadingProvider"
+            @click="loginWithProvider(p.id, 'link')"
+          >
+            {{ loadingProvider === p.id ? '前往授權中…' : `綁定 ${p.name}` }}
+          </button>
+        </div>
+        <p v-if="socialError" class="field-error">{{ socialError }}</p>
+      </section>
+
       <!-- Error Message -->
       <p v-if="error" class="error-message">{{ error }}</p>
 
@@ -445,6 +466,29 @@ const handleSubmit = async () => {
   font-size: 14px;
   color: var(--color-text-secondary);
   margin: 0 0 20px;
+}
+
+.social-bind-list {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.social-bind-btn {
+  flex: 1 1 120px;
+  padding: 12px 16px;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.social-bind-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Input Group */

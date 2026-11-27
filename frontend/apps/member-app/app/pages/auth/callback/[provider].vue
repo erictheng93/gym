@@ -21,7 +21,8 @@ definePageMeta({
 })
 
 const route = useRoute()
-const { handleCallback } = useSocialAuth()
+const { handleCallback, linkSocialAccount } = useSocialAuth()
+const { accessToken } = useAuthTokens()
 const { completeOAuthLogin } = useMemberAuth()
 
 // 從路徑取得 provider
@@ -37,15 +38,8 @@ const errorParam = computed(() => route.query.error as string | undefined)
 const errorDescription = computed(() => route.query.error_description as string | undefined)
 
 // 狀態
-const status = ref<'processing' | 'success' | 'needs_registration' | 'error'>('processing')
+const status = ref<'processing' | 'success' | 'linked' | 'needs_registration' | 'error'>('processing')
 const errorMessage = ref('')
-const socialInfo = ref<{
-  provider: string
-  providerUserId: string
-  email?: string
-  displayName?: string
-  avatarUrl?: string
-} | null>(null)
 
 let redirectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -79,6 +73,31 @@ onMounted(async () => {
     return
   }
 
+  // 綁定流程 (已登入會員從個人資料發起)：呼叫 /link，不走登入
+  const isLink = typeof window !== 'undefined' && sessionStorage.getItem('oauth_intent') === 'link'
+  if (isLink) {
+    sessionStorage.removeItem('oauth_intent')
+    sessionStorage.removeItem('oauth_state')
+    sessionStorage.removeItem('oauth_provider')
+    if (!accessToken.value) {
+      status.value = 'error'
+      errorMessage.value = '請先登入會員後再綁定社群帳號'
+      return
+    }
+    const linkResult = await linkSocialAccount(provider.value, code.value, accessToken.value)
+    if (!linkResult.success) {
+      status.value = 'error'
+      errorMessage.value = linkResult.error || '綁定失敗，請重試'
+      return
+    }
+    status.value = 'linked'
+    redirectTimer = setTimeout(() => {
+      navigateTo('/profile/security')
+      redirectTimer = null
+    }, 1500)
+    return
+  }
+
   try {
     // 處理 OAuth callback
     const result = await handleCallback(
@@ -92,23 +111,9 @@ onMounted(async () => {
       throw new Error(result.error || '登入失敗')
     }
 
-    // 檢查是否需要註冊
+    // 未綁定會員：不開放自助註冊，導引以驗證碼登入後再綁定
     if (result.needsRegistration) {
       status.value = 'needs_registration'
-      socialInfo.value = result.socialInfo || null
-
-      // 儲存社交資訊供完成註冊頁面使用
-      if (typeof window !== 'undefined' && result.socialInfo) {
-        // Only the display info; the provider's access token is never stored client-side
-        sessionStorage.setItem('oauth_social_info', JSON.stringify(result.socialInfo))
-      }
-
-      // 延遲後導向到完成資料頁面
-      if (redirectTimer) clearTimeout(redirectTimer)
-      redirectTimer = setTimeout(() => {
-        navigateTo('/auth/complete-profile')
-        redirectTimer = null
-      }, 2000)
       return
     }
 
@@ -144,8 +149,8 @@ const goToLogin = () => {
   navigateTo('/login')
 }
 
-const goToCompleteProfile = () => {
-  navigateTo('/auth/complete-profile')
+const goToOtpLogin = () => {
+  navigateTo('/login?method=phone')
 }
 
 // Provider 名稱對應
@@ -181,8 +186,21 @@ const providerName = computed(() => {
         </p>
       </div>
 
-      <!-- 需要完成註冊 -->
-      <div v-else-if="status === 'needs_registration'" class="callback-content">
+      <!-- 綁定成功 -->
+      <div v-else-if="status === 'linked'" class="callback-content">
+        <div class="success-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+        </div>
+        <p class="callback-text success">
+          已綁定 {{ providerName }} 帳號
+        </p>
+      </div>
+
+      <!-- 尚未綁定會員 -->
+      <div v-else-if="status === 'needs_registration'" class="callback-content" data-testid="needs-binding">
         <div class="info-icon">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
@@ -191,22 +209,15 @@ const providerName = computed(() => {
           </svg>
         </div>
         <p class="callback-text info">
-          歡迎使用 {{ providerName }} 登入！
+          此 {{ providerName }} 帳號尚未綁定會員
         </p>
         <p class="callback-subtext">
-          這是您首次使用此方式登入，<br>
-          請完善個人資料以繼續
+          會員資料由場館於簽約時建立，無法自行註冊。<br>
+          若您已是會員，請先以手機或 Email 驗證碼登入，再到「個人資料 &gt; 安全設定」綁定 {{ providerName }}；
+          尚未成為會員請洽櫃台辦理。
         </p>
-        <div v-if="socialInfo" class="social-info">
-          <p v-if="socialInfo.displayName">
-            {{ socialInfo.displayName }}
-          </p>
-          <p v-if="socialInfo.email" class="social-email">
-            {{ socialInfo.email }}
-          </p>
-        </div>
-        <button class="btn btn-primary" @click="goToCompleteProfile">
-          完善資料
+        <button class="btn btn-primary" @click="goToOtpLogin">
+          以手機/Email 驗證碼登入
         </button>
       </div>
 

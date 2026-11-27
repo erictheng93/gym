@@ -147,6 +147,8 @@ export interface RevenueTarget {
   year: number
   month: number
   target_amount: number
+  actual_amount?: number
+  achievement_percent?: number
 }
 
 // In-flight deduplication maps
@@ -272,16 +274,18 @@ export const useDashboard = () => {
    */
   const fetchRevenueTargets = async (
     year?: number,
-    branchId?: string
+    branchId?: string,
+    month?: number
   ): Promise<RevenueTarget[]> => {
-    const key = `${year || ''}:${branchId || ''}`
+    const key = `${year || ''}:${branchId || ''}:${month || ''}`
     const existing = inFlightRevenueTargets.get(key)
     if (existing) return existing
 
     const promise = (async () => {
       try {
         const params = new URLSearchParams()
-        if (year) params.append('year', year.toString())
+        if (year && month) params.append('month', `${year}-${String(month).padStart(2, '0')}`)
+        else if (year) params.append('year', year.toString())
         if (branchId) params.append('branch_id', branchId)
 
         const response = await authFetch(`${baseURL}/api/admin/dashboard/revenue-targets?${params}`)
@@ -316,7 +320,7 @@ export const useDashboard = () => {
   ): Promise<boolean> => {
     try {
       const response = await authFetch(`${baseURL}/api/admin/dashboard/revenue-targets`, {
-        method: 'POST',
+        method: 'PUT',
         body: JSON.stringify({
           branch_id: branchId,
           year,
@@ -326,8 +330,8 @@ export const useDashboard = () => {
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      // 重新載入目標
-      await fetchRevenueTargets(year, branchId)
+      // 重新載入目標 (該月份)
+      await fetchRevenueTargets(year, undefined, month)
       return true
     } catch (error) {
       handleError(error, {
@@ -448,7 +452,7 @@ export const useDashboard = () => {
     await Promise.all([
       fetchKPIs(period, branchId),
       fetchContractAlerts(30, branchId),
-      fetchRevenueTargets(new Date().getFullYear(), branchId)
+      fetchRevenueTargets(new Date().getFullYear(), branchId, new Date().getMonth() + 1)
     ])
   }
 
