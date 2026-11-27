@@ -865,7 +865,7 @@ describe('useDashboard', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          method: 'POST',
+          method: 'PUT',
           headers: expect.objectContaining({
             'Content-Type': 'application/json'
           })

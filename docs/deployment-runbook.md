@@ -311,6 +311,7 @@ psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_check_ins_m
 #    - check_ins: idx_check_ins_member_id replaced by
 #      idx_check_ins_member_time (member_id, check_in_time) (#13; built in step 2)
 #    - contracts.transferred_from_contract_id added (NULL, FK -> contracts.id): contract transfer
+#    - revenue_targets table created (empty; set targets in the war room)
 bun run db:push
 ```
 
@@ -324,6 +325,7 @@ psql "$DATABASE_URL" -c "SELECT numeric_precision, numeric_scale FROM informatio
 psql "$DATABASE_URL" -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'bookings' AND column_name IN ('override_reason', 'override_by');"   # expect 2 rows (text, uuid)
 psql "$DATABASE_URL" -c "SELECT c.relname, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname LIKE 'idx_check_ins_member%';"   # expect only idx_check_ins_member_time, indisvalid = t
 psql "$DATABASE_URL" -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'contracts' AND column_name = 'transferred_from_contract_id';"   # expect 1 row (uuid)
+psql "$DATABASE_URL" -c "SELECT count(*) FROM revenue_targets;"   # table exists (0 rows on a fresh upgrade)
 ```
 
 The first query must list `status` (varchar 20), `receipt_no` (varchar 100) and

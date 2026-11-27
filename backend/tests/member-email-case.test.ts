@@ -70,6 +70,9 @@ describe('OAuth email matching', () => {
     process.env.GOOGLE_CLIENT_SECRET = 'test-secret';
   });
 
+  const initState = async () =>
+    (await (await app.request('/api/member/oauth/google/init')).json()).data.state as string;
+
   const mockGoogle = (email: string, userId: string) =>
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -80,7 +83,7 @@ describe('OAuth email matching', () => {
   it('links a social account by email regardless of case', async () => {
     const spy = mockGoogle(MIXED, providerUserId);
     try {
-      const res = await post('/api/member/oauth/google/callback', { code: 'abc' });
+      const res = await post('/api/member/oauth/google/callback', { code: 'abc', state: await initState() });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.data.isNewMember).toBe(false);
@@ -94,7 +97,7 @@ describe('OAuth email matching', () => {
   it('reports needsRegistration for an unknown email (no member created)', async () => {
     const spy = mockGoogle(`Nobody.${suffix}@Test.Test`, `g2-${suffix}`);
     try {
-      const body = await (await post('/api/member/oauth/google/callback', { code: 'abc' })).json();
+      const body = await (await post('/api/member/oauth/google/callback', { code: 'abc', state: await initState() })).json();
       expect(body.data.needsRegistration).toBe(true);
       expect(body.data.member).toBeUndefined();
     } finally {

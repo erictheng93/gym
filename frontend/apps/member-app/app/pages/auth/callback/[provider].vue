@@ -77,14 +77,12 @@ onMounted(async () => {
   const isLink = typeof window !== 'undefined' && sessionStorage.getItem('oauth_intent') === 'link'
   if (isLink) {
     sessionStorage.removeItem('oauth_intent')
-    sessionStorage.removeItem('oauth_state')
-    sessionStorage.removeItem('oauth_provider')
     if (!accessToken.value) {
       status.value = 'error'
       errorMessage.value = '請先登入會員後再綁定社群帳號'
       return
     }
-    const linkResult = await linkSocialAccount(provider.value, code.value, accessToken.value)
+    const linkResult = await linkSocialAccount(provider.value, code.value, state.value || '', accessToken.value)
     if (!linkResult.success) {
       status.value = 'error'
       errorMessage.value = linkResult.error || '綁定失敗，請重試'
