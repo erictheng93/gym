@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, otpTokens, otpSendLogs, members, branches, tenants } from '../db/index.js';
 import { eq, and, asc, sql } from 'drizzle-orm';
-import { rateLimiter, getClientIp } from '../middleware/index.js';
+import { rateLimiter, limitMax, getClientIp } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
 import { emailService } from '../services/email.js';
 import { smsService } from '../services/sms.js';
@@ -83,6 +83,16 @@ const otpSendHourlyRateLimiter = rateLimiter({
   max: process.env.NODE_ENV === 'test' ? 100 : 5,
   keyGenerator: (c) => `otp:send:hourly:${c.get('otpRateKey')}`,
   message: '今日發送次數已達上限，請稍後再試',
+});
+
+// 30 sends per hour per client IP. The identifier limits above cap one inbox,
+// not one sender rotating through phone numbers (SMS cost). Members on shared
+// gym Wi-Fi share this bucket, hence well above one person's need.
+const otpSendIpRateLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: limitMax(30),
+  keyGenerator: (c) => `otp:send:ip:${getClientIp(c)}`,
+  message: '發送次數已達上限，請稍後再試',
 });
 
 // 5 verify attempts per 15 minutes per identifier
@@ -185,6 +195,7 @@ app.post(
   '/send',
   zValidator('json', sendOtpSchema),
   setOtpRateKey,
+  otpSendIpRateLimiter,
   otpSendRateLimiter,
   otpSendHourlyRateLimiter,
   async (c) => {
