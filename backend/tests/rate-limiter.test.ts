@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { limitMax, rateLimiter } from '../src/middleware/rate-limiter.js';
-import { getClientIp, trustedProxyHops } from '../src/middleware/client-ip.js';
+import { getClientIp, isPublicAddress, trustedProxyHops } from '../src/middleware/client-ip.js';
 
 describe('limitMax', () => {
   it('uses the production budget by default', () => {
@@ -131,5 +131,16 @@ describe('rateLimiter store cap', () => {
 
     vi.setSystemTime(1_000_000 + 60_001);
     expect((await hit('c')).status).toBe(200);
+  });
+});
+
+describe('isPublicAddress', () => {
+  // A non-public "client" address means TRUST_PROXY is off by a hop and the
+  // per-IP OTP cap would put every member in one bucket.
+  it.each(['203.0.113.9', '8.8.8.8', '2001:db8::1', '::ffff:1.2.3.4'])('%s is a visitor', ip => {
+    expect(isPublicAddress(ip)).toBe(true);
+  });
+  it.each(['unknown', '', '10.0.0.5', '172.17.0.2', '192.168.1.10', '127.0.0.1', '100.64.0.1', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.5'])('%s is not', ip => {
+    expect(isPublicAddress(ip)).toBe(false);
   });
 });

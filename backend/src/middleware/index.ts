@@ -14,4 +14,4 @@ export {
   extraSecurityHeaders,
   requestId,
 } from './csrf.js';
-export { getClientIp, trustedProxyHops } from './client-ip.js';
+export { getClientIp, trustedProxyHops, isPublicAddress } from './client-ip.js';

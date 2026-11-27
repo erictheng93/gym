@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import app from '../src/app.js';
 import { generateMemberTokens } from '../src/services/member-jwt.js';
 import {
@@ -213,6 +213,29 @@ describe('Member OTP Routes', () => {
       expect(verified.status).toBe(200);
       expect(Number(verified.headers.get('X-RateLimit-Remaining')))
         .toBe(Number(wrong.headers.get('X-RateLimit-Remaining')) - 1);
+    });
+
+    it('caps sends per client IP even when every identifier is new', async () => {
+      vi.stubEnv('TRUST_PROXY', '1');
+      const send = (n: number, ip: string) => app.request('/api/member/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip },
+        body: JSON.stringify({ identifier: `ip-cap-${n}@nowhere.test`, type: 'email' }),
+      });
+      try {
+        // limitMax gives tests a budget of 100 (production: 30)
+        for (let n = 0; n < 100; n++) expect((await send(n, '203.0.113.9')).status).toBe(200);
+        const blocked = await send(100, '203.0.113.9');
+        expect(blocked.status).toBe(429);
+        expect((await send(101, '203.0.113.10')).status).toBe(200);
+        // An internal address means a mis-set TRUST_PROXY: skip the IP cap rather than lock everyone out
+        for (let n = 200; n <= 300; n++) expect((await send(n, '10.0.0.5')).status).toBe(200);
+      } finally {
+        vi.unstubAllEnvs();
+        const { db, otpSendLogs } = await import('../src/db/index.js');
+        const { like } = await import('drizzle-orm');
+        await db.delete(otpSendLogs).where(like(otpSendLogs.identifier, 'ip-cap-%'));
+      }
     });
 
     it('POST /send should accept valid email OTP request', async () => {
