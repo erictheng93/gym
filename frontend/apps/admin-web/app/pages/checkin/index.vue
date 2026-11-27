@@ -678,6 +678,7 @@ const todayCountLabel = computed(() => {
                 <input
                   v-model="searchQuery"
                   type="text"
+                  aria-label="搜尋會員姓名、編號、手機或 Email"
                   :placeholder="PAGES.CHECKIN.SEARCH_PLACEHOLDER"
                   class="search-input"
                   autofocus

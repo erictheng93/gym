@@ -105,7 +105,8 @@ const otpIdentifierSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('email'),
-    identifier: z.string().trim().min(1, '請輸入手機號碼或 Email').transform(email => email.toLowerCase()),
+    identifier: z.string().trim().min(1, '請輸入手機號碼或 Email').max(254, '請輸入有效的 Email')
+      .transform(email => email.toLowerCase()),
   }),
 ]);
 

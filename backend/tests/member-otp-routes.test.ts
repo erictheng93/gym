@@ -32,6 +32,17 @@ describe('Member OTP Routes', () => {
     expect(res.headers.has('X-RateLimit-Remaining')).toBe(false);
   });
 
+  // The identifier becomes a rate-limiter key, so its size must be bounded (RFC 5321: 254)
+  it.each(['send', 'verify'])('rejects an over-long email before the %s limiter', async endpoint => {
+    const res = await app.request(`/api/member/otp/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: `${'a'.repeat(250)}@x.io`, type: 'email', code: '000000' }),
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.has('X-RateLimit-Remaining')).toBe(false);
+  });
+
   describe('POST /api/member/otp/send - validation', () => {
     it('should reject empty body', async () => {
       const res = await app.request('/api/member/otp/send', {

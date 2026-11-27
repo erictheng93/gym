@@ -8,19 +8,40 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
+/**
+ * Upper bound on tracked keys. Some keys are chosen by the client (the OTP
+ * identifier on the unauthenticated /api/member/otp/send lives for an hour),
+ * so without a cap the store grows with request rate until the process runs
+ * out of memory.
+ */
+const parsedMaxKeys = Number(process.env.RATE_LIMIT_MAX_KEYS);
+const MAX_KEYS = Number.isInteger(parsedMaxKeys) && parsedMaxKeys > 0 ? parsedMaxKeys : 100_000;
+
 const CLEANUP_INTERVAL = 60 * 1000;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
+function pruneExpired(now: number) {
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (entry.resetAt <= now) {
+      rateLimitStore.delete(key);
+    }
+  }
+}
+
+/**
+ * Whether a new key fits. When full, expired entries are pruned first; if it
+ * is still full the new key is refused. Live entries are never evicted: that
+ * would let a flood of fresh keys reset an existing brute-force counter.
+ */
+function hasRoomForNewKey(now: number): boolean {
+  if (rateLimitStore.size < MAX_KEYS) return true;
+  pruneExpired(now);
+  return rateLimitStore.size < MAX_KEYS;
+}
+
 function startCleanup() {
   if (cleanupTimer) return;
-  cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (entry.resetAt <= now) {
-        rateLimitStore.delete(key);
-      }
-    }
-  }, CLEANUP_INTERVAL);
+  cleanupTimer = setInterval(() => pruneExpired(Date.now()), CLEANUP_INTERVAL);
   cleanupTimer.unref?.();
 }
 
@@ -60,6 +81,11 @@ export function rateLimiter(options: RateLimitOptions = {}): MiddlewareHandler {
     let entry = rateLimitStore.get(key);
 
     if (!entry || entry.resetAt <= now) {
+      // ponytail: per-process memory store (fails closed when full); move to Redis if the API runs >1 instance
+      if (!entry && !hasRoomForNewKey(now)) {
+        c.header('Retry-After', String(Math.ceil(CLEANUP_INTERVAL / 1000)));
+        return c.json({ success: false, error: message }, 429);
+      }
       entry = { count: 0, resetAt: now + windowMs };
       rateLimitStore.set(key, entry);
     }

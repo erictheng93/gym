@@ -139,6 +139,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
 
       updateOnlineStatus()
       loadPendingCount()
+      pruneExpiredCache().catch(() => {})
     }
 
     const loadPendingCount = async () => {
@@ -472,6 +473,39 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       }
     }
 
+    /**
+     * Delete every expired entry. getCache only removes an expired entry when
+     * that exact key is read again, and keys embed query options (date ranges,
+     * filters), so without this sweep the store only ever grows.
+     * Resolves with the number deleted once the transaction has committed.
+     */
+    const pruneExpiredCache = async (): Promise<number> => {
+      try {
+        const db = await initDB(dbName)
+        const now = Date.now()
+        return await new Promise((resolve) => {
+          const tx = db.transaction(STORES.cache, 'readwrite')
+          let pruned = 0
+          // ponytail: full cursor scan; add an expiresAt index if the cache grows past a few thousand entries
+          const request = tx.objectStore(STORES.cache).openCursor()
+          request.onsuccess = () => {
+            const cursor = request.result
+            if (!cursor) return
+            if ((cursor.value as CacheEntry<unknown>).expiresAt < now) {
+              cursor.delete()
+              pruned++
+            }
+            cursor.continue()
+          }
+          tx.oncomplete = () => resolve(pruned)
+          tx.onerror = () => resolve(0)
+          tx.onabort = () => resolve(0)
+        })
+      } catch {
+        return 0
+      }
+    }
+
     // ---- Computed ----
 
     const hasPendingRequests = computed(() => pendingCount.value > 0)
@@ -500,6 +534,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       setCache,
       deleteCache,
       clearCache,
+      pruneExpiredCache,
     }
   }
 }
