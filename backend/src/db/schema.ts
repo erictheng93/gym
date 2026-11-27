@@ -449,7 +449,9 @@ export const checkIns = pgTable('check_ins', {
   locationDevice: varchar('location_device', { length: 100 }),
   notes: text('notes'),
 }, (table) => [
-  index('idx_check_ins_member_id').on(table.memberId),
+  // (member, time) serves check-in validation (member + today's range) and also
+  // member-only lookups via its leading column, so no separate member_id index (#13)
+  index('idx_check_ins_member_time').on(table.memberId, table.checkInTime),
   index('idx_check_ins_branch_id').on(table.branchId),
   index('idx_check_ins_time').on(table.checkInTime),
   index('idx_check_ins_branch_time').on(table.branchId, table.checkInTime),
