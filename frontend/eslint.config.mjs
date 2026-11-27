@@ -133,6 +133,7 @@ export default tseslint.config(
         useMemberContracts: 'readonly',
         useMemberProfile: 'readonly',
         useCheckIns: 'readonly',
+        useCheckInQr: 'readonly',
         useIssues: 'readonly',
         useLeads: 'readonly',
         useLessonPlans: 'readonly',
