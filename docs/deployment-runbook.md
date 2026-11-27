@@ -310,6 +310,7 @@ psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_check_ins_m
 #    - bookings.override_reason / override_by added (NULL) (#136)
 #    - check_ins: idx_check_ins_member_id replaced by
 #      idx_check_ins_member_time (member_id, check_in_time) (#13; built in step 2)
+#    - contracts.transferred_from_contract_id added (NULL, FK -> contracts.id): contract transfer
 bun run db:push
 ```
 
@@ -322,6 +323,7 @@ psql "$DATABASE_URL" -c "SELECT count(*) AS payments_without_status_or_tenant FR
 psql "$DATABASE_URL" -c "SELECT numeric_precision, numeric_scale FROM information_schema.columns WHERE table_name = 'performance_reviews' AND column_name = 'overall_score';"   # expect 5, 2
 psql "$DATABASE_URL" -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'bookings' AND column_name IN ('override_reason', 'override_by');"   # expect 2 rows (text, uuid)
 psql "$DATABASE_URL" -c "SELECT c.relname, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname LIKE 'idx_check_ins_member%';"   # expect only idx_check_ins_member_time, indisvalid = t
+psql "$DATABASE_URL" -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'contracts' AND column_name = 'transferred_from_contract_id';"   # expect 1 row (uuid)
 ```
 
 The first query must list `status` (varchar 20), `receipt_no` (varchar 100) and

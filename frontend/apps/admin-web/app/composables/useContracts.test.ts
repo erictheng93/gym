@@ -308,6 +308,58 @@ describe('useContracts', () => {
     })
   })
 
+  describe('轉讓 / 續約 / 簽名', () => {
+    const ok = (data: unknown) => mockFetchInstance.apiFetch.mockResolvedValueOnce({ success: true, data })
+
+    it('transfer 送到 /transfer；手續費為 0 時不送 fee / paymentMethod', async () => {
+      const { transferContract } = useContracts()
+
+      ok({ original: { ...apiContract, status: 'TRANSFERRED' }, contract: { ...apiContract, id: 'c-2', totalAmount: '0.00' }, fee: null })
+      const result = await transferContract('c-1', { toMemberId: 'm-2', fee: 300, paymentMethod: 'CASH', reason: '出國' })
+      expect(lastCall()).toEqual(['/contracts/c-1/transfer', {
+        method: 'POST',
+        body: { toMemberId: 'm-2', fee: 300, paymentMethod: 'CASH', reason: '出國' }
+      }])
+      expect(result?.original.status).toBe('TRANSFERRED')
+      expect(result?.contract).toMatchObject({ id: 'c-2', totalAmount: 0 })
+
+      ok({ original: apiContract, contract: apiContract, fee: null })
+      await transferContract('c-1', { toMemberId: 'm-2', fee: 0, paymentMethod: 'CASH' })
+      expect(lastCall()[1]).toEqual({ method: 'POST', body: { toMemberId: 'm-2' } })
+    })
+
+    it('renew POST /renew（無 body），回傳新的草稿合約', async () => {
+      const { renewContract } = useContracts()
+      ok({ ...apiContract, id: 'c-3', status: 'DRAFT', totalAmount: '4800.00' })
+
+      const result = await renewContract('c-1')
+
+      expect(lastCall()).toEqual(['/contracts/c-1/renew', { method: 'POST' }])
+      expect(result).toMatchObject({ id: 'c-3', status: 'DRAFT', totalAmount: 4800 })
+    })
+
+    it('sign 把 PNG data URL 送到 /signature', async () => {
+      const { signContract } = useContracts()
+      ok({ ...apiContract, digitalSignature: 'file-1' })
+
+      const result = await signContract('c-1', 'data:image/png;base64,AAAA')
+
+      expect(lastCall()).toEqual(['/contracts/c-1/signature', { method: 'POST', body: { image: 'data:image/png;base64,AAAA' } }])
+      expect(result?.digitalSignature).toBe('file-1')
+    })
+
+    it('轉讓被後端拒絕時回傳 null 並顯示原因', async () => {
+      mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('此方案不允許轉讓'))
+      const { transferContract } = useContracts()
+
+      expect(await transferContract('c-1', { toMemberId: 'm-2' })).toBeNull()
+      expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({
+        context: 'useContracts.transferContract',
+        customMessage: '此方案不允許轉讓'
+      }))
+    })
+  })
+
   describe('getContractStats', () => {
     it('每個狀態各查一次（status + limit=1），取 pagination.total', async () => {
       mockFetchInstance.apiFetch.mockImplementation(async (_path: string, options: { params: { status: string } }) => ({

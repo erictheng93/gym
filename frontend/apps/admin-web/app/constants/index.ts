@@ -245,6 +245,7 @@ export const MESSAGES = {
     CONTRACT_TERMINATE_FAILED: '終止合約失敗，請稍後再試',
     CONTRACT_EXTEND_FAILED: '延期合約失敗，請稍後再試',
     CONTRACT_RENEW_FAILED: '續約合約失敗，請稍後再試',
+    CONTRACT_SIGNATURE_FAILED: '簽名儲存失敗，請稍後再試',
 
     // Payment
     PAYMENT_CREATE_FAILED: '建立付款紀錄失敗，請稍後再試',
@@ -333,7 +334,8 @@ export const MESSAGES = {
     CONTRACT_TRANSFERRED: '合約轉讓成功',
     CONTRACT_TERMINATED: '合約已終止',
     CONTRACT_EXTENDED: '合約延期成功',
-    CONTRACT_RENEWED: '合約續約成功',
+    CONTRACT_RENEWED: '已建立續約草稿，請確認金額、套用優惠並完成簽名後啟用',
+    CONTRACT_SIGNED: '簽名已儲存',
 
     // Payment
     PAYMENT_CREATED: '付款紀錄建立成功',
@@ -537,13 +539,13 @@ export const PAGES = {
     EXTEND_CONTRACT: '延期合約',
     RENEW_CONTRACT: '續約',
     PAUSE_HINT: '暫停期間將自動延長合約結束日期',
-    RESUME_HINT: '恢復後合約將繼續有效至原定結束日期',
+    RESUME_HINT: '提前恢復時，到期日只順延實際暫停的天數',
     PAUSE_START: '暫停開始日',
     PAUSE_END: '暫停結束日',
     PAUSE_REASON_PLACEHOLDER: '請輸入暫停原因...',
     CONFIRM_PAUSE: '確定暫停',
     CONFIRM_RESUME: '確定恢復',
-    CONFIRM_RESUME_QUESTION: '確定要恢復此合約嗎？',
+    CONFIRM_RESUME_QUESTION: '確定要恢復此合約嗎？提前恢復時，到期日只順延實際暫停的天數。',
     CONFIRM_TRANSFER: '確定轉讓',
     TRANSFER_TO_MEMBER: '將此合約轉讓給另一位會員',
     SEARCH_TARGET_MEMBER: '搜尋目標會員',
@@ -552,6 +554,12 @@ export const PAGES = {
     TRANSFER_REASON_PLACEHOLDER: '請輸入轉讓原因...',
     NO_MEMBER_FOUND: '找不到符合的會員',
     NO_PHONE: '無電話',
+    TRANSFER_HINT: '原合約將標示為已轉讓；受讓會員取得同方案、同到期日的新合約，剩餘堂數一併轉移',
+    TRANSFER_FEE: '轉讓手續費（選填）',
+    TRANSFER_FEE_METHOD: '手續費付款方式',
+    TRANSFER_FEE_HINT: '系統不自動收費；填寫後記為新合約的一筆收入',
+    TRANSFER_SELECTED: '受讓會員',
+    TRANSFER_CHANGE_MEMBER: '重新選擇',
     // Terminate
     TERMINATE_HINT: '終止合約後將無法恢復，請確認是否要終止',
     TERMINATE_REASON: '終止原因',
@@ -562,10 +570,6 @@ export const PAGES = {
     NO_REFUND: '不退款',
     REFUND_MAX: '最多可退',
     REFUND_EXCEEDS_PAID: '退款金額不可超過已收金額',
-    // Not yet available (business rules not decided)
-    NOT_YET_AVAILABLE: '尚未開放',
-    TRANSFER_NOT_AVAILABLE: '轉讓功能尚未開放：轉讓手續費與權益移轉方式尚待確認',
-    RENEW_NOT_AVAILABLE: '續約功能尚未開放：續約計價方式尚待確認，請先以「新增合約」建立新合約',
     // Extend
     EXTEND_HINT: '延期將延長合約的結束日期',
     EXTEND_DAYS: '延期天數',
@@ -580,6 +584,15 @@ export const PAGES = {
     RENEW_AMOUNT: '續約金額',
     CONFIRM_RENEW: '確定續約',
     RENEW_SUCCESS: '續約成功，已建立新合約',
+    RENEW_CONFIRM_MESSAGE: '將以方案目前價格建立新的草稿合約（舊合約不變），可於草稿套用優惠券後再啟用。',
+    // Signature
+    SIGN_CONTRACT: '會員簽名',
+    RESIGN_CONTRACT: '重新簽名',
+    SAVE_SIGNATURE: '儲存簽名',
+    SIGNED: '已簽名',
+    NOT_SIGNED: '尚未簽名',
+    SIGN_REQUIRED_TO_ACTIVATE: '會員簽名後才能啟用合約',
+    SIGNATURE_SAVE_FAILED_AFTER_CREATE: '合約已建立，但簽名儲存失敗，請於合約頁重新簽名',
     // New Contract
     CREATE_TITLE: '新增合約',
     CREATE_CONTRACT: '建立會員合約',

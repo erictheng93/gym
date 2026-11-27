@@ -29,7 +29,10 @@ export interface ApiContract {
   totalAmount: string | number
   paidAmount: string | number
   paymentStatus: ContractPaymentStatus
+  /** files.id of the member's signature PNG (POST /contracts/:id/signature) */
   digitalSignature: string | null
+  /** Set on the recipient's contract created by a transfer */
+  transferredFromContractId?: string | null
   contractPdf?: string | null
   termsAccepted?: boolean
   notes: string | null
@@ -81,6 +84,8 @@ export interface ApiContractLog {
 export interface ApiContractDetail extends ApiContractListRow {
   branch: { id: string; name: string } | null
   salesPerson: { id: string; fullName: string } | null
+  /** Short-lived URL of the signature image; null when unsigned or storage is not configured */
+  signatureUrl?: string | null
   logs: ApiContractLog[]
 }
 
@@ -95,6 +100,7 @@ export interface ContractView extends Omit<ApiContract, 'totalAmount' | 'paidAmo
 export interface ContractDetail extends ContractView {
   branch: { id: string; name: string } | null
   salesPerson: { id: string; fullName: string } | null
+  signatureUrl: string | null
   logs: ApiContractLog[]
 }
 
@@ -126,6 +132,15 @@ export interface CancelContractInput {
   reason?: string
   /** Positive amount actually paid back; recorded as a COMPLETED REFUND payment in the same transaction */
   refund?: { amount: number; paymentMethod: PaymentMethod } | null
+}
+
+/** Body of POST /api/contracts/:id/transfer (manager and above) */
+export interface TransferContractInput {
+  toMemberId: string
+  /** Optional transfer fee, recorded as a COMPLETED INCOME payment on the new contract */
+  fee?: number | null
+  paymentMethod?: PaymentMethod
+  reason?: string
 }
 
 const toNumber = (value: unknown) => {
@@ -164,6 +179,7 @@ export const normalizeContractDetail = (detail: ApiContractDetail): ContractDeta
   ...normalizeContractRow(detail),
   branch: detail.branch ?? null,
   salesPerson: detail.salesPerson ?? null,
+  signatureUrl: detail.signatureUrl ?? null,
   logs: detail.logs ?? []
 })
 
@@ -322,6 +338,33 @@ export const useContracts = () => {
       MESSAGES.ERRORS.CONTRACT_TERMINATE_FAILED
     )
 
+  // 轉讓合約：原合約 → TRANSFERRED，受讓人取得同到期日的新合約（店長以上，同一 transaction）
+  const transferContract = async (id: string, input: TransferContractInput) => {
+    const data = await runAction<{ original: ApiContract; contract: ApiContract; fee: unknown }>(
+      `/contracts/${id}/transfer`,
+      {
+        toMemberId: input.toMemberId,
+        ...(input.fee && input.fee > 0 ? { fee: input.fee, paymentMethod: input.paymentMethod } : {}),
+        ...(input.reason ? { reason: input.reason } : {})
+      },
+      'useContracts.transferContract',
+      MESSAGES.ERRORS.CONTRACT_TRANSFER_FAILED
+    )
+    return data ? { original: normalizeContract(data.original), contract: normalizeContract(data.contract) } : null
+  }
+
+  // 續約：以方案目前價格建立新的草稿合約（舊合約不變），回傳新合約
+  const renewContract = async (id: string): Promise<ContractView | null> => {
+    const data = await runAction<ApiContract>(`/contracts/${id}/renew`, undefined, 'useContracts.renewContract', MESSAGES.ERRORS.CONTRACT_RENEW_FAILED)
+    return data ? normalizeContract(data) : null
+  }
+
+  // 會員簽名：PNG data URL 上傳至檔案儲存，合約指向該檔案（啟用前必須簽名）
+  const signContract = async (id: string, image: string): Promise<ContractView | null> => {
+    const data = await runAction<ApiContract>(`/contracts/${id}/signature`, { image }, 'useContracts.signContract', MESSAGES.ERRORS.CONTRACT_SIGNATURE_FAILED)
+    return data ? normalizeContract(data) : null
+  }
+
   // 統計資料（每個狀態一次 limit=1 查詢，取 pagination.total）
   const getContractStats = async (branchId?: string, force = false) => {
     const defaultStats = { active: 0, expired: 0, draft: 0 }
@@ -365,6 +408,9 @@ export const useContracts = () => {
     resumeContract,
     extendContract,
     cancelContract,
+    transferContract,
+    renewContract,
+    signContract,
     getContractStats
   }
 }

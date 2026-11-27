@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
 import app from '../src/app.js';
@@ -16,6 +17,11 @@ import {
   TEST_MEMBER_B_ID,
   TEST_PLAN_B_ID,
 } from './helpers.js';
+
+// Activation requires a stored signature (POST /:id/signature); these tests are not
+// about signing, so they point digital_signature at a placeholder file id.
+const markSigned = (id: string) =>
+  db.update(contracts).set({ digitalSignature: crypto.randomUUID() }).where(eq(contracts.id, id));
 
 describe('Contracts API', () => {
   let authToken: string;
@@ -266,6 +272,7 @@ describe('Contracts API', () => {
 
       const newContractId = createData.data.id;
 
+      await markSigned(newContractId);
       // Activate it
       const response = await authRequest(`/api/contracts/${newContractId}/activate`, {
         method: 'POST',
@@ -277,6 +284,28 @@ describe('Contracts API', () => {
       const data = await response.json();
       expect(data.success).toBe(true);
       expect(data.data.status).toBe('ACTIVE');
+    });
+
+    it('rejects activating a draft that has no signature', async () => {
+      const createResponse = await authRequest('/api/contracts', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({
+          memberId: TEST_MEMBER_ID,
+          planId: TEST_PLAN_ID,
+          branchId: TEST_BRANCH_ID,
+          startDate: new Date().toISOString().split('T')[0],
+          totalAmount: 1000,
+        }),
+      });
+      const { data: created } = await createResponse.json();
+
+      const response = await authRequest(`/api/contracts/${created.id}/activate`, { method: 'POST', token: authToken });
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toContain('簽名');
+      const [row] = await db.select().from(contracts).where(eq(contracts.id, created.id));
+      expect(row!.status).toBe('DRAFT');
     });
 
     it('should reject activating a non-DRAFT contract', async () => {
@@ -328,6 +357,7 @@ describe('Contracts API', () => {
       const contractId = createData.data.id;
       const originalEndDate = createData.data.endDate;
 
+      await markSigned(contractId);
       // Activate
       const activateRes = await authRequest(`/api/contracts/${contractId}/activate`, {
         method: 'POST',
@@ -382,6 +412,7 @@ describe('Contracts API', () => {
         }),
       });
       const { data } = await createRes.json();
+      await markSigned(data.id);
       await authRequest(`/api/contracts/${data.id}/activate`, { method: 'POST', token: authToken });
       return data as { id: string; endDate: string };
     }
@@ -488,6 +519,7 @@ describe('Contracts API', () => {
       expect(createData.success).toBe(true);
       const contractId = createData.data.id;
 
+      await markSigned(contractId);
       // Activate
       await authRequest(`/api/contracts/${contractId}/activate`, {
         method: 'POST',

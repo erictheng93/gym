@@ -21,6 +21,7 @@ vi.stubGlobal('useRouter', () => ({ push: mockPush, back: mockBack }))
 vi.stubGlobal('definePageMeta', vi.fn())
 
 const mockCreateContract = vi.fn()
+const mockSignContract = vi.fn()
 const mockFetchMembers = vi.fn()
 const mockFetchPlans = vi.fn()
 const mockFetchBranches = vi.fn()
@@ -29,7 +30,7 @@ const mockPlans = ref<Partial<Plan>[]>([])
 const mockBranches = ref<Partial<Branch>[]>([])
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 
-vi.stubGlobal('useContracts', () => ({ createContract: mockCreateContract }))
+vi.stubGlobal('useContracts', () => ({ createContract: mockCreateContract, signContract: mockSignContract }))
 vi.stubGlobal('useMembers', () => ({ members: mockMembers, fetchMembers: mockFetchMembers }))
 vi.stubGlobal('usePlans', () => ({ plans: mockPlans, fetchPlans: mockFetchPlans }))
 vi.stubGlobal('useBranches', () => ({ branches: mockBranches, fetchBranches: mockFetchBranches }))
@@ -98,6 +99,7 @@ describe('contracts/new.vue', () => {
     mockFetchMembers.mockResolvedValue(undefined)
     mockFetchPlans.mockResolvedValue(undefined)
     mockFetchBranches.mockResolvedValue(undefined)
+    mockSignContract.mockResolvedValue({ id: 'contract-1', digitalSignature: 'file-1' })
     mockCreateContract.mockResolvedValue({ id: 'contract-1' })
   })
 
@@ -241,7 +243,22 @@ describe('contracts/new.vue', () => {
         totalAmount: 30000,
         notes: null
       })
+      // the drawn signature is stored on the new contract (R2 + digital_signature)
+      expect(mockSignContract).toHaveBeenCalledWith('contract-1', SIGNATURE)
       expect(toast.success).toHaveBeenCalledWith(MESSAGES.SUCCESS.CONTRACT_CREATED)
+      expect(mockPush).toHaveBeenCalledWith('/contracts/contract-1')
+    })
+
+    it('still opens the DRAFT, with a warning, when the signature fails to save', async () => {
+      mockSignContract.mockResolvedValue(null)
+      const wrapper = await mountPage()
+      await goToStep3(wrapper, 'plan-year')
+      wrapper.findComponent(SignaturePadStub).vm.$emit('update:modelValue', SIGNATURE)
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+
+      expect(toast.success).not.toHaveBeenCalled()
+      expect(toast.warning).toHaveBeenCalledWith(PAGES.CONTRACTS.SIGNATURE_SAVE_FAILED_AFTER_CREATE)
       expect(mockPush).toHaveBeenCalledWith('/contracts/contract-1')
     })
 
@@ -269,6 +286,7 @@ describe('contracts/new.vue', () => {
 
       expect(wrapper.find('.submit-error').text()).toContain(PAGES.CONTRACTS.ERROR_CREATE_FAILED)
       expect(toast.success).not.toHaveBeenCalled()
+      expect(mockSignContract).not.toHaveBeenCalled()
       expect(mockPush).not.toHaveBeenCalled()
       expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
     })

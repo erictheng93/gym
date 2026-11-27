@@ -15,6 +15,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
 // =============================================================================
@@ -238,8 +239,10 @@ export const contracts = pgTable('contracts', {
   totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
   paidAmount: decimal('paid_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   paymentStatus: varchar('payment_status', { length: 20 }).notNull().default('UNPAID').$type<typeof PAYMENT_STATUS[number]>(),
-  digitalSignature: uuid('digital_signature'),
+  digitalSignature: uuid('digital_signature'), // files.id of the member's signature PNG
   contractPdf: uuid('contract_pdf'),
+  // Set on the recipient's contract created by POST /api/contracts/:id/transfer
+  transferredFromContractId: uuid('transferred_from_contract_id').references((): AnyPgColumn => contracts.id),
   termsAccepted: boolean('terms_accepted').notNull().default(false),
   notes: text('notes'),
   createdBy: uuid('created_by').references(() => employees.id),

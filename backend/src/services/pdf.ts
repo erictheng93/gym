@@ -2,6 +2,7 @@
 import { db, contracts, members, membershipPlans, branches, payments } from '../db/index.js';
 import { and, eq } from 'drizzle-orm';
 import { escapeHtml } from '../utils/html.js';
+import { fileService } from './files.js';
 export { escapeHtml };
 
 // Browser instance for PDF generation (puppeteer)
@@ -24,7 +25,7 @@ export interface PdfGenerationResult {
   notFound?: boolean;
 }
 
-interface ContractData {
+export interface ContractData {
   contractNo: string;
   memberName: string;
   memberCode: string;
@@ -38,6 +39,8 @@ interface ContractData {
   branchName: string;
   branchAddress?: string;
   createdAt: string;
+  /** The member's signature PNG as a data: URI (the renderer only loads data:/about: URLs) */
+  signatureDataUri?: string;
 }
 
 interface InvoiceData {
@@ -97,6 +100,7 @@ const PDF_CONTRACT_SELECT = {
   memberId: contracts.memberId,
   planId: contracts.planId,
   branchId: contracts.branchId,
+  digitalSignature: contracts.digitalSignature,
 };
 
 const PDF_CONTRACT_MEMBER_SELECT = {
@@ -159,7 +163,7 @@ export async function generateContractPdf(contractId: string, tenantId: string):
     }
 
     // Fetch related data in parallel
-    const [[member], [plan], [branch]] = await Promise.all([
+    const [[member], [plan], [branch], signature] = await Promise.all([
       db
         .select(PDF_CONTRACT_MEMBER_SELECT)
         .from(members)
@@ -175,6 +179,7 @@ export async function generateContractPdf(contractId: string, tenantId: string):
         .from(branches)
         .where(and(eq(branches.id, contract.branchId), eq(branches.tenantId, tenantId)))
         .limit(1),
+      contract.digitalSignature ? fileService.getContent(contract.digitalSignature, tenantId) : null,
     ]);
 
     const contractData: ContractData = {
@@ -191,6 +196,9 @@ export async function generateContractPdf(contractId: string, tenantId: string):
       branchName: branch?.name || 'Unknown Branch',
       branchAddress: branch?.address || undefined,
       createdAt: contract.createdAt?.toISOString() || new Date().toISOString(),
+      signatureDataUri: signature?.mimeType === 'image/png'
+        ? `data:image/png;base64,${signature.data.toString('base64')}`
+        : undefined,
     };
 
     // Generate HTML
@@ -207,7 +215,7 @@ export async function generateContractPdf(contractId: string, tenantId: string):
   }
 }
 
-function generateContractHtml(data: ContractData): string {
+export function generateContractHtml(data: ContractData): string {
   const planTypeText = data.planType === 'TIME_BASED' ? '期限制' : '堂數制';
 
   return `
@@ -294,6 +302,13 @@ function generateContractHtml(data: ContractData): string {
         .signature-box {
           width: 45%;
           text-align: center;
+        }
+        .signature-image {
+          display: block;
+          max-width: 100%;
+          height: 60px;
+          margin: 0 auto -60px;
+          object-fit: contain;
         }
         .signature-line {
           border-top: 1px solid #333;
@@ -383,6 +398,7 @@ function generateContractHtml(data: ContractData): string {
 
       <div class="signature">
         <div class="signature-box">
+          ${data.signatureDataUri ? `<img class="signature-image" src="${escapeHtml(data.signatureDataUri)}" alt="會員簽名">` : ''}
           <div class="signature-line">會員簽名</div>
         </div>
         <div class="signature-box">
