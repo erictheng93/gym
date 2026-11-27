@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, checkIns, members, contracts, branches, employees, membershipPlans } from '../db/index.js';
@@ -6,6 +7,12 @@ import { eq, and, sql, desc, gte, lte, gt, inArray } from 'drizzle-orm';
 import { requireAuth, requireTenant } from '../middleware/index.js';
 import type { AuthVariables, TenantVariables } from '../middleware/index.js';
 import { getTenantBranchIds } from '../utils/tenant-cache.js';
+import {
+  verifyCheckInQrToken,
+  reserveCheckInQrJti,
+  releaseCheckInQrJti,
+} from '../services/checkin-qr.js';
+import type { CheckInQrPayload } from '../services/checkin-qr.js';
 
 const app = new Hono<{ Variables: AuthVariables & TenantVariables }>();
 
@@ -119,14 +126,27 @@ const COUNT_SELECT = {
 app.use('*', requireAuth);
 app.use('*', requireTenant);
 
+// Either a manual entry (memberId + branchId) or a scanned member QR (qrToken, signed by the
+// backend: services/checkin-qr.ts). With a token the member comes from the token, never the body.
 const createCheckInSchema = z.object({
-  memberId: z.string().uuid(),
-  branchId: z.string().uuid(),
+  memberId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
+  qrToken: z.string().min(1).max(1024).optional(),
   contractId: z.string().uuid().optional(),
   checkInType: z.enum(['ENTRY', 'CLASS', 'FACILITY']).optional().default('ENTRY'),
   checkInMethod: z.enum(['QR_CODE', 'MANUAL', 'CARD']).optional().default('MANUAL'),
   notes: z.string().optional(),
+}).refine((d) => d.qrToken || (d.memberId && d.branchId), {
+  message: 'memberId 與 branchId 為必填',
 });
+
+type CreateCheckInBody = z.infer<typeof createCheckInSchema>;
+type CheckInContext = Context<{ Variables: AuthVariables & TenantVariables }>;
+
+const QR_ERRORS = {
+  INVALID_QR: 'QR Code 無效',
+  QR_EXPIRED: 'QR Code 已過期，請會員重新產生入場碼',
+} as const;
 
 // List check-ins
 app.get('/', async (c) => {
@@ -220,8 +240,57 @@ app.get('/', async (c) => {
 // Create check-in (entry)
 app.post('/', zValidator('json', createCheckInSchema), async (c) => {
   const tenantId = c.get('tenantId')!;
+  const body = c.req.valid('json');
+
+  if (!body.qrToken) return processCheckIn(c, body);
+
+  const verified = verifyCheckInQrToken(body.qrToken);
+  if (!verified.ok) {
+    return c.json({ success: false, error: QR_ERRORS[verified.code], code: verified.code }, 400);
+  }
+  const qr = verified.payload;
+  if (qr.tid !== tenantId) {
+    return c.json({ success: false, error: '此 QR Code 不屬於本館', code: 'QR_WRONG_TENANT' }, 400);
+  }
+  // One scan per token. Reserved before the async work so two simultaneous scans cannot both pass.
+  if (!reserveCheckInQrJti(qr)) {
+    return c.json({ success: false, error: 'QR Code 已使用，請會員重新產生入場碼', code: 'QR_REPLAY' }, 409);
+  }
+  try {
+    const response = await processCheckIn(c, body, qr);
+    // Not recorded (no contract, wrong branch, ...): the member may retry with the same code
+    if (!response.ok) releaseCheckInQrJti(qr);
+    return response;
+  } catch (error) {
+    releaseCheckInQrJti(qr);
+    throw error;
+  }
+});
+
+async function processCheckIn(c: CheckInContext, body: CreateCheckInBody, qr?: CheckInQrPayload): Promise<Response> {
+  const tenantId = c.get('tenantId')!;
   const user = c.get('user')!;
-  const data = c.req.valid('json');
+
+  let memberId = body.memberId!;
+  let branchId = body.branchId;
+  if (qr) {
+    memberId = qr.mid;
+    if (!branchId) {
+      const [own] = await db
+        .select({ branchId: members.branchId })
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.tenantId, tenantId)))
+        .limit(1);
+      if (!own) return c.json({ success: false, error: '會員不存在' }, 404);
+      branchId = own.branchId;
+    }
+  }
+  const data = {
+    ...body,
+    memberId,
+    branchId: branchId!,
+    checkInMethod: qr ? ('QR_CODE' as const) : body.checkInMethod,
+  };
 
   // Calculate today bounds
   const today = new Date().toISOString().slice(0, 10);
@@ -373,7 +442,7 @@ app.post('/', zValidator('json', createCheckInSchema), async (c) => {
       contract,
     },
   }, 201);
-});
+}
 
 // Get check-in by ID
 app.get('/:id', async (c) => {

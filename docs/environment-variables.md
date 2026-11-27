@@ -21,6 +21,7 @@ ENABLE_CRON=true
 SESSION_SECRET=your-session-secret-min-32-chars
 MEMBER_JWT_SECRET=your-member-jwt-secret-min-32-chars
 COACH_JWT_SECRET=your-coach-jwt-secret-min-32-chars
+CHECKIN_QR_SECRET=your-checkin-qr-secret-min-32-chars
 
 # CORS
 CORS_ORIGIN=http://localhost:3001,http://localhost:3002,http://localhost:3003
@@ -62,6 +63,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:15432/gym_nexus
 | `SESSION_SECRET` | **Yes** | - | Staff session signing secret (min 32 chars) |
 | `MEMBER_JWT_SECRET` | **Yes** | - | Member app JWT secret (min 32 chars) |
 | `COACH_JWT_SECRET` | **Yes** | - | Coach app JWT secret (min 32 chars) |
+| `CHECKIN_QR_SECRET` | **Yes** (production) | dev fallback outside production | HMAC key for the signed 30 s member check-in QR (min 32 chars; must differ from `MEMBER_JWT_SECRET`, `COACH_JWT_SECRET`, `SESSION_SECRET`; the API refuses to start in production otherwise). Rotating it only invalidates QR codes already on screen. |
 
 **Generate secrets:**
 ```bash

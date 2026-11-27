@@ -180,6 +180,7 @@ See `.env.example` for all available options. Key variables:
 | `SESSION_SECRET` | Staff auth session secret |
 | `MEMBER_JWT_SECRET` | Member app JWT secret |
 | `COACH_JWT_SECRET` | Coach app JWT secret |
+| `CHECKIN_QR_SECRET` | Signing key for the member check-in QR (distinct from the JWT secrets) |
 | `EMAIL_SMTP_*` | SMTP configuration |
 | `VAPID_*` | Web push notification keys |
 | `LINE_*` | LINE Messaging API keys |

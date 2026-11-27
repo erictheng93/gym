@@ -217,7 +217,8 @@ jobs:
           # Distinct random secrets: production refuses missing/short/shared JWT secrets (#9)
           docker run -d --name api --network host -e DATABASE_URL=$db \
             -e MEMBER_JWT_SECRET="$(openssl rand -hex 32)" \
-            -e COACH_JWT_SECRET="$(openssl rand -hex 32)" gym-api:ci
+            -e COACH_JWT_SECRET="$(openssl rand -hex 32)" \
+            -e CHECKIN_QR_SECRET="$(openssl rand -hex 32)" gym-api:ci
           docker run -d --name hr --network host -e DATABASE_URL=$db -e PORT=3001 \
             -e JWT_SECRET="$(openssl rand -hex 32)" hr-api:ci
           for url in http://localhost:8056/health http://localhost:3001/api/health; do
