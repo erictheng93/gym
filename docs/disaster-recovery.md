@@ -359,6 +359,7 @@ openssl rand -hex 32
 SESSION_SECRET=$(openssl rand -hex 32)
 MEMBER_JWT_SECRET=$(openssl rand -hex 32)
 COACH_JWT_SECRET=$(openssl rand -hex 32)
+CHECKIN_QR_SECRET=$(openssl rand -hex 32)
 
 # 3. Reset admin passwords via database
 docker compose exec database psql -U gym_nexus -d gym_nexus -c "

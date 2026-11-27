@@ -66,6 +66,7 @@ ENABLE_CRON=true
 SESSION_SECRET=<64-char-random-string>
 MEMBER_JWT_SECRET=<64-char-random-string>
 COACH_JWT_SECRET=<64-char-random-string>
+CHECKIN_QR_SECRET=<64-char-random-string>
 
 # CORS (Required - your production domains)
 CORS_ORIGIN=https://admin.gym-nexus.com,https://member.gym-nexus.com,https://coach.gym-nexus.com

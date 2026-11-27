@@ -6,13 +6,11 @@ definePageMeta({
 })
 
 const { member } = useMemberAuth()
-const { getCache, setCache } = useOfflineSync()
 const toast = useToast()
+const { token: qrToken, expiresAt: qrExpiry, status: qrStatus, refresh: refreshQr, start: startQr, stop: stopQr } = useCheckInQr()
 
 const qrCodeDataUrl = ref('')
-const qrExpiry = ref<Date | null>(null)
 const timeRemaining = ref(0)
-const isQrOffline = ref(false)
 
 // Pull-to-refresh
 const isPulling = ref(false)
@@ -21,77 +19,26 @@ const isRefreshing = ref(false)
 const startTouchY = ref(0)
 const PULL_THRESHOLD = 80
 
-// QR data cache settings
-const QR_DATA_CACHE_KEY = 'member:qr-data'
-const QR_DATA_TTL = 24 * 60 * 60 * 1000 // 24 hours
-
-interface QrCacheData {
-  memberCode: string
-  contractId: string | null
-  memberStatus: string
-}
-
-// Cache QR-relevant data for offline use
-const cacheQrData = async () => {
-  if (!member.value) return
-  const data: QrCacheData = {
-    memberCode: member.value.member_code,
-    contractId: member.value.activeContract?.id || null,
-    memberStatus: member.value.member_status,
+// 入場 QR Code = 後端簽發、30 秒有效的 token（離線時無法產生）
+watch(qrToken, async (value) => {
+  if (!value) {
+    qrCodeDataUrl.value = ''
+    return
   }
-  await setCache(QR_DATA_CACHE_KEY, data, QR_DATA_TTL)
-}
-
-// 生成入場 QR Code
-const generateQRCode = async () => {
-  isQrOffline.value = false
-
-  let memberCode: string | undefined
-  let contractId: string | null | undefined
-
-  if (member.value) {
-    memberCode = member.value.member_code
-    contractId = member.value.activeContract?.id || null
-    // Proactively cache for offline use
-    await cacheQrData()
-  } else {
-    // Try offline cache
-    const cached = await getCache<QrCacheData>(QR_DATA_CACHE_KEY)
-    if (cached) {
-      memberCode = cached.memberCode
-      contractId = cached.contractId
-      isQrOffline.value = true
-    } else {
-      toast.error('無法產生入場 QR Code，請連線後重試')
-      return
-    }
-  }
-
-  // QR Code 有效期 3 分鐘 (180 秒)
-  const expiry = new Date(Date.now() + 180 * 1000)
-  qrExpiry.value = expiry
-
-  // QR Code 內容: member_code + timestamp + signature (簡化版)
-  const payload = JSON.stringify({
-    m: memberCode,
-    t: expiry.getTime(),
-    c: contractId
-  })
-
   try {
-    qrCodeDataUrl.value = await QRCode.toDataURL(payload, {
+    qrCodeDataUrl.value = await QRCode.toDataURL(value, {
       width: 280,
       margin: 2,
-      color: {
-        dark: '#000000',
-        light: '#ffffff'
-      }
+      color: { dark: '#000000', light: '#ffffff' }
     })
   } catch (error) {
     console.error('QR Code generation failed:', error)
+    qrCodeDataUrl.value = ''
     toast.error('無法產生入場 QR Code')
   }
-}
+})
+
+const generateQRCode = () => refreshQr()
 
 // 更新倒數計時
 const updateCountdown = () => {
@@ -102,11 +49,6 @@ const updateCountdown = () => {
 
   const remaining = Math.max(0, qrExpiry.value.getTime() - Date.now())
   timeRemaining.value = Math.ceil(remaining / 1000)
-
-  if (remaining <= 0) {
-    // 自動重新生成
-    generateQRCode()
-  }
 }
 
 // Pull-to-refresh handlers
@@ -145,14 +87,16 @@ const handleTouchEnd = async () => {
 }
 
 // 初始化
-onMounted(async () => {
-  generateQRCode()
+onMounted(() => {
+  // 取得 token，頁面可見時每 25 秒自動更新
+  startQr()
 
   // 每秒更新倒數
   const timer = setInterval(updateCountdown, 1000)
 
   onUnmounted(() => {
     clearInterval(timer)
+    stopQr()
   })
 })
 
@@ -219,7 +163,7 @@ const contractStatusText = computed(() => {
     >
       <h2 id="qr-section-title" class="sr-only">入場 QR Code</h2>
       <p id="qr-section-desc" class="sr-only">
-        掃描此 QR Code 進入健身房，每 3 分鐘自動刷新，剩餘 {{ formatTime(timeRemaining) }}
+        掃描此 QR Code 進入健身房，每 30 秒自動更新，剩餘 {{ formatTime(timeRemaining) }}
       </p>
 
       <div class="qr-card">
@@ -236,15 +180,13 @@ const contractStatusText = computed(() => {
             role="status"
             aria-live="polite"
           >
-            <div class="qr-loading-spinner" />
+            <p v-if="qrStatus === 'offline'" class="qr-unavailable">請連線後顯示入場碼</p>
+            <p v-else-if="qrStatus === 'error'" class="qr-unavailable">暫時無法取得入場碼，請稍後重試</p>
+            <div v-else class="qr-loading-spinner" />
           </div>
         </div>
 
         <p class="member-code" aria-label="會員編號">{{ member?.member_code }}</p>
-
-        <p v-if="isQrOffline" class="offline-hint" role="status" aria-live="polite">
-          離線模式 - 使用快取資料
-        </p>
 
         <!-- Progress dots - Apple Watch style -->
         <div
@@ -257,7 +199,7 @@ const contractStatusText = computed(() => {
             v-for="i in 10"
             :key="i"
             class="dot"
-            :class="{ active: i <= Math.ceil(timeRemaining / 18) }"
+            :class="{ active: i <= Math.ceil(timeRemaining / 3) }"
           />
           <span class="time-hint">{{ formatTime(timeRemaining) }}</span>
         </div>
@@ -500,6 +442,16 @@ const contractStatusText = computed(() => {
   justify-content: center;
 }
 
+.qr-unavailable {
+  margin: 0;
+  padding: 0 12px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 .qr-loading-spinner {
   width: 32px;
   height: 32px;
@@ -520,17 +472,6 @@ const contractStatusText = computed(() => {
   color: var(--color-text-secondary);
   letter-spacing: 2px;
   margin-bottom: 16px;
-}
-
-.offline-hint {
-  font-size: 12px;
-  font-weight: 500;
-  color: #ff9500;
-  background: rgba(255, 149, 0, 0.1);
-  padding: 4px 12px;
-  border-radius: 12px;
-  display: inline-block;
-  margin-bottom: 12px;
 }
 
 /* Progress dots - Apple Watch style */

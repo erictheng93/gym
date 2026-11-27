@@ -1,7 +1,6 @@
 import { useFetch } from '~/composables/core/useFetch'
 import { useErrorHandler } from '~/composables/core/useErrorHandler'
 import { MESSAGES } from '~/constants'
-import { useMembers } from '~/composables/useMembers'
 
 // =============================================================================
 // Wire format of the staff check-ins API (backend/src/routes/check-ins.ts) and of
@@ -90,18 +89,9 @@ export interface ActiveContract {
   exhausted: boolean
 }
 
-export interface QrPayload {
-  memberCode: string
-  timestamp: number
-  contractId?: string
-}
-
 export type QrCheckinResult =
   | ({ success: true; member: CheckinMember } & CheckinResult)
   | { success: false; message: string }
-
-/** QR codes from the member app are valid for 30 seconds (GET /api/member/check-in/qr-data) */
-export const QR_VALIDITY_MS = 30_000
 
 /** Backend error text when it is a readable message, otherwise the fallback */
 const errorMessage = (error: unknown, fallback: string) => {
@@ -142,25 +132,6 @@ export const pickActiveContract = (rows: ApiMemberContract[], today = localDate(
   }
 }
 
-/** Parses a member-app QR string: {"m": memberCode, "t": timestamp_ms, "c"?: contractId} */
-export const parseQrPayload = (data: string): QrPayload | null => {
-  try {
-    const parsed = JSON.parse(data)
-    if (!parsed || typeof parsed.m !== 'string' || !parsed.m || !Number.isFinite(Number(parsed.t))) {
-      return null
-    }
-    return {
-      memberCode: parsed.m,
-      timestamp: Number(parsed.t),
-      contractId: typeof parsed.c === 'string' && parsed.c ? parsed.c : undefined
-    }
-  } catch {
-    return null
-  }
-}
-
-export const isQrExpired = (timestamp: number, now = Date.now()) => now - timestamp > QR_VALIDITY_MS || timestamp - now > QR_VALIDITY_MS
-
 const inFlightTodayCheckinsMap = new Map<string, Promise<void>>()
 const inFlightMemberContractMap = new Map<string, Promise<ActiveContract | null>>()
 const inFlightHasCheckedInMap = new Map<string, Promise<boolean>>()
@@ -168,7 +139,6 @@ const inFlightHasCheckedInMap = new Map<string, Promise<boolean>>()
 export const useCheckin = () => {
   const { apiFetch } = useFetch()
   const { handleError } = useErrorHandler()
-  const { findMemberByCode } = useMembers()
   const todayCheckins = useState<CheckinRecord[]>('today_checkins', () => [])
   const isLoading = useState('checkin_loading', () => false)
   const todayCount = useState('checkin_today_count', () => 0)
@@ -219,12 +189,20 @@ export const useCheckin = () => {
     branchId: string
     contractId?: string
     checkInMethod?: CheckinMethod
+  } | {
+    /** the raw string scanned from the member's QR: signed and verified by the backend */
+    qrToken: string
+    branchId?: string
   }): Promise<CheckinResult> => {
-    const { memberId, branchId, contractId, checkInMethod = 'MANUAL' } = options
-    const { data } = await apiFetch<ApiCheckinCreated>('/check-ins', {
-      method: 'POST',
-      body: { memberId, branchId, checkInMethod, ...(contractId ? { contractId } : {}) }
-    })
+    const body = 'qrToken' in options
+      ? { qrToken: options.qrToken, ...(options.branchId ? { branchId: options.branchId } : {}) }
+      : {
+          memberId: options.memberId,
+          branchId: options.branchId,
+          checkInMethod: options.checkInMethod ?? 'MANUAL',
+          ...(options.contractId ? { contractId: options.contractId } : {})
+        }
+    const { data } = await apiFetch<ApiCheckinCreated>('/check-ins', { method: 'POST', body })
     if (!data) throw new Error(MESSAGES.ERRORS.CHECKIN)
 
     const record: CheckinRecord = {
@@ -320,34 +298,19 @@ export const useCheckin = () => {
 
   /**
    * Front-desk QR check-in: the member shows the QR from the member app, staff scans it.
-   * The QR only names the member (and optionally a contract), so this looks the member up by
-   * code and records a QR_CODE entry through the same POST /api/check-ins as a manual one.
-   * `branchId` falls back to the member's own branch when the staff account has none.
+   * The QR is a short-lived token signed by the backend; it goes to POST /api/check-ins as is,
+   * and the backend verifies it (signature / 30 s expiry / this gym / one use) and names the member.
+   * `branchId` falls back to the member's own branch on the backend when the staff account has none.
    */
   const verifyQrCheckin = async (options: { payload: string; branchId?: string }): Promise<QrCheckinResult> => {
-    const parsed = parseQrPayload(options.payload)
-    if (!parsed) return { success: false, message: '無效的 QR Code 格式' }
-    if (isQrExpired(parsed.timestamp)) {
-      return { success: false, message: 'QR Code 已過期，請會員重新產生入場碼' }
-    }
-
-    const member = await findMemberByCode(parsed.memberCode)
-    if (!member) return { success: false, message: `找不到會員編號：${parsed.memberCode}` }
+    const qrToken = options.payload.trim()
+    if (!qrToken) return { success: false, message: '無效的 QR Code 格式' }
 
     try {
-      const result = await postCheckin({
-        memberId: member.id,
-        branchId: options.branchId || member.branchId,
-        contractId: parsed.contractId,
-        checkInMethod: 'QR_CODE'
-      })
-      return {
-        success: true,
-        member: { id: member.id, fullName: member.fullName, memberCode: member.memberCode },
-        ...result
-      }
+      const result = await postCheckin({ qrToken, branchId: options.branchId })
+      return { success: true, member: result.record.member, ...result }
     } catch (error) {
-      // The page shows the reason next to the scanner
+      // The page shows the reason next to the scanner (過期 / 無效 / 他館 / 已使用 ...)
       handleError(error, { context: 'useCheckin.verifyQrCheckin', showToast: false })
       return { success: false, message: errorMessage(error, MESSAGES.ERRORS.CHECKIN) }
     }
@@ -361,8 +324,6 @@ export const useCheckin = () => {
     performCheckin,
     getMemberActiveContract,
     hasCheckedInToday,
-    verifyQrCheckin,
-    parseQrPayload,
-    isQrExpired
+    verifyQrCheckin
   }
 }

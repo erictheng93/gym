@@ -16,7 +16,7 @@ test.describe('Member Entry (QR Code)', () => {
   })
 
   test('should display countdown timer', async ({ page }) => {
-    await expect(page.getByRole('timer')).toContainText(/\d+:\d{2}/)
+    await expect(page.getByRole('timer')).toContainText(/\d+(秒|:\d{2})/)
   })
 
   test('should have an accessible refresh button', async ({ page }) => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mockFetchInstance, mockHandleError } from '@test/setup'
-import { useCheckin, pickActiveContract, parseQrPayload, isQrExpired } from './useCheckin'
+import { useCheckin, pickActiveContract } from './useCheckin'
 
 vi.mock('~/composables/core/useApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('~/composables/core/useApi')>()
@@ -155,69 +155,46 @@ describe('useCheckin', () => {
   })
 
   describe('verifyQrCheckin', () => {
-    const qr = (over: Record<string, unknown> = {}) => JSON.stringify({ m: 'M000001', t: Date.now() - 5000, ...over })
+    const TOKEN = 'eyJ2IjoxfQ.c2ln'
 
-    it('looks the member up by code, then records a QR_CODE entry with the QR contract, with credentials via apiFetch', async () => {
-      api.mockImplementation(async (url: string) => {
-        if (url === '/members') {
-          return { success: true, data: [{ ...member, memberCode: 'M0000010', id: 'other' }, { ...member, branchId: BRANCH_ID }], pagination: { total: 2 } }
-        }
-        return created(countContract)
-      })
+    it('sends the raw scanned token to POST /api/check-ins, with no member lookup or client-side parsing', async () => {
+      api.mockResolvedValue(created(countContract))
       const { verifyQrCheckin } = useCheckin()
 
-      const result = await verifyQrCheckin({ payload: qr({ c: 'c-1' }), branchId: DESK_BRANCH_ID })
+      const result = await verifyQrCheckin({ payload: `  ${TOKEN}\n`, branchId: DESK_BRANCH_ID })
 
-      expect(api).toHaveBeenCalledWith('/members', expect.objectContaining({ params: expect.objectContaining({ search: 'M000001' }) }))
-      expect(api).toHaveBeenLastCalledWith('/check-ins', {
+      expect(api).toHaveBeenCalledTimes(1)
+      expect(api).toHaveBeenCalledWith('/check-ins', {
         method: 'POST',
-        body: { memberId: MEMBER_ID, branchId: DESK_BRANCH_ID, contractId: 'c-1', checkInMethod: 'QR_CODE' }
+        body: { qrToken: TOKEN, branchId: DESK_BRANCH_ID }
       })
       expect(result).toMatchObject({ success: true, member, contract: { remainingCounts: 4 } })
-      // no unmounted /api/admin/* route
-      expect(api.mock.calls.some(([url]) => String(url).includes('/admin/'))).toBe(false)
     })
 
-    it('records at the member’s own branch when the staff account has no branch', async () => {
-      api.mockImplementation(async (url: string) =>
-        url === '/members' ? { success: true, data: [{ ...member, branchId: BRANCH_ID }] } : created(countContract))
+    it('omits the branch when the staff account has none (the backend uses the member’s own)', async () => {
+      api.mockResolvedValue(created(countContract))
       const { verifyQrCheckin } = useCheckin()
 
-      await verifyQrCheckin({ payload: qr() })
+      await verifyQrCheckin({ payload: TOKEN })
 
-      expect(api).toHaveBeenLastCalledWith('/check-ins', expect.objectContaining({ body: expect.objectContaining({ branchId: BRANCH_ID }) }))
+      expect(api).toHaveBeenCalledWith('/check-ins', { method: 'POST', body: { qrToken: TOKEN } })
     })
 
-    it('returns the backend reason when the entry is refused', async () => {
-      api.mockImplementation(async (url: string) => {
-        if (url === '/members') return { success: true, data: [{ ...member, branchId: BRANCH_ID }] }
-        throw new Error('會員無有效合約')
-      })
+    it.each(['QR Code 已過期，請會員重新產生入場碼', 'QR Code 無效', '此 QR Code 不屬於本館', 'QR Code 已使用，請會員重新產生入場碼'])(
+      'shows the backend reason: %s',
+      async (reason) => {
+        api.mockRejectedValue(new Error(reason))
+        const { verifyQrCheckin } = useCheckin()
+
+        expect(await verifyQrCheckin({ payload: TOKEN })).toEqual({ success: false, message: reason })
+      }
+    )
+
+    it('rejects an empty scan without calling the backend', async () => {
       const { verifyQrCheckin } = useCheckin()
 
-      expect(await verifyQrCheckin({ payload: qr() })).toEqual({ success: false, message: '會員無有效合約' })
-    })
-
-    it('rejects an expired, malformed or unknown-member QR without recording anything', async () => {
-      api.mockResolvedValue({ success: true, data: [] })
-      const { verifyQrCheckin } = useCheckin()
-
-      expect(await verifyQrCheckin({ payload: qr({ t: Date.now() - 31_000 }) })).toMatchObject({ success: false })
-      expect(await verifyQrCheckin({ payload: 'not json' })).toEqual({ success: false, message: '無效的 QR Code 格式' })
-      expect(await verifyQrCheckin({ payload: qr() })).toMatchObject({ success: false, message: expect.stringContaining('M000001') })
-      expect(api.mock.calls.some(([url]) => url === '/check-ins')).toBe(false)
-    })
-  })
-
-  describe('QR helpers', () => {
-    it('parses the member-app payload', () => {
-      expect(parseQrPayload('{"m":"M1","t":1000,"c":"c-1"}')).toEqual({ memberCode: 'M1', timestamp: 1000, contractId: 'c-1' })
-      expect(parseQrPayload('{"t":1000}')).toBeNull()
-    })
-
-    it('treats codes older than 30 seconds as expired', () => {
-      expect(isQrExpired(1000, 30_000)).toBe(false)
-      expect(isQrExpired(1000, 31_001)).toBe(true)
+      expect(await verifyQrCheckin({ payload: '  ' })).toEqual({ success: false, message: '無效的 QR Code 格式' })
+      expect(api).not.toHaveBeenCalled()
     })
   })
 

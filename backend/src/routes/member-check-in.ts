@@ -5,12 +5,13 @@ import { db, checkIns, members, contracts, branches, membershipPlans } from '../
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter, limitMax } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
+import { signCheckInQrToken, CHECKIN_QR_TTL_SECONDS } from '../services/checkin-qr.js';
 
 // =============================================================================
 // MEMBER CHECK-IN ROUTES
 // =============================================================================
 // QR code check-in for member-app
-// Endpoints: /qr (POST), /history (GET), /today (GET)
+// Endpoints: /qr (POST), /qr-token (GET), /history (GET), /today (GET)
 
 const app = new Hono<{ Variables: MemberVariables }>();
 
@@ -328,31 +329,31 @@ app.post(
 );
 
 // -----------------------------------------------------------------------------
-// GET /api/member/check-in/qr-data - Generate QR data for check-in
+// GET /api/member/check-in/qr-token - Signed, short-lived token for the entry QR
 // -----------------------------------------------------------------------------
+// The front desk sends the scanned token to POST /api/check-ins (see services/checkin-qr.ts).
 
-app.get('/qr-data', async (c) => {
-  const memberInfo = c.get('member')!;
-  const contractId = c.req.query('contractId');
-
-  // Generate QR payload
-  const qrPayload = {
-    m: memberInfo.memberCode,
-    t: Date.now(),
-    c: contractId || undefined,
-  };
-
-  return c.json({
-    success: true,
-    data: {
-      payload: qrPayload,
-      // JSON string for QR code generation
-      qrString: JSON.stringify(qrPayload),
-      // Valid for 30 seconds
-      expiresAt: new Date(Date.now() + 30 * 1000).toISOString(),
-    },
-  });
-});
+app.get(
+  '/qr-token',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    max: limitMax(20),
+    keyGenerator: (c) => `checkin:qr-token:${c.get('member')?.id || 'unknown'}`,
+    message: '入場碼請求過於頻繁，請稍後再試',
+  }),
+  (c) => {
+    const memberInfo = c.get('member')!;
+    const { token, expiresAt } = signCheckInQrToken({
+      memberId: memberInfo.id,
+      tenantId: memberInfo.tenantId,
+    });
+    c.header('Cache-Control', 'no-store');
+    return c.json({
+      success: true,
+      data: { token, expiresAt: expiresAt.toISOString(), ttlSeconds: CHECKIN_QR_TTL_SECONDS },
+    });
+  },
+);
 
 // -----------------------------------------------------------------------------
 // GET /api/member/check-in/history - Get check-in history
@@ -525,7 +526,7 @@ app.get('/stats', async (c) => {
 // -----------------------------------------------------------------------------
 // GET /api/member/check-in/:id - Single check-in detail (own records only)
 // -----------------------------------------------------------------------------
-// Registered last so it never shadows /qr-data, /history, /today, /stats.
+// Registered last so it never shadows /qr-token, /history, /today, /stats.
 // Staff-internal data (notes, processedById, IP/device) is not exposed.
 
 app.get(
