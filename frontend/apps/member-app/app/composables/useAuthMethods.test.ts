@@ -84,6 +84,8 @@ vi.stubGlobal('useAuthSession', () => ({
 // Mock $fetch
 const mockFetch = vi.fn()
 vi.stubGlobal('$fetch', mockFetch)
+const mockResetForLogout = vi.fn().mockResolvedValue(undefined)
+vi.stubGlobal('useOfflineSync', () => ({ resetForLogout: mockResetForLogout }))
 
 // Import after mocks
 import { useAuthMethods } from './useAuthMethods'
@@ -598,6 +600,8 @@ describe('useAuthMethods', () => {
       await logout()
 
       expect(mockClearTokens).toHaveBeenCalled()
+      // offline data must be flushed/wiped while the member's token is still set
+      expect(mockResetForLogout.mock.invocationCallOrder[0]).toBeLessThan(mockClearTokens.mock.invocationCallOrder[0]!)
       expect(mockClearSession).toHaveBeenCalled()
       expect(mockNavigateTo).toHaveBeenCalledWith('/login')
     })

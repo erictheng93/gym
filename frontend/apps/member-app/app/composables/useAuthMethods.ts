@@ -492,6 +492,8 @@ export const useAuthMethods = () => {
    * Logout and clear all auth state
    */
   const logout = async () => {
+    // Before clearTokens: pending requests still need this member's token to flush
+    await useOfflineSync().resetForLogout()
     clearTokens()
     clearSession()
     await navigateTo('/login')

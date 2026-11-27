@@ -256,6 +256,47 @@ describe('useOfflineSync with IndexedDB', () => {
     })
   })
 
+  describe('resetForLogout', () => {
+    // Queued requests read auth headers at sync time, so leftovers would replay
+    // under whichever account logs in next on this device.
+    it('flushes pending requests with the current token, then wipes queue and cache', async () => {
+      const { queueRequest, setCache, getCache, getPendingRequests, pendingCount, resetForLogout } = useOfflineSync()
+      mockFetch.mockResolvedValue({ success: true })
+      await queueRequest({ url: 'http://localhost:8056/api/member/workouts', method: 'POST', body: { a: 1 }, maxRetries: 3, type: 'workout' })
+      await setCache('workouts', [{ id: 'w1' }])
+
+      await resetForLogout()
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch.mock.calls[0]![1].headers).toMatchObject({ 'X-Member-Token': 'token123' })
+      expect(await getPendingRequests()).toHaveLength(0)
+      expect(pendingCount.value).toBe(0)
+      expect(await getCache('workouts')).toBeNull()
+    })
+
+    it('warns before logout only while items are pending, saying they will be lost', async () => {
+      const { queueRequest, isOnline, pendingLogoutWarning } = useOfflineSync()
+      expect(pendingLogoutWarning()).toBeNull()
+
+      await queueRequest({ url: 'http://localhost:8056/api/member/workouts', method: 'POST', body: { a: 1 }, maxRetries: 3, type: 'workout' })
+      expect(pendingLogoutWarning()).toMatch(/1 筆資料尚未上傳.*刪除且無法復原/)
+
+      isOnline.value = false
+      expect(pendingLogoutWarning()).toMatch(/目前沒有網路.*1 筆/)
+    })
+
+    it('drops queued requests without sending them when offline', async () => {
+      const { queueRequest, getPendingRequests, isOnline, resetForLogout } = useOfflineSync()
+      await queueRequest({ url: 'http://localhost:8056/api/member/workouts', method: 'POST', body: { a: 1 }, maxRetries: 3, type: 'workout' })
+      isOnline.value = false
+
+      await resetForLogout()
+
+      expect(mockFetch).not.toHaveBeenCalled()
+      expect(await getPendingRequests()).toHaveLength(0)
+    })
+  })
+
   describe('Sync Operations', () => {
     it('should sync pending requests when online', async () => {
       const { queueRequest, syncPendingRequests, pendingCount, isOnline } = useOfflineSync()

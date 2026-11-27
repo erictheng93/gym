@@ -506,6 +506,32 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       }
     }
 
+    /**
+     * Call before the session is dropped. Queued requests pick up auth headers
+     * at sync time, so anything left behind would replay under the NEXT
+     * account on this device; the cache would show it this user's data.
+     * Flush what the current token can still send, then wipe both stores.
+     */
+    const resetForLogout = async (): Promise<void> => {
+      if (isOnline.value && pendingCount.value > 0) {
+        // ponytail: 5s cap so a hung request cannot block logout; unsent items are dropped
+        await Promise.race([
+          syncPendingRequests().catch(() => undefined),
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ])
+      }
+      await Promise.all([clearCache(), clearQueue()])
+    }
+
+    /** Text for the logout confirmation when unsent items would be lost; null when nothing is pending. */
+    const pendingLogoutWarning = (): string | null => {
+      const n = pendingCount.value
+      if (n <= 0) return null
+      return isOnline.value
+        ? `還有 ${n} 筆資料尚未上傳。登出時會先嘗試上傳，若上傳失敗，這些資料將被刪除且無法復原。確定要登出嗎？`
+        : `目前沒有網路，還有 ${n} 筆資料尚未上傳。登出後這些資料將被刪除且無法復原。確定要登出嗎？`
+    }
+
     // ---- Computed ----
 
     const hasPendingRequests = computed(() => pendingCount.value > 0)
@@ -535,6 +561,8 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       deleteCache,
       clearCache,
       pruneExpiredCache,
+      resetForLogout,
+      pendingLogoutWarning,
     }
   }
 }

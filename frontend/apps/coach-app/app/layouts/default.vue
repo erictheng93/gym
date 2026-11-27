@@ -138,9 +138,11 @@ const getInitials = (name: string) => {
   return ((parts[0] ?? '').charAt(0) + (parts[parts.length - 1] ?? '').charAt(0)).toUpperCase()
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  const warning = useOfflineSync().pendingLogoutWarning()
+  if (warning && !confirm(warning)) return
   menuOpen.value = false
-  logout()
+  await logout()
   router.push('/login')
 }
 
