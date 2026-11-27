@@ -61,6 +61,8 @@ vi.stubGlobal('computed', (getter: () => unknown) => ({
 // Mock $fetch
 const mockFetch = vi.fn()
 vi.stubGlobal('$fetch', mockFetch)
+const mockResetForLogout = vi.fn().mockResolvedValue(undefined)
+vi.stubGlobal('useOfflineSync', () => ({ resetForLogout: mockResetForLogout }))
 
 // Mock navigateTo
 const mockNavigateTo = vi.fn()
@@ -220,6 +222,8 @@ describe('useCoachAuth', () => {
       await auth.logout()
 
       expect(mockTokens.clearTokens).toHaveBeenCalled()
+      // offline data must be flushed/wiped while the coach's token is still set
+      expect(mockResetForLogout.mock.invocationCallOrder[0]).toBeLessThan(mockTokens.clearTokens.mock.invocationCallOrder[0]!)
       expect(mockSession.clearSession).toHaveBeenCalled()
     })
   })

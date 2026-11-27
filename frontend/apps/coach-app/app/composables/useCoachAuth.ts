@@ -78,8 +78,10 @@ export const useCoachAuth = () => {
   /**
    * Logout - clear tokens and session
    */
-  const logout = () => {
+  const logout = async () => {
     checkAuthPromise = null
+    // Before clearTokens: pending requests still need this coach's token to flush
+    await useOfflineSync().resetForLogout()
     tokens.clearTokens()
     session.clearSession()
   }
