@@ -54,3 +54,6 @@ Gym參考廠商/
 cookies.txt
 *.cookies
 cookie*.txt
+
+# TypeScript incremental build cache
+*.tsbuildinfo
