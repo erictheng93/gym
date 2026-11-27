@@ -98,7 +98,7 @@ describe('rateLimiter store cap', () => {
     vi.stubEnv('RATE_LIMIT_MAX_KEYS', cap);
     const mod = await import('../src/middleware/rate-limiter.js');
     const app = new Hono();
-    app.post('/:key', mod.rateLimiter({ max: 2, windowMs: 60_000, keyGenerator: (c) => c.req.param('key') }), (c) => c.text('ok'));
+    app.post('/:key', mod.rateLimiter({ max: 2, windowMs: 60_000, keyGenerator: (c) => c.req.param('key') ?? '' }), (c) => c.text('ok'));
     return (key: string) => app.request(`/${key}`, { method: 'POST' });
   }
 
