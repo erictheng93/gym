@@ -1,7 +1,7 @@
 # Gym Nexus - 智慧健身房全方位管理系統 (CRM/ERP)
 
 [![Hono.js](https://img.shields.io/badge/Backend-Hono.js-E36002?style=flat-square&logo=hono)](https://hono.dev/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2017%2F18-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2017-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Nuxt](https://img.shields.io/badge/Frontend-Nuxt%204-00DC82?style=flat-square&logo=nuxt.js)](https://nuxt.com/)
 [![Bun](https://img.shields.io/badge/Runtime-Bun%201.x-fbf0df?style=flat-square&logo=bun)](https://bun.sh/)
 [![Drizzle](https://img.shields.io/badge/ORM-Drizzle-C5F74F?style=flat-square)](https://orm.drizzle.team/)
@@ -48,10 +48,10 @@
 | **Hono.js** | 輕量、超高速 Web 框架 | v4.x |
 | **Drizzle ORM** | Type-safe 資料庫 ORM | v0.45.x |
 | **Lucia Auth** | 員工 Session 狀態管理 | v3.x |
-| **PostgreSQL + PostGIS** | 核心資料庫與地理空間運算 | v17 / 18 + PostGIS 3.4 |
+| **PostgreSQL + PostGIS** | 核心資料庫與地理空間運算 | v17 + PostGIS 3.4 |
 | **Zod** | API 請求驗證 | v4.x |
 | **Bun** | 套件管理、開發與測試執行 | v1.4.x |
-| **Node.js** | 正式環境執行 (Docker runtime) | v22 |
+| **Node.js** | 正式環境執行 (Docker runtime：API v22、hr-service v20) | v20 / v22 |
 
 ### Frontend
 | 技術 | 用途 | 版本 |
@@ -84,13 +84,22 @@
 - 會員狀態自動化：合約生效/暫停/過期自動連動會員權限。
 - RFM 價值分群：日排程自動針對消費額度、入場頻率與近期活動評分，以平行聚合加速批次標籤標註。
 - 跨店與多門市入場簽到、體態測量紀錄與目標管理。
+- **簽章短效入場 QR**：後端簽發 30 秒有效的 HMAC 簽章 QR Token，由櫃檯驗證，降低截圖轉傳風險。
+- **社群登入**：會員可使用 Google / LINE / Apple OAuth 登入與綁定帳號；OTP 與 OAuth 的 Email 比對不分大小寫，OAuth state 為一次性並綁定會員。
 
-### 3. 三端應用程式 (Apps)
-- **Admin Web** (預設 `http://localhost:3001` 或 `3000`) - 櫃檯簽到、會員與合約管理、營運與 HR 報表。
+### 3. 合約與營收管理
+- **合約轉讓**：原合約轉為 `TRANSFERRED`，受讓會員取得沿用方案與到期日的新 `ACTIVE` 合約，可選擇收取轉讓費；全程於單一交易內完成。
+- **續約**：依現行方案價格建立 `DRAFT` 續約合約，起始日為原合約到期隔日（已過期則為當日）。
+- **提前復課**：暫停提前結束時，到期日只順延實際暫停的天數。
+- **電子簽名**：簽名 PNG 存放於 R2 並嵌入合約 PDF；櫃檯啟用合約前必須簽名（線上付清的合約維持自動啟用，見 [產品決策](./docs/product-decisions.md)）。
+- **營收目標**：依分店設定每月營收目標，於戰情室 (War Room) 分店比較中追蹤達成狀況。
+
+### 4. 三端應用程式 (Apps)
+- **Admin Web** (預設 `http://localhost:3001`) - 櫃檯簽到、會員與合約管理、營運與 HR 報表。
 - **Member App** (預設 `http://localhost:3002`) - 會員 PWA、電子會員卡、合約與扣點預覽、線上預約課程。
 - **Coach App** (預設 `http://localhost:3003`) - 教練課表、學員管理、課程點名與課單教案設計。
 
-### 4. 系統強韌度與高並發防護 (Hardened Concurrency)
+### 5. 系統強韌度與高並發防護 (Hardened Concurrency)
 - **金流 Webhook 冪等性與 Transaction 事務**：確保每筆第三方支付通知僅入帳一次，更新收款與合約啟動全程包裹於資料庫交易內。
 - **離線同步 FIFO 順序佇列**：解決離線資料同步時先建後修的依賴亂序問題。
 - **防踩踏單飛互斥鎖 (Token Stampede Mutex)**：多 API 同時觸發 401 時自動合併 Refresh 請求，保護使用者 Session 不被重複輪換作廢。
@@ -105,10 +114,10 @@
 gym/
 ├── backend/                    # Hono.js 後端 API (bun)
 │   ├── src/
-│   │   ├── routes/            # API 路由模組 (49 個檔案)
+│   │   ├── routes/            # API 路由模組 (50+ 個檔案)
 │   │   ├── services/          # 核心業務邏輯 (Email, Push, LINE, SMS, Payment, PDF, Storage...)
 │   │   ├── middleware/        # 認證、CSRF、Rate Limiting、Tenant 隔離
-│   │   ├── db/                # Drizzle Schema (53 張表) 與 Migration
+│   │   ├── db/                # Drizzle Schema (50+ 張表) 與 Migration
 │   │   ├── hooks/             # 業務事件鉤子 (合約、支付、簽到觸發連動)
 │   │   └── cron/              # 定時排程 (月結帳、日營收統計、RFM 分群、合約到期)
 │   ├── tests/                 # Vitest 後端整合與單元測試套件
@@ -127,12 +136,12 @@ gym/
 │   │   ├── shared/            # 共用型別、Composables (離線同步、網路請求)
 │   │   ├── hr-core/           # 人資考勤核心運算邏輯
 │   │   └── hr-composables/    # 人資考勤 Composables
-│   ├── e2e/                   # Playwright 完整業務流 E2E 自動化測試 (15 套 + 教練端 6 套)
+│   ├── e2e/                   # Playwright E2E 測試 (admin 主流程 + member-app/ + coach-app/)
 │   ├── package.json           # bun workspaces 管理
 │   └── bun.lock               # bun lockfile
 │
 ├── hr-service/                 # 人資 API 服務 (Express, bun)
-├── rust-backend/               # Rust 後端服務 (Cargo)
+├── rust-backend/               # Rust (Axum) 後端移植 MVP，非正式環境主後端 (Cargo)
 ├── .github/workflows/          # CI 與 CodeQL
 ├── docs/                       # 系統技術文件與架構手冊
 ├── CLAUDE.md                   # AI 助理開發指南與指令總覽
@@ -190,40 +199,25 @@ bun run dev:coach    # Coach App  -> http://localhost:3003
 
 ## 🔐 環境變數 (Environment Variables)
 
-### Backend (.env)
-```env
-# Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:15432/gym_nexus
+完整清單與說明以範例檔為準，請勿只依本節設定：
 
-# Auth Secrets
+- **Backend**：[`backend/.env.example`](./backend/.env.example)
+- **Frontend**：`frontend/apps/{admin-web,member-app,coach-app}/.env.example`
+
+本地開發最少需要：
+
+```env
+# backend/.env
+DATABASE_URL=postgresql://gym_nexus:gym_nexus_dev@localhost:15432/gym_nexus
 SESSION_SECRET=your-session-secret
 MEMBER_JWT_SECRET=your-member-jwt-secret
 COACH_JWT_SECRET=your-coach-jwt-secret
 
-# Email (SMTP)
-EMAIL_SMTP_HOST=smtp.example.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_USER=your-email
-EMAIL_SMTP_PASSWORD=your-password
-EMAIL_FROM=noreply@example.com
-
-# Push Notifications
-VAPID_PUBLIC_KEY=your-vapid-public-key
-VAPID_PRIVATE_KEY=your-vapid-private-key
-
-# LINE Messaging API
-LINE_CHANNEL_ACCESS_TOKEN=your-line-token
-LINE_CHANNEL_SECRET=your-line-secret
-
-# Payment
-STRIPE_SECRET_KEY=sk_test_xxx
-ECPAY_MERCHANT_ID=your-ecpay-merchant
-```
-
-### Frontend (.env)
-```env
+# frontend/apps/*/.env
 API_BASE_URL=http://localhost:8056
 ```
+
+其餘整合依需求設定：Email (`EMAIL_*`)、Web Push (`VAPID_*`)、簡訊 (`MITAKE_*`)、金流 (`STRIPE_*`、`ECPAY_*`、`LINEPAY_*`)、社群登入 (`GOOGLE_*`、`LINE_CHANNEL_*`、`APPLE_*`)。
 
 ---
 
@@ -244,7 +238,7 @@ POST /api/auth/logout
 
 # 會員 App
 POST /api/member/otp/send
-POST /api/member/auth/verify
+POST /api/member/otp/verify
 GET  /api/member/me
 GET  /api/member/check-in/history
 
@@ -273,7 +267,7 @@ GET  /api/reports/*
 ```bash
 cd backend
 # 需先啟動資料庫：docker compose up database -d，並執行 bun run db:push
-bunx vitest run        # 執行全套 Vitest 測試 (42 個測試檔案、804 項測試)
+bunx vitest run        # 執行全套 Vitest 測試
 bun run test:coverage  # 產生程式碼覆蓋率報告
 bun run typecheck      # 執行 TypeScript 嚴格型別檢查
 ```
@@ -281,7 +275,7 @@ bun run typecheck      # 執行 TypeScript 嚴格型別檢查
 ### 前端單元與組件測試 (Frontend Unit & Component)
 ```bash
 cd frontend
-bunx vitest run        # 執行全套 Vitest 單元測試 (81 個測試檔案、1,905 項測試)
+bunx vitest run        # 執行全套 Vitest 單元測試
 bun run typecheck      # 執行 Nuxt 全端型別檢查
 bun run lint           # ESLint 程式碼品質檢查
 ```
