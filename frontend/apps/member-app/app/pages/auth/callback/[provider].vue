@@ -22,8 +22,7 @@ definePageMeta({
 
 const route = useRoute()
 const { handleCallback, linkSocialAccount } = useSocialAuth()
-const { accessToken } = useAuthTokens()
-const { completeOAuthLogin } = useMemberAuth()
+const { completeOAuthLogin, accessToken } = useMemberAuth()
 
 // 從路徑取得 provider
 const provider = computed(() => route.params.provider as string)

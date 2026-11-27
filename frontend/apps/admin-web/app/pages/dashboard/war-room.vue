@@ -320,8 +320,8 @@ onUnmounted(() => {
         :kpis="kpis"
         :targets="revenueTargets"
         :can-edit-targets="canEditTargets"
-        @save-target="saveTarget"
         :loading="isLoading"
+        @save-target="saveTarget"
       />
     </section>
 
