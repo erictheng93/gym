@@ -272,7 +272,8 @@ describe('useSocialAuth', () => {
       const { useSocialAuth } = await import('./useSocialAuth')
       const { handleCallback } = useSocialAuth()
 
-      const result = await handleCallback('google', 'auth_code_123')
+      mockSessionStorage['oauth_state'] = 'st'
+      const result = await handleCallback('google', 'auth_code_123', 'st')
 
       expect(result.success).toBe(true)
       expect(result.needsRegistration).toBe(true)
@@ -304,7 +305,8 @@ describe('useSocialAuth', () => {
       const { useSocialAuth } = await import('./useSocialAuth')
       const { handleCallback } = useSocialAuth()
 
-      const result = await handleCallback('google', 'invalid_code')
+      mockSessionStorage['oauth_state'] = 'st'
+      const result = await handleCallback('google', 'invalid_code', 'st')
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('授權失敗，請重試')
@@ -324,7 +326,9 @@ describe('useSocialAuth', () => {
       const { useSocialAuth } = await import('./useSocialAuth')
       const { linkSocialAccount } = useSocialAuth()
 
-      const result = await linkSocialAccount('google', 'auth_code', 'member_token')
+      mockSessionStorage['oauth_state'] = 'link_state'
+      mockSessionStorage['oauth_provider'] = 'google'
+      const result = await linkSocialAccount('google', 'auth_code', 'link_state', 'member_token')
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8056/api/member/oauth/link',
@@ -336,6 +340,7 @@ describe('useSocialAuth', () => {
           body: JSON.stringify({
             provider: 'google',
             code: 'auth_code',
+            state: 'link_state',
           }),
         }),
       )
@@ -356,10 +361,33 @@ describe('useSocialAuth', () => {
       const { useSocialAuth } = await import('./useSocialAuth')
       const { linkSocialAccount } = useSocialAuth()
 
-      const result = await linkSocialAccount('google', 'auth_code', 'member_token')
+      mockSessionStorage['oauth_state'] = 'link_state'
+      mockSessionStorage['oauth_provider'] = 'google'
+      const result = await linkSocialAccount('google', 'auth_code', 'link_state', 'member_token')
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('此帳號已連結')
+    })
+
+    it.each([
+      ['state differs from the one stored at init', 'attacker_state', 'google', 'link_state'],
+      ['provider differs from the one stored at init', 'link_state', 'line', 'link_state'],
+      ['no state was stored at init', 'link_state', 'google', undefined],
+    ])('never calls the link API when %s', async (_name, state, storedProvider, storedState) => {
+      if (storedState) mockSessionStorage['oauth_state'] = storedState
+      mockSessionStorage['oauth_provider'] = storedProvider
+      mockSessionStorage['oauth_intent'] = 'link'
+
+      const { useSocialAuth } = await import('./useSocialAuth')
+      const { linkSocialAccount } = useSocialAuth()
+
+      const result = await linkSocialAccount('google', 'auth_code', state, 'member_token')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('授權狀態無效，請重新綁定')
+      expect(mockFetch).not.toHaveBeenCalled()
+      // consumed either way
+      expect(mockSessionStorage['oauth_state']).toBeUndefined()
     })
   })
 

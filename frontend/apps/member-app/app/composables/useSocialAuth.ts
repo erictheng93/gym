@@ -122,7 +122,7 @@ export const useSocialAuth = () => {
    *
    * @param providerId - 提供者 ID (google, line, apple)
    */
-  const loginWithProvider = async (providerId: string) => {
+  const loginWithProvider = async (providerId: string, intent: 'login' | 'link' = 'login') => {
     error.value = null
     loadingProvider.value = providerId
 
@@ -132,13 +132,18 @@ export const useSocialAuth = () => {
       const redirectUrl = `${currentOrigin}/auth/callback/${providerId}`
 
       // 從 backend-v2 獲取 OAuth 授權 URL
+      // 綁定流程使用綁定會員的 state (link-init 需要會員登入)
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      if (intent === 'link') {
+        const memberToken = useAuthTokens().accessToken.value
+        if (!memberToken) throw new Error('請先登入會員後再綁定社群帳號')
+        headers['X-Member-Token'] = memberToken
+      }
       const response = await fetch(
-        `${apiBaseUrl}/api/member/oauth/${providerId}/init?redirect=${encodeURIComponent(redirectUrl)}`,
+        `${apiBaseUrl}/api/member/oauth/${providerId}/${intent === 'link' ? 'link-init' : 'init'}?redirect=${encodeURIComponent(redirectUrl)}`,
         {
           method: 'GET',
-          headers: {
-            Accept: 'application/json',
-          },
+          headers,
         },
       )
 
@@ -160,6 +165,9 @@ export const useSocialAuth = () => {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('oauth_state', result.data.state)
         sessionStorage.setItem('oauth_provider', providerId)
+        // 綁定流程：callback 頁面看到 link 意圖時呼叫 /link 而非登入
+        if (intent === 'link') sessionStorage.setItem('oauth_intent', 'link')
+        else sessionStorage.removeItem('oauth_intent')
       }
 
       // 使用 location.href 進行導向 (PWA 相容，避免 popup)
@@ -196,7 +204,7 @@ export const useSocialAuth = () => {
         : null
 
       // 驗證 state (如果有提供)
-      if (state && storedState && state !== storedState) {
+      if (!state || !storedState || state !== storedState) {
         throw new Error('授權狀態無效，請重新登入')
       }
 
@@ -254,16 +262,30 @@ export const useSocialAuth = () => {
    *
    * @param providerId - 提供者 ID
    * @param code - OAuth 授權碼
+   * @param state - link-init 發出並綁定此會員的 state
    * @param memberToken - 會員 JWT token
    */
   const linkSocialAccount = async (
     providerId: string,
     code: string,
+    state: string,
     memberToken: string,
   ): Promise<{ success: boolean; error?: string }> => {
     loadingProvider.value = providerId
 
     try {
+      // 先比對 init 時存下的 state / provider，再清除；不符就不呼叫 API (防綁定 CSRF)
+      const storedState = typeof window !== 'undefined' ? sessionStorage.getItem('oauth_state') : null
+      const storedProvider = typeof window !== 'undefined' ? sessionStorage.getItem('oauth_provider') : null
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('oauth_intent')
+        sessionStorage.removeItem('oauth_state')
+        sessionStorage.removeItem('oauth_provider')
+      }
+      if (!state || !storedState || state !== storedState || storedProvider !== providerId) {
+        throw new Error('授權狀態無效，請重新綁定')
+      }
+
       const response = await fetch(`${apiBaseUrl}/api/member/oauth/link`, {
         method: 'POST',
         headers: {
@@ -274,6 +296,7 @@ export const useSocialAuth = () => {
         body: JSON.stringify({
           provider: providerId,
           code,
+          state,
         }),
       })
 

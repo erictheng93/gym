@@ -1713,3 +1713,18 @@ export const employeeShiftsRelations = relations(employeeShifts, ({ one }) => ({
     references: [shiftSchedules.id],
   }),
 }));
+
+// Monthly revenue target per branch (war room). month = first day of the month.
+// target_amount >= 0 is enforced by the PUT route.
+export const revenueTargets = pgTable('revenue_targets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  branchId: uuid('branch_id').notNull().references(() => branches.id, { onDelete: 'cascade' }),
+  month: date('month').notNull(),
+  targetAmount: decimal('target_amount', { precision: 12, scale: 2 }).notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('uq_revenue_targets_tenant_branch_month').on(table.tenantId, table.branchId, table.month),
+]);

@@ -10,11 +10,38 @@ interface Props {
   kpis: DashboardKPIs | null
   targets?: RevenueTarget[]
   loading?: boolean
+  /** admin / super_admin 才可設定本月營收目標 */
+  canEditTargets?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
+  canEditTargets: false
 })
+
+const emit = defineEmits<{
+  (e: 'save-target', branchId: string, amount: number): void
+}>()
+
+// 目標編輯狀態
+const editingBranchId = ref<string | null>(null)
+const editingAmount = ref('')
+
+const startEdit = (branchId: string, current: number) => {
+  editingBranchId.value = branchId
+  editingAmount.value = current > 0 ? String(current) : ''
+}
+
+const cancelEdit = () => {
+  editingBranchId.value = null
+}
+
+const submitEdit = (branchId: string) => {
+  const amount = Number(editingAmount.value)
+  if (editingAmount.value.trim() === '' || !Number.isFinite(amount) || amount < 0) return
+  emit('save-target', branchId, amount)
+  editingBranchId.value = null
+}
 
 const { formatCurrency } = useCharts()
 
@@ -47,7 +74,8 @@ const branchData = computed(() => {
 
     const mtdRevenue = parseFloat(branch.revenue as any) || 0
     const targetAmount = target?.target_amount || 0
-    const achievement = targetAmount > 0 ? (mtdRevenue / targetAmount) * 100 : 0
+    // 達成率 = 本月已完成營收 / 本月目標 (由後端計算，不受所選期間影響)
+    const achievement = target?.achievement_percent ?? 0
 
     return {
       branch_id: branch.branch_id,
@@ -58,6 +86,7 @@ const branchData = computed(() => {
       active_members: members?.active || 0,
       checkins: checkins?.today_checkins || 0,
       target: targetAmount,
+      actual: target?.actual_amount ?? 0,
       achievement: achievement.toFixed(1)
     }
   }).sort((a, b) => b.revenue - a.revenue)
@@ -119,6 +148,7 @@ const getAchievementClass = (achievement: string) => {
             <th class="col-number">營收</th>
             <th class="col-number">會員數</th>
             <th class="col-number">今日入場</th>
+            <th class="col-number">本月目標</th>
             <th class="col-number">達成率</th>
           </tr>
         </thead>
@@ -142,7 +172,37 @@ const getAchievementClass = (achievement: string) => {
               <span class="checkin-count">{{ branch.checkins }}</span>
             </td>
             <td class="col-number">
-              <div class="achievement-cell">
+              <div v-if="editingBranchId === branch.branch_id" class="target-edit">
+                <input
+                  v-model="editingAmount"
+                  class="target-input"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  inputmode="numeric"
+                  aria-label="本月營收目標"
+                  @keyup.enter="submitEdit(branch.branch_id)"
+                  @keyup.esc="cancelEdit"
+                >
+                <button type="button" class="target-btn primary" @click="submitEdit(branch.branch_id)">儲存</button>
+                <button type="button" class="target-btn" @click="cancelEdit">取消</button>
+              </div>
+              <template v-else>
+                <span v-if="branch.target > 0" class="target-value">{{ formatCurrency(branch.target) }}</span>
+                <span v-else class="target-empty">未設定</span>
+                <button
+                  v-if="canEditTargets"
+                  type="button"
+                  class="target-btn"
+                  @click="startEdit(branch.branch_id, branch.target)"
+                >
+                  {{ branch.target > 0 ? '修改' : '設定' }}
+                </button>
+              </template>
+            </td>
+            <td class="col-number">
+              <span v-if="branch.target <= 0" class="target-empty">—</span>
+              <div v-else class="achievement-cell">
                 <div class="achievement-bar">
                   <div
                     class="achievement-fill"
@@ -170,6 +230,9 @@ const getAchievementClass = (achievement: string) => {
             </td>
             <td class="col-number">
               <span class="checkin-count total">{{ totals.checkins }}</span>
+            </td>
+            <td class="col-number">
+              <span class="total-label">—</span>
             </td>
             <td class="col-number">
               <span class="total-label">—</span>
@@ -320,6 +383,51 @@ const getAchievementClass = (achievement: string) => {
 
 .achievement-text.achievement-low {
   color: var(--color-error);
+}
+
+.target-value {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.target-empty {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+}
+
+.target-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.target-input {
+  width: 110px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: right;
+}
+
+.target-btn {
+  margin-left: var(--space-sm);
+  padding: 4px 12px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-out;
+}
+
+.target-btn.primary {
+  background: var(--color-accent);
+  color: #fff;
 }
 
 .total-row {

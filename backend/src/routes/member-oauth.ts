@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { db, members, branches, memberSocialAccounts } from '../db/index.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { memberAuthMiddleware, requireMember, rateLimiter, limitMax } from '../middleware/index.js';
 import type { MemberVariables } from '../middleware/index.js';
 import { memberJwtService } from '../services/member-jwt.js';
@@ -151,7 +152,7 @@ const callbackSchema = z.object({
 const linkAccountSchema = z.object({
   provider: z.enum(['google', 'line', 'apple']),
   code: z.string().min(1, '請提供授權碼'),
-  state: z.string().optional(),
+  state: z.string().min(1, '請提供授權狀態'),
 });
 
 // -----------------------------------------------------------------------------
@@ -282,13 +283,42 @@ function generateState(): string {
 }
 
 // State storage (in production, use Redis or database)
-const stateStore = new Map<string, { createdAt: number; redirect?: string }>();
+const STATE_TTL_MS = 10 * 60 * 1000;
+interface OAuthState {
+  createdAt: number;
+  redirect?: string;
+  purpose: 'login' | 'link';
+  provider: OAuthProvider;
+  /** link purpose only: the member the state was issued to */
+  memberId?: string;
+}
+const stateStore = new Map<string, OAuthState>();
+
+/**
+ * Single-use state check. The entry is removed whether or not it matches, so a
+ * state can never be replayed. It must be unexpired, issued for this purpose
+ * and provider and, for linking, to this very member (prevents account-linking
+ * CSRF with an attacker's code and an attacker-supplied state).
+ */
+function consumeState(
+  state: string | undefined,
+  expected: { purpose: 'login' | 'link'; provider: OAuthProvider; memberId?: string },
+): boolean {
+  if (!state) return false;
+  const stored = stateStore.get(state);
+  if (!stored) return false;
+  stateStore.delete(state);
+  return Date.now() - stored.createdAt <= STATE_TTL_MS
+    && stored.purpose === expected.purpose
+    && stored.provider === expected.provider
+    && stored.memberId === expected.memberId;
+}
 
 // Clean up old states periodically
 setInterval(() => {
   const now = Date.now();
   for (const [key, value] of stateStore.entries()) {
-    if (now - value.createdAt > 10 * 60 * 1000) { // 10 minutes
+    if (now - value.createdAt > STATE_TTL_MS) {
       stateStore.delete(key);
     }
   }
@@ -298,53 +328,64 @@ setInterval(() => {
 // GET /api/member/oauth/:provider/init - Start OAuth flow
 // -----------------------------------------------------------------------------
 
+function buildInitResponse(c: Context, provider: OAuthProvider, purpose: 'login' | 'link', memberId?: string) {
+  const redirect = c.req.query('redirect');
+  const config = getOAuthConfig(provider);
+
+  if (!config || !config.clientId) {
+    return c.json({
+      success: false,
+      error: `${provider} 登入尚未設定`,
+      code: 'OAUTH_NOT_CONFIGURED',
+    }, 400);
+  }
+
+  // Generate and store state
+  const state = generateState();
+  stateStore.set(state, { createdAt: Date.now(), redirect, purpose, provider, memberId });
+
+  // Build authorization URL
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: 'code',
+    scope: config.scope,
+    state,
+  });
+
+  // Provider-specific params
+  if (provider === 'line') {
+    params.set('bot_prompt', 'normal');
+  } else if (provider === 'apple') {
+    params.set('response_mode', 'form_post');
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      authUrl: `${config.authUrl}?${params.toString()}`,
+      state,
+    },
+  });
+}
+
 app.get(
   '/:provider/init',
   zValidator('param', providerParamSchema),
-  async (c) => {
-    const { provider } = c.req.valid('param');
-    const redirect = c.req.query('redirect');
+  (c) => buildInitResponse(c, c.req.valid('param').provider, 'login'),
+);
 
-    const config = getOAuthConfig(provider);
+// -----------------------------------------------------------------------------
+// GET /api/member/oauth/:provider/link-init - Start OAuth flow to link an account
+// The state is bound to the authenticated member; /link only accepts that state.
+// -----------------------------------------------------------------------------
 
-    if (!config || !config.clientId) {
-      return c.json({
-        success: false,
-        error: `${provider} 登入尚未設定`,
-        code: 'OAUTH_NOT_CONFIGURED',
-      }, 400);
-    }
-
-    // Generate and store state
-    const state = generateState();
-    stateStore.set(state, { createdAt: Date.now(), redirect });
-
-    // Build authorization URL
-    const params = new URLSearchParams({
-      client_id: config.clientId,
-      redirect_uri: config.redirectUri,
-      response_type: 'code',
-      scope: config.scope,
-      state,
-    });
-
-    // Provider-specific params
-    if (provider === 'line') {
-      params.set('bot_prompt', 'normal');
-    } else if (provider === 'apple') {
-      params.set('response_mode', 'form_post');
-    }
-
-    const authUrl = `${config.authUrl}?${params.toString()}`;
-
-    return c.json({
-      success: true,
-      data: {
-        authUrl,
-        state,
-      },
-    });
-  }
+app.get(
+  '/:provider/link-init',
+  memberAuthMiddleware,
+  requireMember,
+  zValidator('param', providerParamSchema),
+  (c) => buildInitResponse(c, c.req.valid('param').provider, 'link', c.get('member')!.id),
 );
 
 // -----------------------------------------------------------------------------
@@ -363,17 +404,13 @@ app.post(
     const { provider } = c.req.valid('param');
     const { code, state, user: appleUser } = c.req.valid('json');
 
-    // Verify state
-    if (state) {
-      const storedState = stateStore.get(state);
-      if (!storedState) {
-        return c.json({
-          success: false,
-          error: '授權狀態無效或已過期',
-          code: 'INVALID_STATE',
-        }, 400);
-      }
-      stateStore.delete(state);
+    // Verify state (required, single-use, issued by /init for this provider)
+    if (!consumeState(state, { purpose: 'login', provider })) {
+      return c.json({
+        success: false,
+        error: '授權狀態無效或已過期',
+        code: 'INVALID_STATE',
+      }, 400);
     }
 
     // Exchange code for tokens
@@ -497,7 +534,7 @@ app.post(
       const [memberByEmail] = await db
         .select(MEMBER_OAUTH_DETAIL_SELECT)
         .from(members)
-        .where(eq(members.email, userInfo.email))
+        .where(eq(sql`lower(${members.email})`, userInfo.email.trim().toLowerCase()))
         .limit(1);
 
       if (memberByEmail) {
@@ -597,7 +634,16 @@ app.post(
   zValidator('json', linkAccountSchema),
   async (c) => {
     const memberInfo = c.get('member')!;
-    const { provider, code } = c.req.valid('json');
+    const { provider, code, state } = c.req.valid('json');
+
+    // The state must have been issued to this member by /link-init for this provider
+    if (!consumeState(state, { purpose: 'link', provider, memberId: memberInfo.id })) {
+      return c.json({
+        success: false,
+        error: '授權狀態無效或已過期',
+        code: 'INVALID_STATE',
+      }, 400);
+    }
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(provider, code);

@@ -28,7 +28,8 @@ const otpForm = useFormValidation(otpVerifySchema)
 
 // 登入方式切換
 type LoginMethod = 'email' | 'phone'
-const loginMethod = ref<LoginMethod>('email')
+// ?method=phone 直接開啟手機驗證碼登入 (社群帳號未綁定時的導引)
+const loginMethod = ref<LoginMethod>(useRoute().query.method === 'phone' ? 'phone' : 'email')
 
 // Email 登入
 const email = ref('')
