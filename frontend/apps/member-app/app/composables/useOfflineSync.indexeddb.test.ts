@@ -274,6 +274,17 @@ describe('useOfflineSync with IndexedDB', () => {
       expect(await getCache('workouts')).toBeNull()
     })
 
+    it('warns before logout only while items are pending, saying they will be lost', async () => {
+      const { queueRequest, isOnline, pendingLogoutWarning } = useOfflineSync()
+      expect(pendingLogoutWarning()).toBeNull()
+
+      await queueRequest({ url: 'http://localhost:8056/api/member/workouts', method: 'POST', body: { a: 1 }, maxRetries: 3, type: 'workout' })
+      expect(pendingLogoutWarning()).toMatch(/1 筆資料尚未上傳.*刪除且無法復原/)
+
+      isOnline.value = false
+      expect(pendingLogoutWarning()).toMatch(/目前沒有網路.*1 筆/)
+    })
+
     it('drops queued requests without sending them when offline', async () => {
       const { queueRequest, getPendingRequests, isOnline, resetForLogout } = useOfflineSync()
       await queueRequest({ url: 'http://localhost:8056/api/member/workouts', method: 'POST', body: { a: 1 }, maxRetries: 3, type: 'workout' })

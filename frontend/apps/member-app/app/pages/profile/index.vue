@@ -176,7 +176,7 @@ const onPhoneChanged = async () => {
 
 // 登出
 const handleLogout = async () => {
-  if (confirm('確定要登出嗎？')) {
+  if (confirm(useOfflineSync().pendingLogoutWarning() ?? '確定要登出嗎？')) {
     await logout()
   }
 }

@@ -523,6 +523,15 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       await Promise.all([clearCache(), clearQueue()])
     }
 
+    /** Text for the logout confirmation when unsent items would be lost; null when nothing is pending. */
+    const pendingLogoutWarning = (): string | null => {
+      const n = pendingCount.value
+      if (n <= 0) return null
+      return isOnline.value
+        ? `還有 ${n} 筆資料尚未上傳。登出時會先嘗試上傳，若上傳失敗，這些資料將被刪除且無法復原。確定要登出嗎？`
+        : `目前沒有網路，還有 ${n} 筆資料尚未上傳。登出後這些資料將被刪除且無法復原。確定要登出嗎？`
+    }
+
     // ---- Computed ----
 
     const hasPendingRequests = computed(() => pendingCount.value > 0)
@@ -553,6 +562,7 @@ export const createOfflineSync = (config: OfflineSyncConfig) => {
       clearCache,
       pruneExpiredCache,
       resetForLogout,
+      pendingLogoutWarning,
     }
   }
 }

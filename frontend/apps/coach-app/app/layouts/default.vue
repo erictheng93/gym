@@ -139,6 +139,8 @@ const getInitials = (name: string) => {
 }
 
 const handleLogout = async () => {
+  const warning = useOfflineSync().pendingLogoutWarning()
+  if (warning && !confirm(warning)) return
   menuOpen.value = false
   await logout()
   router.push('/login')
