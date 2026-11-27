@@ -18,7 +18,7 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const { createContract } = useContracts()
+const { createContract, signContract } = useContracts()
 const { members, fetchMembers } = useMembers()
 const { plans, fetchPlans } = usePlans()
 const { branches, fetchBranches } = useBranches()
@@ -137,7 +137,8 @@ const handleSubmit = async () => {
   try {
     // POST /api/contracts schema. The backend derives endDate / remainingCounts from the
     // plan and creates the contract as DRAFT (activated on the detail page once paid).
-    // It has no field for the drawn signature, so the signature only gates submission.
+    // The drawn signature is then stored with POST /contracts/:id/signature (R2 + digital_signature);
+    // activation requires it.
     const created = await createContract({
       memberId: form.member_id,
       planId: form.plan_id,
@@ -153,7 +154,13 @@ const handleSubmit = async () => {
       return
     }
 
-    useToast().success(MESSAGES.SUCCESS.CONTRACT_CREATED)
+    // The contract exists as a DRAFT either way; if the signature fails to save, staff re-sign on its page
+    const signed = await signContract(created.id, form.digital_signature)
+    if (signed) {
+      useToast().success(MESSAGES.SUCCESS.CONTRACT_CREATED)
+    } else {
+      useToast().warning(PAGES.CONTRACTS.SIGNATURE_SAVE_FAILED_AFTER_CREATE)
+    }
     router.push(`/contracts/${created.id}`)
   } finally {
     isSubmitting.value = false

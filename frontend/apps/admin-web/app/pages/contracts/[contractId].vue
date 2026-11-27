@@ -48,6 +48,7 @@ const LOG_TYPE_LABEL_MAP: Record<string, string> = {
 <script setup lang="ts">
 import type { PaymentMethod } from '~/types/schema'
 import type { ContractDetail } from '~/composables/useContracts'
+import type { ApiMember } from '~/composables/useMembers'
 import { MESSAGES, PAGES } from '~/constants'
 import { validateUUIDParam } from '~/utils/validation'
 
@@ -64,9 +65,14 @@ const {
   pauseContract,
   resumeContract,
   extendContract,
-  cancelContract
+  cancelContract,
+  transferContract,
+  renewContract,
+  signContract
 } = useContracts()
 const { confirm } = useConfirm()
+const { user } = useAuth()
+const { searchMembers } = useMembers()
 const { fetchPayments, payments } = usePayments()
 
 const contract = ref<ContractDetail | null>(null)
@@ -76,6 +82,8 @@ const showPauseModal = ref(false)
 const showResumeModal = ref(false)
 const showTerminateModal = ref(false)
 const showExtendModal = ref(false)
+const showTransferModal = ref(false)
+const showSignModal = ref(false)
 const isProcessing = ref(false)
 
 const pauseForm = reactive({
@@ -94,6 +102,18 @@ const extendForm = reactive({
   days: 0,
   reason: ''
 })
+
+const transferForm = reactive({
+  search: '',
+  member: null as ApiMember | null,
+  fee: 0,
+  feeMethod: 'CASH' as PaymentMethod,
+  reason: ''
+})
+const transferResults = ref<ApiMember[]>([])
+const hasSearchedRecipient = ref(false)
+
+const signatureImage = ref('')
 
 const contractId = computed(() => route.params.contractId as string)
 
@@ -186,9 +206,9 @@ const handleResume = async () => {
   })
 }
 
-// 啟用草稿合約（金流只付部分金額時不會自動啟用，由櫃台確認後手動啟用）
+// 啟用草稿合約（金流只付部分金額時不會自動啟用，由櫃台確認後手動啟用；須先完成會員簽名）
 const handleActivate = async () => {
-  if (!contract.value) return
+  if (!contract.value || !isSigned.value) return
 
   const confirmed = await confirm({
     title: PAGES.CONTRACTS.ACTIVATE_CONTRACT,
@@ -205,8 +225,17 @@ const handleActivate = async () => {
 
 const status = computed(() => contract.value?.status)
 
-// 檢查是否可以啟用
+// 檢查是否可以啟用（後端要求已簽名）
 const canActivate = computed(() => status.value === 'DRAFT')
+const isSigned = computed(() => !!contract.value?.digitalSignature)
+
+// 簽名：草稿可重簽；有效/暫停中的合約只能補簽一次（例如轉讓取得的合約），不可覆蓋
+const canSign = computed(() =>
+  status.value === 'DRAFT' || ((status.value === 'ACTIVE' || status.value === 'PAUSED') && !isSigned.value)
+)
+
+// 與後端一致：轉讓限店長以上
+const isManager = computed(() => ['super_admin', 'admin', 'manager'].includes(user.value?.role ?? ''))
 
 // 檢查是否可以暫停
 const canPause = computed(() => status.value === 'ACTIVE' && !!contract.value?.plan?.allowPause)
@@ -214,9 +243,9 @@ const canPause = computed(() => status.value === 'ACTIVE' && !!contract.value?.p
 // 檢查是否可以恢復
 const canResume = computed(() => status.value === 'PAUSED')
 
-// 轉讓：方案允許轉讓時顯示；轉讓規則尚未定案，按鈕維持「尚未開放」
-const showTransfer = computed(() =>
-  (status.value === 'ACTIVE' || status.value === 'PAUSED') && !!contract.value?.plan?.allowTransfer
+// 轉讓：限有效合約、方案允許轉讓、店長以上（docs/product-decisions.md #2）
+const canTransfer = computed(() =>
+  status.value === 'ACTIVE' && !!contract.value?.plan?.allowTransfer && isManager.value
 )
 
 // 檢查是否可以終止（POST /contracts/:id/cancel 接受 DRAFT / ACTIVE / PAUSED）
@@ -225,8 +254,8 @@ const canTerminate = computed(() => status.value === 'DRAFT' || status.value ===
 // 檢查是否可以延期
 const canExtend = computed(() => status.value === 'ACTIVE' || status.value === 'PAUSED')
 
-// 續約：計價規則尚未定案，按鈕維持「尚未開放」
-const showRenew = computed(() => status.value === 'ACTIVE' || status.value === 'EXPIRED')
+// 續約：有效或已到期的合約（docs/product-decisions.md #3）
+const canRenew = computed(() => status.value === 'ACTIVE' || status.value === 'EXPIRED')
 
 // 預覽延期後的結束日（實際日期以後端計算為準；用 UTC 避免時區位移）
 const extendedEndDate = computed(() => {
@@ -279,6 +308,98 @@ const handleExtend = async () => {
   )
 }
 
+// 轉讓：搜尋受讓會員（排除原會員），選填手續費
+const searchRecipients = async () => {
+  const query = transferForm.search.trim()
+  if (!query) return
+  const rows = await searchMembers(query, 8)
+  transferResults.value = rows.filter(m => m.id !== contract.value?.memberId)
+  hasSearchedRecipient.value = true
+}
+
+const isTransferFeeValid = computed(() => transferForm.fee >= 0)
+
+const openTransferModal = () => {
+  transferForm.search = ''
+  transferForm.member = null
+  transferForm.fee = 0
+  transferForm.feeMethod = 'CASH'
+  transferForm.reason = ''
+  transferResults.value = []
+  hasSearchedRecipient.value = false
+  showTransferModal.value = true
+}
+
+const handleTransfer = async () => {
+  if (!contract.value || !transferForm.member || !isTransferFeeValid.value) return
+  const id = contract.value.id
+  isProcessing.value = true
+  try {
+    const result = await transferContract(id, {
+      toMemberId: transferForm.member.id,
+      ...(transferForm.fee > 0 ? { fee: transferForm.fee, paymentMethod: transferForm.feeMethod } : {}),
+      reason: transferForm.reason.trim() || undefined
+    })
+    if (result) {
+      showTransferModal.value = false
+      useToast().success(MESSAGES.SUCCESS.CONTRACT_TRANSFERRED)
+      router.push(`/contracts/${result.contract.id}`)
+    }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+// 續約：預覽起始日（以後端為準）＝舊合約到期日隔天；已到期則為今天
+const renewStartDate = computed(() => {
+  const today = new Date().toISOString().slice(0, 10)
+  const end = contract.value?.endDate
+  if (!end || status.value === 'EXPIRED' || end < today) return today
+  const next = new Date(`${end}T00:00:00Z`)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.toISOString().slice(0, 10)
+})
+
+const handleRenew = async () => {
+  if (!contract.value) return
+  const confirmed = await confirm({
+    title: PAGES.CONTRACTS.RENEW_CONTRACT,
+    message: `${PAGES.CONTRACTS.RENEW_CONFIRM_MESSAGE}${PAGES.CONTRACTS.RENEW_START_DATE}：${formatDate(renewStartDate.value)}，${PAGES.CONTRACTS.RENEW_AMOUNT}：${formatCurrency(contract.value.plan?.price ?? 0)}`,
+    confirmText: PAGES.CONTRACTS.CONFIRM_RENEW,
+    type: 'info',
+    confirmVariant: 'primary'
+  })
+  if (!confirmed) return
+
+  const id = contract.value.id
+  isProcessing.value = true
+  try {
+    const renewed = await renewContract(id)
+    if (renewed) {
+      useToast().success(MESSAGES.SUCCESS.CONTRACT_RENEWED)
+      // 前往新草稿：套用優惠券、簽名後啟用
+      router.push(`/contracts/${renewed.id}`)
+    }
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+// 會員簽名（POST /contracts/:id/signature）
+const openSignModal = () => {
+  signatureImage.value = ''
+  showSignModal.value = true
+}
+
+const handleSaveSignature = async () => {
+  if (!contract.value || !signatureImage.value) return
+  const id = contract.value.id
+  const image = signatureImage.value
+  await runAction(() => signContract(id, image), MESSAGES.SUCCESS.CONTRACT_SIGNED, () => {
+    showSignModal.value = false
+  })
+}
+
 // 打開延期 Modal
 const openExtendModal = () => {
   extendForm.days = 0
@@ -313,7 +434,13 @@ const openTerminateModal = () => {
           {{ MESSAGES.ACTIONS.BACK }}
         </button>
         <div class="header-actions">
-          <button v-if="canActivate" class="btn btn-primary" :disabled="isProcessing" @click="handleActivate">
+          <button
+            v-if="canActivate"
+            class="btn btn-primary"
+            :disabled="isProcessing || !isSigned"
+            :title="isSigned ? undefined : PAGES.CONTRACTS.SIGN_REQUIRED_TO_ACTIVATE"
+            @click="handleActivate"
+          >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
             </svg>
@@ -337,31 +464,17 @@ const openTerminateModal = () => {
             </svg>
             {{ PAGES.CONTRACTS.EXTEND_CONTRACT }}
           </button>
-          <button
-            v-if="showTransfer"
-            class="btn btn-ghost btn-coming-soon"
-            disabled
-            :title="PAGES.CONTRACTS.TRANSFER_NOT_AVAILABLE"
-            data-testid="transfer-coming-soon"
-          >
+          <button v-if="canTransfer" class="btn btn-ghost" :disabled="isProcessing" @click="openTransferModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 3h5v5" /><path d="M8 3H3v5" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" /><path d="M16 21h5v-5" /><path d="M8 21H3v-5" />
             </svg>
             {{ PAGES.CONTRACTS.TRANSFER_CONTRACT }}
-            <span class="coming-soon-tag">{{ PAGES.CONTRACTS.NOT_YET_AVAILABLE }}</span>
           </button>
-          <button
-            v-if="showRenew"
-            class="btn btn-ghost btn-coming-soon"
-            disabled
-            :title="PAGES.CONTRACTS.RENEW_NOT_AVAILABLE"
-            data-testid="renew-coming-soon"
-          >
+          <button v-if="canRenew" class="btn btn-ghost" :disabled="isProcessing" @click="handleRenew">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3" /><path d="M12 12a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" /><path d="m16 12 5 3-5 3v-6Z" />
+              <path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" />
             </svg>
             {{ PAGES.CONTRACTS.RENEW_CONTRACT }}
-            <span class="coming-soon-tag">{{ PAGES.CONTRACTS.NOT_YET_AVAILABLE }}</span>
           </button>
           <button v-if="canTerminate" class="btn btn-danger" @click="openTerminateModal">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -509,16 +622,23 @@ const openTerminateModal = () => {
         </section>
 
         <!-- Signature -->
-        <section v-if="contract.digitalSignature" class="detail-card card signature-card">
+        <section v-if="isSigned || canSign" class="detail-card card signature-card" data-testid="signature-card">
           <h3 class="card-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
             {{ PAGES.CONTRACTS.E_SIGNATURE }}
           </h3>
-          <div class="signature-preview">
-            <img :src="contract.digitalSignature" :alt="PAGES.CONTRACTS.E_SIGNATURE" />
+          <div v-if="contract.signatureUrl" class="signature-preview">
+            <img :src="contract.signatureUrl" :alt="PAGES.CONTRACTS.E_SIGNATURE" />
           </div>
+          <p v-else-if="isSigned" class="signature-status text-success">{{ PAGES.CONTRACTS.SIGNED }}</p>
+          <p v-else class="signature-status text-secondary">
+            {{ PAGES.CONTRACTS.NOT_SIGNED }}<template v-if="canActivate">：{{ PAGES.CONTRACTS.SIGN_REQUIRED_TO_ACTIVATE }}</template>
+          </p>
+          <button v-if="canSign" class="btn btn-secondary btn-small signature-action" @click="openSignModal">
+            {{ isSigned ? PAGES.CONTRACTS.RESIGN_CONTRACT : PAGES.CONTRACTS.SIGN_CONTRACT }}
+          </button>
         </section>
       </div>
 
@@ -650,6 +770,101 @@ const openTerminateModal = () => {
             <button class="btn btn-secondary" @click="showResumeModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
             <button class="btn btn-primary" :disabled="isProcessing" @click="handleResume">
               {{ isProcessing ? MESSAGES.ACTIONS.PROCESSING : PAGES.CONTRACTS.CONFIRM_RESUME }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Transfer Modal -->
+    <Teleport to="body">
+      <div v-if="showTransferModal" class="modal-overlay" @click.self="showTransferModal = false">
+        <div class="modal-content glass-card">
+          <h3 class="modal-title">{{ PAGES.CONTRACTS.TRANSFER_CONTRACT }}</h3>
+          <p class="modal-desc text-secondary">{{ PAGES.CONTRACTS.TRANSFER_HINT }}</p>
+
+          <div class="modal-form">
+            <div v-if="transferForm.member" class="transfer-selected" data-testid="transfer-selected">
+              <div>
+                <span class="input-label">{{ PAGES.CONTRACTS.TRANSFER_SELECTED }}</span>
+                <p class="transfer-member-name">{{ transferForm.member.fullName }}
+                  <code class="member-code">{{ transferForm.member.memberCode }}</code>
+                </p>
+              </div>
+              <button class="btn btn-ghost btn-small" @click="transferForm.member = null">{{ PAGES.CONTRACTS.TRANSFER_CHANGE_MEMBER }}</button>
+            </div>
+            <div v-else class="input-group">
+              <label class="input-label">{{ PAGES.CONTRACTS.SEARCH_TARGET_MEMBER }}</label>
+              <div class="transfer-search">
+                <input
+                  v-model="transferForm.search"
+                  type="search"
+                  class="input"
+                  data-testid="transfer-search"
+                  :placeholder="PAGES.CONTRACTS.SEARCH_MEMBER_PLACEHOLDER"
+                  @keydown.enter.prevent="searchRecipients"
+                />
+                <button class="btn btn-secondary" :disabled="!transferForm.search.trim()" @click="searchRecipients">{{ MESSAGES.FORM.SEARCH }}</button>
+              </div>
+              <ul v-if="transferResults.length" class="transfer-results">
+                <li v-for="m in transferResults" :key="m.id">
+                  <button class="transfer-result" data-testid="transfer-result" @click="transferForm.member = m">
+                    <span>{{ m.fullName }}</span>
+                    <span class="text-tertiary">{{ m.memberCode }} · {{ m.phone || PAGES.CONTRACTS.NO_PHONE }}</span>
+                  </button>
+                </li>
+              </ul>
+              <p v-else-if="hasSearchedRecipient" class="text-secondary">{{ PAGES.CONTRACTS.NO_MEMBER_FOUND }}</p>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">{{ PAGES.CONTRACTS.TRANSFER_FEE }}</label>
+              <input v-model.number="transferForm.fee" type="number" min="0" class="input" data-testid="transfer-fee" />
+              <span class="input-hint text-tertiary">{{ PAGES.CONTRACTS.TRANSFER_FEE_HINT }}</span>
+            </div>
+            <div v-if="transferForm.fee > 0" class="input-group">
+              <label class="input-label">{{ PAGES.CONTRACTS.TRANSFER_FEE_METHOD }}</label>
+              <select v-model="transferForm.feeMethod" class="input" data-testid="transfer-fee-method">
+                <option v-for="(label, method) in LABELS.PAYMENT_METHOD" :key="method" :value="method">{{ label }}</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label class="input-label">{{ PAGES.CONTRACTS.TRANSFER_REASON }}</label>
+              <textarea v-model="transferForm.reason" class="input" rows="2" :placeholder="PAGES.CONTRACTS.TRANSFER_REASON_PLACEHOLDER"></textarea>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn btn-secondary" @click="showTransferModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
+            <button
+              class="btn btn-primary"
+              data-testid="confirm-transfer"
+              :disabled="isProcessing || !transferForm.member || !isTransferFeeValid"
+              @click="handleTransfer"
+            >
+              {{ isProcessing ? MESSAGES.ACTIONS.PROCESSING : PAGES.CONTRACTS.CONFIRM_TRANSFER }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Signature Modal -->
+    <Teleport to="body">
+      <div v-if="showSignModal" class="modal-overlay" @click.self="showSignModal = false">
+        <div class="modal-content glass-card modal-wide">
+          <h3 class="modal-title">{{ PAGES.CONTRACTS.SIGN_CONTRACT }}</h3>
+          <p class="modal-desc text-secondary">{{ PAGES.CONTRACTS.SIGN_INSTRUCTION }}</p>
+          <LazySignaturePad v-model="signatureImage" />
+          <div class="modal-actions">
+            <button class="btn btn-secondary" @click="showSignModal = false">{{ MESSAGES.FORM.CANCEL }}</button>
+            <button
+              class="btn btn-primary"
+              data-testid="save-signature"
+              :disabled="isProcessing || !signatureImage"
+              @click="handleSaveSignature"
+            >
+              {{ isProcessing ? MESSAGES.ACTIONS.PROCESSING : PAGES.CONTRACTS.SAVE_SIGNATURE }}
             </button>
           </div>
         </div>
@@ -1450,22 +1665,78 @@ const openTerminateModal = () => {
   color: var(--color-text-tertiary);
 }
 
-/* 尚未開放的動作：保留位置讓櫃台知道功能存在，但不可操作 */
-.btn-coming-soon {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  cursor: not-allowed;
-  opacity: 0.6;
+/* Signature status + action */
+.signature-status {
+  margin: 0;
+  font-size: 15px;
 }
 
-.coming-soon-tag {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
+.signature-action {
+  margin-top: 12px;
+}
+
+/* Transfer modal */
+.transfer-search {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.transfer-search .input {
+  flex: 1;
+}
+
+.transfer-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.transfer-result {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: var(--radius-md);
   background: var(--color-bg-tertiary);
-  color: var(--color-text-tertiary);
-  font-size: 12px;
-  font-weight: 500;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 200ms ease-out;
+}
+
+.transfer-result:hover {
+  background: var(--color-accent-light);
+}
+
+.transfer-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-light);
+}
+
+.transfer-member-name {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.input-hint {
+  font-size: 13px;
+}
+
+.modal-wide {
+  max-width: 560px;
 }
 
 /* Responsive */
