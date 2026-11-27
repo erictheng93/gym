@@ -658,7 +658,35 @@ export function isAllowedPdfRequest(url: string): boolean {
   return url.startsWith('data:') || url.startsWith('about:');
 }
 
+// ponytail: in-process limit on concurrent Chromium pages (~150MB each), so a burst
+// of downloads queues instead of exhausting memory. Move PDF rendering to a worker
+// queue if volume outgrows one process (#14).
+const MAX_CONCURRENT_PDF_PAGES = Math.max(1, Number(process.env.PDF_MAX_CONCURRENCY) || 2);
+let activePdfPages = 0;
+const waitingForPdfPage: Array<() => void> = [];
+
+/** Run fn with at most `limit` concurrent callers; the rest wait in FIFO order. */
+export async function withPdfSlot<T>(fn: () => Promise<T>, limit = MAX_CONCURRENT_PDF_PAGES): Promise<T> {
+  if (activePdfPages < limit) {
+    activePdfPages++;
+  } else {
+    // The releasing caller hands its slot over, so activePdfPages stays the same
+    await new Promise<void>((resolve) => waitingForPdfPage.push(resolve));
+  }
+  try {
+    return await fn();
+  } finally {
+    const next = waitingForPdfPage.shift();
+    if (next) next();
+    else activePdfPages--;
+  }
+}
+
 async function generatePdfFromHtml(html: string): Promise<Buffer> {
+  return withPdfSlot(() => renderPdf(html));
+}
+
+async function renderPdf(html: string): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
 

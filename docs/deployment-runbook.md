@@ -293,12 +293,22 @@ cd backend
 bun run db:backfill-tenant -- --dry-run   # report only
 bun run db:backfill-tenant                # apply (no-op if nothing is NULL)
 
-# 2. Apply the schema. One db:push covers every schema change since the old version:
+# 2. Build the check-in index WITHOUT blocking writes (#13). db:push would run a
+#    plain CREATE INDEX, which blocks inserts into check_ins (every check-in) while
+#    it builds. CONCURRENTLY cannot run inside a transaction, so run it on its own.
+#    db:push then sees the index already exists and only drops the old one.
+psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_check_ins_member_time ON check_ins (member_id, check_in_time);"
+#    If it was interrupted it leaves an INVALID index: DROP INDEX CONCURRENTLY
+#    idx_check_ins_member_time; and run it again.
+
+# 3. Apply the schema. One db:push covers every schema change since the old version:
 #    - members/contracts/payments.tenant_id NOT NULL      (#116)
 #    - payments.receipt_no widened varchar(30) -> (100)   (#112)
 #    - payments.status added, existing rows = COMPLETED   (#119)
 #    - performance_reviews.overall_score decimal(5,2)     (#131)
 #    - bookings.override_reason / override_by added (NULL) (#136)
+#    - check_ins: idx_check_ins_member_id replaced by
+#      idx_check_ins_member_time (member_id, check_in_time) (#13; built in step 2)
 bun run db:push
 ```
 
@@ -310,6 +320,7 @@ psql "$DATABASE_URL" -c "SELECT column_name, data_type, character_maximum_length
 psql "$DATABASE_URL" -c "SELECT count(*) AS payments_without_status_or_tenant FROM payments WHERE status IS NULL OR tenant_id IS NULL;"   # expect 0
 psql "$DATABASE_URL" -c "SELECT numeric_precision, numeric_scale FROM information_schema.columns WHERE table_name = 'performance_reviews' AND column_name = 'overall_score';"   # expect 5, 2
 psql "$DATABASE_URL" -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'bookings' AND column_name IN ('override_reason', 'override_by');"   # expect 2 rows (text, uuid)
+psql "$DATABASE_URL" -c "SELECT c.relname, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname LIKE 'idx_check_ins_member%';"   # expect only idx_check_ins_member_time, indisvalid = t
 ```
 
 The first query must list `status` (varchar 20), `receipt_no` (varchar 100) and
