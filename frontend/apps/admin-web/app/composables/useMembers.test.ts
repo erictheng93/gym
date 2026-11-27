@@ -89,6 +89,23 @@ describe('useMembers', () => {
       expect(lastCall()[1].params).toEqual({ page: 1, limit: 20, sortBy: 'dateCreated', sortOrder: 'desc' })
     })
 
+    it('a slower, older search response does not overwrite a newer one (#17)', async () => {
+      let resolveOld!: (v: unknown) => void
+      mockFetchInstance.apiFetch
+        .mockImplementationOnce(() => new Promise((r) => { resolveOld = r })) // search "A", slow
+        .mockResolvedValueOnce({ ...listResponse, data: [otherMember], pagination: { ...listResponse.pagination, total: 1 } }) // search "AB"
+      const { fetchMembers, members, totalCount, isLoading } = useMembers()
+
+      const oldFetch = fetchMembers({ search: 'A' }, true)
+      await fetchMembers({ search: 'AB' }, true)
+      resolveOld(listResponse) // the older response arrives last
+      await oldFetch
+
+      expect(members.value).toEqual([otherMember])
+      expect(totalCount.value).toBe(1)
+      expect(isLoading.value).toBe(false)
+    })
+
     it('reports the error and leaves loading off when fetching fails', async () => {
       mockFetchInstance.apiFetch.mockRejectedValueOnce(new Error('Fetch failed'))
       const { fetchMembers, isLoading } = useMembers()

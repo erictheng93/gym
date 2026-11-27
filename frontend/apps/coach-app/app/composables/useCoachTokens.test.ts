@@ -143,6 +143,25 @@ describe('useCoachTokens', () => {
       expect(cookieStore.get('coach_refresh_token')!.value).toBe('new-refresh')
     })
 
+    it('concurrent 401s share one refresh request (#16)', async () => {
+      cookieStore.set('coach_refresh_token', { value: 'old-refresh' })
+      let resolveFetch!: (v: unknown) => void
+      mockFetch.mockImplementationOnce(() => new Promise((r) => { resolveFetch = r }))
+
+      const { refreshAccessToken } = useCoachTokens()
+      const pending = [refreshAccessToken(), refreshAccessToken(), useCoachTokens().refreshAccessToken()]
+      resolveFetch({ success: true, access_token: 'new-access', refresh_token: 'new-refresh' })
+
+      expect(await Promise.all(pending)).toEqual([true, true, true])
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+
+      // Once settled, the next refresh is a new request with the rotated token
+      mockFetch.mockResolvedValueOnce({ success: true, access_token: 'newer-access', refresh_token: 'newer-refresh' })
+      expect(await refreshAccessToken()).toBe(true)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+
     it('should return false on refresh failure', async () => {
       cookieStore.set('coach_refresh_token', { value: 'expired-refresh' })
 
